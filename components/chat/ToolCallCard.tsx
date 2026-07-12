@@ -45,10 +45,20 @@ export function ToolCallCard({
   part: any;
   compact?: boolean;
 }) {
+  // --- Defensive guard: any unexpected part shape silently
+  // returns null instead of crashing the whole message bubble. ---
+  if (!part || typeof part !== "object") return null;
   if (!isToolUIPart(part)) return null;
 
+  // Safely extract fields — defensive against any potential runtime issues
   const toolPart = part as AnyToolPart;
-  const toolName = getToolName(toolPart);
+  let toolName: string;
+  try {
+    toolName = getToolName(toolPart);
+  } catch {
+    toolName = "tool";
+  }
+
   const displayTitle = isDynamicToolUIPart(toolPart)
     ? (toolPart.title ?? toolName)
     : toolName;

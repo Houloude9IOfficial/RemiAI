@@ -117,7 +117,13 @@ function getToolLabel(toolName: string): ToolLabel {
 function getGroupLabel(parts: AnyToolPart[]): ToolLabel {
   let best: ToolLabel | null = null;
   for (const part of parts) {
-    const name = getToolName(part).toLowerCase();
+    if (!part || typeof part !== "object") continue;
+    let name: string;
+    try {
+      name = getToolName(part).toLowerCase();
+    } catch {
+      continue;
+    }
     const label = getToolLabel(name);
     if (label !== FALLBACK_LABEL) best = label;
   }

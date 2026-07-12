@@ -1,3 +1,5 @@
+"use client";
+
 import type { UIMessage } from "ai";
 import { isTextUIPart, isToolUIPart } from "ai";
 import { ToolCallGroup } from "./ToolCallGroup";
@@ -5,7 +7,7 @@ import { MarkdownRenderer } from "./MarkdownRenderer";
 
 /**
  * Collect consecutive tool parts into groups for rendering.
- * Non-tool parts (step-start, text, etc.) are skipped entirely.
+ * Non-tool parts (step-start, text, files, etc.) are skipped entirely.
  */
 function collectToolGroups(parts: UIMessage["parts"]) {
   const groups: Array<{ parts: (typeof parts)[number][] }> = [];
@@ -61,15 +63,35 @@ export function MessageBubble({ message }: { message: UIMessage }) {
     .join("");
 
   const toolGroups = collectToolGroups(message.parts);
+  const hasToolGroups = toolGroups.length > 0;
+  const hasText = fullText.trim().length > 0;
 
-  // ALWAYS render the assistant container — at the very first write()
-  // parts may be empty, but we need the DOM node to exist so React
-  // can populate it as the stream progresses.
+  // If nothing to render yet, show a streaming placeholder.
+  // The parent MessageList handles the visible placeholder while
+  // streaming is in progress. We just need the DOM node to exist
+  // so React can populate it when content arrives.
+  if (!hasToolGroups && !hasText) {
+    return (
+      <div className="flex justify-start">
+        <div className="w-full max-w-[85%] text-sm text-foreground px-4 py-2">
+          <div className="flex items-center gap-2">
+            <div className="flex h-4 w-4 items-center justify-center">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-muted-foreground/40" />
+            </div>
+            <span className="text-muted-foreground/60">
+              Generating response...
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex justify-start">
-      <div className="w-full max-w-[85%] text-sm text-foreground">
+      <div className="w-full max-w-[85%] text-sm text-foreground px-4 py-2">
         {/* Tool call groups */}
-        {toolGroups.length > 0 && (
+        {hasToolGroups && (
           <div className="mb-2 flex flex-col gap-2">
             {toolGroups.map((group, idx) => (
               <ToolCallGroup key={idx} parts={group.parts as any} />
@@ -78,7 +100,7 @@ export function MessageBubble({ message }: { message: UIMessage }) {
         )}
 
         {/* Text content */}
-        {fullText && <MarkdownRenderer content={fullText} />}
+        {hasText && <p className="whitespace-pre-wrap">{fullText}</p>}
       </div>
     </div>
   );
