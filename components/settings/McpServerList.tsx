@@ -86,7 +86,7 @@ export function McpServerList() {
   if (servers.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        No MCP servers configured yet — add one above to give the AI extra tools.
+        No MCP servers configured yet. Add one above to give your AI extra tools.
       </p>
     );
   }

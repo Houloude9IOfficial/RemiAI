@@ -65,8 +65,8 @@ export function CustomizeForm() {
       <div>
         <h1 className="text-lg font-semibold">Customize</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Tell Remi how to address you, what you like, and how you&apos;d like
-          the AI to behave. These preferences will be added to every conversation.
+          Tell your AI how to call you, what you like, and how you&apos;d like
+          it to behave. These preferences will be added to every conversation.
         </p>
       </div>
 
@@ -92,7 +92,7 @@ export function CustomizeForm() {
               onChange={(e) => setForm({ ...form, preferredName: e.target.value })}
             />
             <p className="text-[11px] text-muted-foreground/60">
-              Remi will address you by this name in conversations.
+              Your AI will call you by this name in conversations.
             </p>
           </div>
 
@@ -107,7 +107,7 @@ export function CustomizeForm() {
               className="min-h-[80px] resize-y"
             />
             <p className="text-[11px] text-muted-foreground/60">
-              Things Remi should know about you — your interests, profession, communication style, etc.
+              Things your AI should know about you. (your interests, profession, communication style, etc.)
             </p>
           </div>
 
@@ -122,7 +122,7 @@ export function CustomizeForm() {
               className="min-h-[80px] resize-y"
             />
             <p className="text-[11px] text-muted-foreground/60">
-              How you want the AI to behave — tone, style, level of formality, etc.
+              How you want the AI to behave. (tone, style, level of formality, etc.)
             </p>
           </div>
 

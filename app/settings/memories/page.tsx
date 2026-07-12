@@ -8,8 +8,7 @@ export default function MemoriesSettingsPage() {
         <div>
           <h1 className="text-lg font-semibold">Memories</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Memories are short facts the AI remembers about you across conversations.
-            The AI saves them automatically — you can review, search, or delete them here.
+            Your AI can remember information across conversations, like your name, preferences, or other details you share.
           </p>
         </div>
         <MemoryList />

@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Brain, FolderOpen, MessageSquarePlus, Plug, Settings2, User, Wrench } from "lucide-react";
+import { Brain, FolderOpen, MessageSquarePlus, Pen, Plug, Settings2, User, Wrench } from "lucide-react";
 import { conversationsApi } from "@/lib/api/conversations";
 import { ConversationList } from "./ConversationList";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -67,7 +67,7 @@ export function AppSidebar() {
           disabled={newChatMutation.isPending}
           onClick={() => newChatMutation.mutate()}
         >
-          <MessageSquarePlus className="h-4 w-4" />
+          <Pen className="h-4 w-4" />
         </Button>
       </div>
 
@@ -91,9 +91,6 @@ export function AppSidebar() {
           </Link>
         ))}
         <div className="mt-2 flex items-center justify-between border-t pt-2">
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60">
-            Theme
-          </span>
           <ThemeToggle />
         </div>
       </nav>

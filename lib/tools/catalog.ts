@@ -3,6 +3,7 @@ export type ToolCategory = "builtin" | "memory" | "integration";
 export interface ToolDefinition {
   id: string;
   name: string;
+  icon?: string | null;
   description: string;
   toolNames: string[];
   category: ToolCategory;
@@ -65,6 +66,7 @@ export const TOOL_CATALOG: ToolDefinition[] = [
   {
     id: "brave_search",
     name: "Brave Search",
+    icon: "https://upload.wikimedia.org/wikipedia/commons/5/51/Brave_icon_lionface.png",
     description:
       "Search the web using Brave Search. Get up-to-date information, news, and answers from the internet.",
     toolNames: ["brave_web_search"],
@@ -79,6 +81,7 @@ export const TOOL_CATALOG: ToolDefinition[] = [
   {
     id: "notion",
     name: "Notion (Read-only)",
+    icon: "https://upload.wikimedia.org/wikipedia/commons/4/45/Notion_app_logo.png",
     description:
       "Search pages and read page content from your Notion workspace. Uses a Notion integration token for read-only access.",
     toolNames: ["notion_search_pages", "notion_get_page"],
@@ -93,6 +96,7 @@ export const TOOL_CATALOG: ToolDefinition[] = [
   {
     id: "context7",
     name: "Context7",
+    icon: "https://upstash.gallerycdn.vsassets.io/extensions/upstash/context7-mcp/1.1.0/1781270197176/Microsoft.VisualStudio.Services.Icons.Default",
     description:
       "Fetch up-to-date documentation and code examples for libraries and frameworks. Helps the AI provide accurate, version-specific answers.",
     toolNames: ["context7_get_docs"],

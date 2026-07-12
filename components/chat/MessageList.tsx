@@ -196,7 +196,7 @@ export function MessageList({
 
   if (messages.length === 0 && !isWaiting) {
     return (
-      <div className="relative flex flex-1 flex-col items-center justify-center gap-6 overflow-hidden px-6 animate-fade-in">
+      <div className="relative flex flex-1 flex-col items-center justify-center gap-6 overflow-hidden px-6 pt-50 animate-fade-in">
         {/* Floating particle background */}
         {/* <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
           {PARTICLES.map((particle, i) => (
@@ -214,14 +214,14 @@ export function MessageList({
         </div>
 
         {/* Big greeting text */}
-        <p className="relative max-w-md text-center text-2xl font-medium tracking-tight text-foreground/80">
+        <p className="relative max-w-md text-center text-3xl font-medium tracking-tight text-foreground/80">
           {greeting}
         </p>
 
         {/* Subtitle hint */}
-        <p className="relative max-w-xs text-center text-sm text-muted-foreground/60">
+        {/* <p className="relative max-w-xs text-center text-sm text-muted-foreground/60">
           Type a message below or pick a starter.
-        </p>
+        </p> */}
 
         {/* Quick action cards */}
         <div className="relative flex max-w-lg flex-wrap justify-center gap-2">
