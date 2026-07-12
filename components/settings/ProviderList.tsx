@@ -38,7 +38,7 @@ export function ProviderList() {
   if (providers.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        No providers configured yet — add one above to start chatting.
+        No providers configured yet. Add one above to start chatting.
       </p>
     );
   }

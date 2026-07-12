@@ -1,29 +1,3 @@
-CREATE TABLE `memories` (
-	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
-	`content` text NOT NULL,
-	`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
-	`updated_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE `tool_configs` (
-	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
-	`tool_id` text NOT NULL,
-	`enabled` integer DEFAULT false NOT NULL,
-	`api_key` text,
-	`config` text,
-	`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
-	`updated_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `tool_configs_tool_id_unique` ON `tool_configs` (`tool_id`);--> statement-breakpoint
-CREATE TABLE `user_preferences` (
-	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
-	`preferred_name` text DEFAULT '' NOT NULL,
-	`preferences` text DEFAULT '' NOT NULL,
-	`personality` text DEFAULT 'Be helpful, concise, and direct. Match the user''s tone.' NOT NULL,
-	`updated_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL
-);
---> statement-breakpoint
 PRAGMA foreign_keys=OFF;--> statement-breakpoint
 CREATE TABLE `__new_conversations` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,

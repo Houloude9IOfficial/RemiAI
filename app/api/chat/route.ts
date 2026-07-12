@@ -17,6 +17,8 @@ import { buildFilesystemTools } from "@/lib/fs/tools";
 import { buildContextTools } from "@/lib/tools/context";
 import { buildMemoryTools } from "@/lib/tools/memories";
 import { buildIntegrationTools } from "@/lib/tools/integrations";
+import { buildExecutionTools } from "@/lib/tools/exec";
+import { buildDocumentReaderTools } from "@/lib/tools/document-reader";
 
 function titleFromMessage(message: UIMessage): string {
   const text = message.parts
@@ -98,6 +100,12 @@ export async function POST(req: Request) {
   // Gather integration tools (Brave Search, Notion, Context7) based on config
   const integrationToolSet = await buildIntegrationTools();
 
+  // Gather code execution tools (python_exec, js_exec)
+  const executionToolSet = await buildExecutionTools();
+
+  // Gather document reader tools (read_document)
+  const documentToolSet = await buildDocumentReaderTools();
+
   // Merge all tool sets (last writer wins on name collision)
   const tools = {
     ...mcpToolSet,
@@ -105,6 +113,8 @@ export async function POST(req: Request) {
     ...contextToolSet,
     ...memoryToolSet,
     ...integrationToolSet,
+    ...executionToolSet,
+    ...documentToolSet,
   };
 
   // Build combined system prompt with user preferences

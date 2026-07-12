@@ -79,7 +79,9 @@ read_file({ rootId: 1, relativePath: "projects/notes.md" }) → read a file
 search_files({ rootId: 1, query: "TODO" }) → search all files in that root
 \`\`\`
 
-**IMPORTANT**: The \`rootId\` parameter is the numeric \`id\` from \`list_permitted_roots\`. Do NOT pass the \`path\` string as \`rootId\`.
+**IMPORTANT**: The \`rootId\` parameter must be a **number** (e.g. \`1\`), NOT a string (e.g. NOT \`"1"\`). Pass the numeric \`id\` from \`list_permitted_roots\`. Do NOT pass the \`path\` string as \`rootId\`.
+
+**Windows users**: Always use forward slashes (\`/\`) in \`relativePath\` — the system normalises them automatically. Never use backslashes (\`\\\`).
 
 ## Available filesystem tools
 
@@ -94,6 +96,25 @@ search_files({ rootId: 1, query: "TODO" }) → search all files in that root
 | \`write_file\` | \`rootId\` (number, required), \`relativePath\`, \`content\`, \`mode\` | Write or append to a file. Write-permission required. |
 | \`get_time_details\` | (none) | Get current date, time, timezone, weekday, and UTC offset. |
 | \`get_device_details\` | (none) | Get details about the user's browser, OS, and device type. |
+| \`python_exec\` | \`code\` (string required), \`timeout\` (number, optional) | Execute Python code in a subprocess. Returns stdout, stderr, exit code, and duration. Supports print() output. Timeout: 30s default, max 120s. |
+| \`js_exec\` | \`code\` (string required), \`timeout\` (number, optional) | Execute JavaScript code in a sandboxed Node.js VM. Supports console.log() output, await, and return values. No access to fs, network, or timers. Timeout: 15s default, max 60s. |
+| \`read_document\` | \`rootId\` (number required), \`relativePath\` (string required) | Extract text from document files: PDF, DOCX, DOC, ODT, RTF, EPUB. Uses pdf-parse for PDFs and mammoth for DOCX files. Max 50 MB. Use this INSTEAD of read_file for non-text documents. |
+
+## Code execution
+
+You have access to Python and JavaScript execution tools. Use them to:
+- Run calculations, algorithms, or data processing
+- Test code snippets before writing them to files
+- Generate or transform data
+- Solve programming problems
+
+For \`python_exec\`: use print() to see output. The code runs as a subprocess.
+For \`js_exec\`: use console.log() to see output. \`await\` is supported at top level.
+Both tools have timeouts. If execution takes too long, increase the timeout parameter.
+
+## Document reader
+
+Use \`read_document\` INSTEAD of \`read_file\` when the user asks you to read a PDF, DOCX, Word document, or other document format. The \`read_file\` tool only works on plain text files (.md, .txt, .csv, .json, etc.). For everything else, use \`read_document\`. It uses the same \`rootId\` and \`relativePath\` system as the filesystem tools.
 
 ## MCP tools
 

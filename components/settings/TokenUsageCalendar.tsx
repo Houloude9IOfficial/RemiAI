@@ -90,25 +90,27 @@ export function TokenUsageCalendar({ dailyUsage }: TokenUsageCalendarProps) {
 
                 return (
                   <Tooltip key={index}>
-                    <TooltipTrigger asChild>
-                      <div
-                        className={`
-                          aspect-square rounded-sm border border-border/20 cursor-pointer
-                          hover:ring-2 hover:ring-blue-500 transition-all
-                          ${colorClass}
-                          ${isToday ? "ring-2 ring-blue-500" : ""}
-                        `}
-                      >
-                        <div className="h-full w-full flex items-center justify-center">
-                          <span className="text-xs font-medium">
-                            {day.totalTokens > 0 ? 
-                              day.totalTokens >= 1000 ? 
-                                (day.totalTokens / 1000).toFixed(1) + "K" : 
-                                day.totalTokens
-                              : "-"
-                            }
-                          </span>
-                        </div>
+                    <TooltipTrigger
+                      render={
+                        <div
+                          className={`
+                            aspect-square rounded-sm border border-border/20 cursor-pointer
+                            hover:ring-2 hover:ring-blue-500 transition-all
+                            ${colorClass}
+                            ${isToday ? "ring-2 ring-blue-500" : ""}
+                          `}
+                        />
+                      }
+                    >
+                      <div className="h-full w-full flex items-center justify-center">
+                        <span className="text-xs font-medium">
+                          {day.totalTokens > 0 ? 
+                            day.totalTokens >= 1000 ? 
+                              (day.totalTokens / 1000).toFixed(1) + "K" : 
+                              day.totalTokens
+                            : "-"
+                          }
+                        </span>
                       </div>
                     </TooltipTrigger>
                     <TooltipContent>

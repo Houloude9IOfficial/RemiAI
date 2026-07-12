@@ -92,6 +92,14 @@ export function ToolCallCard({
     ((output as Record<string, unknown>).type === "image" ||
       (output as Record<string, unknown>).type === "video");
 
+  // Detect if the output is a code execution result (from python_exec / js_exec)
+  const isExecResult =
+    output !== undefined &&
+    output !== null &&
+    typeof output === "object" &&
+    "stdout" in (output as Record<string, unknown>) &&
+    typeof (output as Record<string, unknown>).stdout === "string";
+
   // Split MCP namespaced name "server__tool" into server + display name
   const displayName = displayTitle.includes("__")
     ? displayTitle.split("__").slice(1).join("__")
@@ -185,6 +193,8 @@ export function ToolCallCard({
           >
             {isMediaResult ? (
               <MediaDisplay data={output as Record<string, unknown>} />
+            ) : isExecResult ? (
+              <TerminalOutput data={output as Record<string, unknown>} />
             ) : (
               <JsonBlock data={output} />
             )}
@@ -291,9 +301,7 @@ export function ToolCallCard({
           <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
           <span className="text-xs text-destructive">{errorText}</span>
         </div>
-      )}
-
-      {/* Output section */}
+      )}        {/* Output section */}
       {output !== undefined && !isError && (
         <CollapsibleSection
           open={outputOpen}
@@ -302,6 +310,8 @@ export function ToolCallCard({
         >
           {isMediaResult ? (
             <MediaDisplay data={output as Record<string, unknown>} />
+          ) : isExecResult ? (
+            <TerminalOutput data={output as Record<string, unknown>} />
           ) : (
             <JsonBlock data={output} />
           )}
@@ -461,4 +471,70 @@ function formatJson(data: unknown): string {
   } catch {
     return String(data);
   }
+}
+
+/**
+ * Terminal-like output for code execution results (python_exec / js_exec).
+ * Shows stdout in green, stderr in red, with an exit code badge.
+ */
+function TerminalOutput({ data }: { data: Record<string, unknown> }) {
+  const stdout = (data.stdout as string) ?? "";
+  const stderr = (data.stderr as string) ?? "";
+  const exitCode = data.exitCode as number | null;
+  const timedOut = (data.timedOut as boolean) ?? false;
+  const duration = (data.duration as string) ?? "";
+  const returnValue = data.returnValue;
+
+  const hasStdout = stdout.length > 0;
+  const hasStderr = stderr.length > 0;
+  const hasReturn = returnValue !== undefined;
+
+  if (!hasStdout && !hasStderr && !hasReturn) {
+    return (
+      <div className="rounded-md bg-[#1e1e2e] p-3 text-xs font-mono leading-relaxed">
+        <span className="text-muted-foreground italic">(no output)</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-md bg-[#1e1e2e] overflow-hidden">
+      {/* Terminal header bar */}
+      <div className="flex items-center gap-1.5 border-b border-white/5 px-3 py-1.5">
+        <div className="flex gap-1">
+          <span className="h-2.5 w-2.5 rounded-full bg-red-500/70" />
+          <span className="h-2.5 w-2.5 rounded-full bg-yellow-500/70" />
+          <span className="h-2.5 w-2.5 rounded-full bg-green-500/70" />
+        </div>
+        <span className="ml-2 text-[10px] text-white/40 font-mono">
+          {timedOut ? "⏱ Timed out" : exitCode === 0 ? "✓ Success" : `✗ Exit ${exitCode}`}
+        </span>
+        {duration && (
+          <span className="ml-auto text-[10px] text-white/30 font-mono">
+            {duration}
+          </span>
+        )}
+      </div>
+
+      {/* Terminal body */}
+      <div className="max-h-60 overflow-y-auto p-3 text-xs font-mono leading-relaxed custom-scrollbar">
+        {hasStdout && (
+          <pre className="text-green-400/90 whitespace-pre-wrap m-0">{stdout}</pre>
+        )}
+        {hasStderr && (
+          <pre className="text-red-400/90 whitespace-pre-wrap m-0">{stderr}</pre>
+        )}
+        {hasReturn && (
+          <div className="mt-2 border-t border-white/5 pt-2">
+            <span className="text-[10px] text-white/30 uppercase tracking-wider">Return value</span>
+            <pre className="text-blue-400/90 whitespace-pre-wrap mt-1">
+              {typeof returnValue === "object"
+                ? JSON.stringify(returnValue, null, 2)
+                : String(returnValue)}
+            </pre>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }

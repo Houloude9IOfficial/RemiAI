@@ -51,6 +51,28 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     togglable: false,
     requiresApiKey: false,
   },
+  // ── Code execution tools (togglable, disabled by default, security warning) ──
+  {
+    id: "code_execution",
+    name: "Code Execution",
+    description:
+      "Run Python or JavaScript code on your machine. This is NOT a secure sandbox — the code has full filesystem access. Only enable if you trust the AI. Includes python_exec and js_exec with console output.",
+    toolNames: ["python_exec", "js_exec"],
+    category: "builtin",
+    togglable: true,
+    requiresApiKey: false,
+  },
+  // ── Document reader tools (builtin, always on, not togglable) ──
+  {
+    id: "document_reader",
+    name: "Document Reader",
+    description:
+      "Extract text from PDF, DOCX, DOC, ODT, RTF, and EPUB files. Uses pdf-parse and mammoth libraries for document parsing.",
+    toolNames: ["read_document"],
+    category: "builtin",
+    togglable: false,
+    requiresApiKey: false,
+  },
   // ── Memory tools (builtin, always on, not togglable) ──
   {
     id: "memory",

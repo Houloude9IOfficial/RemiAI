@@ -18,3 +18,5 @@ add agent support to work at background
 add on input marking, e.g @FILE to be able to tag files, and allow the AI to easily understand what to do.
 
 add BASH/SHELL commands support with confirmations and auto-approve mode
+
+if tool input is {} do not show input, only output

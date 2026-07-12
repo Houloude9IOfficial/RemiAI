@@ -16,6 +16,7 @@ import {
   Wrench,
   Brain,
   Globe,
+  AlertTriangle,
   BookOpen,
   FileSearch,
   Clock,
@@ -24,6 +25,14 @@ import { toast } from "sonner";
 import { toolsApi } from "@/lib/api/tools";
 import type { ToolWithConfig } from "@/app/api/tools/route";
 import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const CATEGORY_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   builtin: Wrench,
@@ -57,6 +66,7 @@ export function ToolList() {
 
   const [apiKeyInputs, setApiKeyInputs] = useState<Record<string, string>>({});
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
+  const [confirmTool, setConfirmTool] = useState<ToolWithConfig | null>(null);
 
   const updateMutation = useMutation({
     mutationFn: ({
@@ -83,7 +93,19 @@ export function ToolList() {
       return;
     }
 
+    // Show security warning for code execution
+    if (newEnabled && tool.id === "code_execution") {
+      setConfirmTool(tool);
+      return;
+    }
+
     updateMutation.mutate({ toolId: tool.id, enabled: newEnabled });
+  };
+
+  const handleConfirmEnable = () => {
+    if (!confirmTool) return;
+    updateMutation.mutate({ toolId: confirmTool.id, enabled: true });
+    setConfirmTool(null);
   };
 
   const handleSaveApiKey = (tool: ToolWithConfig) => {
@@ -140,7 +162,7 @@ export function ToolList() {
               const inputKey = `api-key-${tool.id}`;
 
               return (
-                <Card key={tool.id} className="overflow-hidden">
+                <Card key={tool.id} className="overflow-hidden mb-5">
                   <CardHeader className="flex-row items-start gap-3 space-y-0 py-3">
                     {tool.icon ? (
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center bg-none rounded-lg">
@@ -314,6 +336,48 @@ export function ToolList() {
           </div>
         </div>
       ))}
+
+      {/* Security warning dialog for code execution */}
+      <Dialog open={confirmTool !== null} onOpenChange={(open) => !open && setConfirmTool(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="h-5 w-5" />
+              Enable Code Execution?
+            </DialogTitle>
+            <DialogDescription className="pt-2 space-y-3" render={<div />}>
+              <p className="text-sm font-medium text-foreground">
+                This is <strong>NOT a secure sandbox</strong>.
+              </p>
+              <ul className="text-xs space-y-1.5 text-muted-foreground list-disc pl-4">
+                <li>The code runs as a subprocess on <strong>your machine</strong> with <strong>full filesystem access</strong></li>
+                <li>It can read, write, and delete <strong>any file</strong> on your system</li>
+                <li>It can make network connections</li>
+                <li>Environment variables (PATH, HOME, etc.) are stripped to prevent easy file discovery</li>
+                <li>But <strong>absolute paths still work</strong> — this is <strong>not</strong> a security boundary</li>
+              </ul>
+              <p className="text-xs text-muted-foreground">
+                Only enable if you understand these risks. True sandboxing requires Docker containers.
+              </p>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setConfirmTool(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="default"
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+              onClick={handleConfirmEnable}
+            >
+              I Understand, Enable
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

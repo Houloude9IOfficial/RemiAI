@@ -66,11 +66,24 @@ export async function getPermittedRoots(): Promise<PermittedRoot[]> {
 
 /**
  * Look up a single root by its DB id. Throws if not found.
+ *
+ * The `id` parameter is typed as `number` but may arrive as a string
+ * when the AI model serializes numbers as strings in tool call JSON.
+ * Both `z.coerce.number()` (Zod-level) and `Number()` (runtime guard)
+ * handle this so the lookup always works cross-platform.
  */
 export async function getRootById(id: number): Promise<PermittedRoot> {
+  // Runtime coercion: AI models sometimes send rootId as a string ("1")
+  // even when the schema says number. Number() handles both.
+  const numericId = Number(id);
   const roots = await getPermittedRoots();
-  const root = roots.find((r) => r.id === id);
-  if (!root) throw new FilesystemError(`Root directory ${id} not found`, "NOT_FOUND");
+  const root = roots.find((r) => r.id === numericId);
+  if (!root) {
+    throw new FilesystemError(
+      `Root directory ${id} not found. Make sure to pass the numeric id (e.g. rootId=1) — the AI must send the number, not a string like rootId="1".`,
+      "NOT_FOUND",
+    );
+  }
   return root;
 }
 
@@ -160,7 +173,11 @@ function isWithinRoot(target: string, root: string): boolean {
   const normalizedTarget = path.normalize(target);
   const normalizedRoot = path.normalize(root);
   if (normalizedTarget === normalizedRoot) return true;
-  return normalizedTarget.startsWith(normalizedRoot + path.sep);
+  // Use path.sep for containment check (\ on Windows, / on macOS/Linux)
+  const withSep = normalizedRoot.endsWith(path.sep)
+    ? normalizedRoot
+    : normalizedRoot + path.sep;
+  return normalizedTarget.startsWith(withSep);
 }
 
 // ---------------------------------------------------------------------------
@@ -334,6 +351,7 @@ export async function searchFiles(
 /**
  * Collect all file paths recursively in a root directory matching a glob.
  * Uses ripgrep for speed, falls back to Node glob.
+ * All returned paths use forward slashes (/) for cross-platform consistency.
  */
 async function discoverFiles(
   root: PermittedRoot,
@@ -353,7 +371,11 @@ async function discoverFiles(
     });
 
     if (rgResult.status === 0 && rgResult.stdout) {
-      return rgResult.stdout.trim().split("\n").filter(Boolean);
+      return rgResult.stdout
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map(normalizePath);
     }
   } catch {
     // rg not available — fall through
@@ -363,9 +385,19 @@ async function discoverFiles(
   const nodeGlob = await importGlob();
   const files: string[] = [];
   for await (const fp of nodeGlob(globPattern, { cwd: root.path, nodir: true })) {
-    files.push(fp);
+    files.push(normalizePath(fp));
   }
   return files.sort();
+}
+
+/**
+ * Normalize a file path to always use forward slashes (/).
+ * This ensures cross-platform consistency: macOS/Linux use / natively,
+ * Windows uses \ internally, but AI models and tool outputs should always
+ * use / so that paths work the same everywhere.
+ */
+function normalizePath(fp: string): string {
+  return fp.replace(/\\/g, "/");
 }
 
 /**
@@ -450,6 +482,7 @@ function extractLine(content: string, line: number): string {
 
 /**
  * Match files by glob pattern inside a root directory.
+ * All returned paths use forward slashes (/) for cross-platform consistency.
  */
 export async function globFiles(
   root: PermittedRoot,
@@ -460,7 +493,7 @@ export async function globFiles(
   const results: string[] = [];
 
   for await (const filePath of nodeGlob(globPattern, { cwd: root.path })) {
-    results.push(filePath);
+    results.push(normalizePath(filePath));
   }
 
   return results.sort();
@@ -644,14 +677,17 @@ async function importSharp(): Promise<
 
 /**
  * Build the server URL path used to serve this media file.
+ * Converts Windows backslashes to forward slashes so the URL is valid.
  */
 async function buildMediaUrl(
   root: PermittedRoot,
   relativePath: string,
   _filename: string,
 ): Promise<string> {
+  // Normalize Windows backslashes to forward slashes
+  const normalized = normalizePath(relativePath);
   // URL-encode each path segment so special characters are safe
-  const encodedSegments = relativePath
+  const encodedSegments = normalized
     .split("/")
     .map((s) => encodeURIComponent(s))
     .join("/");

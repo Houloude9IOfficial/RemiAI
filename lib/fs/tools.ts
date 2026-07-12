@@ -57,7 +57,7 @@ export const listDirectoryTool = {
     "List files and directories inside a permitted root directory (or subdirectory). Returns entries sorted with directories first, then alphabetically, with file sizes and types.",
   parameters: z.object({
     rootId: z
-      .number()
+      .coerce.number()
       .int()
       .positive()
       .describe("ID of the permitted root directory (use list_permitted_roots to discover)"),
@@ -65,7 +65,7 @@ export const listDirectoryTool = {
       .string()
       .optional()
       .describe(
-        "Optional relative path within the root. Leave empty to list the root itself.",
+        "Optional relative path within the root. Leave empty to list the root itself. Use forward slashes (/) even on Windows.",
       ),
   }),
   execute: async ({
@@ -95,11 +95,11 @@ export const readFileTool = {
     "Read the text content of a file within a permitted root. Supports optional offset and limit for partial reads (useful for large files). Max 100KB per read.",
   parameters: z.object({
     rootId: z
-      .number()
+      .coerce.number()
       .int()
       .positive()
       .describe("ID of the permitted root directory"),
-    relativePath: z.string().describe("Relative path to the file within the root"),
+    relativePath: z.string().describe("Relative path to the file within the root (use forward slashes even on Windows)"),
     offset: z
       .number()
       .int()
@@ -139,7 +139,7 @@ export const searchFilesTool = {
     "Search for a text string inside files within a permitted root. Uses ripgrep if available (much faster), otherwise falls back to a Node.js line-by-line search. Optionally filter by glob pattern.",
   parameters: z.object({
     rootId: z
-      .number()
+      .coerce.number()
       .int()
       .positive()
       .describe("ID of the permitted root directory"),
@@ -174,7 +174,7 @@ export const globFilesTool = {
     "Find files matching a glob pattern inside a permitted root. Use this to discover files by name or extension (e.g. '**/*.ts', '*.md', 'docs/**/*').",
   parameters: z.object({
     rootId: z
-      .number()
+      .coerce.number()
       .int()
       .positive()
       .describe("ID of the permitted root directory"),
@@ -200,13 +200,13 @@ export const readMediaTool = {
     "Read an image or video file and examine its content. The result has a `dataUrl` field (a base64 data URL you can look at to see the image) for images up to 128 KB. For larger images and all videos, `dataUrl` is absent and only `url` + metadata are returned. **If `dataUrl` is present, look at it and describe the image content. If `dataUrl` is absent, tell the user the file details (filename, type, size) and that it's too large to inline — offer to help with it in other ways. Always continue with a text response.** Supported formats: images (.jpg, .png, .gif, .webp, .svg, .avif) and videos (.mp4, .webm, .mov, .avi, .mkv). Max file size: 20 MB.",
   parameters: z.object({
     rootId: z
-      .number()
+      .coerce.number()
       .int()
       .positive()
       .describe("ID of the permitted root directory"),
     relativePath: z
       .string()
-      .describe("Relative path to the media file within the root"),
+      .describe("Relative path to the media file within the root (use forward slashes even on Windows)"),
   }),
   execute: async ({
     rootId,
@@ -229,11 +229,11 @@ export const writeFileTool = {
     "Write content to a file within a permitted root. Creates parent directories if needed. By default overwrites the file; use mode='append' to append instead.",
   parameters: z.object({
     rootId: z
-      .number()
+      .coerce.number()
       .int()
       .positive()
       .describe("ID of the permitted root directory (must have write permission)"),
-    relativePath: z.string().describe("Relative path to the file within the root"),
+    relativePath: z.string().describe("Relative path to the file within the root (use forward slashes even on Windows)"),
     content: z.string().describe("Text content to write to the file"),
     mode: z
       .enum(["overwrite", "append"])

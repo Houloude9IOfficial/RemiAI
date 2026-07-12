@@ -18,6 +18,7 @@ import {
   FileSearch,
   Clock,
   Monitor,
+  Terminal,
 } from "lucide-react";
 
 type AnyToolPart = ToolUIPart<any> | DynamicToolUIPart;
@@ -100,6 +101,21 @@ const TOOL_LABELS: Record<string, ToolLabel> = {
     present: "Checking device",
     past: "Checked device",
     icon: Monitor,
+  },
+  python_exec: {
+    present: "Running Python",
+    past: "Ran Python",
+    icon: Terminal,
+  },
+  js_exec: {
+    present: "Running JavaScript",
+    past: "Ran JavaScript",
+    icon: Terminal,
+  },
+  read_document: {
+    present: "Reading document",
+    past: "Read document",
+    icon: FileText,
   },
 };
 
