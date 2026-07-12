@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowUp, Square, Target, Sparkles } from "lucide-react";
@@ -44,13 +45,39 @@ export function ChatInput({
 
       {/* Subtle indicator bar when goal mode is active */}
       {agentic && !isStreaming && (
-        <div className="mt-1.5 flex items-center gap-1.5 px-1">
-          <div className="h-0.5 flex-1 rounded-full bg-gradient-to-r from-primary/40 via-primary/60 to-primary/40" />
-          <span className="text-[10px] font-medium tracking-wide text-primary/70">
-            Goal mode — AI will work autonomously
-          </span>
-          <div className="h-0.5 flex-1 rounded-full bg-gradient-to-r from-primary/40 via-primary/60 to-primary/40" />
-        </div>
+        <AnimatePresence>
+          <motion.div
+            className="mt-1.5 flex items-center gap-1.5 px-1"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: 'flex-1' }}
+              exit={{ width: 0 }}
+              transition={{ duration: 0.5 }}
+              className="h-0.5 rounded-full bg-gradient-to-r from-primary/40 via-primary/60 to-primary/40"
+            />
+            <motion.span
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.5 }}
+              className="text-[10px] font-medium tracking-wide text-primary/70"
+            >
+              Goal mode — AI will work autonomously
+            </motion.span>
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: 'flex-1' }}
+              exit={{ width: 0 }}
+              transition={{ duration: 0.5 }}
+              className="h-0.5 rounded-full bg-gradient-to-r from-primary/40 via-primary/60 to-primary/40"
+            />
+          </motion.div>
+        </AnimatePresence>
       )}
       {/* Fade-blur gradient at the top so chat content fades smoothly into the input area */}
       <div className="pointer-events-none absolute inset-x-0 -top-6 z-10 h-6 bg-gradient-to-b from-transparent to-background backdrop-blur-[1px]" />
