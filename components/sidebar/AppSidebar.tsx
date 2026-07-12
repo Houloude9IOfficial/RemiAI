@@ -5,10 +5,11 @@ import { usePathname, useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Brain, FolderOpen, MessageSquarePlus, Pen, Plug, Settings2, User, Wrench } from "lucide-react";
+import { Brain, BarChart3, FolderOpen, MessageSquarePlus, Pen, Plug, Settings2, User, Wrench } from "lucide-react";
 import { conversationsApi } from "@/lib/api/conversations";
 import { ConversationList } from "./ConversationList";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { AboutModal } from "./AboutModal";
 
 const settingsLinks = [
   { href: "/settings/customize", label: "Customize", icon: User },
@@ -17,6 +18,7 @@ const settingsLinks = [
   { href: "/settings/directories", label: "Directories", icon: FolderOpen },
   { href: "/settings/providers", label: "Models & Providers", icon: Settings2 },
   { href: "/settings/mcp", label: "MCP Servers", icon: Plug },
+  { href: "/settings/usage", label: "Usage", icon: BarChart3 },
 ];
 
 export function AppSidebar() {
@@ -91,6 +93,7 @@ export function AppSidebar() {
           </Link>
         ))}
         <div className="mt-2 flex items-center justify-between border-t pt-2">
+          <AboutModal />
           <ThemeToggle />
         </div>
       </nav>
