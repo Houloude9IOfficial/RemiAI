@@ -41,5 +41,11 @@ Once the server is running, you can interact with RemiAI through the web UI. The
 - Manage memories (`remember`, `search_memories`, `get_recent_memories`)
 - Call MCP services (`myServer__toolName`)
 
+## Made with
+
+- [Claude Code](https://claude.com/product/claude-code) (10$ Credits)
+- [FreeBuff](https://freebuff.com)
+- [FreeLLMAPI](https://freellmapi.co)
+
 ## License
 This project is licensed under the **MIT License** – see `LICENSE` for details.
