@@ -71,6 +71,15 @@ function ConversationChat({
       modelId: nextModelId,
     });
     setModel({ providerId: nextProviderId, modelId: nextModelId });
+    // Persist this choice for future new conversations
+    try {
+      localStorage.setItem(
+        "lastModel",
+        JSON.stringify({ providerId: nextProviderId, modelId: nextModelId }),
+      );
+    } catch {
+      // localStorage may be unavailable — ignore
+    }
     onConversationChanged();
   };
 

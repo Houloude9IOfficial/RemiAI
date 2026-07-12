@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { FolderOpen, MessageSquarePlus, Plug, Settings2 } from "lucide-react";
 import { conversationsApi } from "@/lib/api/conversations";
 import { ConversationList } from "./ConversationList";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 const settingsLinks = [
   { href: "/settings/directories", label: "Directories", icon: FolderOpen },
@@ -21,7 +22,24 @@ export function AppSidebar() {
   const queryClient = useQueryClient();
 
   const newChatMutation = useMutation({
-    mutationFn: () => conversationsApi.create(),
+    mutationFn: () => {
+      // Use the last-selected model from localStorage, if any
+      const lastModel = globalThis.localStorage?.getItem("lastModel");
+      let providerId: number | undefined;
+      let modelId: string | undefined;
+      if (lastModel) {
+        try {
+          const parsed = JSON.parse(lastModel);
+          if (typeof parsed.providerId === "number") providerId = parsed.providerId;
+          if (typeof parsed.modelId === "string") modelId = parsed.modelId;
+        } catch {
+          // Ignore corrupt localStorage value
+        }
+      }
+      return conversationsApi.create(
+        providerId && modelId ? { providerId, modelId } : undefined,
+      );
+    },
     onSuccess: (conversation) => {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
       router.push(`/chat/${conversation.id}`);
@@ -56,7 +74,7 @@ export function AppSidebar() {
             key={href}
             href={href}
             className={cn(
-              "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground",
+              "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors duration-150",
               pathname.startsWith(href) && "bg-muted text-foreground",
             )}
           >
@@ -64,6 +82,12 @@ export function AppSidebar() {
             {label}
           </Link>
         ))}
+        <div className="mt-2 flex items-center justify-between border-t pt-2">
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60">
+            Theme
+          </span>
+          <ThemeToggle />
+        </div>
       </nav>
     </aside>
   );

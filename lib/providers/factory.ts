@@ -2,6 +2,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import type { LanguageModel } from "ai";
 import type { providers } from "@/db/schema";
+import { createCompatFetch } from "./compat";
 
 type ProviderRow = typeof providers.$inferSelect;
 
@@ -18,11 +19,13 @@ export function getLanguageModel(provider: ProviderRow, modelId: string): Langua
       return createOpenAI({
         baseURL: provider.baseUrl ?? "http://localhost:11434/v1",
         apiKey: provider.apiKey ?? "ollama",
+        fetch: createCompatFetch(),
       }).chat(modelId);
     case "openai-compatible":
       return createOpenAI({
         baseURL: provider.baseUrl!,
         apiKey: provider.apiKey ?? undefined,
+        fetch: createCompatFetch(),
       }).chat(modelId);
   }
 }

@@ -1,25 +1,84 @@
 import type { UIMessage } from "ai";
-import { cn } from "@/lib/utils";
+import { isTextUIPart, isToolUIPart } from "ai";
+import { ToolCallGroup } from "./ToolCallGroup";
+import { MarkdownRenderer } from "./MarkdownRenderer";
+
+/**
+ * Collect consecutive tool parts into groups for rendering.
+ * Non-tool parts (step-start, text, etc.) are skipped entirely.
+ */
+function collectToolGroups(parts: UIMessage["parts"]) {
+  const groups: Array<{ parts: (typeof parts)[number][] }> = [];
+  let currentGroup: (typeof parts)[number][] | null = null;
+
+  for (const part of parts) {
+    if (isToolUIPart(part)) {
+      if (currentGroup) {
+        currentGroup.push(part);
+      } else {
+        currentGroup = [part];
+      }
+    } else {
+      if (currentGroup) {
+        groups.push({ parts: currentGroup });
+        currentGroup = null;
+      }
+    }
+  }
+
+  if (currentGroup) {
+    groups.push({ parts: currentGroup });
+  }
+
+  return groups;
+}
 
 export function MessageBubble({ message }: { message: UIMessage }) {
-  const text = message.parts
-    .filter((p): p is { type: "text"; text: string } => p.type === "text")
+  // ---- User messages ----
+  if (message.role === "user") {
+    const inlineText = message.parts
+      .filter(isTextUIPart)
+      .map((p) => p.text)
+      .join("");
+    if (!inlineText) return null;
+
+    return (
+      <div className="flex justify-end">
+        <div className="max-w-[75%] rounded-2xl bg-primary px-4 py-2 text-sm text-primary-foreground">
+          <p className="whitespace-pre-wrap">{inlineText}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ---- Assistant messages ----
+  // Join ALL text parts' .text properties (across all steps).
+  // During streaming the last text part is mutated in-place by
+  // text-delta events, so this is always up-to-date.
+  const fullText = message.parts
+    .filter(isTextUIPart)
     .map((p) => p.text)
     .join("");
 
-  if (!text) return null;
+  const toolGroups = collectToolGroups(message.parts);
 
-  const isUser = message.role === "user";
-
+  // ALWAYS render the assistant container — at the very first write()
+  // parts may be empty, but we need the DOM node to exist so React
+  // can populate it as the stream progresses.
   return (
-    <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
-      <div
-        className={cn(
-          "max-w-[75%] whitespace-pre-wrap rounded-2xl px-4 py-2 text-sm",
-          isUser ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
+    <div className="flex justify-start">
+      <div className="w-full max-w-[85%] text-sm text-foreground">
+        {/* Tool call groups */}
+        {toolGroups.length > 0 && (
+          <div className="mb-2 flex flex-col gap-2">
+            {toolGroups.map((group, idx) => (
+              <ToolCallGroup key={idx} parts={group.parts as any} />
+            ))}
+          </div>
         )}
-      >
-        {text}
+
+        {/* Text content */}
+        {fullText && <MarkdownRenderer content={fullText} />}
       </div>
     </div>
   );
