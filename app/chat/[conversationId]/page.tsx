@@ -86,14 +86,16 @@ function ConversationChat({
   };
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <div className="flex flex-1 flex-col">
       <div className="flex items-center gap-2 border-b px-4 py-2">
         <span className="text-sm font-medium">{initialConversation.title}</span>
         <div className="ml-auto">
           <ModelPicker providerId={providerId} modelId={modelId} onChange={handleModelChange} />
         </div>
       </div>
-      <MessageList messages={messages} status={status} onSend={(text) => sendMessage({ text })} />
+      <div className="flex-1 overflow-auto">
+        <MessageList messages={messages} status={status} onSend={(text) => sendMessage({ text })} />
+      </div>
       {error && (
         <p className="px-6 pb-2 text-xs text-destructive">{error.message}</p>
       )}

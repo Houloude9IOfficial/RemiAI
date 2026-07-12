@@ -32,9 +32,9 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <Providers>
-          <div className="flex h-screen w-full overflow-hidden">
+          <div className="flex h-screen w-full">
             <AppSidebar />
-            <main className="flex flex-1 flex-col overflow-hidden">{children}</main>
+            <main className="flex flex-1 flex-col overflow-auto">{children}</main>
           </div>
         </Providers>
       </body>

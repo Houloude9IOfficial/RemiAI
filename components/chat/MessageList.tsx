@@ -245,7 +245,7 @@ export function MessageList({
   }
 
   return (
-    <div className="relative flex flex-1 flex-col overflow-hidden">
+    <div className="relative flex flex-1 flex-col">
       <div
         ref={scrollRef}
         className="flex flex-1 flex-col overflow-y-auto p-6"
