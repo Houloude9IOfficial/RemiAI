@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React from "react";
 import Markdown from "markdown-to-jsx";
 import hljs from "highlight.js";
 import { cn } from "@/lib/utils";
@@ -25,7 +25,7 @@ export function MarkdownRenderer({ content, className, isStreaming }: MarkdownRe
       <Markdown
         options={{
           // Safely handle streaming HTML — don't try to parse incomplete tags
-          optimizeForStreamingHtml: true,
+          optimizeForStreaming: true,
           // Force block mode for full markdown parsing
           forceBlock: true,
           // Wrap plain text in a <div> rather than a <p> so we don't get
@@ -46,8 +46,21 @@ export function MarkdownRenderer({ content, className, isStreaming }: MarkdownRe
 
             // -- Code blocks with language badge + copy button
             pre: ({ children, ...props }: any) => {
-              // Try to extract language from the <code> child's className
+              // Extract language and raw text so we can highlight the code
+              const rawText = extractCodeContent(children);
               const lang = extractLanguage(children);
+
+              // Highlight the code if we have a language and it's supported
+              let highlighted = rawText;
+              try {
+                if (lang && hljs.getLanguage(lang)) {
+                  highlighted = hljs.highlight(rawText, { language: lang }).value;
+                }
+              } catch {
+                // If highlighting fails (e.g. incomplete code during streaming),
+                // fall back to unhighlighted text
+              }
+
               return (
                 <div className="group relative">
                   {lang && (
@@ -56,32 +69,29 @@ export function MarkdownRenderer({ content, className, isStreaming }: MarkdownRe
                     </span>
                   )}
                   <pre {...props} className="custom-scrollbar">
-                    {children}
+                    {/* Render highlighted code as raw HTML */}
+                    <code
+                      className={`language-${lang ?? ""} hljs`}
+                      dangerouslySetInnerHTML={{ __html: highlighted }}
+                    />
                   </pre>
                   {!isStreaming && (
                     <CopyButton>
-                      {extractCodeContent(children)}
+                      {rawText}
                     </CopyButton>
                   )}
                 </div>
               );
             },
 
-            // -- Inline & block code
+            // -- Inline code only. Block code (inside <pre>) must preserve its
+            // language class so the pre override can detect it for highlighting.
+            // markdown-to-jsx uses className="language-js lang-js" for fenced blocks.
             code: ({ className: cls, children, ...props }: any) => {
-              // markdown-to-jsx passes language as "lang-xxx" on <code> inside <pre>
-              // We convert it to "language-xxx hljs" for highlight.js CSS
-              const lang = cls?.replace(/^lang-/, "language-");
-              const isBlock = !!lang;
-
-              if (isBlock) {
-                return (
-                  <code className={`${lang} hljs`} {...props}>
-                    {children}
-                  </code>
-                );
+              // Block code inside <pre> — preserve language class for pre override
+              if (cls?.includes("lang-")) {
+                return <code className={cls} {...props}>{children}</code>;
               }
-
               // Inline code
               return (
                 <code
@@ -115,14 +125,41 @@ export function MarkdownRenderer({ content, className, isStreaming }: MarkdownRe
               </td>
             ),
 
+            // -- Headings
+            h1: ({ children, ...props }: any) => (
+              <h1 className="text-xl font-bold leading-tight mt-6 mb-3" {...props}>{children}</h1>
+            ),
+            h2: ({ children, ...props }: any) => (
+              <h2 className="text-lg font-bold leading-tight mt-5 mb-2" {...props}>{children}</h2>
+            ),
+            h3: ({ children, ...props }: any) => (
+              <h3 className="text-base font-semibold leading-tight mt-4 mb-2" {...props}>{children}</h3>
+            ),
+
+            // -- Lists
+            ul: ({ children, ...props }: any) => (
+              <ul className="list-disc pl-5 my-2 space-y-1" {...props}>{children}</ul>
+            ),
+            ol: ({ children, ...props }: any) => (
+              <ol className="list-decimal pl-5 my-2 space-y-1" {...props}>{children}</ol>
+            ),
+            li: ({ children, ...props }: any) => (
+              <li className="leading-relaxed" {...props}>{children}</li>
+            ),
+
             // -- Blockquotes
             blockquote: ({ children, ...props }: any) => (
               <blockquote
-                className="border-l-3 border-muted-foreground/25 pl-4 italic text-muted-foreground"
+                className="border-l-4 border-muted-foreground/20 pl-4 italic text-muted-foreground my-3"
                 {...props}
               >
                 {children}
               </blockquote>
+            ),
+
+            // -- Paragraphs
+            p: ({ children, ...props }: any) => (
+              <p className="mb-3 last:mb-0 leading-relaxed" {...props}>{children}</p>
             ),
 
             // -- Images
@@ -131,7 +168,7 @@ export function MarkdownRenderer({ content, className, isStreaming }: MarkdownRe
               <img
                 src={src}
                 alt={alt ?? ""}
-                className="max-w-full rounded-lg border border-border/50"
+                className="max-w-full rounded-lg border border-border/50 my-3"
                 loading="lazy"
                 {...props}
               />
@@ -139,7 +176,7 @@ export function MarkdownRenderer({ content, className, isStreaming }: MarkdownRe
 
             // -- Horizontal rules
             hr: () => (
-              <hr className="my-4 border-t border-border/50" />
+              <hr className="my-5 border-t border-border/50" />
             ),
           },
         }}
@@ -163,7 +200,8 @@ function extractLanguage(children: React.ReactNode): string | null {
   const firstChild = React.Children.toArray(children)[0];
   if (React.isValidElement<{ className?: string }>(firstChild)) {
     const cls = firstChild.props.className ?? "";
-    const match = cls.match(/^lang-(\w+)/);
+    // match-to-jsx outputs "language-js lang-js" for fenced blocks
+    const match = cls.match(/lang-(\w+)/);
     if (match) return match[1];
   }
   return null;
