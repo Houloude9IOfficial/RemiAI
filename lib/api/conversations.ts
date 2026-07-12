@@ -5,6 +5,8 @@ export type Conversation = {
   title: string;
   providerId: number | null;
   modelId: string | null;
+  totalInputTokens: number;
+  totalOutputTokens: number;
   createdAt: string;
   updatedAt: string;
 };

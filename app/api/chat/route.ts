@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { convertToModelMessages, streamText, stepCountIs, type UIMessage } from "ai";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   conversations,
@@ -29,9 +29,10 @@ function titleFromMessage(message: UIMessage): string {
 }
 
 export async function POST(req: Request) {
-  const { conversationId, messages: uiMessages } = (await req.json()) as {
+  const { conversationId, messages: uiMessages, agenticMode } = (await req.json()) as {
     conversationId: number;
     messages: UIMessage[];
+    agenticMode?: boolean;
   };
 
   const conversation = await db
@@ -136,9 +137,22 @@ export async function POST(req: Request) {
     system: SYSTEM_PROMPT + systemTip + memoryTip,
     messages: modelMessages,
     tools: Object.keys(tools).length > 0 ? tools : undefined,
-    // Allow up to 100 steps so the model can make multiple tool calls
-    // in sequence (e.g. list directory → read file → respond)
-    stopWhen: stepCountIs(100),
+    // Allow up to 100 steps normally, or 500 in agentic/goal mode
+    // so the model can work autonomously until task completion
+    stopWhen: stepCountIs(agenticMode ? 500 : 100),
+    onFinish: async ({ usage }) => {
+      // Accumulate token usage — this callback fires before
+      // toUIMessageStreamResponse's onFinish
+      if (usage) {
+        await db
+          .update(conversations)
+          .set({
+            totalInputTokens: sql`total_input_tokens + ${usage.inputTokens ?? 0}`,
+            totalOutputTokens: sql`total_output_tokens + ${usage.outputTokens ?? 0}`,
+          })
+          .where(eq(conversations.id, conversationId));
+      }
+    },
   });
 
   return result.toUIMessageStreamResponse({

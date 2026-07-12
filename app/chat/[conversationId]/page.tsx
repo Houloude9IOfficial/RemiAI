@@ -51,12 +51,13 @@ function ConversationChat({
   initialMessages: Awaited<ReturnType<typeof conversationsApi.get>>["messages"];
   onConversationChanged: () => void;
 }) {
+  const [agenticMode, setAgenticMode] = useState(false);
   const { messages, sendMessage, status, stop, error } = useChat({
     id: String(conversationId),
     messages: initialMessages,
     transport: new DefaultChatTransport({
       api: "/api/chat",
-      body: { conversationId },
+      body: { conversationId, agenticMode },
     }),
     onFinish: onConversationChanged,
   });
@@ -99,6 +100,8 @@ function ConversationChat({
       <ChatInput
         status={status}
         disabled={!providerId || !modelId}
+        agentic={agenticMode}
+        onAgenticChange={setAgenticMode}
         onSend={(text) => sendMessage({ text })}
         onStop={stop}
       />

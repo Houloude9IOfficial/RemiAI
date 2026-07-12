@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { providers } from "@/db/schema";
+import { providers, conversations } from "@/db/schema";
 import { providerUpdateSchema } from "@/lib/validation/schemas";
 import { jsonError } from "@/lib/validation/api";
 import { maskProvider } from "@/lib/providers/mask";
@@ -36,6 +36,14 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  await db.delete(providers).where(eq(providers.id, Number(id)));
+  const providerId = Number(id);
+
+  // Detach any conversations referencing this provider before deleting
+  await db
+    .update(conversations)
+    .set({ providerId: null, modelId: null })
+    .where(eq(conversations.providerId, providerId));
+
+  await db.delete(providers).where(eq(providers.id, providerId));
   return NextResponse.json({ ok: true });
 }

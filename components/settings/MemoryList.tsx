@@ -124,7 +124,15 @@ export function MemoryList() {
                   <TableCell className="text-center text-xs text-muted-foreground">
                     {idx + 1}
                   </TableCell>
-                  <TableCell className="text-sm">{memory.content}</TableCell>
+                  <TableCell 
+                    className="text-sm max-w-xs overflow-hidden text-ellipsis whitespace-nowrap cursor-pointer hover:underline"
+                    onClick={() => {
+                      navigator.clipboard.writeText(memory.content);
+                      toast.success("Copied!");
+                    }}
+                  >
+                    {memory.content}
+                  </TableCell>
                   <TableCell className="text-xs text-muted-foreground hidden sm:table-cell">
                     {new Date(memory.createdAt).toLocaleDateString(undefined, {
                       month: "short",

@@ -71,8 +71,12 @@ export const userPreferences = sqliteTable("user_preferences", {
 export const conversations = sqliteTable("conversations", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   title: text("title").notNull().default("New chat"),
-  providerId: integer("provider_id").references(() => providers.id),
+  providerId: integer("provider_id").references(() => providers.id, {
+    onDelete: "set null",
+  }),
   modelId: text("model_id"),
+  totalInputTokens: integer("total_input_tokens").notNull().default(0),
+  totalOutputTokens: integer("total_output_tokens").notNull().default(0),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });

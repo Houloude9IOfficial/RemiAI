@@ -1,3 +1,5 @@
+import CenteredLayout from '@/components/layout/CenteredLayout';
+
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
-  return <div className="flex-1 overflow-y-auto p-6">{children}</div>;
+  return <CenteredLayout>{children}</CenteredLayout>;
 }

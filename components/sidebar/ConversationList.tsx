@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -24,9 +24,146 @@ import {
   Loader2,
   CheckSquare,
   Square,
+  Info,
+  MessageSquare,
+  ArrowUpToLine,
+  ArrowDownToLine,
+  Clock,
 } from "lucide-react";
-import { conversationsApi } from "@/lib/api/conversations";
+import { conversationsApi, type Conversation } from "@/lib/api/conversations";
 import { toast } from "sonner";
+
+function formatNumber(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return String(n);
+}
+
+function formatDate(dateStr: string): string {
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return d.toLocaleDateString();
+}
+
+function ContextMenuPortal({
+  conversation,
+  position,
+  onClose,
+}: {
+  conversation: Conversation;
+  position: { x: number; y: number };
+  onClose: () => void;
+}) {
+  return createPortal(
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 z-50"
+        onClick={onClose}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onClose();
+        }}
+      />
+      {/* Menu */}
+      <div
+        className="fixed z-50 w-56 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10"
+        style={{ left: position.x, top: position.y }}
+      >
+        {/* Title */}
+        <div className="truncate px-1.5 py-1 text-sm font-medium">
+          {conversation.title}
+        </div>
+
+        <div className="mx-1 h-px bg-border" />
+
+        {/* Stats header */}
+        {/* <div className="relative flex cursor-default items-center gap-1.5 rounded-md px-1.5 py-1 text-xs text-muted-foreground select-none opacity-50">
+          <Info className="h-3.5 w-3.5 shrink-0" />
+          Conversation stats
+        </div> */}
+
+        {/* Stats rows */}
+        <div className="space-y-1 px-1.5 py-1">
+          <StatRow
+            icon={<Clock className="h-3 w-3" />}
+            label="Created"
+            value={formatDate(conversation.createdAt)}
+          />
+          <StatRow
+            icon={<Clock className="h-3 w-3" />}
+            label="Last active"
+            value={formatDate(conversation.updatedAt)}
+          />
+          <StatRow
+            icon={<ArrowUpToLine className="h-3 w-3" />}
+            label="Input tokens"
+            value={formatNumber(conversation.totalInputTokens)}
+          />
+          <StatRow
+            icon={<ArrowDownToLine className="h-3 w-3" />}
+            label="Output tokens"
+            value={formatNumber(conversation.totalOutputTokens)}
+          />
+          <StatRow
+            icon={<MessageSquare className="h-3 w-3" />}
+            label="Total tokens"
+            value={formatNumber(conversation.totalInputTokens + conversation.totalOutputTokens)}
+          />
+        </div>
+
+        <div className="mx-1 h-px bg-border" />
+
+        {/* Copy stats */}
+        <div
+          className="relative flex cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-1 text-sm select-none hover:bg-accent hover:text-accent-foreground"
+          onClick={() => {
+            navigator.clipboard.writeText(
+              `Conversation: ${conversation.title}\n` +
+              `Created: ${conversation.createdAt}\n` +
+              `Input tokens: ${conversation.totalInputTokens}\n` +
+              `Output tokens: ${conversation.totalOutputTokens}`,
+            );
+            toast.success("Stats copied to clipboard");
+            onClose();
+          }}
+          role="menuitem"
+          tabIndex={0}
+        >
+          <Copy className="h-3.5 w-3.5" />
+          Copy stats
+        </div>
+      </div>
+    </>,
+    document.body,
+  );
+}
+
+function StatRow({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex gap-2 text-xs">
+      <span className="text-muted-foreground/60 shrink-0">{icon}</span>
+      <span className="flex-1 text-muted-foreground">{label}</span>
+      <span className="font-medium tabular-nums text-foreground">{value}</span>
+    </div>
+  );
+}
 
 export function ConversationList() {
   const pathname = usePathname();
@@ -48,6 +185,10 @@ export function ConversationList() {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [batchDeleteConfirm, setBatchDeleteConfirm] = useState(false);
+
+  // Right-click context menu state
+  const [contextMenuId, setContextMenuId] = useState<number | null>(null);
+  const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number } | null>(null);
 
   const renameMutation = useMutation({
     mutationFn: ({ id, title }: { id: number; title: string }) =>
@@ -157,6 +298,19 @@ export function ConversationList() {
     setSelectedIds(new Set());
   }, []);
 
+  // Close context menu on Escape
+  useEffect(() => {
+    if (!contextMenuId) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setContextMenuId(null);
+        setContextMenuPos(null);
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [contextMenuId]);
+
   if (conversations.length === 0) {
     return (
       <p className="px-2 py-1 text-xs text-muted-foreground/70">
@@ -238,120 +392,138 @@ export function ConversationList() {
           return (
             <div
               key={conversation.id}
-              className={cn(
-                "group/conversation relative flex items-center rounded-md px-2 py-1.5 text-sm",
-                isActive && !selectMode
-                  ? "bg-muted text-foreground"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                selectMode && isSelected && "bg-primary/10",
-                selectMode && "cursor-pointer",
-              )}
-              onClick={
-                selectMode ? () => toggleSelect(conversation.id) : undefined
-              }
+              className="relative"
+              onContextMenu={(e) => {
+                if (!selectMode) {
+                  e.preventDefault();
+                  setContextMenuId(conversation.id);
+                  setContextMenuPos({ x: e.clientX, y: e.clientY });
+                }
+              }}
             >
-              {renamingId === conversation.id ? (
-                /* ---- Inline rename input ---- */
-                <form
-                  className="flex flex-1 items-center gap-1"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    commitRename();
-                  }}
-                >
-                  <Input
-                    value={renameValue}
-                    onChange={(e) => setRenameValue(e.target.value)}
-                    onBlur={commitRename}
-                    onKeyDown={(e) => {
-                      if (e.key === "Escape") cancelRename();
-                    }}
-                    className="h-6 min-w-0 flex-1 px-1 text-sm"
-                    autoFocus
-                  />
-                  <button
-                    type="submit"
-                    className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground"
-                    tabIndex={-1}
-                  >
-                    <Check className="h-3 w-3" />
-                  </button>
-                  <button
-                    type="button"
-                    className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground"
-                    onClick={cancelRename}
-                    tabIndex={-1}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </form>
-              ) : selectMode ? (
-                /* ---- Select mode: checkbox + title ---- */
-                <>
-                  <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground">
-                    {isSelected ? (
-                      <CheckSquare className="h-4 w-4 text-primary" />
-                    ) : (
-                      <Square className="h-4 w-4" />
-                    )}
-                  </div>
-                  <span
-                    className={cn(
-                      "ml-2 flex-1 truncate text-sm",
-                      isSelected && "text-foreground font-medium",
-                    )}
-                  >
-                    {conversation.title}
-                  </span>
-                </>
-              ) : (
-                /* ---- Normal link view ---- */
-                <>
-                  <Link
-                    href={`/chat/${conversation.id}`}
-                    className="flex-1 truncate"
-                  >
-                    {conversation.title}
-                  </Link>
+              <div
+                className={cn(
+                  "group/conversation flex w-full items-center justify-start rounded-md px-2 py-1.5 text-sm text-left",
+                  isActive && !selectMode
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  selectMode && isSelected && "bg-primary/10",
+                  selectMode && "cursor-pointer",
+                  (!selectMode) && "cursor-default",
+                )}
+                onClick={
+                  selectMode ? () => toggleSelect(conversation.id) : undefined
+                }
+              >
+                  {renamingId === conversation.id ? (
+                    /* ---- Inline rename input ---- */
+                    <form
+                      className="flex flex-1 items-center gap-1"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        commitRename();
+                      }}
+                    >
+                      <Input
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onBlur={commitRename}
+                        onKeyDown={(e) => {
+                          if (e.key === "Escape") cancelRename();
+                        }}
+                        className="h-6 min-w-0 flex-1 px-1 text-sm"
+                        autoFocus
+                      />
+                      <button
+                        type="submit"
+                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+                        tabIndex={-1}
+                      >
+                        <Check className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        className="flex h-5 w-5 shrink-0 rounded text-muted-foreground hover:text-foreground"
+                        onClick={cancelRename}
+                        tabIndex={-1}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </form>
+                  ) : selectMode ? (
+                    /* ---- Select mode: checkbox + title ---- */
+                    <>
+                      <div className="flex h-5 w-5 shrink-0 rounded text-muted-foreground">
+                        {isSelected ? (
+                          <CheckSquare className="h-4 w-4 text-primary" />
+                        ) : (
+                          <Square className="h-4 w-4" />
+                        )}
+                      </div>
+                      <span
+                        className={cn(
+                          "ml-2 flex-1 truncate text-sm",
+                          isSelected && "text-foreground font-medium",
+                        )}
+                      >
+                        {conversation.title}
+                      </span>
+                    </>
+                  ) : (
+                    /* ---- Normal link view ---- */
+                    <>
+                      <Link
+                        href={`/chat/${conversation.id}`}
+                        className="flex-1 truncate"
+                      >
+                        {conversation.title}
+                      </Link>
 
-                  {/* Hover actions */}
-                  <div className="flex shrink-0 items-center gap-0.5 opacity-0 group-hover/conversation:opacity-100 transition-opacity">
-                    <button
-                      type="button"
-                      className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-muted-foreground/10 hover:text-foreground"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        startRename(conversation.id, conversation.title);
-                      }}
-                      title="Rename"
-                    >
-                      <PenLine className="h-3 w-3" />
-                    </button>
-                    <button
-                      type="button"
-                      className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-muted-foreground/10 hover:text-foreground"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        duplicateMutation.mutate(conversation.id);
-                      }}
-                      title="Duplicate"
-                    >
-                      <Copy className="h-3 w-3" />
-                    </button>
-                    <button
-                      type="button"
-                      className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setDeletingId(conversation.id);
-                      }}
-                      title="Delete"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  </div>
-                </>
-              )}
+                      {/* Hover actions */}
+                      <div className="flex shrink-0 items-center gap-0.5 opacity-0 group-hover/conversation:opacity-100 transition-opacity">
+                        <span
+                          className="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted-foreground/10 hover:text-foreground"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            startRename(conversation.id, conversation.title);
+                          }}
+                          role="button"
+                          tabIndex={-1}
+                          title="Rename"
+                        >
+                          <PenLine className="h-3 w-3" />
+                        </span>
+                        <span
+                          className="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted-foreground/10 hover:text-foreground"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            duplicateMutation.mutate(conversation.id);
+                          }}
+                          role="button"
+                          tabIndex={-1}
+                          title="Duplicate"
+                        >
+                          <Copy className="h-3 w-3" />
+                        </span>
+                        <span
+                          className="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setDeletingId(conversation.id);
+                          }}
+                          role="button"
+                          tabIndex={-1}
+                          title="Delete"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </span>
+                      </div>
+                    </>
+                  )}
+                </div>
             </div>
           );
         })}
@@ -440,6 +612,22 @@ export function ConversationList() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Right-click context menu (portal) */}
+      {contextMenuId !== null && contextMenuPos && (() => {
+        const conversation = conversations.find((c) => c.id === contextMenuId);
+        if (!conversation) return null;
+        return (
+          <ContextMenuPortal
+            conversation={conversation}
+            position={contextMenuPos}
+            onClose={() => {
+              setContextMenuId(null);
+              setContextMenuPos(null);
+            }}
+          />
+        );
+      })()}
     </>
   );
 }
