@@ -53,6 +53,14 @@ export const mcpServers = sqliteTable("mcp_servers", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
+export const userPreferences = sqliteTable("user_preferences", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  preferredName: text("preferred_name").notNull().default(""),
+  preferences: text("preferences").notNull().default(""),
+  personality: text("personality").notNull().default("Be helpful, concise, and direct. Match the user\'s tone."),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const conversations = sqliteTable("conversations", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   title: text("title").notNull().default("New chat"),

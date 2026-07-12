@@ -9,6 +9,7 @@ import { persistUIMessage } from "@/lib/chat/persist";
 import { getMcpTools } from "@/lib/mcp/tools";
 import { buildFilesystemTools } from "@/lib/fs/tools";
 import { buildContextTools } from "@/lib/tools/context";
+import { userPreferences } from "@/db/schema";
 
 function titleFromMessage(message: UIMessage): string {
   const text = message.parts
@@ -86,10 +87,29 @@ export async function POST(req: Request) {
   // Merge all tool sets (filesystem tools take precedence on name collision)
   const tools = { ...mcpToolSet, ...fsToolSet, ...contextToolSet };
 
+  // Build combined system prompt with user preferences
+  const prefs = await db.select().from(userPreferences).get();
+  const prefParts: string[] = [];
+  if (prefs?.preferredName) {
+    prefParts.push(`The user's preferred name is "${prefs.preferredName}". Address them by this name.`);
+  }
+  if (prefs?.preferences) {
+    prefParts.push(`The user's preferences and context: ${prefs.preferences}`);
+  }
+  if (prefs?.personality) {
+    prefParts.push(`Your personality and tone should follow this guidance: ${prefs.personality}`);
+  }
+
+  const systemTip = prefParts.length > 0
+    ? `\n\n## User preferences\n${prefParts.join("\n")}`
+    : "";
+
+  const modelMessages = await convertToModelMessages(uiMessages);
+
   const result = streamText({
     model,
-    system: SYSTEM_PROMPT,
-    messages: await convertToModelMessages(uiMessages),
+    system: SYSTEM_PROMPT + systemTip,
+    messages: modelMessages,
     tools: Object.keys(tools).length > 0 ? tools : undefined,
     // Allow up to 100 steps so the model can make multiple tool calls
     // in sequence (e.g. list directory → read file → respond)

@@ -5,12 +5,13 @@ import { usePathname, useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { FolderOpen, MessageSquarePlus, Plug, Settings2 } from "lucide-react";
+import { FolderOpen, MessageSquarePlus, Plug, Settings2, User } from "lucide-react";
 import { conversationsApi } from "@/lib/api/conversations";
 import { ConversationList } from "./ConversationList";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 const settingsLinks = [
+  { href: "/settings/customize", label: "Customize", icon: User },
   { href: "/settings/directories", label: "Directories", icon: FolderOpen },
   { href: "/settings/providers", label: "Models & Providers", icon: Settings2 },
   { href: "/settings/mcp", label: "MCP Servers", icon: Plug },

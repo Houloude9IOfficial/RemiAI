@@ -119,6 +119,9 @@ export function MessageBubble({ message, isStreaming }: { message: UIMessage; is
     );
   }
 
+  const showThinking =
+    isStreaming && (hasToolGroups || hasText);
+
   return (
     <div className="flex justify-start">
       <div className="w-full max-w-[85%] px-4 py-3 text-sm text-foreground">
@@ -133,6 +136,16 @@ export function MessageBubble({ message, isStreaming }: { message: UIMessage; is
 
         {/* Text content — render as markdown, with safe fallback */}
         {hasText && <SafeMarkdown content={fullText} isStreaming={isStreaming} />}
+
+        {/* Thinking indicator — shown under tools/text while AI is still processing */}
+        {showThinking && (
+          <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground/60">
+            <div className="flex h-3 w-3 items-center justify-center">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground/40" />
+            </div>
+            Thinking...
+          </div>
+        )}
       </div>
     </div>
   );

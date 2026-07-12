@@ -430,3 +430,42 @@
 .animate-streaming-cursor {
   animation: streaming-cursor 0.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
+
+/* ------------------------------------------------------------------ */
+/* Floating particles for empty state                                  */
+/* ------------------------------------------------------------------ */
+
+@keyframes float-drift {
+  0%, 100% {
+    transform: translateY(0) translateX(0);
+  }
+  25% {
+    transform: translateY(-18px) translateX(12px);
+  }
+  50% {
+    transform: translateY(-8px) translateX(-10px);
+  }
+  75% {
+    transform: translateY(-22px) translateX(6px);
+  }
+}
+
+@keyframes float-drift-slow {
+  0%, 100% {
+    transform: translateY(0) translateX(0);
+  }
+  33% {
+    transform: translateY(-14px) translateX(-6px);
+  }
+  66% {
+    transform: translateY(-6px) translateX(10px);
+  }
+}
+
+.animate-float-drift {
+  animation: float-drift 10s ease-in-out infinite;
+}
+
+.animate-float-drift-slow {
+  animation: float-drift-slow 15s ease-in-out infinite;
+}

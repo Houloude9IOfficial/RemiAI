@@ -27,8 +27,10 @@ export function ChatInput({
   };
 
   return (
-    <div className="border-t p-4">
-      <div className="flex items-end gap-2 rounded-2xl border bg-background p-2">
+    <div className="relative border-none p-8">
+      {/* Fade-blur gradient at the top so chat content fades smoothly into the input area */}
+      <div className="pointer-events-none absolute inset-x-0 -top-6 z-10 h-6 bg-gradient-to-b from-transparent to-background backdrop-blur-[1px]" />
+      <div className="flex items-end bg-background gap-2 rounded-2xl border p-2">
         <Textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -38,9 +40,9 @@ export function ChatInput({
               submit();
             }
           }}
-          placeholder={disabled ? "Pick a model to start chatting" : "Message RemiAI..."}
+          placeholder={disabled ? "Pick a model to start chatting" : "Message Remi..."}
           disabled={disabled}
-          className="min-h-9 resize-none border-none shadow-none focus-visible:ring-0"
+          className="min-h-9 resize-none bg-background border-none shadow-none focus-visible:ring-0"
           rows={1}
         />
         {isStreaming ? (

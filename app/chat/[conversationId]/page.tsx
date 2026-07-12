@@ -91,7 +91,7 @@ function ConversationChat({
           <ModelPicker providerId={providerId} modelId={modelId} onChange={handleModelChange} />
         </div>
       </div>
-      <MessageList messages={messages} status={status} />
+      <MessageList messages={messages} status={status} onSend={(text) => sendMessage({ text })} />
       {error && (
         <p className="px-6 pb-2 text-xs text-destructive">{error.message}</p>
       )}

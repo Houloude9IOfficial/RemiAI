@@ -37,6 +37,11 @@ export function ModelPicker({
 
   const value = providerId && modelId ? encode(providerId, modelId) : "";
 
+  // Look up the current model's clean display label for the trigger preview
+  const currentProvider = availableProviders.find((p) => p.providerId === providerId);
+  const currentModel = currentProvider?.models.find((m) => m.modelId === modelId);
+  const triggerLabel = currentModel?.modelLabel ?? modelId ?? null;
+
   if (availableProviders.length === 0) {
     return (
       <span className="text-xs text-muted-foreground">
@@ -54,8 +59,10 @@ export function ModelPicker({
         onChange(decoded.providerId, decoded.modelId);
       }}
     >
-      <SelectTrigger size="sm" className="h-7 text-xs">
-        <SelectValue placeholder="Pick a model" />
+      <SelectTrigger size="sm" className="h-7 w-50 text-xs">
+        <SelectValue placeholder="Pick a model">
+          {value ? triggerLabel : null}
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         {availableProviders.map((provider) => (
@@ -66,7 +73,7 @@ export function ModelPicker({
                 key={model.modelId}
                 value={encode(provider.providerId, model.modelId)}
               >
-                {model.modelLabel ?? model.modelId}
+                {`${model.modelLabel ?? model.modelId}`}
               </SelectItem>
             ))}
           </SelectGroup>
