@@ -103,24 +103,32 @@ export function MarkdownRenderer({ content, className, isStreaming }: MarkdownRe
               );
             },
 
-            // -- Tables
+            // -- Tables (modern, spacious, clean design)
             table: ({ children, ...props }: any) => (
-              <div className="custom-scrollbar overflow-x-auto">
-                <table className="w-full border-collapse text-sm" {...props}>
+              <div className="custom-scrollbar my-4 overflow-x-auto overflow-y-hidden rounded-xl border border-border/30 bg-card shadow-sm first:mt-0 last:mb-0">
+                <table className="w-full border-separate border-spacing-0 text-sm" {...props}>
                   {children}
                 </table>
               </div>
             ),
             th: ({ children, ...props }: any) => (
               <th
-                className="border border-border bg-muted px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+                className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground bg-muted/40 border-b border-border/30"
                 {...props}
               >
                 {children}
               </th>
             ),
+            tr: ({ children, ...props }: any) => (
+              <tr
+                className="transition-colors hover:bg-muted/25 even:bg-muted/15 last:[&>td]:border-b-0"
+                {...props}
+              >
+                {children}
+              </tr>
+            ),
             td: ({ children, ...props }: any) => (
-              <td className="border border-border px-3 py-2" {...props}>
+              <td className="px-5 py-3 border-b border-border/10 leading-relaxed" {...props}>
                 {children}
               </td>
             ),

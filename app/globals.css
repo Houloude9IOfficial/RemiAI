@@ -255,12 +255,47 @@
   margin: 1.5em 0;
 }
 
-/* Tables */
+/* Tables — modern spacious styling (inline overrides in MarkdownRenderer handle the heavy lifting) */
 .markdown-body table {
-  margin: 0.75em 0;
+  margin: 0;
 }
-.markdown-body table:first-child { margin-top: 0; }
-.markdown-body table:last-child { margin-bottom: 0; }
+
+/* Natural text wrapping inside cells */
+.markdown-body th,
+.markdown-body td {
+  word-break: break-word;
+  overflow-wrap: break-word;
+  white-space: normal;
+}
+
+/* Inline code inside table cells */
+.markdown-body td code,
+.markdown-body th code {
+  font-size: 0.85em;
+}
+
+/* Empty cells get a subtle placeholder dash */
+.markdown-body td:empty::before {
+  content: "—";
+  color: var(--muted-foreground);
+  opacity: 0.4;
+}
+
+/* Smooth fade-in animation when table first appears */
+.markdown-body .custom-scrollbar:has(table) {
+  animation: table-fade-in 0.3s ease-out;
+}
+
+@keyframes table-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 
 /* Bold / italic */
 .markdown-body strong {
