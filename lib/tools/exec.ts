@@ -31,14 +31,14 @@ export type ExecResult = SandboxResult;
  * (needed on Windows). Strips HOME, USERPROFILE, APPDATA, etc.
  * so the subprocess can't easily discover user directories.
  */
-function getSafeEnv(): Record<string, string> {
+function getSafeEnv(): NodeJS.ProcessEnv {
   const env: Record<string, string> = {
     PATH: process.env.PATH ?? "",
   };
   if (process.platform === "win32") {
     env.SYSTEMROOT = process.env.SYSTEMROOT ?? "";
   }
-  return env;
+  return env as NodeJS.ProcessEnv;
 }
 
 /**
