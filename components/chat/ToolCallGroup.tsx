@@ -137,9 +137,10 @@ export function ToolCallGroup({
 }) {
   const { present, past, icon: ActionIcon } = getGroupLabel(parts);
 
-  // Start open so the user sees tools running in real-time.
+  // Start collapsed for already-completed tools (chat history) and open for
+  // live streaming tools so the user sees them running in real-time.
   // Auto-collapses when all tools complete (see useEffect below).
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(!parts.every(isPartComplete));
 
   const running = parts.some(isPartRunning);
   const completed = parts.every(isPartComplete);
@@ -149,7 +150,7 @@ export function ToolCallGroup({
     if (running) {
       setIsOpen(true);
     } else if (completed && parts.length > 0) {
-      const timer = setTimeout(() => setIsOpen(false), 1500);
+      const timer = setTimeout(() => setIsOpen(false), 250);
       return () => clearTimeout(timer);
     }
   }, [running, completed, parts.length]);

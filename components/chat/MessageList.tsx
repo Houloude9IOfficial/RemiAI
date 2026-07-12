@@ -53,7 +53,10 @@ export function MessageList({
               className="animate-fade-in"
               style={{ animationDelay: delay }}
             >
-              <MessageBubble message={message} />
+              <MessageBubble
+                message={message}
+                isStreaming={idx === messages.length - 1 && status === "streaming"}
+              />
             </div>
           );
         })}

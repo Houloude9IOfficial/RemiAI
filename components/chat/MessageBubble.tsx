@@ -2,8 +2,40 @@
 
 import type { UIMessage } from "ai";
 import { isTextUIPart, isToolUIPart } from "ai";
+import { Component } from "react";
 import { ToolCallGroup } from "./ToolCallGroup";
 import { MarkdownRenderer } from "./MarkdownRenderer";
+
+/**
+ * Error boundary that wraps the markdown renderer.
+ * If `react-markdown` + `rehype-highlight` throw (e.g. on malformed
+ * streaming content), this falls back to rendering the raw text so
+ * the response is never entirely invisible.
+ */
+class SafeMarkdown extends Component<
+  { content: string; isStreaming?: boolean },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <p className="whitespace-pre-wrap">{this.props.content}</p>
+      );
+    }
+    return (
+      <MarkdownRenderer
+        content={this.props.content}
+        isStreaming={this.props.isStreaming}
+      />
+    );
+  }
+}
 
 /**
  * Collect consecutive tool parts into groups for rendering.
@@ -35,7 +67,7 @@ function collectToolGroups(parts: UIMessage["parts"]) {
   return groups;
 }
 
-export function MessageBubble({ message }: { message: UIMessage }) {
+export function MessageBubble({ message, isStreaming }: { message: UIMessage; isStreaming?: boolean }) {
   // ---- User messages ----
   if (message.role === "user") {
     const inlineText = message.parts
@@ -73,12 +105,12 @@ export function MessageBubble({ message }: { message: UIMessage }) {
   if (!hasToolGroups && !hasText) {
     return (
       <div className="flex justify-start">
-        <div className="w-full max-w-[85%] text-sm text-foreground px-4 py-2">
+        <div className="w-full max-w-[85%] px-4 py-3 text-sm">
           <div className="flex items-center gap-2">
             <div className="flex h-4 w-4 items-center justify-center">
               <span className="h-2 w-2 animate-pulse rounded-full bg-muted-foreground/40" />
             </div>
-            <span className="text-muted-foreground/60">
+            <span className="text-xs text-muted-foreground/60">
               Generating response...
             </span>
           </div>
@@ -89,7 +121,7 @@ export function MessageBubble({ message }: { message: UIMessage }) {
 
   return (
     <div className="flex justify-start">
-      <div className="w-full max-w-[85%] text-sm text-foreground px-4 py-2">
+      <div className="w-full max-w-[85%] px-4 py-3 text-sm text-foreground">
         {/* Tool call groups */}
         {hasToolGroups && (
           <div className="mb-2 flex flex-col gap-2">
@@ -99,8 +131,8 @@ export function MessageBubble({ message }: { message: UIMessage }) {
           </div>
         )}
 
-        {/* Text content */}
-        {hasText && <p className="whitespace-pre-wrap">{fullText}</p>}
+        {/* Text content — render as markdown, with safe fallback */}
+        {hasText && <SafeMarkdown content={fullText} isStreaming={isStreaming} />}
       </div>
     </div>
   );
