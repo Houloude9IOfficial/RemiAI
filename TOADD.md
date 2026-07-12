@@ -20,3 +20,5 @@ add on input marking, e.g @FILE to be able to tag files, and allow the AI to eas
 add BASH/SHELL commands support with confirmations and auto-approve mode
 
 if tool input is {} do not show input, only output
+
+add logo to web favicon

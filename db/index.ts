@@ -16,6 +16,6 @@ const db = drizzle(sqlite, { schema });
 
 // Auto-run migrations on startup so the app works out of the box
 // without requiring a separate `npm run db:migrate` step.
-migrate(db, { migrationsFolder: path.join(process.cwd(), "db/migrations") });
+// migrate(db, { migrationsFolder: path.join(process.cwd(), "db/migrations") });
 
 export { db };
