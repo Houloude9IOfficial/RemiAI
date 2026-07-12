@@ -35,10 +35,20 @@ export function ProviderForm() {
 
   const createMutation = useMutation({
     mutationFn: providersApi.create,
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["providers"] });
       setApiKey("");
-      toast.success("Provider added");
+      if (result._discovered) {
+        toast.success(
+          `Provider added — discovered ${result._modelCount} model${result._modelCount === 1 ? "" : "s"}`,
+        );
+      } else if (result._modelCount > 0) {
+        toast.success(
+          `Provider added — ${result._modelCount} default model${result._modelCount === 1 ? "" : "s"} (auto-discovery unavailable)`,
+        );
+      } else {
+        toast.success("Provider added");
+      }
     },
     onError: (err: Error) => toast.error(err.message),
   });

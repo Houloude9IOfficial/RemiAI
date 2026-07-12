@@ -2,14 +2,21 @@ import { NextResponse } from "next/server";
 import { convertToModelMessages, streamText, stepCountIs, type UIMessage } from "ai";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { conversations, providers, mcpServers } from "@/db/schema";
+import {
+  conversations,
+  providers,
+  mcpServers,
+  userPreferences,
+  memories,
+} from "@/db/schema";
 import { getLanguageModel } from "@/lib/providers/factory";
 import { SYSTEM_PROMPT } from "@/lib/chat/system-prompt";
 import { persistUIMessage } from "@/lib/chat/persist";
 import { getMcpTools } from "@/lib/mcp/tools";
 import { buildFilesystemTools } from "@/lib/fs/tools";
 import { buildContextTools } from "@/lib/tools/context";
-import { userPreferences } from "@/db/schema";
+import { buildMemoryTools } from "@/lib/tools/memories";
+import { buildIntegrationTools } from "@/lib/tools/integrations";
 
 function titleFromMessage(message: UIMessage): string {
   const text = message.parts
@@ -84,8 +91,20 @@ export async function POST(req: Request) {
     req.headers.get("user-agent") ?? undefined,
   );
 
-  // Merge all tool sets (filesystem tools take precedence on name collision)
-  const tools = { ...mcpToolSet, ...fsToolSet, ...contextToolSet };
+  // Gather memory tools (remember, search_memories)
+  const memoryToolSet = buildMemoryTools();
+
+  // Gather integration tools (Brave Search, Notion, Context7) based on config
+  const integrationToolSet = await buildIntegrationTools();
+
+  // Merge all tool sets (last writer wins on name collision)
+  const tools = {
+    ...mcpToolSet,
+    ...fsToolSet,
+    ...contextToolSet,
+    ...memoryToolSet,
+    ...integrationToolSet,
+  };
 
   // Build combined system prompt with user preferences
   const prefs = await db.select().from(userPreferences).get();
@@ -104,11 +123,17 @@ export async function POST(req: Request) {
     ? `\n\n## User preferences\n${prefParts.join("\n")}`
     : "";
 
+  // Inject saved memories into the system prompt for context
+  const memoryRows = await db.select().from(memories).orderBy(memories.createdAt).all();
+  const memoryTip = memoryRows.length > 0
+    ? `\n\n## Saved memories\nThe following are things you have remembered about the user across conversations. Use them to provide personalized and contextually relevant responses.\n${memoryRows.map((m) => `- ${m.content}`).join("\n")}`
+    : "";
+
   const modelMessages = await convertToModelMessages(uiMessages);
 
   const result = streamText({
     model,
-    system: SYSTEM_PROMPT + systemTip,
+    system: SYSTEM_PROMPT + systemTip + memoryTip,
     messages: modelMessages,
     tools: Object.keys(tools).length > 0 ? tools : undefined,
     // Allow up to 100 steps so the model can make multiple tool calls

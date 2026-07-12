@@ -5,13 +5,15 @@ import { usePathname, useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { FolderOpen, MessageSquarePlus, Plug, Settings2, User } from "lucide-react";
+import { Brain, FolderOpen, MessageSquarePlus, Plug, Settings2, User, Wrench } from "lucide-react";
 import { conversationsApi } from "@/lib/api/conversations";
 import { ConversationList } from "./ConversationList";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 const settingsLinks = [
   { href: "/settings/customize", label: "Customize", icon: User },
+  { href: "/settings/tools", label: "Tools", icon: Wrench },
+  { href: "/settings/memories", label: "Memories", icon: Brain },
   { href: "/settings/directories", label: "Directories", icon: FolderOpen },
   { href: "/settings/providers", label: "Models & Providers", icon: Settings2 },
   { href: "/settings/mcp", label: "MCP Servers", icon: Plug },
@@ -50,9 +52,14 @@ export function AppSidebar() {
   return (
     <aside className="flex h-full w-64 flex-col border-r bg-muted/30">
       <div className="flex items-center justify-between px-3 py-3">
-        <Link href="/chat" className="text-sm font-semibold tracking-tight">
+        <button
+          type="button"
+          onClick={() => newChatMutation.mutate()}
+          disabled={newChatMutation.isPending}
+          className="text-sm font-semibold tracking-tight hover:text-foreground/80 transition-colors disabled:opacity-50"
+        >
           RemiAI
-        </Link>
+        </button>
         <Button
           size="icon"
           variant="ghost"
@@ -65,7 +72,7 @@ export function AppSidebar() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-2 text-sm text-muted-foreground">
-        <div className="px-2 py-1 text-xs uppercase tracking-wide">Chats</div>
+        {/* <div className="px-2 py-1 text-xs uppercase tracking-wide">Chats</div> */}
         <ConversationList />
       </div>
 

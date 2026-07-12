@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowUp, Square } from "lucide-react";
@@ -18,7 +18,15 @@ export function ChatInput({
   onStop: () => void;
 }) {
   const [text, setText] = useState("");
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const isStreaming = status === "streaming" || status === "submitted";
+
+  // Auto-focus input on mount and whenever it becomes enabled
+  useEffect(() => {
+    if (!disabled && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [disabled]);
 
   const submit = () => {
     if (!text.trim() || disabled) return;
@@ -32,6 +40,7 @@ export function ChatInput({
       <div className="pointer-events-none absolute inset-x-0 -top-6 z-10 h-6 bg-gradient-to-b from-transparent to-background backdrop-blur-[1px]" />
       <div className="flex items-end bg-background gap-2 rounded-2xl border p-2">
         <Textarea
+          ref={inputRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {

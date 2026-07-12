@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Trash2 } from "lucide-react";
+import { RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { providersApi, type Provider } from "@/lib/api/providers";
 import { PROVIDER_MODEL_CATALOG } from "@/lib/providers/catalog";
@@ -48,15 +48,42 @@ export function ProviderModelList({ provider }: { provider: Provider }) {
     onError: (err: Error) => toast.error(err.message),
   });
 
+  const refreshMutation = useMutation({
+    mutationFn: () => providersApi.refreshModels(provider.id),
+    onSuccess: (result) => {
+      invalidate();
+      toast.success(result.message);
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
   const suggestions = (PROVIDER_MODEL_CATALOG[provider.kind] ?? []).filter(
     (m) => !models.some((existing) => existing.modelId === m.modelId),
   );
 
   return (
     <div className="flex flex-col gap-2 border-t pt-3">
-      {models.length === 0 && (
-        <p className="text-xs text-muted-foreground">No models enabled yet.</p>
-      )}
+      <div className="flex items-center justify-between">
+        {models.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No models enabled yet.</p>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            {models.length} model{models.length === 1 ? "" : "s"}
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={() => refreshMutation.mutate()}
+          disabled={refreshMutation.isPending}
+          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+          title="Refresh models from provider"
+        >
+          <RefreshCw
+            className={`h-3 w-3 ${refreshMutation.isPending ? "animate-spin" : ""}`}
+          />
+          Refresh
+        </button>
+      </div>
       {models.map((model) => (
         <div key={model.id} className="flex items-center gap-2 text-sm">
           <Switch

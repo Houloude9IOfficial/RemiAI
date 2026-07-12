@@ -137,28 +137,25 @@ export function ToolCallGroup({
 }) {
   const { present, past, icon: ActionIcon } = getGroupLabel(parts);
 
-  // Start collapsed for already-completed tools (chat history) and open for
-  // live streaming tools so the user sees them running in real-time.
-  // Auto-collapses when all tools complete (see useEffect below).
-  const [isOpen, setIsOpen] = useState(!parts.every(isPartComplete));
+  // Always start collapsed — user can click to expand if they want to see details.
+  // Even during streaming, the group stays closed; only the header shows the spinner.
+  const [isOpen, setIsOpen] = useState(false);
 
   const running = parts.some(isPartRunning);
   const completed = parts.every(isPartComplete);
 
-  // Auto-expand while running, auto-collapse with a delay when complete
+  // When all tools finish, auto-collapse if user had manually expanded
   useEffect(() => {
-    if (running) {
-      setIsOpen(true);
-    } else if (completed && parts.length > 0) {
+    if (completed && parts.length > 0) {
       const timer = setTimeout(() => setIsOpen(false), 250);
       return () => clearTimeout(timer);
     }
-  }, [running, completed, parts.length]);
+  }, [completed, parts.length]);
 
   const toggle = useCallback(() => setIsOpen((o) => !o), []);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border/60 bg-muted/20 dark:bg-muted/10">
+    <div className="overflow-hidden rounded-xl border border-border/60 bg-muted/20 dark:bg-muted/10 animate-tool-slide-up">
       {/* Header — always visible, clickable to toggle */}
       <button
         type="button"
@@ -206,11 +203,16 @@ export function ToolCallGroup({
         <div className="overflow-hidden">
           <div className="flex flex-col gap-1 p-1.5">
             {parts.map((part, idx) => (
-              <ToolCallCard
+              <div
                 key={(part as any).toolCallId ?? idx}
-                part={part}
-                compact
-              />
+                className="animate-tool-card-in"
+                style={{ animationDelay: `${idx * 60}ms` }}
+              >
+                <ToolCallCard
+                  part={part}
+                  compact
+                />
+              </div>
             ))}
           </div>
         </div>

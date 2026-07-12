@@ -45,4 +45,16 @@ export const conversationsApi = {
     fetch(`/api/conversations/${id}`, { method: "DELETE" }).then((res) =>
       unwrap<{ ok: true }>(res),
     ),
+
+  duplicate: (id: number): Promise<Conversation> =>
+    fetch(`/api/conversations/${id}/duplicate`, { method: "POST" }).then((res) =>
+      unwrap<Conversation>(res),
+    ),
+
+  removeMany: (ids: number[]): Promise<{ ok: true }> =>
+    fetch("/api/conversations/batch-delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    }).then((res) => unwrap<{ ok: true }>(res)),
 };

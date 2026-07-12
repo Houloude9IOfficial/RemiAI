@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { providers } from "@/db/schema";
+import { providers, providerModels } from "@/db/schema";
 import { providerCreateSchema } from "@/lib/validation/schemas";
 import { jsonError } from "@/lib/validation/api";
 import { maskProvider } from "@/lib/providers/mask";
+import { discoverModels } from "@/lib/providers/discover";
+import { PROVIDER_MODEL_CATALOG } from "@/lib/providers/catalog";
 
 export async function GET() {
   const rows = await db.select().from(providers).orderBy(providers.createdAt);
@@ -37,5 +39,35 @@ export async function POST(req: Request) {
     .returning()
     .get();
 
-  return NextResponse.json(maskProvider(row), { status: 201 });
+  // Try to auto-discover models from the provider's API
+  const { models, discovered } = await discoverModels({
+    kind: row.kind,
+    baseUrl: row.baseUrl,
+    apiKey: row.apiKey,
+  });
+
+  // Seed models — discovered ones on success, catalog defaults on failure
+  const seedModels = discovered
+    ? models
+    : (PROVIDER_MODEL_CATALOG[row.kind] ?? []).map((m) => ({
+        modelId: m.modelId,
+        label: m.label,
+      }));
+
+  for (const model of seedModels) {
+    await db
+      .insert(providerModels)
+      .values({
+        providerId: row.id,
+        modelId: model.modelId,
+        label: model.label,
+      })
+      .onConflictDoNothing({ target: [providerModels.providerId, providerModels.modelId] })
+      .run();
+  }
+
+  return NextResponse.json(
+    { ...maskProvider(row), _modelCount: seedModels.length, _discovered: discovered },
+    { status: 201 },
+  );
 }

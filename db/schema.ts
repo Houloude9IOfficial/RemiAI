@@ -53,6 +53,13 @@ export const mcpServers = sqliteTable("mcp_servers", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
+export const memories = sqliteTable("memories", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  content: text("content").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const userPreferences = sqliteTable("user_preferences", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   preferredName: text("preferred_name").notNull().default(""),
@@ -66,6 +73,16 @@ export const conversations = sqliteTable("conversations", {
   title: text("title").notNull().default("New chat"),
   providerId: integer("provider_id").references(() => providers.id),
   modelId: text("model_id"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const toolConfigs = sqliteTable("tool_configs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  toolId: text("tool_id").notNull().unique(),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+  apiKey: text("api_key"),
+  config: text("config", { mode: "json" }).$type<Record<string, string>>(),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });

@@ -12,6 +12,11 @@ export type Provider = {
   createdAt: string;
 };
 
+export type ProviderCreateResult = Provider & {
+  _modelCount: number;
+  _discovered: boolean;
+};
+
 export type ProviderInput = {
   kind: ProviderKind;
   isPreset: boolean;
@@ -39,12 +44,12 @@ export const providersApi = {
   list: (): Promise<Provider[]> =>
     fetch("/api/providers").then((res) => unwrap<Provider[]>(res)),
 
-  create: (input: ProviderInput): Promise<Provider> =>
+  create: (input: ProviderInput): Promise<ProviderCreateResult> =>
     fetch("/api/providers", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
-    }).then((res) => unwrap<Provider>(res)),
+    }).then((res) => unwrap<ProviderCreateResult>(res)),
 
   update: (
     id: number,
@@ -87,4 +92,13 @@ export const providersApi = {
     fetch(`/api/providers/${providerId}/models/${encodeURIComponent(modelId)}`, {
       method: "DELETE",
     }).then((res) => unwrap<{ ok: true }>(res)),
+
+  refreshModels: (
+    providerId: number,
+  ): Promise<{ count: number; discovered: boolean; message: string }> =>
+    fetch(`/api/providers/${providerId}/refresh-models`, {
+      method: "POST",
+    }).then((res) =>
+      unwrap<{ count: number; discovered: boolean; message: string }>(res),
+    ),
 };

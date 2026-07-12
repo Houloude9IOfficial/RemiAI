@@ -198,7 +198,7 @@ export function MessageList({
     return (
       <div className="relative flex flex-1 flex-col items-center justify-center gap-6 overflow-hidden px-6 animate-fade-in">
         {/* Floating particle background */}
-        <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+        {/* <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
           {PARTICLES.map((particle, i) => (
             <div
               key={i}
@@ -206,7 +206,7 @@ export function MessageList({
               style={particle.style}
             />
           ))}
-        </div>
+        </div> */}
 
         {/* Decorative sparkle icon */}
         <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl border border-border/40 bg-background/60 shadow-sm backdrop-blur-sm">
@@ -289,7 +289,7 @@ export function MessageList({
           type="button"
           onClick={scrollToBottom}
           className={cn(
-            "pointer-events-auto mb-3 flex items-center gap-1.5 rounded-full border border-border/50 bg-background/90 px-3.5 py-1.5 text-xs font-medium text-muted-foreground shadow-md backdrop-blur-sm transition-all duration-150 hover:bg-muted hover:text-foreground hover:shadow-lg active:scale-95",
+            "pointer-events-auto mb-7 flex items-center gap-1.5 rounded-full border border-border/50 bg-background/90 px-3.5 py-1.5 text-xs font-medium text-muted-foreground shadow-md backdrop-blur-sm transition-all duration-150 hover:bg-muted hover:text-foreground hover:shadow-lg active:scale-95",
           )}
         >
           <ChevronDown className="h-3 w-3" />

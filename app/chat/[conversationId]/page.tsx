@@ -29,6 +29,7 @@ export default function ConversationPage({
 
   return (
     <ConversationChat
+      key={conversationId}
       conversationId={conversationId}
       initialConversation={data.conversation}
       initialMessages={data.messages}
