@@ -2,15 +2,58 @@
 
 import type { UIMessage } from "ai";
 import { isTextUIPart, isToolUIPart } from "ai";
-import { Component } from "react";
+import { Component, useRef } from "react";
 import { ToolCallGroup } from "./ToolCallGroup";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 
+// ── Helpers ───────────────────────────────────────────────────────────
+
+/** Characters that are structurally significant to markdown syntax. */
+const MARKDOWN_SYNTAX = new Set([
+  "*", "#", "`", ">", "-", "_", "[", "]", "(", ")", "!", "~", "|", "\\", "&",
+]);
+
+/**
+ * Wraps each non-markdown-syntax character in the `newChars` portion of
+ * `text` in an individually animated `<span>`. The `prevLength` is the
+ * number of already-rendered characters; everything beyond it gets the
+ * letter-by-letter fade-in treatment.
+ *
+ * Characters that are part of markdown syntax (e.g. `*`, `#`, `` ` ``) are
+ * left unwrapped so the markdown parser sees them natively.
+ *
+ * Returns a raw HTML string that markdown-to-jsx will pass through.
+ */
+function wrapNewCharsWithFadeIn(text: string, prevLength: number): string {
+  if (prevLength >= text.length) return text;
+
+  const before = text.slice(0, prevLength);
+  const toWrap = text.slice(prevLength);
+
+  let result = "";
+  for (let i = 0; i < toWrap.length; i++) {
+    const char = toWrap[i];
+    // Skip wrapping for markdown structural characters and newlines
+    if (MARKDOWN_SYNTAX.has(char) || char === "\n") {
+      result += char;
+    } else {
+      const delay = i * 12; // 12ms between each character
+      // Escape HTML special characters to prevent injection
+      const escaped = char === "&" ? "&amp;" : char === "<" ? "&lt;" : char === ">" ? "&gt;" : char === '"' ? "&quot;" : char;
+      result += `<span class="animate-letter-fade-in" style="animation-delay:${delay}ms">${escaped}</span>`;
+    }
+  }
+
+  return before + result;
+}
+
+// ── Error boundary ────────────────────────────────────────────────────
+
 /**
  * Error boundary that wraps the markdown renderer.
- * If `react-markdown` + `rehype-highlight` throw (e.g. on malformed
- * streaming content), this falls back to rendering the raw text so
- * the response is never entirely invisible.
+ * If markdown parsing throws (e.g. on malformed streaming content),
+ * this falls back to rendering the raw text so the response is never
+ * entirely invisible.
  */
 class SafeMarkdown extends Component<
   { content: string; isStreaming?: boolean },
@@ -35,6 +78,36 @@ class SafeMarkdown extends Component<
       />
     );
   }
+}
+
+// ── Streaming-aware markdown wrapper ──────────────────────────────────
+
+/**
+ * Wraps SafeMarkdown to provide letter-by-letter fade-in for the last
+ * streaming segment. Tracks the `prevLength` across renders so only
+ * newly arrived characters get animated.
+ */
+function StreamingSafeMarkdown({ content, isStreaming }: { content: string; isStreaming?: boolean }) {
+  const prevLengthRef = useRef(0);
+
+  if (!isStreaming) {
+    // Streaming done — reset tracker and render clean markdown
+    prevLengthRef.current = 0;
+    return <SafeMarkdown content={content} isStreaming={false} />;
+  }
+
+  // Text shrunk (e.g. error recovery / new stream starting) — reset
+  if (content.length < prevLengthRef.current) {
+    prevLengthRef.current = 0;
+  }
+
+  const prevLen = prevLengthRef.current;
+  prevLengthRef.current = content.length;
+
+  // Wrap newly arrived characters in individually animated spans
+  const enriched = wrapNewCharsWithFadeIn(content, prevLen);
+
+  return <SafeMarkdown content={enriched} isStreaming={true} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -127,7 +200,7 @@ export function MessageBubble({ message, isStreaming }: { message: UIMessage; is
         <div className="flex flex-col gap-3">
           {segments.map((segment, idx) =>
             segment.type === "text" ? (
-              <SafeMarkdown
+              <StreamingSafeMarkdown
                 key={`text-${idx}`}
                 content={segment.text}
                 isStreaming={isStreaming && idx === segments.length - 1}

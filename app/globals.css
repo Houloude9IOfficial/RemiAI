@@ -452,18 +452,26 @@
   animation: scale-in 0.2s ease-out;
 }
 
-/* Streaming cursor — a blinking vertical bar at the end of markdown */
-@keyframes streaming-cursor {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
+/* Letter-by-letter fade-in for streaming text chunks */
+@keyframes letter-fade-in {
+  0% {
     opacity: 0;
+    transform: translateY(2px);
+    filter: blur(1px);
+  }
+  60% {
+    opacity: 1;
+    filter: blur(0);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
   }
 }
 
-.animate-streaming-cursor {
-  animation: streaming-cursor 0.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+.animate-letter-fade-in {
+  animation: letter-fade-in 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 /* ------------------------------------------------------------------ */

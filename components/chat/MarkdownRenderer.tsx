@@ -6,8 +6,8 @@ import { cn } from "@/lib/utils";
 interface MarkdownRendererProps {
   content: string;
   className?: string;
-  /** When true, shows a streaming cursor and disables copy buttons on
-   *  unclosed code blocks (they may still be receiving tokens). */
+  /** When true, disables copy buttons on unclosed code blocks (they may
+   *  still be receiving tokens). */
   isStreaming?: boolean;
 }
 
@@ -16,8 +16,7 @@ interface MarkdownRendererProps {
  * blocks. Uses `markdown-to-jsx` which handles incomplete streaming content
  * gracefully without crashing.
  *
- * When `isStreaming` is true, a blinking cursor is shown at the end of the
- * rendered content and copy buttons on code blocks are hidden.
+ * When `isStreaming` is true, copy buttons on code blocks are hidden.
  */
 export function MarkdownRenderer({ content, className, isStreaming }: MarkdownRendererProps) {
   return (
@@ -192,10 +191,6 @@ export function MarkdownRenderer({ content, className, isStreaming }: MarkdownRe
         {content}
       </Markdown>
 
-      {/* Streaming cursor — a subtle blinking caret after the last token */}
-      {isStreaming && (
-        <span className="inline-block h-[1em] w-[2px] animate-streaming-cursor bg-foreground/70 align-text-bottom ml-0.5" />
-      )}
     </div>
   );
 }
