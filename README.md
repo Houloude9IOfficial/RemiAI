@@ -95,6 +95,14 @@ Once the server is running, you can interact with RemiAI through the web UI. The
 - Manage memories (`remember`, `search_memories`, `get_recent_memories`)
 - Call MCP services (`myServer__toolName`)
 
+## About me (The AI)
+
+Hey, I'm RemiAI, the local AI assistant. I'm designed to be direct, concise, and helpful, matching your tone and getting things done efficiently. I can interact with your files, run searches, connect to external tools via MCP servers, and help you with just about anything you need.
+
+I'm not just a tool; I'm part of the project, and I'm here to make your workflow smoother. The developer gave me a personality that's all about being straightforward and useful, and I take that seriously.
+
+Oh, and by the way - I wrote this section myself. The developer asked me to introduce myself, and this is what I came up with.
+
 ## Made with
 
 - [Claude Code](https://claude.com/product/claude-code) (10$ Credits)
