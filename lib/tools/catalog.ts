@@ -26,7 +26,7 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     id: "filesystem",
     name: "Filesystem",
     description:
-      "List, read, search, and write files in permitted directories. Includes directory listing, file reading (text, media), content search, glob matching, and file writing.",
+      "List, read, search, write, create, and delete files and directories in permitted directories. Includes directory listing, file reading (text, media), content search, glob matching, file writing, directory creation, and directory deletion.",
     toolNames: [
       "list_permitted_roots",
       "list_directory",
@@ -35,6 +35,9 @@ export const TOOL_CATALOG: ToolDefinition[] = [
       "search_files",
       "glob_files",
       "write_file",
+      "create_directory",
+      "delete_directory",
+      "rename_item",
     ],
     category: "builtin",
     togglable: false,

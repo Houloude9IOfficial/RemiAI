@@ -9,6 +9,9 @@ import {
   searchFiles,
   globFiles,
   writeFile,
+  createDirectory,
+  deleteDirectory,
+  renameItem,
   type PermittedRoot,
 } from "./access";
 
@@ -222,6 +225,106 @@ export const readMediaTool = {
 };
 
 /**
+ * Create a new directory (folder) within a permitted root.
+ */
+export const createDirectoryTool = {
+  description:
+    "Create one or more directories (folders) at the specified path within a permitted root. Creates parent directories automatically if they don't exist. Requires write permission on the root. Use this to organise files into folders or create project structures.",
+  parameters: z.object({
+    rootId: z
+      .coerce.number()
+      .int()
+      .positive()
+      .describe("ID of the permitted root directory (must have write permission)"),
+    relativePath: z
+      .string()
+      .describe(
+        "Relative path for the new directory within the root (use forward slashes even on Windows). Creates any missing parent directories automatically.",
+      ),
+  }),
+  execute: async ({
+    rootId,
+    relativePath,
+  }: {
+    rootId: number;
+    relativePath: string;
+  }) => {
+    await ensureRoots();
+    const root = await getRootById(rootId);
+    return await createDirectory(root, relativePath);
+  },
+};
+
+/**
+ * Rename or move a file or directory within a permitted root.
+ */
+export const renameItemTool = {
+  description:
+    "Rename or move a file or directory to a new location within the same permitted root. Works for both files and directories. For example, you can rename a file, move a file into a subfolder, or rename a directory. Requires write permission on the root. The destination parent directory is created automatically if it doesn't exist. This operation is reversible (you can rename it back).",
+  parameters: z.object({
+    rootId: z
+      .coerce.number()
+      .int()
+      .positive()
+      .describe("ID of the permitted root directory (must have write permission)"),
+    sourceRelativePath: z
+      .string()
+      .describe(
+        "Current relative path of the file or directory within the root (use forward slashes even on Windows)",
+      ),
+    destRelativePath: z
+      .string()
+      .describe(
+        "New relative path for the file or directory within the root (use forward slashes even on Windows). Parent directories are created automatically.",
+      ),
+  }),
+  execute: async ({
+    rootId,
+    sourceRelativePath,
+    destRelativePath,
+  }: {
+    rootId: number;
+    sourceRelativePath: string;
+    destRelativePath: string;
+  }) => {
+    await ensureRoots();
+    const root = await getRootById(rootId);
+    return await renameItem(root, sourceRelativePath, destRelativePath);
+  },
+};
+
+/**
+ * Delete a directory and all its contents within a permitted root.
+ */
+export const deleteDirectoryTool = {
+  description:
+    "⚠️ WARNING: This permanently deletes a directory and ALL of its contents (files, subdirectories, everything) within a permitted root. This action CANNOT be undone — the data is gone forever. Requires write permission on the root. ONLY proceed if you are absolutely certain the user wants to delete this directory and everything inside it. If you have ANY doubt, ask the user to confirm first before proceeding.",
+  parameters: z.object({
+    rootId: z
+      .coerce.number()
+      .int()
+      .positive()
+      .describe("ID of the permitted root directory (must have write permission)"),
+    relativePath: z
+      .string()
+      .describe(
+        "Relative path to the directory to delete within the root (use forward slashes even on Windows). This deletes the directory and everything inside it permanently.",
+      ),
+  }),
+  execute: async ({
+    rootId,
+    relativePath,
+  }: {
+    rootId: number;
+    relativePath: string;
+  }) => {
+    await ensureRoots();
+    const root = await getRootById(rootId);
+    return await deleteDirectory(root, relativePath);
+  },
+};
+
+/**
  * Write content to a file (creates or overwrites by default).
  */
 export const writeFileTool = {
@@ -308,6 +411,9 @@ export async function buildFilesystemTools(): Promise<Record<string, any>> {
     tools.search_files = withTruncation(searchFilesTool);
     tools.glob_files = withTruncation(globFilesTool);
     tools.write_file = withTruncation(writeFileTool);
+    tools.create_directory = withTruncation(createDirectoryTool);
+    tools.delete_directory = withTruncation(deleteDirectoryTool);
+    tools.rename_item = withTruncation(renameItemTool);
   }
 
   return tools;

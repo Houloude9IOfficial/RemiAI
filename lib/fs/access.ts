@@ -696,6 +696,124 @@ async function buildMediaUrl(
 }
 
 /**
+ * Rename or move a file or directory within a permitted root. Requires write
+ * permission on the root. Works for both files and directories. If the
+ * destination is on a different filesystem (cross-device), this will fail
+ * with a clear error message — in that case, use copy + delete instead.
+ *
+ * Returns the old and new resolved paths on success.
+ */
+export async function renameItem(
+  root: PermittedRoot,
+  sourceRelativePath: string,
+  destRelativePath: string,
+): Promise<{ oldPath: string; newPath: string }> {
+  assertCanWrite(root);
+
+  // Resolve source path (must exist on disk)
+  const sourcePath = await resolvePath(root, sourceRelativePath);
+
+  // Verify source exists
+  try {
+    await fs.stat(sourcePath);
+  } catch (err: any) {
+    if (err.code === "ENOENT") {
+      throw new FilesystemError(
+        `Source "${sourceRelativePath}" does not exist`,
+        "NOT_FOUND",
+      );
+    }
+    throw err;
+  }
+
+  // Manually resolve destination path — resolvePath requires the parent
+  // directory to exist, but we want to support renaming into new
+  // non-existent subdirectories. We do a containment check on the raw
+  // candidate path instead.
+  const destCleaned = destRelativePath.replace(/^[/\\]+/, "");
+  const destCandidate = path.resolve(root.path, destCleaned);
+  if (!isWithinRoot(destCandidate, root.path)) {
+    throw new FilesystemError(
+      `Destination "${destRelativePath}" is outside the permitted root`,
+      "ACCESS_DENIED",
+    );
+  }
+
+  // Create parent directory of destination if it doesn't exist
+  await fs.mkdir(path.dirname(destCandidate), { recursive: true });
+
+  try {
+    await fs.rename(sourcePath, destCandidate);
+  } catch (err: any) {
+    if (err.code === "EXDEV") {
+      throw new FilesystemError(
+        `Cannot rename across filesystem boundaries. Use write_file (copy) + delete_directory to move "${sourceRelativePath}" to "${destRelativePath}" instead.`,
+        "CROSS_DEVICE",
+      );
+    }
+    if (err.code === "ENOTEMPTY" || err.code === "EEXIST") {
+      throw new FilesystemError(
+        `Destination "${destRelativePath}" already exists`,
+        "DESTINATION_EXISTS",
+      );
+    }
+    throw err;
+  }
+
+  return { oldPath: sourcePath, newPath: destCandidate };
+}
+
+/**
+ * Create a new directory (and any missing parent directories) at the specified
+ * path within a permitted root. Requires write permission on the root.
+ */
+export async function createDirectory(
+  root: PermittedRoot,
+  relativePath: string,
+): Promise<{ path: string }> {
+  assertCanWrite(root);
+  const targetPath = await resolvePath(root, relativePath);
+  await fs.mkdir(targetPath, { recursive: true });
+  return { path: targetPath };
+}
+
+/**
+ * Permanently delete a directory and ALL of its contents (files,
+ * subdirectories, everything) within a permitted root. Requires write
+ * permission on the root. The target must be an existing directory.
+ * This action CANNOT be undone — use with extreme care.
+ */
+export async function deleteDirectory(
+  root: PermittedRoot,
+  relativePath: string,
+): Promise<{ path: string; deleted: boolean }> {
+  assertCanWrite(root);
+  const targetPath = await resolvePath(root, relativePath);
+
+  let stats;
+  try {
+    stats = await fs.stat(targetPath);
+  } catch (err: any) {
+    if (err.code === "ENOENT") {
+      throw new FilesystemError(
+        `Directory "${relativePath}" does not exist`,
+        "NOT_FOUND",
+      );
+    }
+    throw err;
+  }
+  if (!stats.isDirectory()) {
+    throw new FilesystemError(
+      `"${relativePath}" is not a directory`,
+      "NOT_A_DIRECTORY",
+    );
+  }
+
+  await fs.rm(targetPath, { recursive: true, force: false });
+  return { path: targetPath, deleted: true };
+}
+
+/**
  * Write content to a file. Creates parent directories if they don't exist.
  * When `mode` is "append", appends to the existing file (or creates if absent).
  */

@@ -26,8 +26,8 @@ add actual file attachments, and also allow ctrl + v to paste attachments or via
 
 <!-- add an ask questions tool and allow asking up to 7 questions with 3 choices + custom. -->
 
-if an error occurs, show the message in a card and allow retry from where it was left. 
+<!-- if an error occurs, show the message in a card and allow retry from where it was left. 
 add a create directory tool (only in directories allowed writing)
-add a delete folder and directory tool (only in directories allowed writing and warn the AI to be sure before doing).
+add a delete folder and directory tool (only in directories allowed writing and warn the AI to be sure before doing). -->
 
 Fix MCP page layout and on test it's modal
