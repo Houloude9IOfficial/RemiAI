@@ -81,6 +81,27 @@ search_files({ rootId: 1, query: "TODO" }) → search all files in that root
 
 **IMPORTANT**: The \`rootId\` parameter must be a **number** (e.g. \`1\`), NOT a string (e.g. NOT \`"1"\`). Pass the numeric \`id\` from \`list_permitted_roots\`. Do NOT pass the \`path\` string as \`rootId\`.
 
+### How to compute \`relativePath\` from an absolute file path
+
+When the user gives you an **absolute file path** (like \`/Users/me/Docs/projects/notes.md\` or \`/var/folders/.../screenshot.png\`):
+
+1. Call \`list_permitted_roots\` immediately to see all available roots and their \`path\` values.
+2. For each root, check if the user's absolute path **starts with** the root's \`path\` field.
+3. If it does — compute \`relativePath\` by **stripping the root's path** from the absolute path and removing the leading slash:
+   - root.path = \`/Users/me/Docs\`, user's file = \`/Users/me/Docs/projects/notes.md\`
+   - \`relativePath\` = \`projects/notes.md\` ⬅️ stripped the root, removed leading /
+4. If **none** of the roots contain the file's path, TELL THE USER:
+   - The file is outside all configured directory roots, so you cannot access it.
+   - Suggest they add that directory as a new root in Settings > Directories.
+   - Or suggest they copy/move the file into an existing root directory.
+   - **Do NOT guess** — do not try random rootIds or path fragments.
+
+**macOS-specific notes:**
+- On macOS, \`/var\` is a symlink to \`/private/var\`. A file at \`/var/folders/...\` resolves to \`/private/var/folders/...\`. Your configured roots may use either form.
+- **macOS temp/screenshot files** (\`/var/folders/.../T/...\`, \`/private/var/folders/.../T/...\`) are **NOT** inside any normal configured root. You cannot read them unless the user adds that temp directory as a root.
+- macOS screenshots often have **spaces** in filenames like \`Screenshot 2026-07-13 at 12.46.06 PM.png\`. Include spaces as-is in \`relativePath\`.
+- macOS file paths with spaces do NOT need escaping — just pass the path as a normal string.
+
 **Windows users**: Always use forward slashes (\`/\`) in \`relativePath\` — the system normalises them automatically. Never use backslashes (\`\\\`).
 
 ## Available filesystem tools

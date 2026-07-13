@@ -22,3 +22,5 @@ add BASH/SHELL commands support with confirmations and auto-approve mode
 if tool input is {} do not show input, only output
 
 add logo to web favicon
+
+add a delay tool to have a delay between calls and requests

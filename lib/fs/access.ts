@@ -80,7 +80,7 @@ export async function getRootById(id: number): Promise<PermittedRoot> {
   const root = roots.find((r) => r.id === numericId);
   if (!root) {
     throw new FilesystemError(
-      `Root directory ${id} not found. Make sure to pass the numeric id (e.g. rootId=1) — the AI must send the number, not a string like rootId="1".`,
+      `Root directory ${id} not found. Make sure to pass the numeric id (e.g. rootId=1) — the AI must send the number, not a string like rootId="1". On macOS, temp/screenshot files under /var/folders/... are NOT inside any configured root — either add that directory in Settings > Directories, or copy/move the file into an existing root.`,
       "NOT_FOUND",
     );
   }
@@ -117,7 +117,7 @@ export async function resolvePath(
   // Ensure the candidate starts with root (before resolving symlinks)
   if (!isWithinRoot(candidate, root.path)) {
     throw new FilesystemError(
-      `Path "${relativePath}" is outside the permitted root`,
+      `Path "${relativePath}" is outside the permitted root. On macOS, temp/screenshot files under /var/folders/... are NOT inside any configured root — either add that directory in Settings > Directories, or copy/move the file into an existing root.`,
       "ACCESS_DENIED",
     );
   }
@@ -157,7 +157,7 @@ export async function resolvePath(
   // Final containment check for existing paths
   if (!isWithinRoot(resolved, root.path)) {
     throw new FilesystemError(
-      `Resolved path "${relativePath}" is outside the permitted root (symlink escape?)`,
+      `Resolved path "${relativePath}" is outside the permitted root (symlink escape?). On macOS, /var is symlinked to /private/var, so paths like /var/folders/... resolve to /private/var/folders/... Make sure your configured root uses the real path.`,
       "ACCESS_DENIED",
     );
   }
