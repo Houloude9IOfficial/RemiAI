@@ -104,7 +104,7 @@ export function MarkdownRenderer({ content, className, isStreaming }: MarkdownRe
 
             // -- Tables (clean, spacious, clearly separated grid)
             table: ({ children, ...props }: any) => (
-              <div className="custom-scrollbar my-4 overflow-x-auto rounded-lg bg-card first:mt-0 last:mb-0">
+              <div className="custom-scrollbar overflow-x-auto">
                 <table className="w-full border-separate border-spacing-0 text-sm" {...props}>
                   {children}
                 </table>
