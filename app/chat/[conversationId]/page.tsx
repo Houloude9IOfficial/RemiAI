@@ -8,6 +8,7 @@ import { MessageList } from "@/components/chat/MessageList";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { ModelPicker } from "@/components/chat/ModelPicker";
 import { TodoProgressBar } from "@/components/chat/TodoProgressBar";
+import { ExportDialog } from "@/components/chat/ExportDialog";
 import { ErrorCard } from "@/components/ui/error-card";
 import { useErrorHandler } from "@/lib/hooks/use-error-handler";
 import { conversationsApi } from "@/lib/api/conversations";
@@ -155,6 +156,9 @@ function ConversationChat({
   return (
     <div className="flex flex-1 flex-col h-full">
       <div className="flex items-center gap-2 border-b px-4 py-2 bg-background/95 backdrop-blur sticky top-0 z-20">
+        {messages.length > 0 && (
+          <ExportDialog messages={messages} title={initialConversation.title} />
+        )}
         <span className="text-sm font-medium">{initialConversation.title}</span>
         <div className="ml-auto">
           <ModelPicker providerId={providerId} modelId={modelId} onChange={handleModelChange} />

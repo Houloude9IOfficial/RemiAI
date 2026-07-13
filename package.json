@@ -28,6 +28,7 @@
     "framer-motion": "^12.42.2",
     "fuse.js": "^7.4.2",
     "highlight.js": "^11.11.1",
+    "jspdf": "^4.2.1",
     "lucide-react": "^1.24.0",
     "mammoth": "^1.9.0",
     "markdown-to-jsx": "^9.8.2",
