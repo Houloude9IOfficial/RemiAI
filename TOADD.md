@@ -14,9 +14,8 @@ add an Agent spawner system, allow AI to spawn seperate agents to do stuff, and 
 create logo
 
 add agent support to work at background
-add on input marking, e.g @FILE to be able to tag files, and allow the AI to easily understand what to do.
 
-add BASH/SHELL commands support with confirmations and auto-approve mode
+add on input marking, e.g @FILE to be able to tag files, and allow the AI to easily understand what to do.
 
 
 add logo to web favicon
