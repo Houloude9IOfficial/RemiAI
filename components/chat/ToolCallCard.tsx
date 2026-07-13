@@ -38,6 +38,15 @@ function getApproved(part: AnyToolPart): boolean | undefined {
   return (part as any).approved;
 }
 
+function isEmptyObject(obj: unknown): boolean {
+  return (
+    obj !== null &&
+    typeof obj === "object" &&
+    !Array.isArray(obj) &&
+    Object.keys(obj as Record<string, unknown>).length === 0
+  );
+}
+
 export function ToolCallCard({
   part,
   compact = true,
@@ -174,7 +183,7 @@ export function ToolCallCard({
         </div>
 
         {/* Input section */}
-        {input !== undefined && (
+        {!isEmptyObject(input) && (
           <CompactSection
             open={inputOpen}
             onToggle={() => setInputOpen(!inputOpen)}
@@ -285,7 +294,7 @@ export function ToolCallCard({
       </div>
 
       {/* Input section */}
-      {input !== undefined && (
+      {!isEmptyObject(input) && (
         <CollapsibleSection
           open={inputOpen}
           onToggle={() => setInputOpen(!inputOpen)}
@@ -427,7 +436,7 @@ function CompactSection({
 
 function JsonBlock({ data }: { data: unknown }) {
   const formatted = formatJson(data);
-  const [collapsed, setCollapsed] = useState(formatted.length > 200);
+  const [collapsed, setCollapsed] = useState(formatted ? formatted.length > 200 : false);
 
   if (!formatted)
     return (
