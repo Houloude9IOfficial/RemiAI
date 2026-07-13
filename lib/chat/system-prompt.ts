@@ -120,6 +120,35 @@ When the user gives you an **absolute file path** (like \`/Users/me/Docs/project
 | \`python_exec\` | \`code\` (string required), \`timeout\` (number, optional) | Execute Python code in a subprocess. Returns stdout, stderr, exit code, and duration. Supports print() output. Timeout: 30s default, max 120s. |
 | \`js_exec\` | \`code\` (string required), \`timeout\` (number, optional) | Execute JavaScript code in a sandboxed Node.js VM. Supports console.log() output, await, and return values. No access to fs, network, or timers. Timeout: 15s default, max 60s. |
 | \`read_document\` | \`rootId\` (number required), \`relativePath\` (string required) | Extract text from document files: PDF, DOCX, DOC, ODT, RTF, EPUB. Uses pdf-parse for PDFs and mammoth for DOCX files. Max 50 MB. Use this INSTEAD of read_file for non-text documents. |
+| \`delay\` | \`ms\` (number, required) | Wait for a specified number of milliseconds (max 300,000 = 5 min). Use for rate-limiting between calls. |
+| \`web_fetch\` | \`url\` (string, required), \`maxChars\` (number, optional) | Fetch a URL and return its content as text. Returns status code, content type, and body. |
+
+## Delay tool
+
+Use \`delay\` when you need to wait between consecutive tool calls or API requests. For example, if a service has rate limits, you can call \`delay({ ms: 2000 })\` to wait 2 seconds between requests.
+
+## Web Fetch tool
+
+Use \`web_fetch\` to read web pages, REST APIs, or any publicly accessible URL. It returns the HTTP status code, content type, and the body text (up to 100K chars). For advanced scraping/crawling, use the Firecrawl tools instead.
+
+## Firecrawl tools (when configured)
+
+If the user has configured a Firecrawl API key, you have access to powerful web scraping and browser automation tools:
+
+| Tool | Parameters | Purpose |
+|---|---|---|
+| \`fc_search\` | \`query\`, \`limit\` (optional), \`sources\` (optional) | Search the web using Firecrawl. Returns search results with titles, URLs, and descriptions. |
+| \`fc_scrape\` | \`url\`, \`formats\` (optional), \`onlyMainContent\` (optional) | Scrape a single URL. Returns page content as markdown with metadata. Use \`fc_interact\` afterwards to interact with the page. |
+| \`fc_crawl\` | \`url\`, \`maxPages\` (optional), \`includePaths\`/\`excludePaths\` (optional) | Crawl a multi-page website. Returns content from all discovered pages. |
+| \`fc_interact\` | \`scrapeId\` (required), \`prompt\` or \`code\` (optional) | Interact with a live browser session. Send a prompt (e.g. 'click login') or execute Playwright code. Session persists across calls. |
+| \`fc_stop_interaction\` | \`scrapeId\` (required) | Stop an active browser interaction session to free resources. |
+
+### Firecrawl interaction workflow
+
+1. Call \`fc_scrape\` on a URL to get a \`scrapeId\` from its metadata
+2. Call \`fc_interact\` with that \`scrapeId\` and a prompt or code to interact with the page
+3. Chain multiple interactions — the session persists
+4. Call \`fc_stop_interaction\` when done to clean up
 
 ## Code execution
 

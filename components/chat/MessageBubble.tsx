@@ -37,34 +37,45 @@ class SafeMarkdown extends Component<
   }
 }
 
+// ---------------------------------------------------------------------------
+// Segment builder — preserves the original order of parts so text between
+// tool calls actually renders *between* the tool call groups.
+// ---------------------------------------------------------------------------
+
+type Segment =
+  | { type: "text"; text: string }
+  | { type: "tool"; parts: UIMessage["parts"] };
+
 /**
- * Collect consecutive tool parts into groups for rendering.
- * Non-tool parts (step-start, text, files, etc.) are skipped entirely.
+ * Walk through `parts` in order and produce interleaved segments.
+ * Consecutive text parts are merged into one text segment.
+ * Consecutive tool parts are merged into one tool segment.
+ * All other part types (step-start, source, file) are skipped.
  */
-function collectToolGroups(parts: UIMessage["parts"]) {
-  const groups: Array<{ parts: (typeof parts)[number][] }> = [];
-  let currentGroup: (typeof parts)[number][] | null = null;
+function buildSegments(parts: UIMessage["parts"]): Segment[] {
+  const segments: Segment[] = [];
 
   for (const part of parts) {
-    if (isToolUIPart(part)) {
-      if (currentGroup) {
-        currentGroup.push(part);
+    if (isTextUIPart(part)) {
+      const last = segments[segments.length - 1];
+      if (last?.type === "text") {
+        // Append to ongoing text segment (streaming appends text-deltas)
+        last.text += part.text;
       } else {
-        currentGroup = [part];
+        segments.push({ type: "text", text: part.text });
       }
-    } else {
-      if (currentGroup) {
-        groups.push({ parts: currentGroup });
-        currentGroup = null;
+    } else if (isToolUIPart(part)) {
+      const last = segments[segments.length - 1];
+      if (last?.type === "tool") {
+        last.parts.push(part);
+      } else {
+        segments.push({ type: "tool", parts: [part] });
       }
     }
+    // Skip step-start, source, file parts
   }
 
-  if (currentGroup) {
-    groups.push({ parts: currentGroup });
-  }
-
-  return groups;
+  return segments;
 }
 
 export function MessageBubble({ message, isStreaming }: { message: UIMessage; isStreaming?: boolean }) {
@@ -86,23 +97,11 @@ export function MessageBubble({ message, isStreaming }: { message: UIMessage; is
   }
 
   // ---- Assistant messages ----
-  // Join ALL text parts' .text properties (across all steps).
-  // During streaming the last text part is mutated in-place by
-  // text-delta events, so this is always up-to-date.
-  const fullText = message.parts
-    .filter(isTextUIPart)
-    .map((p) => p.text)
-    .join("");
-
-  const toolGroups = collectToolGroups(message.parts);
-  const hasToolGroups = toolGroups.length > 0;
-  const hasText = fullText.trim().length > 0;
+  const segments = buildSegments(message.parts);
+  const hasAnyContent = segments.length > 0;
 
   // If nothing to render yet, show a streaming placeholder.
-  // The parent MessageList handles the visible placeholder while
-  // streaming is in progress. We just need the DOM node to exist
-  // so React can populate it when content arrives.
-  if (!hasToolGroups && !hasText) {
+  if (!hasAnyContent) {
     return (
       <div className="flex justify-start">
         <div className="w-full max-w-[85%] px-4 py-3 text-sm">
@@ -119,27 +118,29 @@ export function MessageBubble({ message, isStreaming }: { message: UIMessage; is
     );
   }
 
-  const showThinking =
-    isStreaming && (hasToolGroups || hasText);
+  const showThinking = isStreaming && hasAnyContent;
 
   return (
     <div className="flex justify-start">
       <div className="w-full max-w-[85%] px-4 py-3 text-sm text-foreground">
-        {/* Tool call groups */}
-        {hasToolGroups && (
-          <div className="mb-2 flex flex-col gap-2">
-            {toolGroups.map((group, idx) => (
-              <ToolCallGroup key={idx} parts={group.parts as any} />
-            ))}
-          </div>
-        )}
+        {/* Render segments in their original interleaved order */}
+        <div className="flex flex-col gap-3">
+          {segments.map((segment, idx) =>
+            segment.type === "text" ? (
+              <SafeMarkdown
+                key={`text-${idx}`}
+                content={segment.text}
+                isStreaming={isStreaming && idx === segments.length - 1}
+              />
+            ) : (
+              <ToolCallGroup key={`tool-${idx}`} parts={segment.parts as any} />
+            ),
+          )}
+        </div>
 
-        {/* Text content — render as markdown, with safe fallback */}
-        {hasText && <SafeMarkdown content={fullText} isStreaming={isStreaming} />}
-
-        {/* Thinking indicator — shown under tools/text while AI is still processing */}
+        {/* Thinking indicator — shown under content while AI is still processing */}
         {showThinking && (
-          <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground/60">
+          <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground/60">
             <div className="flex h-3 w-3 items-center justify-center">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground/40" />
             </div>

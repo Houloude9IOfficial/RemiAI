@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { buildBraveSearchTool } from "./brave-search";
 import { buildNotionTools } from "./notion";
 import { buildContext7Tool } from "./context7";
+import { buildFirecrawlTools } from "./firecrawl";
 
 /**
  * Build integration tools based on saved configs from the DB.
@@ -25,6 +26,9 @@ export async function buildIntegrationTools(): Promise<Record<string, any>> {
         break;
       case "context7":
         Object.assign(tools, buildContext7Tool(config.apiKey));
+        break;
+      case "firecrawl":
+        Object.assign(tools, buildFirecrawlTools(config.apiKey));
         break;
     }
   }

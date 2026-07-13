@@ -129,6 +129,49 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     apiKeyPlaceholder: "ctx7_...",
     docsUrl: "https://context7.com/dashboard",
   },
+  // ── Delay tool (builtin, always on, not togglable) ──
+  {
+    id: "delay",
+    name: "Delay",
+    description:
+      "Wait for a specified number of milliseconds before continuing. Useful for rate-limiting between consecutive tool calls or API requests.",
+    toolNames: ["delay"],
+    category: "builtin",
+    togglable: false,
+    requiresApiKey: false,
+  },
+  // ── Web Fetch tool (builtin, always on, not togglable) ──
+  {
+    id: "web_fetch",
+    name: "Web Fetch",
+    description:
+      "Fetch a specific URL and return its content as text. Use this to read web pages, REST APIs, or any publicly accessible URL.",
+    toolNames: ["web_fetch"],
+    category: "builtin",
+    togglable: false,
+    requiresApiKey: false,
+  },
+  // ── Firecrawl (integration, togglable, needs API key) ──
+  {
+    id: "firecrawl",
+    name: "Firecrawl",
+    icon: "https://firecrawl.dev/logo.png",
+    description:
+      "Powerful web scraping, crawling, searching, and browser interaction powered by Firecrawl. Includes fc_search (web search), fc_scrape (single page scrape), fc_crawl (multi-page crawl), fc_interact (browser interaction), and fc_stop_interaction.",
+    toolNames: [
+      "fc_search",
+      "fc_scrape",
+      "fc_crawl",
+      "fc_interact",
+      "fc_stop_interaction",
+    ],
+    category: "integration",
+    togglable: true,
+    requiresApiKey: true,
+    apiKeyLabel: "Firecrawl API Key",
+    apiKeyPlaceholder: "fc-...",
+    docsUrl: "https://firecrawl.dev",
+  },
 ];
 
 export function getToolDef(id: string): ToolDefinition | undefined {
