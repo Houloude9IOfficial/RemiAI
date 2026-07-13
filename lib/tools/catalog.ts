@@ -140,6 +140,17 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     togglable: false,
     requiresApiKey: false,
   },
+  // ── Ask Questions tool (builtin, always on, not togglable) ──
+  {
+    id: "ask_questions",
+    name: "Ask Questions",
+    description:
+      "Ask the user up to 7 structured questions at once, each with 3 predefined choices plus optional custom answers. Use this to gather multiple pieces of information from the user efficiently.",
+    toolNames: ["ask_questions"],
+    category: "builtin",
+    togglable: false,
+    requiresApiKey: false,
+  },
   // ── Web Fetch tool (builtin, always on, not togglable) ──
   {
     id: "web_fetch",

@@ -131,6 +131,58 @@ Use \`delay\` when you need to wait between consecutive tool calls or API reques
 
 Use \`web_fetch\` to read web pages, REST APIs, or any publicly accessible URL. It returns the HTTP status code, content type, and the body text (up to 100K chars). For advanced scraping/crawling, use the Firecrawl tools instead.
 
+## Ask Questions tool
+
+Use \`ask_questions\` when you need to gather multiple pieces of structured information from the user at once. This is especially useful for onboarding, project setup, preference gathering, or any scenario where you need to ask several questions together.
+
+### How to use it:
+1. Call \`ask_questions\` with 1-7 questions, each with:
+   - A unique \`id\` (kebab-case, e.g. \`"tech-stack"\`)
+   - The \`question\` text (clear and specific)
+   - 2-3 \`options\` (predefined answer choices, min 2 max 3)
+   - \`allowCustom\` (boolean, default true) — whether the user can provide their own answer
+2. After the tool returns, **present the questions to the user** in your text response in a nicely formatted way
+3. Ask the user to respond with their answers
+4. When the user replies, process their answers and use them to guide the conversation
+
+### When to use it:
+- **Setting up a project**: Ask about tech stack, features, design preferences
+- **Gathering requirements**: What the user needs, wants, and expects
+- **Preferences**: Color themes, communication style, complexity level
+- **Decision-making**: Help the user choose between options with structured pros/cons
+
+### Example:
+\`\`\`
+// Tool call:
+ask_questions({
+  title: "Project Setup",
+  questions: [
+    {
+      id: "tech-stack",
+      question: "What tech stack do you want to use?",
+      options: ["Next.js + TypeScript", "React + Vite", "Plain HTML/CSS/JS"],
+      allowCustom: true,
+    },
+    {
+      id: "styling",
+      question: "How would you like to handle styling?",
+      options: ["Tailwind CSS", "CSS Modules", "Styled Components"],
+      allowCustom: true,
+    },
+  ],
+})
+
+// Then in your text response, present them nicely:
+// "I have a couple of questions to get started:
+//
+// **1. What tech stack do you want to use?**
+// - a) Next.js + TypeScript
+// - b) React + Vite
+// - c) Plain HTML/CSS/JS
+// - (or tell me your own idea!)
+// ..."
+\`\`\`
+
 ## Firecrawl tools (when configured)
 
 If the user has configured a Firecrawl API key, you have access to powerful web scraping and browser automation tools:

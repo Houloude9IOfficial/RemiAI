@@ -19,6 +19,7 @@ import {
   Clock,
   Monitor,
   Terminal,
+  HelpCircle,
 } from "lucide-react";
 
 type AnyToolPart = ToolUIPart<any> | DynamicToolUIPart;
@@ -43,6 +44,20 @@ function isPartComplete(part: AnyToolPart): boolean {
     s === "output-available" ||
     s === "output-denied" ||
     s === "approval-responded"
+  );
+}
+
+function getOutput(part: AnyToolPart): unknown {
+  return (part as any).output;
+}
+
+function isQuestionsPart(part: AnyToolPart): boolean {
+  const output = getOutput(part);
+  return (
+    output !== undefined &&
+    output !== null &&
+    typeof output === "object" &&
+    (output as Record<string, unknown>).type === "questions"
   );
 }
 
@@ -117,6 +132,11 @@ const TOOL_LABELS: Record<string, ToolLabel> = {
     past: "Read document",
     icon: FileText,
   },
+  ask_questions: {
+    present: "Asking questions",
+    past: "Asked questions",
+    icon: HelpCircle,
+  },
 };
 
 const FALLBACK_LABEL: ToolLabel = {
@@ -153,20 +173,31 @@ export function ToolCallGroup({
 }) {
   const { present, past, icon: ActionIcon } = getGroupLabel(parts);
 
-  // Always start collapsed — user can click to expand if they want to see details.
-  // Even during streaming, the group stays closed; only the header shows the spinner.
-  const [isOpen, setIsOpen] = useState(false);
+  // Detect if any part has questions output — keep expanded so the user can see
+  // and interact with the question cards.
+  const hasQuestions = parts.some(isQuestionsPart);
+
+  // Start expanded if the group contains questions, otherwise collapsed.
+  const [isOpen, setIsOpen] = useState(hasQuestions);
 
   const running = parts.some(isPartRunning);
   const completed = parts.every(isPartComplete);
 
-  // When all tools finish, auto-collapse if user had manually expanded
+  // Auto-expand when questions appear (output arrives after streaming completes)
   useEffect(() => {
-    if (completed && parts.length > 0) {
+    if (hasQuestions) {
+      setIsOpen(true);
+    }
+  }, [hasQuestions]);
+
+  // When all tools finish, auto-collapse if user had manually expanded.
+  // Skip auto-collapse for questions — we want the interactive cards to stay visible.
+  useEffect(() => {
+    if (completed && parts.length > 0 && !hasQuestions) {
       const timer = setTimeout(() => setIsOpen(false), 250);
       return () => clearTimeout(timer);
     }
-  }, [completed, parts.length]);
+  }, [completed, parts.length, hasQuestions]);
 
   const toggle = useCallback(() => setIsOpen((o) => !o), []);
 

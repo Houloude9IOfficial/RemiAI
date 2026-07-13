@@ -15,6 +15,7 @@ import {
   Terminal,
 } from "lucide-react";
 import { MediaDisplay } from "./MediaDisplay";
+import { QuestionsCard } from "./QuestionsCard";
 
 type AnyToolPart = ToolUIPart<any> | DynamicToolUIPart;
 
@@ -109,6 +110,13 @@ export function ToolCallCard({
     "stdout" in (output as Record<string, unknown>) &&
     typeof (output as Record<string, unknown>).stdout === "string";
 
+  // Detect if the output is a questions result (from ask_questions)
+  const isQuestionsResult =
+    output !== undefined &&
+    output !== null &&
+    typeof output === "object" &&
+    (output as Record<string, unknown>).type === "questions";
+
   // Split MCP namespaced name "server__tool" into server + display name
   const displayName = displayTitle.includes("__")
     ? displayTitle.split("__").slice(1).join("__")
@@ -125,6 +133,12 @@ export function ToolCallCard({
 
   if (compact) {
     // ---- Compact layout (inside ToolCallGroup) ----
+
+    // For questions output, render the interactive QuestionsCard instead
+    if (isQuestionsResult && output && isComplete) {
+      return <QuestionsCard data={output} />;
+    }
+
     return (
       <div
         className={cn(

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useMemo, type ComponentType } from "react"
 import { useQuery } from "@tanstack/react-query";
 import { preferencesApi } from "@/lib/api/preferences";
 import { MessageBubble } from "./MessageBubble";
+import { ChatMessageProvider } from "./ChatMessageContext";
 import {
   Loader2,
   ChevronDown,
@@ -245,38 +246,39 @@ export function MessageList({
   }
 
   return (
-    <div className="relative flex flex-1 flex-col">
-      <div
-        ref={scrollRef}
-        className="flex flex-1 flex-col overflow-y-auto p-6"
-      >
-        <div className="flex flex-col gap-4">
-          {messages.map((message, idx) => {
-            return (
-              <div key={message.id}>
-                <MessageBubble
-                  message={message}
-                  isStreaming={
-                    idx === messages.length - 1 && status === "streaming"
-                  }
-                />
-              </div>
-            );
-          })}
+    <ChatMessageProvider value={{ sendMessage: onSend ?? (() => {}) }}>
+      <div className="relative flex flex-1 flex-col">
+        <div
+          ref={scrollRef}
+          className="flex flex-1 flex-col overflow-y-auto p-6"
+        >
+          <div className="flex flex-col gap-4">
+            {messages.map((message, idx) => {
+              return (
+                <div key={message.id}>
+                  <MessageBubble
+                    message={message}
+                    isStreaming={
+                      idx === messages.length - 1 && status === "streaming"
+                    }
+                  />
+                </div>
+              );
+            })}
 
-          {isWaiting && (
-            <div className="flex justify-start">
-              <div className="w-full max-w-[85%] rounded-xl border border-border/50 bg-muted/30 px-4 py-3 text-sm text-foreground">
-                <div className="flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                  <span className="text-muted-foreground">Thinking...</span>
+            {isWaiting && (
+              <div className="flex justify-start">
+                <div className="w-full max-w-[85%] rounded-xl border border-border/50 bg-muted/30 px-4 py-3 text-sm text-foreground">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    <span className="text-muted-foreground">Thinking...</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
+          <div ref={bottomRef} />
         </div>
-        <div ref={bottomRef} />
-      </div>
 
       {/* Scroll-to-bottom floating button — bottom center */}
       <div
@@ -297,5 +299,6 @@ export function MessageList({
         </button>
       </div>
     </div>
+    </ChatMessageProvider>
   );
 }

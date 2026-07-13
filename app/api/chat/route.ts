@@ -21,6 +21,7 @@ import { buildExecutionTools } from "@/lib/tools/exec";
 import { buildDocumentReaderTools } from "@/lib/tools/document-reader";
 import { delayTool } from "@/lib/tools/delay";
 import { webFetchTool } from "@/lib/tools/web-fetch";
+import { askQuestionsTool } from "@/lib/tools/ask-questions";
 
 function titleFromMessage(message: UIMessage): string {
   const text = message.parts
@@ -116,10 +117,11 @@ export async function POST(req: Request) {
   // Gather document reader tools (read_document)
   const documentToolSet = await buildDocumentReaderTools();
 
-  // Built-in always-on tools (delay, web_fetch)
+  // Built-in always-on tools (delay, web_fetch, ask_questions)
   const builtinToolSet = {
     delay: delayTool,
     web_fetch: webFetchTool,
+    ask_questions: askQuestionsTool,
   };
 
   // Merge all tool sets (last writer wins on name collision)
