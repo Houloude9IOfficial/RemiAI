@@ -1,4 +1,9 @@
-# RemiAI
+<h1 align="center" > RemiAI </h1>
+
+<p align="center">
+  <img src="./assets/Preview.png" style="border-radius: 15px;">
+</p>
+
 
 RemiAI is a **local AI assistant** designed to help you interact with your files, run searches, and connect to external tools (MCP servers). It is built with Next.js, TypeScript, and the AI SDK libraries, offering a lightweight, self‑hosted alternative to cloud‑based assistants.
 
