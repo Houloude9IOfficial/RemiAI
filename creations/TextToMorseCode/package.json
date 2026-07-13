@@ -1,0 +1,11 @@
+{
+  "name": "morse-code-converter",
+  "version": "1.0.0",
+  "description": "A simple command-line tool that converts text to Morse code.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "author": "Nicolas Houloudes",
+  "license": "MIT"
+}
