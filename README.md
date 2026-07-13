@@ -6,7 +6,15 @@ RemiAI is a **local AI assistant** designed to help you interact with your files
 - **Direct Conversational Interface** – concise, tone‑matched responses.
 - **File System Integration** – list, read, search, and write files in permitted directories.
 - **Memory Management** – persistent user‑specific facts via `remember`, `search_memories`, and `get_recent_memories`.
-- **Extensible with MCP** – call external services using namespaced tools.
+- **Extensible with MCP** – call external services using namespaced tools (e.g., `myServer__toolName`).
+- **Agent System** – spawn sub‑agents for isolated tasks to optimize token usage.
+
+### Technical Highlights
+- **Automated Database Migrations** – Drizzle ORM migrations run automatically on startup (SQLite).
+- **Cross-Platform Compatibility** – Handles Windows path normalization and numeric ID coercion.
+- **Turbopack Configuration** – Resolved workspace root inference in `next.config.ts`.
+
+
 - **Agent System** – spawn sub‑agents for isolated tasks, reducing token usage.
 - **Open‑Source Friendly** – full project source available on GitHub.
 
@@ -35,6 +43,18 @@ npm run build
 npm start
 ```
 The app will be available at `http://127.0.0.1:3000`.
+
+## Creations
+After build a good version of the project, i decided to try it a bit in coding. The project originally doesn't fully support coding but it has most tools needed so i though, why not give it a go?
+
+I tried building a simple service monitor that checks if a service is up or down. It's a very simple idea and with a lightweight model (Mistral) it managed to create the fully working prototype, and is now available [here](./creations/service-monitor/). I also asked it the following question:
+
+```
+Ok so, here's the thing, i built you. This project was a test to what you can achieve, and i will include it in your source code. Build a README.md, to explain what we built, how you though and what happened behind the scenes.
+```
+
+and it managed to create a complete README.md based on what the project included and how it was built. It is available [here](./creations/service-monitor/README.md). It is as the AI wrote it, nothing modified.
+
 
 ## Troubleshooting
 ### Database errors ("no such table")
