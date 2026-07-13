@@ -255,9 +255,27 @@
   margin: 1.5em 0;
 }
 
-/* Tables — modern spacious styling (inline overrides in MarkdownRenderer handle the heavy lifting) */
+/* Tables — modern spacious styling */
 .markdown-body table {
-  margin: 0;
+  border-collapse: collapse;
+  border-spacing: 0;
+  width: 100%;
+  margin: 0.75em 0; /* Add some vertical margin */
+}
+
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid var(--border); /* Use existing border variable */
+  padding: 10px;
+  text-align: left;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  white-space: normal;
+}
+
+.markdown-body th {
+  background-color: var(--muted); /* Use existing muted background variable */
+  font-weight: 600;
 }
 
 /* Natural text wrapping inside cells */

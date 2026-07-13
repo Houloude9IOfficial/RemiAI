@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { conversationsApi, type Conversation } from "@/lib/api/conversations";
 import { toast } from "sonner";
+import { useActiveStreams } from "@/lib/chat/streaming-context";
 
 function formatNumber(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -311,6 +312,8 @@ export function ConversationList() {
     return () => document.removeEventListener("keydown", handler);
   }, [contextMenuId]);
 
+  const activeStreams = useActiveStreams();
+
   if (conversations.length === 0) {
     return (
       <p className="px-2 py-1 text-xs text-muted-foreground/70">
@@ -388,6 +391,7 @@ export function ConversationList() {
         {conversations.map((conversation) => {
           const isActive = pathname === `/chat/${conversation.id}`;
           const isSelected = selectedIds.has(conversation.id);
+          const isStreaming = activeStreams.has(conversation.id);
 
           return (
             <div
@@ -476,50 +480,73 @@ export function ConversationList() {
                         href={`/chat/${conversation.id}`}
                         className="flex-1 truncate"
                       >
+                        {isStreaming && (
+                          <span className="inline-flex items-center mr-1.5">
+                            <span className="relative flex h-2 w-2">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
+                            </span>
+                          </span>
+                        )}
                         {conversation.title}
                       </Link>
 
-                      {/* Hover actions */}
-                      <div className="flex shrink-0 items-center gap-0.5 opacity-0 group-hover/conversation:opacity-100 transition-opacity">
-                        <span
-                          className="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted-foreground/10 hover:text-foreground"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            startRename(conversation.id, conversation.title);
-                          }}
-                          role="button"
-                          tabIndex={-1}
-                          title="Rename"
-                        >
-                          <PenLine className="h-3 w-3" />
-                        </span>
-                        <span
-                          className="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted-foreground/10 hover:text-foreground"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            duplicateMutation.mutate(conversation.id);
-                          }}
-                          role="button"
-                          tabIndex={-1}
-                          title="Duplicate"
-                        >
-                          <Copy className="h-3 w-3" />
-                        </span>
-                        <span
-                          className="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setDeletingId(conversation.id);
-                          }}
-                          role="button"
-                          tabIndex={-1}
-                          title="Delete"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </span>
+                      {/* Hover actions (hide when streaming) */}
+                      <div
+                        className={cn(
+                          "flex shrink-0 items-center gap-0.5 transition-opacity",
+                          isStreaming
+                            ? "opacity-100"
+                            : "opacity-0 group-hover/conversation:opacity-100",
+                        )}
+                      >
+                        {isStreaming ? (
+                          <span className="flex h-6 w-6 items-center justify-center" title="Generating...">
+                            <span className="h-3 w-3 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                          </span>
+                        ) : (
+                          <>
+                            <span
+                              className="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted-foreground/10 hover:text-foreground"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                startRename(conversation.id, conversation.title);
+                              }}
+                              role="button"
+                              tabIndex={-1}
+                              title="Rename"
+                            >
+                              <PenLine className="h-3 w-3" />
+                            </span>
+                            <span
+                              className="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted-foreground/10 hover:text-foreground"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                duplicateMutation.mutate(conversation.id);
+                              }}
+                              role="button"
+                              tabIndex={-1}
+                              title="Duplicate"
+                            >
+                              <Copy className="h-3 w-3" />
+                            </span>
+                            <span
+                              className="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setDeletingId(conversation.id);
+                              }}
+                              role="button"
+                              tabIndex={-1}
+                              title="Delete"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </span>
+                          </>
+                        )}
                       </div>
                     </>
                   )}

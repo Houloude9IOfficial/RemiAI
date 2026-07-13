@@ -102,9 +102,9 @@ export function MarkdownRenderer({ content, className, isStreaming }: MarkdownRe
               );
             },
 
-            // -- Tables (modern, spacious, clean design)
+            // -- Tables (clean, spacious, clearly separated grid)
             table: ({ children, ...props }: any) => (
-              <div className="custom-scrollbar my-4 overflow-x-auto overflow-y-hidden rounded-xl border border-border/30 bg-card shadow-sm first:mt-0 last:mb-0">
+              <div className="custom-scrollbar my-4 overflow-x-auto rounded-lg bg-card first:mt-0 last:mb-0">
                 <table className="w-full border-separate border-spacing-0 text-sm" {...props}>
                   {children}
                 </table>
@@ -112,7 +112,7 @@ export function MarkdownRenderer({ content, className, isStreaming }: MarkdownRe
             ),
             th: ({ children, ...props }: any) => (
               <th
-                className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground bg-muted/40 border-b border-border/30"
+                className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground/80 bg-muted/75 border-b-2 border-border/50 border-r border-border/35 last:border-r-0 whitespace-normal"
                 {...props}
               >
                 {children}
@@ -120,14 +120,14 @@ export function MarkdownRenderer({ content, className, isStreaming }: MarkdownRe
             ),
             tr: ({ children, ...props }: any) => (
               <tr
-                className="transition-colors hover:bg-muted/25 even:bg-muted/15 last:[&>td]:border-b-0"
+                className="transition-colors duration-150 hover:bg-muted/30 even:bg-muted/10 last:[&>td]:border-b-0"
                 {...props}
               >
                 {children}
               </tr>
             ),
             td: ({ children, ...props }: any) => (
-              <td className="px-5 py-3 border-b border-border/10 leading-relaxed" {...props}>
+              <td className="px-5 py-3 border-b border-border/30 border-r border-border/25 last:border-r-0 leading-relaxed align-top whitespace-normal" {...props}>
                 {children}
               </td>
             ),

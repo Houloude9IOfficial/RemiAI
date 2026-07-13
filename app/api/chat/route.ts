@@ -1,5 +1,13 @@
 import { NextResponse } from "next/server";
-import { convertToModelMessages, streamText, stepCountIs, type UIMessage } from "ai";
+import {
+  convertToModelMessages,
+  streamText,
+  stepCountIs,
+  createUIMessageStreamResponse,
+  type UIMessage,
+} from "ai";
+import { streamRegistry } from "@/lib/chat/stream-registry";
+import { periodicallyPersistMessages } from "@/lib/chat/persist-interval";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -73,12 +81,15 @@ export async function POST(req: Request) {
   const lastMessage = uiMessages[uiMessages.length - 1];
   if (lastMessage?.role === "user") {
     await persistUIMessage(conversationId, lastMessage);
-    if (conversation.title === "New chat") {
-      await db
-        .update(conversations)
-        .set({ title: titleFromMessage(lastMessage) })
-        .where(eq(conversations.id, conversationId));
-    }
+    await db
+      .update(conversations)
+      .set({
+        title: conversation.title === "New chat"
+          ? titleFromMessage(lastMessage)
+          : conversation.title,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(conversations.id, conversationId));
   }
 
   const model = getLanguageModel(provider, conversation.modelId);
@@ -200,27 +211,35 @@ export async function POST(req: Request) {
     },
   });
 
-  return result.toUIMessageStreamResponse({
+  // Get the UIMessageChunk stream so we can tee it — one branch for the
+  // HTTP response, one for periodic persistence to the database.
+  const uiMessageStream = result.toUIMessageStream({
     originalMessages: uiMessages,
     generateMessageId: () => crypto.randomUUID(),
-    onFinish: async ({ messages: finalMessages }) => {
-      // Close MCP clients now that streaming and all tool calls are done
-      if (closeMcpClients) {
-        await closeMcpClients();
-      }
+  });
 
-      // Persist all new messages (multi-step tool calls may produce
-      // multiple intermediate messages — tool-call, tool-result, final text)
-      const existingIds = new Set(uiMessages.map((m) => m.id));
-      for (const msg of finalMessages) {
-        if (!existingIds.has(msg.id)) {
-          await persistUIMessage(conversationId, msg);
-        }
-      }
-      await db
-        .update(conversations)
-        .set({ updatedAt: new Date().toISOString() })
-        .where(eq(conversations.id, conversationId));
+  // Tee the stream: [persistBranch, responseBranch]
+  const [persistBranch, responseBranch] = uiMessageStream.tee();
+
+  // Periodically persist partial messages to the DB (every 2s).
+  // This ensures a page refresh shows partial AI responses.
+  periodicallyPersistMessages(conversationId, uiMessages, persistBranch, async () => {
+    // Cleanup after stream finishes:
+    if (closeMcpClients) {
+      await closeMcpClients();
+    }
+    await db
+      .update(conversations)
+      .set({ updatedAt: new Date().toISOString() })
+      .where(eq(conversations.id, conversationId));
+  });
+
+  // Build the SSE response for the client, and register the SSE stream
+  // for reconnection support.
+  return createUIMessageStreamResponse({
+    stream: responseBranch,
+    consumeSseStream: ({ stream }) => {
+      streamRegistry.register(conversationId, stream);
     },
   });
 }
