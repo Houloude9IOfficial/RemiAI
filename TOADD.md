@@ -15,7 +15,7 @@ Allow AI to save memory snapshots (sentences) that will always be sent to AI at 
 
 add agent support to work at background (such as cron jobs, heartbeats, etc...). Have pages for management too.
 
-add on input marking, e.g @FILE to be able to tag files, and allow the AI to easily understand what to do.
+<!-- add on input marking, e.g @FILE to be able to tag files, and allow the AI to easily understand what to do. -->
 
 
 <!-- add logo to web favicon -->

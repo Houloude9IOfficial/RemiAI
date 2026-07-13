@@ -1,11 +1,18 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowUp, Square, Target, Sparkles } from "lucide-react";
+import {
+  ArrowUp,
+  Square,
+  Target,
+  Sparkles,
+  Paperclip,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FilePickerDialog } from "./FilePickerDialog";
 import type { ChatStatus } from "ai";
 
 const LINE_HEIGHT = 24;
@@ -29,6 +36,8 @@ export function ChatInput({
 }) {
   const [text, setText] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [fileDialogOpen, setFileDialogOpen] = useState(false);
+
   const isStreaming = status === "streaming" || status === "submitted";
 
   useEffect(() => {
@@ -50,6 +59,30 @@ export function ChatInput({
     resize();
   }, [text]);
 
+  const handleFileSelect = useCallback(
+    (displayText: string) => {
+      const el = inputRef.current;
+      const cursorPos = el?.selectionStart ?? text.length;
+
+      // Insert the file marker at cursor position
+      const before = text.slice(0, cursorPos);
+      const after = text.slice(cursorPos);
+      const newText = before + displayText + after;
+
+      setText(newText);
+      setFileDialogOpen(false);
+
+      // Restore focus and cursor after insertion
+      requestAnimationFrame(() => {
+        el?.focus();
+        const newCursorPos = cursorPos + displayText.length;
+        el?.setSelectionRange(newCursorPos, newCursorPos);
+        resize();
+      });
+    },
+    [text],
+  );
+
   const submit = () => {
     if (!text.trim() || disabled) return;
     onSend(text.trim());
@@ -57,11 +90,28 @@ export function ChatInput({
     requestAnimationFrame(resize);
   };
 
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        submit();
+      }
+    },
+    [submit],
+  );
+
   return (
     <div className="relative border-none p-8">
       <div className="pointer-events-none absolute inset-x-0 -top-6 z-10 h-6 bg-gradient-to-b from-transparent to-background backdrop-blur-[1px]" />
 
       <div className="relative flex items-end bg-background gap-2 rounded-2xl border p-2">
+        {/* File picker dialog */}
+        <FilePickerDialog
+          open={fileDialogOpen}
+          onOpenChange={setFileDialogOpen}
+          onSelect={handleFileSelect}
+        />
+
         {agentic && !isStreaming && (
           <AnimatePresence>
             <motion.div
@@ -103,18 +153,35 @@ export function ChatInput({
             ref={inputRef}
             value={text}
             onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                submit();
-              }
-            }}
-            placeholder={disabled ? "Pick a model to start chatting" : "Message Remi..."}
+            onKeyDown={handleKeyDown}
+            placeholder={
+              disabled
+                ? "Pick a model to start chatting"
+                : 'Message Remi...'
+            }
             disabled={disabled}
             className="!bg-transparent dark:!bg-transparent max-h-[72px] min-h-0 resize-none border-none py-0 leading-6 shadow-none focus-visible:ring-0"
             rows={1}
           />
         </div>
+
+        {/* File attachment button */}
+        {!isStreaming && (
+          <button
+            type="button"
+            onClick={() => setFileDialogOpen(true)}
+            disabled={disabled}
+            className={cn(
+              "flex h-10 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-all duration-200",
+              "border-border/60 bg-transparent text-muted-foreground hover:border-muted-foreground/30 hover:text-foreground",
+              disabled && "opacity-40 pointer-events-none",
+            )}
+            title="Attach a file from your directories"
+          >
+            <Paperclip className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">File</span>
+          </button>
+        )}
 
         {!isStreaming && onAgenticChange && (
           <button

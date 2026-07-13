@@ -20,9 +20,31 @@ async function unwrap<T>(res: Response): Promise<T> {
   return data as T;
 }
 
+export type BrowseEntry = {
+  name: string;
+  relativePath: string;
+  isDirectory: boolean;
+  rootId: number;
+  rootLabel: string;
+};
+
 export const directoriesApi = {
   list: (): Promise<Directory[]> =>
     fetch("/api/directories").then((res) => unwrap<Directory[]>(res)),
+
+  browse: (
+    rootId?: number,
+    relativePath?: string,
+    depth?: number,
+  ): Promise<{ roots: BrowseEntry[]; entries: BrowseEntry[] }> => {
+    const params = new URLSearchParams();
+    if (rootId !== undefined) params.set("rootId", String(rootId));
+    if (relativePath !== undefined) params.set("relativePath", relativePath);
+    if (depth !== undefined) params.set("depth", String(depth));
+    return fetch(`/api/directories/browse?${params}`).then((res) =>
+      unwrap<{ roots: BrowseEntry[]; entries: BrowseEntry[] }>(res),
+    );
+  },
 
   validate: (
     path: string,
