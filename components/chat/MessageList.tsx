@@ -210,8 +210,18 @@ export function MessageList({
         </div> */}
 
         {/* Decorative sparkle icon */}
-        <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl border border-border/40 bg-background/60 shadow-sm backdrop-blur-sm">
-          <Sparkles className="h-6 w-6 text-primary/60" />
+        <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl border border-border/40 bg-background/60 backdrop-blur-sm">
+          {/* <Sparkles className="h-6 w-6 text-primary/60" /> */}
+                    <img
+            src="/RemiAI.png"
+            alt="RemiAI"
+            className="block h-7 w-auto dark:hidden"
+          />
+          <img
+            src="/RemiAI-Light.png"
+            alt="RemiAI"
+            className="hidden h-7 w-auto dark:block"
+          />
         </div>
 
         {/* Big greeting text */}

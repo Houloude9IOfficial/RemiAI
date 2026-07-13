@@ -11,13 +11,15 @@ Allow AI to save memory snapshots (sentences) that will always be sent to AI at 
 
 <!-- add about screen with logo, github repo, copyright, etc -->
 
-create logo
+<!-- create logo -->
 
 add agent support to work at background (such as cron jobs, heartbeats, etc...). Have pages for management too.
 
 add on input marking, e.g @FILE to be able to tag files, and allow the AI to easily understand what to do.
 
 
-add logo to web favicon
+<!-- add logo to web favicon -->
+
+add a plan mode for stuff
 
 <!-- add an ask questions tool and allow asking up to 7 questions with 3 choices + custom. -->

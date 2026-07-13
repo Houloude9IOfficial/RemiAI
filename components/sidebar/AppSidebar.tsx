@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Brain, BarChart3, FolderOpen, MessageSquarePlus, Pen, Plug, Settings2, User, Wrench, Bot } from "lucide-react";
+import { Brain, BarChart3, FolderOpen, Pen, Plug, Settings2, User, Wrench, Bot } from "lucide-react";
 import { conversationsApi } from "@/lib/api/conversations";
 import { ConversationList } from "./ConversationList";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -59,9 +59,19 @@ export function AppSidebar() {
           type="button"
           onClick={() => newChatMutation.mutate()}
           disabled={newChatMutation.isPending}
-          className="text-sm font-semibold tracking-tight hover:text-foreground/80 transition-colors disabled:opacity-50"
+          className="flex items-center gap-2 disabled:opacity-50"
+          title="New chat"
         >
-          RemiAI
+          <img
+            src="/RemiAI.png"
+            alt="RemiAI"
+            className="block h-7 w-auto dark:hidden"
+          />
+          <img
+            src="/RemiAI-Light.png"
+            alt="RemiAI"
+            className="hidden h-7 w-auto dark:block"
+          />
         </button>
         <Button
           size="icon"

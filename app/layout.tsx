@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { AppSidebar } from "@/components/sidebar/AppSidebar";
+import { ThemeFavicon } from "@/components/ThemeFavicon";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -17,6 +18,19 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "RemiAI",
   description: "Your local AI assistant for your own files.",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any", type: "image/x-icon" },
+      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-48x48.png", sizes: "48x48", type: "image/png" },
+    ],
+    apple: [
+      { url: "/RemiAI.png", sizes: "180x180" },
+      { url: "/RemiAI-Light.png", sizes: "180x180" },
+    ],
+  },
+  manifest: "/manifest.json",
 };
 
 export default function RootLayout({
@@ -32,6 +46,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <Providers>
+          <ThemeFavicon />
           <div className="flex h-screen w-full">
             <AppSidebar />
             <main className="flex flex-1 flex-col overflow-auto">{children}</main>
