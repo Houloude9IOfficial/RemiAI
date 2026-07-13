@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { MediaDisplay } from "./MediaDisplay";
 import { QuestionsCard } from "./QuestionsCard";
+import { TodoBoard } from "./TodoBoard";
 
 type AnyToolPart = ToolUIPart<any> | DynamicToolUIPart;
 
@@ -117,6 +118,23 @@ export function ToolCallCard({
     typeof output === "object" &&
     (output as Record<string, unknown>).type === "questions";
 
+  // Detect if the output is a todo list (from todos_init / todos_update / todos_view)
+  const isTodoList =
+    output !== undefined &&
+    output !== null &&
+    typeof output === "object" &&
+    (output as Record<string, unknown>).type === "todo_list";
+
+  // Detect if the output is an agent spawn/result
+  const isAgentResult =
+    output !== undefined &&
+    output !== null &&
+    typeof output === "object" &&
+    ((output as Record<string, unknown>).type === "agent_result" ||
+      (output as Record<string, unknown>).type === "agent_spawn" ||
+      (output as Record<string, unknown>).type === "agent_status" ||
+      (output as Record<string, unknown>).type === "agent_error");
+
   // Split MCP namespaced name "server__tool" into server + display name
   const displayName = displayTitle.includes("__")
     ? displayTitle.split("__").slice(1).join("__")
@@ -137,6 +155,16 @@ export function ToolCallCard({
     // For questions output, render the interactive QuestionsCard instead
     if (isQuestionsResult && output && isComplete) {
       return <QuestionsCard data={output} />;
+    }
+
+    // For todo list output, render the visual TodoBoard
+    if (isTodoList && output && isComplete) {
+      return <TodoBoard data={output} />;
+    }
+
+    // For agent results, render the AgentResultCard
+    if (isAgentResult && output && isComplete) {
+      return <AgentResultCard data={output as Record<string, unknown>} />;
     }
 
     return (
@@ -218,6 +246,8 @@ export function ToolCallCard({
               <MediaDisplay data={output as Record<string, unknown>} />
             ) : isExecResult ? (
               <TerminalOutput data={output as Record<string, unknown>} />
+            ) : isAgentResult ? (
+              <AgentResultCard data={output as Record<string, unknown>} compact />
             ) : (
               <JsonBlock data={output} />
             )}
@@ -352,6 +382,139 @@ export function ToolCallCard({
       )}
     </div>
   );
+}
+
+/* ---- Agent Result Card ---- */
+
+function AgentResultCard({
+  data,
+  compact,
+}: {
+  data: Record<string, unknown>;
+  compact?: boolean;
+}) {
+  const type = data.type as string;
+  const agentType = data.agent_type as string;
+  const agentLabel = (data.agent_label as string) ?? agentType;
+  const status = data.status as string;
+
+  if (type === "agent_spawn" && status === "background") {
+    return (
+      <div className="rounded-md bg-amber-500/5 border border-amber-500/20 p-2.5 text-xs">
+        <div className="flex items-center gap-2 mb-1.5">
+          <div className="flex h-5 w-5 items-center justify-center rounded bg-amber-500/10 text-amber-600 dark:text-amber-400">
+            <Loader2 className="h-3 w-3 animate-spin" />
+          </div>
+          <span className="font-medium text-amber-700 dark:text-amber-300">
+            {agentLabel} started
+          </span>
+        </div>
+        <p className="text-muted-foreground">
+          Task #{String(data.task_id)} is running in the background.{" "}
+          {String(data.message)}
+        </p>
+      </div>
+    );
+  }
+
+  if (
+    type === "agent_result" &&
+    status === "completed"
+  ) {
+    const resultText = data.result as string;
+    const usage = data.usage as Record<string, unknown> | undefined;
+
+    return (
+      <div className="rounded-md overflow-hidden">
+        {/* Agent header */}
+        <div
+          className={cn(
+            "flex items-center gap-2 px-2.5 py-2",
+            "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+          )}
+        >
+          <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+          <span className="text-xs font-semibold">{agentLabel} result</span>
+          {usage && (
+            <span className="ml-auto text-[10px] text-muted-foreground tabular-nums">
+              {String(usage.inputTokens ?? 0)} in / {String(usage.outputTokens ?? 0)} out tokens
+            </span>
+          )}
+        </div>
+        {/* Result content */}
+        {resultText && (
+          <div className="max-h-80 overflow-y-auto border-t border-emerald-500/10 bg-background p-2.5 custom-scrollbar">
+            <pre className="whitespace-pre-wrap text-xs leading-relaxed text-foreground/90 font-sans">
+              {resultText}
+            </pre>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (type === "agent_status" && status === "completed") {
+    const resultText = data.result as string;
+    const usage = data.usage as Record<string, unknown> | undefined;
+
+    return (
+      <div className="rounded-md overflow-hidden">
+        <div className="flex items-center gap-2 bg-emerald-500/10 px-2.5 py-2 text-emerald-700 dark:text-emerald-300">
+          <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+          <span className="text-xs font-semibold">{agentLabel} ready</span>
+          {usage && (
+            <span className="ml-auto text-[10px] text-muted-foreground tabular-nums">
+              {String(usage.inputTokens ?? 0)} in / {String(usage.outputTokens ?? 0)} out
+            </span>
+          )}
+        </div>
+        {resultText && (
+          <div className="max-h-80 overflow-y-auto border-t border-emerald-500/10 bg-background p-2.5 custom-scrollbar">
+            <pre className="whitespace-pre-wrap text-xs leading-relaxed text-foreground/90 font-sans">
+              {resultText}
+            </pre>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (type === "agent_status" && status === "running") {
+    return (
+      <div className="rounded-md bg-blue-500/5 border border-blue-500/20 p-2.5 text-xs">
+        <div className="flex items-center gap-2">
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600 dark:text-blue-400" />
+          <span className="font-medium text-blue-700 dark:text-blue-300">
+            {agentLabel} is still working...
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  if (
+    (type === "agent_error" || type === "agent_status") &&
+    (status === "failed" || status === "error" || status === "not_found")
+  ) {
+    return (
+      <div className="rounded-md bg-destructive/5 border border-destructive/20 p-2.5 text-xs">
+        <div className="flex items-center gap-2 mb-1">
+          <XCircle className="h-3.5 w-3.5 shrink-0 text-destructive" />
+          <span className="font-medium text-destructive">
+            {agentLabel} {status === "not_found" ? "not found" : "failed"}
+          </span>
+        </div>
+        <p className="text-destructive/80">
+          {(data.error as string) ?? "Unknown error"}
+        </p>
+        {(data.hint as string) && (
+          <p className="mt-1 text-muted-foreground italic">{String(data.hint)}</p>
+        )}
+      </div>
+    );
+  }
+
+  return null;
 }
 
 /* ---- Sub-components ---- */

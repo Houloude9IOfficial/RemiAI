@@ -20,6 +20,10 @@ import {
   Monitor,
   Terminal,
   HelpCircle,
+  Bot,
+  ClipboardList,
+  RefreshCw,
+  Eye,
 } from "lucide-react";
 
 type AnyToolPart = ToolUIPart<any> | DynamicToolUIPart;
@@ -136,6 +140,31 @@ const TOOL_LABELS: Record<string, ToolLabel> = {
     present: "Asking questions",
     past: "Asked questions",
     icon: HelpCircle,
+  },
+  spawn_agent: {
+    present: "Spawning agent",
+    past: "Spawned agent",
+    icon: Bot,
+  },
+  get_agent_result: {
+    present: "Checking agent",
+    past: "Checked agent",
+    icon: Bot,
+  },
+  todos_init: {
+    present: "Planning tasks",
+    past: "Planned tasks",
+    icon: ClipboardList,
+  },
+  todos_update: {
+    present: "Updating tasks",
+    past: "Updated tasks",
+    icon: RefreshCw,
+  },
+  todos_view: {
+    present: "Viewing tasks",
+    past: "Viewed tasks",
+    icon: Eye,
   },
 };
 

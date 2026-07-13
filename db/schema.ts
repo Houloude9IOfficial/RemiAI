@@ -106,3 +106,51 @@ export const messages = sqliteTable(
   },
   (t) => [unique().on(t.conversationId, t.uiId)],
 );
+
+export const todoItems = sqliteTable(
+  "todo_items",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    conversationId: integer("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    itemId: text("item_id").notNull(),
+    task: text("task").notNull(),
+    status: text("status", {
+      enum: ["pending", "in_progress", "completed", "failed", "skipped"],
+    })
+      .notNull()
+      .default("pending"),
+    note: text("note"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (t) => [unique().on(t.conversationId, t.itemId)],
+);
+
+export const agentTasks = sqliteTable("agent_tasks", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  conversationId: integer("conversation_id")
+    .notNull()
+    .references(() => conversations.id, { onDelete: "cascade" }),
+  parentTaskId: integer("parent_task_id"),
+  chainDepth: integer("chain_depth").notNull().default(0),
+  agentType: text("agent_type", {
+    enum: ["researcher", "coder", "analyst", "summarizer", "custom"],
+  }).notNull(),
+  task: text("task").notNull(),
+  systemPromptOverride: text("system_prompt_override"),
+  status: text("status", {
+    enum: ["queued", "running", "completed", "failed"],
+  })
+    .notNull()
+    .default("running"),
+  result: text("result"),
+  progress: text("progress"),
+  error: text("error"),
+  inputTokens: integer("input_tokens").notNull().default(0),
+  outputTokens: integer("output_tokens").notNull().default(0),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  completedAt: text("completed_at"),
+});

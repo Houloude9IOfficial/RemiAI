@@ -22,6 +22,11 @@ import { buildDocumentReaderTools } from "@/lib/tools/document-reader";
 import { delayTool } from "@/lib/tools/delay";
 import { webFetchTool } from "@/lib/tools/web-fetch";
 import { askQuestionsTool } from "@/lib/tools/ask-questions";
+import {
+  buildMainSpawnAgentTool,
+  buildGetAgentResultTool,
+} from "@/lib/tools/agent-spawner";
+import { buildTodoTools } from "@/lib/tools/todo";
 
 function titleFromMessage(message: UIMessage): string {
   const text = message.parts
@@ -124,6 +129,15 @@ export async function POST(req: Request) {
     ask_questions: askQuestionsTool,
   };
 
+  // Agent spawner tools with chaining support
+  const agentToolSet = {
+    spawn_agent: buildMainSpawnAgentTool(provider, conversation.modelId, conversationId),
+    get_agent_result: buildGetAgentResultTool(),
+  };
+
+  // Todo list tools for multi-step task planning
+  const todoToolSet = buildTodoTools(conversationId);
+
   // Merge all tool sets (last writer wins on name collision)
   const tools = {
     ...mcpToolSet,
@@ -134,6 +148,8 @@ export async function POST(req: Request) {
     ...executionToolSet,
     ...documentToolSet,
     ...builtinToolSet,
+    ...agentToolSet,
+    ...todoToolSet,
   };
 
   // Build combined system prompt with user preferences

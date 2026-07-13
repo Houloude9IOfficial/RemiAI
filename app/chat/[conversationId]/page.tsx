@@ -7,6 +7,7 @@ import { DefaultChatTransport } from "ai";
 import { MessageList } from "@/components/chat/MessageList";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { ModelPicker } from "@/components/chat/ModelPicker";
+import { TodoProgressBar } from "@/components/chat/TodoProgressBar";
 import { conversationsApi } from "@/lib/api/conversations";
 
 export default function ConversationPage({
@@ -93,6 +94,7 @@ function ConversationChat({
           <ModelPicker providerId={providerId} modelId={modelId} onChange={handleModelChange} />
         </div>
       </div>
+      <TodoProgressBar conversationId={conversationId} />
       <div className="flex-1 overflow-y-auto">
         <MessageList messages={messages} status={status} onSend={(text) => sendMessage({ text })} />
       </div>

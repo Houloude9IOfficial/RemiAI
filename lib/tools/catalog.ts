@@ -162,6 +162,28 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     togglable: false,
     requiresApiKey: false,
   },
+  // ── Todo List (builtin, always on, not togglable) ──
+  {
+    id: "todo",
+    name: "Todo List",
+    description:
+      "Plan and track multi-step tasks with a todo list. Use todos_init to create a plan, todos_update to mark items as completed/in_progress/failed, and todos_view to check progress. Perfect for breaking down complex requests into manageable steps.",
+    toolNames: ["todos_init", "todos_update", "todos_view"],
+    category: "builtin",
+    togglable: false,
+    requiresApiKey: false,
+  },
+  // ── Agent Spawner (builtin, always on, not togglable) ──
+  {
+    id: "agent_spawner",
+    name: "Agent Spawner",
+    description:
+      "Spawn specialised sub-agents (researcher, coder, analyst, summarizer, or custom) to handle tasks independently. Supports blocking (wait for result) and background (fire-and-forget) modes. Features agent chaining — sub-agents can spawn their own sub-agents up to 3 levels deep, creating a tree of collaborating specialists. Token usage is tracked on the conversation.",
+    toolNames: ["spawn_agent", "get_agent_result"],
+    category: "builtin",
+    togglable: false,
+    requiresApiKey: false,
+  },
   // ── Firecrawl (integration, togglable, needs API key) ──
   {
     id: "firecrawl",
