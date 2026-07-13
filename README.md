@@ -45,7 +45,7 @@ npm start
 The app will be available at `http://127.0.0.1:3000`.
 
 ## Creations
-After build a good version of the project, i decided to try it a bit in coding. The project originally doesn't fully support coding but it has most tools needed so i though, why not give it a go?
+After i built a good version of the project, i decided to try it a bit in coding. The project originally doesn't fully support coding but it has most tools needed so i though, why not give it a go?
 
 I tried building a simple service monitor that checks if a service is up or down. It's a very simple idea and with a lightweight model (Mistral) it managed to create the fully working prototype, and is now available [here](./creations/service-monitor/). I also asked it the following question:
 
