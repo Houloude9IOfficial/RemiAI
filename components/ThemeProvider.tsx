@@ -97,6 +97,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       document.documentElement.classList.add(newTheme);
       document.documentElement.style.colorScheme = newTheme;
       setResolvedTheme(newTheme);
+    } else {
+      // For "system", resolve the current system preference and apply it
+      const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+      const resolved = mediaQuery.matches ? "dark" : "light";
+      document.documentElement.classList.remove("light", "dark");
+      document.documentElement.classList.add(resolved);
+      document.documentElement.style.colorScheme = resolved;
+      setResolvedTheme(resolved);
     }
   }, []);
 
