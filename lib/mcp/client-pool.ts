@@ -2,6 +2,8 @@ import { createMCPClient, type MCPClient } from "@ai-sdk/mcp";
 import { Experimental_StdioMCPTransport as StdioMCPTransport } from "@ai-sdk/mcp/mcp-stdio";
 import type { mcpServers } from "@/db/schema";
 
+export type { MCPClient };
+
 export type McpServerRow = typeof mcpServers.$inferSelect;
 
 export type McpTestResult = {
@@ -13,11 +15,7 @@ export type McpTestResult = {
   error?: string;
 };
 
-export type McpToolEntry = {
-  serverName: string;
-  namespacedName: string;
-  tool: Record<string, unknown>;
-};
+
 
 /**
  * Create an MCP client from a database server row.
@@ -76,47 +74,3 @@ export async function testConnection(server: McpServerRow): Promise<McpTestResul
   }
 }
 
-/**
- * Fetch tools from a single MCP server, namespaced by server name.
- * Returns an array of tool entries, never throws (returns empty on error).
- */
-export async function getNamespacedTools(
-  server: McpServerRow,
-): Promise<McpToolEntry[]> {
-  let client: MCPClient | undefined;
-  try {
-    client = await createClientFromRow(server);
-    const tools = await client.tools();
-    return Object.entries(tools).map(([name, tool]) => ({
-      serverName: server.name,
-      namespacedName: `${server.name}__${name}`,
-      tool: tool as Record<string, unknown>,
-    }));
-  } catch {
-    return [];
-  } finally {
-    if (client) await client.close().catch(() => {});
-  }
-}
-
-/**
- * Fetch tools from multiple MCP servers, namespaced by server name.
- * Each server's tools are wrapped in try/catch — one failure doesn't break others.
- */
-export async function getAllNamespacedTools(
-  servers: McpServerRow[],
-): Promise<Record<string, any>> {
-  const results = await Promise.allSettled(
-    servers.map((server) => getNamespacedTools(server)),
-  );
-
-  const merged: Record<string, unknown> = {};
-  for (const result of results) {
-    if (result.status === "fulfilled") {
-      for (const entry of result.value) {
-        merged[entry.namespacedName] = entry.tool;
-      }
-    }
-  }
-  return merged;
-}

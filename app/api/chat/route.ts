@@ -12,7 +12,7 @@ import {
 import { getLanguageModel } from "@/lib/providers/factory";
 import { SYSTEM_PROMPT } from "@/lib/chat/system-prompt";
 import { persistUIMessage } from "@/lib/chat/persist";
-import { getMcpTools } from "@/lib/mcp/tools";
+import { createMcpToolsManager } from "@/lib/mcp/tools";
 import { buildFilesystemTools } from "@/lib/fs/tools";
 import { buildContextTools } from "@/lib/tools/context";
 import { buildMemoryTools } from "@/lib/tools/memories";
@@ -84,9 +84,17 @@ export async function POST(req: Request) {
     .where(eq(mcpServers.enabled, true))
     .all();
 
-  const mcpToolSet = enabledMcpServers.length > 0
-    ? await getMcpTools(enabledMcpServers)
-    : undefined;
+  // Gather MCP tools from enabled servers — keep clients alive during streaming
+  let closeMcpClients: (() => Promise<void>) | undefined;
+  let mcpToolSet: Record<string, unknown> | undefined;
+
+  if (enabledMcpServers.length > 0) {
+    const manager = await createMcpToolsManager(enabledMcpServers);
+    mcpToolSet = manager.tools;
+    closeMcpClients = manager.close;
+  } else {
+    mcpToolSet = undefined;
+  }
 
   // Gather filesystem tools from configured directories
   const fsToolSet = await buildFilesystemTools();
@@ -178,6 +186,11 @@ export async function POST(req: Request) {
     originalMessages: uiMessages,
     generateMessageId: () => crypto.randomUUID(),
     onFinish: async ({ messages: finalMessages }) => {
+      // Close MCP clients now that streaming and all tool calls are done
+      if (closeMcpClients) {
+        await closeMcpClients();
+      }
+
       // Persist all new messages (multi-step tool calls may produce
       // multiple intermediate messages — tool-call, tool-result, final text)
       const existingIds = new Set(uiMessages.map((m) => m.id));
