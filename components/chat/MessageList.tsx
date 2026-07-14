@@ -243,7 +243,7 @@ export function MessageList({
                 key={action.label}
                 type="button"
                 onClick={() => onSend?.(action.prompt)}
-                className="group inline-flex items-center gap-1.5 rounded-full border border-border/40 bg-background/50 px-3.5 py-2 text-xs text-muted-foreground shadow-sm backdrop-blur-sm transition-all duration-200 hover:border-border/80 hover:bg-muted/50 hover:text-foreground hover:shadow-md active:scale-[0.97]"
+                className="group inline-flex items-center gap-1.5 rounded-full border border-border/40 bg-background/50 px-3.5 py-2 text-xs text-muted-foreground backdrop-blur-sm transition-all duration-200 hover:border-border/80 hover:bg-muted/50 hover:text-foreground active:scale-[0.97]"
               >
                 <Icon className="h-3.5 w-3.5 transition-colors duration-200 group-hover:text-primary" />
                 <span>{action.label}</span>
