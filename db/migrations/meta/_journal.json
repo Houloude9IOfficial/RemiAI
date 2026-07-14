@@ -92,6 +92,13 @@
       "when": 1784030400000,
       "tag": "0017_last_scheduled_run",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1784038700000,
+      "tag": "0018_conversation_mode",
+      "breakpoints": true
     }
   ]
 }

@@ -11,6 +11,7 @@ const updateSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   providerId: z.number().int().optional().nullable(),
   modelId: z.string().optional().nullable(),
+  mode: z.enum(["chat", "goal", "plan"]).optional(),
 });
 
 export async function GET(

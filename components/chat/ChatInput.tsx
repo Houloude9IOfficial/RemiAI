@@ -9,10 +9,13 @@ import {
   Square,
   Target,
   Sparkles,
+  ListChecks,
   Paperclip,
   Upload,
+  MessageCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { FilePickerDialog } from "./FilePickerDialog";
 import { toast } from "sonner";
 import { FileAttachmentPreview, type AttachedFile } from "./FileAttachmentPreview";
@@ -25,20 +28,22 @@ const MAX_HEIGHT = LINE_HEIGHT * MAX_LINES;
 const MAX_ATTACHMENTS = 10;
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
 
+export type ChatMode = "chat" | "goal" | "plan";
+
 export function ChatInput({
   conversationId,
   status,
   disabled,
-  agentic,
-  onAgenticChange,
+  mode,
+  onModeChange,
   onSend,
   onStop,
 }: {
   conversationId: number;
   status: ChatStatus;
   disabled?: boolean;
-  agentic?: boolean;
-  onAgenticChange?: (value: boolean) => void;
+  mode?: ChatMode;
+  onModeChange?: (value: ChatMode) => void;
   onSend: (text: string) => void;
   onStop: () => void;
 }) {
@@ -507,7 +512,7 @@ export function ChatInput({
             onSelect={handleFileSelect}
           />
 
-          {agentic && !isStreaming && (
+          {(mode === "goal" || mode === "plan") && !isStreaming && (
             <AnimatePresence>
               <motion.div
                 className="absolute bottom-full left-0 right-0 mb-1.5 flex items-center gap-1.5 px-1 z-20"
@@ -521,23 +526,38 @@ export function ChatInput({
                   animate={{ width: "flex-1" }}
                   exit={{ width: 0 }}
                   transition={{ duration: 0.5 }}
-                  className="h-0.5 rounded-full bg-gradient-to-r from-primary/40 via-primary/60 to-primary/40"
+                  className={cn(
+                    "h-0.5 rounded-full",
+                    mode === "goal"
+                      ? "bg-gradient-to-r from-cyan-400/30 via-cyan-400/60 to-cyan-400/30"
+                      : "bg-gradient-to-r from-emerald-400/30 via-emerald-400/60 to-emerald-400/30",
+                  )}
                 />
                 <motion.span
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.5 }}
-                  className="text-[10px] font-medium tracking-wide text-primary/70"
+                  className={cn(
+                    "text-[10px] font-medium tracking-wide",
+                    mode === "goal" ? "text-cyan-400/80" : "text-emerald-400/80",
+                  )}
                 >
-                  Goal mode — AI will work autonomously
+                  {mode === "goal"
+                    ? "Goal mode — AI will work autonomously until complete"
+                    : "Plan mode — AI will ask questions and plan without writing files"}
                 </motion.span>
                 <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: "flex-1" }}
                   exit={{ width: 0 }}
                   transition={{ duration: 0.5 }}
-                  className="h-0.5 rounded-full bg-gradient-to-r from-primary/40 via-primary/60 to-primary/40"
+                  className={cn(
+                    "h-0.5 rounded-full",
+                    mode === "goal"
+                      ? "bg-gradient-to-r from-cyan-400/30 via-cyan-400/60 to-cyan-400/30"
+                      : "bg-gradient-to-r from-emerald-400/30 via-emerald-400/60 to-emerald-400/30",
+                  )}
                 />
               </motion.div>
             </AnimatePresence>
@@ -599,34 +619,93 @@ export function ChatInput({
             </>
           )}
 
-          {!isStreaming && onAgenticChange && (
-            <button
-              type="button"
-              onClick={() => onAgenticChange(!agentic)}
-              disabled={disabled}
-              className={cn(
-                "group relative flex h-10 shrink-0 items-center gap-1.5 rounded-lg border px-3.5 text-xs font-medium transition-all duration-200",
-                agentic
-                  ? "border-primary/40 bg-primary/10 text-primary shadow-sm"
-                  : "border-border/60 bg-transparent text-muted-foreground hover:border-muted-foreground/30 hover:text-foreground",
-                disabled && "opacity-40 pointer-events-none",
-              )}
-              title={
-                agentic
-                  ? "Goal mode active — AI will work autonomously until complete"
-                  : "Toggle Goal mode for autonomous multi-step tasks"
-              }
-            >
-              {agentic ? (
-                <Sparkles className="h-3.5 w-3.5 animate-pulse" />
-              ) : (
-                <Target className="h-3.5 w-3.5" />
-              )}
-              <span>Goal</span>
-              {agentic && (
-                <span className="absolute -inset-0.5 rounded-lg bg-primary/10 blur-sm -z-10" />
-              )}
-            </button>
+          {!isStreaming && onModeChange && (
+            <div className="flex shrink-0 rounded-lg border border-border/60 p-0.5 bg-muted/20">
+              {/* Chat mode */}
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      onClick={() => onModeChange("chat")}
+                      disabled={disabled}
+                      className={cn(
+                        "flex h-8 items-center gap-1 rounded-md px-2.5 text-xs font-medium transition-all duration-200",
+                        mode === "chat"
+                          ? "bg-background text-foreground shadow-sm border border-border/40"
+                          : "text-muted-foreground hover:text-foreground border border-transparent",
+                        disabled && "opacity-40 pointer-events-none",
+                      )}
+                    />
+                  }
+                >
+                  <MessageCircle className="h-3.5 w-3.5" />
+                  <span>Chat</span>
+                </TooltipTrigger>
+                <TooltipContent side="top" align="center" className="text-center">
+                  <p className="font-semibold text-xs">Chat mode</p>
+                  <p className="text-[10px] opacity-80">Normal conversation with the AI</p>
+                </TooltipContent>
+              </Tooltip>
+
+              {/* Goal mode */}
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      onClick={() => onModeChange("goal")}
+                      disabled={disabled}
+                      className={cn(
+                        "flex h-8 items-center gap-1 rounded-md px-2.5 text-xs font-medium transition-all duration-200",
+                        mode === "goal"
+                          ? "bg-background text-cyan-600 dark:text-cyan-400 shadow-sm border border-cyan-400/40"
+                          : "text-muted-foreground hover:text-foreground border border-transparent",
+                        disabled && "opacity-40 pointer-events-none",
+                      )}
+                    />
+                  }
+                >
+                  {mode === "goal" ? (
+                    <Sparkles className="h-3.5 w-3.5 animate-pulse" />
+                  ) : (
+                    <Target className="h-3.5 w-3.5" />
+                  )}
+                  <span>Goal</span>
+                </TooltipTrigger>
+                <TooltipContent side="top" align="center" className="text-center">
+                  <p className="font-semibold text-xs">Goal mode</p>
+                  <p className="text-[10px] opacity-80">AI works autonomously until task is complete</p>
+                </TooltipContent>
+              </Tooltip>
+
+              {/* Plan mode */}
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      onClick={() => onModeChange("plan")}
+                      disabled={disabled}
+                      className={cn(
+                        "flex h-8 items-center gap-1 rounded-md px-2.5 text-xs font-medium transition-all duration-200",
+                        mode === "plan"
+                          ? "bg-background text-emerald-600 dark:text-emerald-400 shadow-sm border border-emerald-400/40"
+                          : "text-muted-foreground hover:text-foreground border border-transparent",
+                        disabled && "opacity-40 pointer-events-none",
+                      )}
+                    />
+                  }
+                >
+                  <ListChecks className="h-3.5 w-3.5" />
+                  <span>Plan</span>
+                </TooltipTrigger>
+                <TooltipContent side="top" align="center" className="text-center">
+                  <p className="font-semibold text-xs">Plan mode</p>
+                  <p className="text-[10px] opacity-80">AI helps plan without modifying any files</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
           )}
 
           {isStreaming ? (
