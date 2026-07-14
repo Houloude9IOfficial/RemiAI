@@ -61,8 +61,9 @@ export function DirectoryTable() {
           <TableHead className="text-center">Write</TableHead>
           <TableHead className="text-center">
             <Tooltip>
-              <TooltipTrigger className="inline-flex items-center gap-1 text-xs font-medium">
-                <Eye className="h-3 w-3" />
+              {/* <TooltipTrigger className="inline-flex items-center gap-1 text-xs font-medium"> */}
+              <TooltipTrigger>
+                {/* <Eye className="h-3 w-3" /> */}
                 <span>Watch</span>
               </TooltipTrigger>
               <TooltipContent>

@@ -13,7 +13,7 @@ Allow AI to save memory snapshots (sentences) that will always be sent to AI at 
 
 <!-- create logo -->
 
-add agent support to work at background (such as cron jobs, heartbeats, etc...). Have pages for management too.
+<!-- SKIPPED FOR NOW: add agent support to work at background (such as cron jobs, heartbeats, etc...). Have pages for management too. -->
 
 <!-- add on input marking, e.g @FILE to be able to tag files, and allow the AI to easily understand what to do. -->
 
@@ -30,7 +30,11 @@ add actual file attachments, and also allow ctrl + v to paste attachments or via
 add a create directory tool (only in directories allowed writing)
 add a delete folder and directory tool (only in directories allowed writing and warn the AI to be sure before doing). -->
 
-Fix MCP page layout and on test it's modal
+<!-- Fix MCP page layout and on test it's modal -->
+
+Add a slide to collapse/uncollapse extra pages in sidebar
+
+Add Built-in vector store option so the local assistant can index files for semantic search
 
 <!-- Feature: Routines
 Descriptions: A tool (togglable) that allows the AI with javascript to create routines, be saved in a library, and be able to run them at any point. -->

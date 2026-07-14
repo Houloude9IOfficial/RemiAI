@@ -110,6 +110,20 @@ export function WatcherStatus() {
           <div className="flex flex-1 items-center gap-2">
             <Activity className="h-5 w-5 text-muted-foreground" />
             <span className="font-medium">File Watcher</span>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-6 gap-1"
+              disabled={isScanning || !hasWatched}
+              onClick={() => scanMutation.mutate()}
+            >
+              {isScanning ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <ScanSearch className="h-3 w-3" />
+              )}
+              {isScanning ? "Scanning..." : "Rescan All"}
+            </Button>
             {data?.running ? (
               <Badge
                 variant="outline"
@@ -128,20 +142,6 @@ export function WatcherStatus() {
               </Badge>
             )}
           </div>
-          <Button
-            size="sm"
-            variant="outline"
-            className="gap-1.5"
-            disabled={isScanning || !hasWatched}
-            onClick={() => scanMutation.mutate()}
-          >
-            {isScanning ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <ScanSearch className="h-3.5 w-3.5" />
-            )}
-            {isScanning ? "Scanning..." : "Rescan All"}
-          </Button>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -191,6 +191,22 @@ export function WatcherStatus() {
                       <EyeOff className="h-4 w-4 text-muted-foreground" />
                     )}
                     <span className="text-sm font-medium">{dir.label}</span>
+                    {dir.watchEnabled && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 gap-1 text-xs"
+                        disabled={isDirScanning || isScanning}
+                        onClick={() => scanDirMutation.mutate(dir.id)}
+                      >
+                        {isDirScanning ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <ScanSearch className="h-3 w-3" />
+                        )}
+                        {isDirScanning ? "Scanning..." : "Scan"}
+                      </Button>
+                    )}
                     <Badge variant="outline" className="text-[10px]">
                       {dir.path}
                     </Badge>
@@ -210,22 +226,6 @@ export function WatcherStatus() {
                       <span className="text-muted-foreground">Not watched</span>
                     )}
                   </div>
-                  {dir.watchEnabled && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 gap-1 text-xs"
-                      disabled={isDirScanning || isScanning}
-                      onClick={() => scanDirMutation.mutate(dir.id)}
-                    >
-                      {isDirScanning ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <ScanSearch className="h-3 w-3" />
-                      )}
-                      {isDirScanning ? "Scanning..." : "Scan"}
-                    </Button>
-                  )}
                 </CardHeader>
               </Card>
             );

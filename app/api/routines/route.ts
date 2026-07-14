@@ -36,7 +36,6 @@ export async function POST(req: Request) {
     name: string;
     description?: string;
     code: string;
-    schedule?: string;
   };
 
   if (!body.name?.trim()) {
@@ -67,7 +66,6 @@ export async function POST(req: Request) {
       name: body.name.trim(),
       description: body.description?.trim() ?? "",
       code: body.code,
-      schedule: body.schedule ?? null,
       enabled: true,
       createdAt: now,
       updatedAt: now,

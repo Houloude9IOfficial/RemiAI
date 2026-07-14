@@ -14,18 +14,16 @@ function formatRoutineList(
     id: number;
     name: string;
     description: string;
-    schedule: string | null;
     enabled: boolean;
     lastRun?: string | null;
     lastStatus?: string | null;
   }>,
 ): string {
   const lines = items.map((a) => {
-    const schedule = a.schedule ? ` (schedule: \`${a.schedule}\`)` : "";
     const last = a.lastRun
       ? ` — last run: ${a.lastStatus ?? "unknown"} at ${a.lastRun}`
       : " — never run";
-    return `- **${a.name}**: ${a.description}${schedule}${last}`;
+    return `- **${a.name}**: ${a.description}${last}`;
   });
   return lines.length > 0
     ? `## Available routines\n\n${lines.join("\n")}`
@@ -56,25 +54,18 @@ async function getLastLog(
 
 /**
  * Create a new routine — a named JavaScript script that can be run later
- * (manually or on a schedule).
+ * (manually by the AI or from the settings panel).
  */
 export const createRoutineTool = {
-  description: `Create a new routine — a named JavaScript script that can be saved to the routine library and run later. Routines persist across conversations and can optionally be scheduled with a cron expression.
+  description: `Create a new routine — a named JavaScript script that can be saved to the routine library and run later. Routines persist across conversations and can be run on demand.
 
 The code runs in an isolated sandbox with console.log() for output and top-level await support.
 
 Use this to:
 - Create reusable automation scripts (e.g. "check_uptime" that fetches a URL)
 - Save useful scripts for later use
-- Set up scheduled tasks with cron expressions
 
-Examples of cron expressions:
-- \`*/15 * * * *\` — every 15 minutes
-- \`0 * * * *\` — every hour at minute 0
-- \`0 9 * * 1-5\` — every weekday at 9 AM
-- \`*/5 * * * *\` — every 5 minutes
-
-After creating a routine, the user can view and manage it in Settings > Routines.`,
+After creating a routine, the user can view and run it in Settings > Routines.`,
 
   parameters: z.object({
     name: z
@@ -97,25 +88,16 @@ After creating a routine, the user can view and manage it in Settings > Routines
       .describe(
         "JavaScript code to execute. Use console.log() for output. Top-level await is supported.",
       ),
-    schedule: z
-      .string()
-      .max(100)
-      .optional()
-      .describe(
-        "Optional cron expression for scheduled execution (e.g. '*/15 * * * *' for every 15 minutes). Standard 5-field cron format.",
-      ),
   }),
 
   execute: async ({
     name,
     description,
     code,
-    schedule,
   }: {
     name: string;
     description?: string;
     code: string;
-    schedule?: string;
   }) => {
     // Check if routine with this name already exists
     const existing = await db
@@ -138,7 +120,6 @@ After creating a routine, the user can view and manage it in Settings > Routines
         name,
         description: description ?? "",
         code,
-        schedule: schedule ?? null,
         enabled: true,
         createdAt: now,
         updatedAt: now,
@@ -152,12 +133,9 @@ After creating a routine, the user can view and manage it in Settings > Routines
         id: routine.id,
         name: routine.name,
         description: routine.description,
-        schedule: routine.schedule,
         enabled: routine.enabled,
       },
-      message: `Routine "${routine.name}" created successfully.${
-        schedule ? ` It will run on schedule: \`${schedule}\`.` : ""
-      }`,
+      message: `Routine "${routine.name}" created successfully.`,
     });
   },
 };
@@ -223,7 +201,7 @@ The routine runs in an isolated sandbox. Returns stdout, stderr, exit code, and 
  * List all saved routines with their status.
  */
 export const listRoutinesTool = {
-  description: `List all saved routines with their descriptions, schedules, and last run status. Use this to discover what routines are available and their current state.`,
+  description: `List all saved routines with their descriptions and last run status. Use this to discover what routines are available and their current state.`,
 
   parameters: z.object({}).describe("List all saved routines."),
 
@@ -242,7 +220,6 @@ export const listRoutinesTool = {
           id: r.id,
           name: r.name,
           description: r.description,
-          schedule: r.schedule,
           enabled: r.enabled,
           lastRun: lastLog?.completedAt ?? null,
           lastStatus: lastLog?.status ?? null,
@@ -261,10 +238,10 @@ export const listRoutinesTool = {
 };
 
 /**
- * Update an existing routine's code, description, or schedule.
+ * Update an existing routine's code, description, or name.
  */
 export const updateRoutineTool = {
-  description: `Update an existing routine's code, description, or schedule. Use this to modify a routine after creation — for example, to fix a bug in the script or change the schedule.
+  description: `Update an existing routine's code, description, or name. Use this to modify a routine after creation — for example, to fix a bug in the script or rename it.
 
 All fields are optional — only provided fields will be updated.`,
 
@@ -289,16 +266,10 @@ All fields are optional — only provided fields will be updated.`,
       .min(1)
       .optional()
       .describe("New JavaScript code for the routine."),
-    schedule: z
-      .string()
-      .max(100)
-      .optional()
-      .nullable()
-      .describe("New cron expression, or null to remove scheduling."),
     enabled: z
       .boolean()
       .optional()
-      .describe("Whether the routine is enabled (scheduled routines only run when enabled)."),
+      .describe("Whether the routine is enabled."),
   }),
 
   execute: async ({
@@ -306,14 +277,12 @@ All fields are optional — only provided fields will be updated.`,
     newName,
     description,
     code,
-    schedule,
     enabled,
   }: {
     name: string;
     newName?: string;
     description?: string;
     code?: string;
-    schedule?: string | null;
     enabled?: boolean;
   }) => {
     const routine = await db
@@ -333,7 +302,6 @@ All fields are optional — only provided fields will be updated.`,
     if (newName !== undefined) updates.name = newName;
     if (description !== undefined) updates.description = description;
     if (code !== undefined) updates.code = code;
-    if (schedule !== undefined) updates.schedule = schedule;
     if (enabled !== undefined) updates.enabled = enabled;
 
     await db
@@ -354,7 +322,6 @@ All fields are optional — only provided fields will be updated.`,
         id: updated?.id,
         name: updated?.name,
         description: updated?.description,
-        schedule: updated?.schedule,
         enabled: updated?.enabled,
       },
       message: `Routine "${name}" updated successfully.${
@@ -412,7 +379,7 @@ Use this to remove outdated or unused routines.`,
 export const getRoutineLogsTool = {
   description: `Get the recent run history for a routine. Shows the last 25 runs with status, output, and timestamps.
 
-Use this to check if a scheduled routine is running correctly, debug failures, or review past results.`,
+Use this to check past runs, debug failures, or review results.`,
 
   parameters: z.object({
     name: z

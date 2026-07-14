@@ -1,11 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -15,36 +14,180 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { mcpServersApi, type McpTransportKind } from "@/lib/api/mcp-servers";
+import {
+  mcpServersApi,
+  type McpServer,
+  type McpTransportKind,
+} from "@/lib/api/mcp-servers";
+import { Plus, X } from "lucide-react";
 
-export function McpServerForm() {
+type KeyValuePair = { key: string; value: string };
+
+function recordToPairs(record: Record<string, string> | null): KeyValuePair[] {
+  if (!record) return [];
+  return Object.entries(record).map(([key, value]) => ({ key, value }));
+}
+
+function KeyValueList({
+  label,
+  pairs,
+  onChange,
+  keyPlaceholder = "Key",
+  valuePlaceholder = "Value",
+}: {
+  label: string;
+  pairs: KeyValuePair[];
+  onChange: (pairs: KeyValuePair[]) => void;
+  keyPlaceholder?: string;
+  valuePlaceholder?: string;
+}) {
+  const add = () => onChange([...pairs, { key: "", value: "" }]);
+  const remove = (i: number) => onChange(pairs.filter((_, idx) => idx !== i));
+  const update = (i: number, field: "key" | "value", val: string) => {
+    const next = pairs.map((p, idx) => (idx === i ? { ...p, [field]: val } : p));
+    onChange(next);
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <Label>{label}</Label>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          onClick={add}
+          className="h-6 w-6"
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        {pairs.length === 0 && (
+          <p className="text-xs text-muted-foreground italic">None</p>
+        )}
+        {pairs.map((pair, i) => (
+          <div key={i} className="flex items-center gap-1.5">
+            <Input
+              placeholder={keyPlaceholder}
+              className="h-7 text-xs font-mono flex-1"
+              value={pair.key}
+              onChange={(e) => update(i, "key", e.target.value)}
+            />
+            <span className="text-muted-foreground text-xs shrink-0">:</span>
+            <Input
+              placeholder={valuePlaceholder}
+              className="h-7 text-xs font-mono flex-1"
+              value={pair.value}
+              onChange={(e) => update(i, "value", e.target.value)}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="h-6 w-6 shrink-0 text-muted-foreground hover:text-destructive"
+              onClick={() => remove(i)}
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function McpServerForm({
+  initialServer,
+  onCancelEdit,
+}: {
+  initialServer?: McpServer;
+  onCancelEdit?: () => void;
+}) {
   const queryClient = useQueryClient();
+  const isEditing = !!initialServer;
+
   const [name, setName] = useState("");
   const [transport, setTransport] = useState<McpTransportKind>("stdio");
 
   // stdio fields
   const [command, setCommand] = useState("");
   const [args, setArgs] = useState("");
-  const [envJson, setEnvJson] = useState("");
+  const [env, setEnv] = useState<KeyValuePair[]>([]);
 
   // http fields
   const [url, setUrl] = useState("");
-  const [headersJson, setHeadersJson] = useState("");
+  const [headers, setHeaders] = useState<KeyValuePair[]>([]);
+
+  // Populate form when editing server changes
+  useEffect(() => {
+    if (initialServer) {
+      setName(initialServer.name);
+      setTransport(initialServer.transport);
+      setCommand(initialServer.command ?? "");
+      setArgs(initialServer.args?.join("\n") ?? "");
+      setEnv(recordToPairs(initialServer.env));
+      setUrl(initialServer.url ?? "");
+      setHeaders(recordToPairs(initialServer.headers));
+    } else {
+      setName("");
+      setTransport("stdio");
+      setCommand("");
+      setArgs("");
+      setEnv([]);
+      setUrl("");
+      setHeaders([]);
+    }
+  }, [initialServer]);
 
   const createMutation = useMutation({
     mutationFn: mcpServersApi.create,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
-      setName("");
-      setCommand("");
-      setArgs("");
-      setEnvJson("");
-      setUrl("");
-      setHeadersJson("");
+      resetForm();
       toast.success("MCP server added");
     },
     onError: (err: Error) => toast.error(err.message),
   });
+
+  const updateMutation = useMutation({
+    mutationFn: ({
+      id,
+      input,
+    }: {
+      id: number;
+      input: Parameters<typeof mcpServersApi.update>[1];
+    }) => mcpServersApi.update(id, input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+      resetForm();
+      onCancelEdit?.();
+      toast.success("MCP server updated");
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const toRecord = (pairs: KeyValuePair[]): Record<string, string> | null => {
+    const entries = pairs
+      .map(({ key, value }) => [key.trim(), value] as [string, string])
+      .filter(([key]) => key);
+    return entries.length > 0 ? Object.fromEntries(entries) : null;
+  };
+
+  const resetForm = () => {
+    setName("");
+    setTransport("stdio");
+    setCommand("");
+    setArgs("");
+    setEnv([]);
+    setUrl("");
+    setHeaders([]);
+  };
+
+  const handleCancel = () => {
+    resetForm();
+    onCancelEdit?.();
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,39 +199,56 @@ export function McpServerForm() {
           .filter(Boolean)
       : null;
 
-    const parsedEnv = envJson?.trim()
-      ? parseJsonFieldOrWarn(envJson)
-      : null;
-    if (envJson?.trim() && parsedEnv === null) {
-      toast.error("Invalid JSON in environment variables");
-      return;
-    }
+    const envRecord = toRecord(env);
+    const headersRecord = toRecord(headers);
 
-    const parsedHeaders = headersJson?.trim()
-      ? parseJsonFieldOrWarn(headersJson)
-      : null;
-    if (headersJson?.trim() && parsedHeaders === null) {
-      toast.error("Invalid JSON in headers");
-      return;
-    }
-
-    createMutation.mutate({
+    const payload = {
       name,
       transport,
       command: transport === "stdio" ? command : null,
       args: transport === "stdio" ? parsedArgs : null,
-      env: transport === "stdio" ? parsedEnv : null,
+      env: transport === "stdio" ? envRecord : null,
       url: transport === "http" ? url : null,
-      headers: transport === "http" ? parsedHeaders : null,
-    });
+      headers: transport === "http" ? headersRecord : null,
+    };
+
+    if (isEditing && initialServer) {
+      updateMutation.mutate({ id: initialServer.id, input: payload });
+    } else {
+      createMutation.mutate(payload);
+    }
   };
+
+  const isPending = createMutation.isPending || updateMutation.isPending;
+  const submitText = isEditing
+    ? isPending
+      ? "Saving..."
+      : "Save changes"
+    : isPending
+      ? "Adding..."
+      : "Add server";
 
   return (
     <form
       className="flex flex-col gap-3 rounded-lg border p-4"
       onSubmit={handleSubmit}
     >
-      <h2 className="text-sm font-medium">Add MCP Server</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-medium">
+          {isEditing ? `Edit ${initialServer.name}` : "Add MCP Server"}
+        </h2>
+        {isEditing && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={handleCancel}
+            className="h-6 text-xs"
+          >
+            Cancel
+          </Button>
+        )}
+      </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
@@ -140,25 +300,23 @@ export function McpServerForm() {
             </Label>
             <Textarea
               id="mcp-args"
-              placeholder="-y\n@modelcontextprotocol/server-filesystem\n/path/to/allowed/dir"
+              placeholder={[
+                "-y",
+                "@modelcontextprotocol/server-filesystem",
+                "/path/to/allowed/dir",
+              ].join("\n")}
               className="min-h-[60px] resize-y text-xs font-mono"
               value={args}
               onChange={(e) => setArgs(e.target.value)}
             />
           </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="mcp-env">
-              Environment variables{" "}
-              <span className="text-xs text-muted-foreground">(JSON)</span>
-            </Label>
-            <Textarea
-              id="mcp-env"
-              placeholder='{"KEY": "value"}'
-              className="min-h-[60px] resize-y text-xs font-mono"
-              value={envJson}
-              onChange={(e) => setEnvJson(e.target.value)}
-            />
-          </div>
+          <KeyValueList
+            label="Environment variables"
+            pairs={env}
+            onChange={setEnv}
+            keyPlaceholder="KEY"
+            valuePlaceholder="value"
+          />
         </>
       ) : (
         <>
@@ -172,41 +330,23 @@ export function McpServerForm() {
               required
             />
           </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="mcp-headers">
-              Headers{" "}
-              <span className="text-xs text-muted-foreground">(JSON)</span>
-            </Label>
-            <Textarea
-              id="mcp-headers"
-              placeholder='{"Authorization": "Bearer ..."}'
-              className="min-h-[60px] resize-y text-xs font-mono"
-              value={headersJson}
-              onChange={(e) => setHeadersJson(e.target.value)}
-            />
-          </div>
+          <KeyValueList
+            label="Headers"
+            pairs={headers}
+            onChange={setHeaders}
+            keyPlaceholder="Header-Name"
+            valuePlaceholder="value"
+          />
         </>
       )}
 
       <Button
         type="submit"
         className="ml-auto"
-        disabled={createMutation.isPending || !name.trim()}
+        disabled={isPending || !name.trim()}
       >
-        {createMutation.isPending ? "Adding..." : "Add server"}
+        {submitText}
       </Button>
     </form>
   );
-}
-
-function parseJsonFieldOrWarn(json: string): Record<string, string> | null {
-  try {
-    const parsed = JSON.parse(json);
-    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-      return parsed;
-    }
-    return null;
-  } catch {
-    return null;
-  }
 }

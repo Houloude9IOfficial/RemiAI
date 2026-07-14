@@ -26,3 +26,21 @@ export async function GET(
 
   return NextResponse.json(logs);
 }
+
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  const routineId = parseInt(id, 10);
+  if (isNaN(routineId)) {
+    return NextResponse.json({ error: "Invalid routine ID" }, { status: 400 });
+  }
+
+  const result = await db
+    .delete(routineLogs)
+    .where(eq(routineLogs.routineId, routineId))
+    .run();
+
+  return NextResponse.json({ ok: true, deleted: result.changes });
+}

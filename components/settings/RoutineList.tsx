@@ -27,7 +27,6 @@ import {
   History,
   Terminal,
   Loader2,
-  Clock,
 } from "lucide-react";
 import { routinesApi, type Routine, type RoutineLog } from "@/lib/api/routines";
 
@@ -37,11 +36,21 @@ import { routinesApi, type Routine, type RoutineLog } from "@/lib/api/routines";
 
 function RoutineLogsDialog({ routine }: { routine: Routine }) {
   const [open, setOpen] = useState(false);
+  const queryClient = useQueryClient();
 
   const { data: logs = [], isLoading } = useQuery({
     queryKey: ["routine-logs", routine.id],
     queryFn: () => routinesApi.logs(routine.id),
     enabled: open,
+  });
+
+  const clearMutation = useMutation({
+    mutationFn: () => routinesApi.clearLogs(routine.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["routine-logs", routine.id] });
+      toast.success("Run history cleared");
+    },
+    onError: (err: Error) => toast.error(err.message),
   });
 
   return (
@@ -54,14 +63,9 @@ function RoutineLogsDialog({ routine }: { routine: Routine }) {
         History
       </DialogTrigger>
       <DialogContent className="max-w-2xl">
-        <DialogTitle>Run History — {routine.name}</DialogTitle>
+        <DialogTitle>Run History &#8226; {routine.name}</DialogTitle>
         <DialogDescription>
           Recent execution logs for this routine.
-          {routine.schedule && (
-            <span className="ml-1">
-              Scheduled: <code className="text-xs">{routine.schedule}</code>
-            </span>
-          )}
         </DialogDescription>
         <div className="mt-2 max-h-96 overflow-y-auto space-y-2">
           {isLoading ? (
@@ -107,12 +111,30 @@ function RoutineLogsDialog({ routine }: { routine: Routine }) {
             ))
           )}
         </div>
-        <div className="mt-2 flex justify-end">
-          <DialogClose
-            render={<Button variant="ghost" size="sm" />}
-          >
-            Close
-          </DialogClose>
+        <div className="mt-2 flex items-center justify-between">
+          {logs.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs text-muted-foreground hover:text-destructive"
+              onClick={() => clearMutation.mutate()}
+              disabled={clearMutation.isPending}
+            >
+              {clearMutation.isPending ? (
+                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+              ) : (
+                <Trash2 className="h-3 w-3 mr-1" />
+              )}
+              Clear history
+            </Button>
+          )}
+          <div className="flex items-center gap-2 ml-auto">
+            <DialogClose
+              render={<Button variant="ghost" size="sm" />}
+            >
+              Close
+            </DialogClose>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
@@ -137,7 +159,6 @@ function RoutineFormDialog({
   const [name, setName] = useState(routine?.name ?? "");
   const [description, setDescription] = useState(routine?.description ?? "");
   const [code, setCode] = useState(routine?.code ?? "");
-  const [schedule, setSchedule] = useState(routine?.schedule ?? "");
 
   const createMutation = useMutation({
     mutationFn: () =>
@@ -145,7 +166,6 @@ function RoutineFormDialog({
         name: name.trim(),
         description: description.trim(),
         code,
-        schedule: schedule.trim() || undefined,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["routines"] });
@@ -162,7 +182,6 @@ function RoutineFormDialog({
         name: name.trim(),
         description: description.trim(),
         code,
-        schedule: schedule.trim() || null,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["routines"] });
@@ -176,7 +195,6 @@ function RoutineFormDialog({
     setName("");
     setDescription("");
     setCode("");
-    setSchedule("");
   };
 
   const isPending = createMutation.isPending || updateMutation.isPending;
@@ -188,7 +206,7 @@ function RoutineFormDialog({
         <DialogTitle>{isEdit ? "Edit Routine" : "Create Routine"}</DialogTitle>
         <DialogDescription>
           {isEdit
-            ? "Modify the routine's code, schedule, or metadata."
+            ? "Modify the routine's code, name, or description."
             : "Create a reusable JavaScript routine that the AI can run anytime."}
         </DialogDescription>
         <div className="mt-4 space-y-4">
@@ -225,31 +243,12 @@ function RoutineFormDialog({
               id="routine-code"
               value={code}
               onChange={(e) => setCode(e.target.value)}
-              placeholder='const res = await fetch("https://api.example.com/health");\nconst data = await res.json();\nconsole.log("Status:", data.status);'
+              placeholder='console.log("Hello, world!");'
               className="min-h-[200px] font-mono text-sm"
               disabled={isPending}
             />
             <p className="text-xs text-muted-foreground">
               Use console.log() for output. Top-level await is supported.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="routine-schedule">
-              Schedule (cron expression)
-            </Label>
-            <Input
-              id="routine-schedule"
-              value={schedule}
-              onChange={(e) => setSchedule(e.target.value)}
-              placeholder="*/15 * * * *"
-              disabled={isPending}
-            />
-            <p className="text-xs text-muted-foreground">
-              Optional. Examples:{" "}
-              <code className="text-xs">*/15 * * * *</code> (every 15 min),{" "}
-              <code className="text-xs">0 * * * *</code> (every hour),{" "}
-              <code className="text-xs">0 9 * * 1-5</code> (weekdays at 9 AM)
             </p>
           </div>
         </div>
@@ -301,12 +300,6 @@ function RoutineCard({
           <div className="flex items-center gap-2">
             <Terminal className="h-4 w-4 text-muted-foreground shrink-0" />
             <h3 className="font-medium text-sm truncate">{routine.name}</h3>
-            {routine.schedule && (
-              <Badge variant="outline" className="text-xs shrink-0">
-                <Clock className="h-3 w-3 mr-1" />
-                {routine.schedule}
-              </Badge>
-            )}
           </div>
           {routine.description && (
             <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
@@ -419,12 +412,12 @@ export function RoutineList() {
 
   const runMutation = useMutation({
     mutationFn: (id: number) => routinesApi.run(id),
-    onSuccess: (result) => {
+    onSuccess: (result, id) => {
       queryClient.invalidateQueries({ queryKey: ["routines"] });
       queryClient.invalidateQueries({ queryKey: ["routine-logs"] });
       setRunningIds((prev) => {
         const next = new Set(prev);
-        next.delete(result.logId);
+        next.delete(id);
         return next;
       });
 
@@ -436,7 +429,14 @@ export function RoutineList() {
         );
       }
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error, id) => {
+      setRunningIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      toast.error(err.message);
+    },
   });
 
   const handleRun = (routine: Routine) => {
@@ -487,14 +487,12 @@ export function RoutineList() {
           <h3 className="text-sm font-medium">No Routines Yet</h3>
           <p className="mt-1 text-xs text-muted-foreground">
             Routines are reusable JavaScript scripts that the AI can create and
-            run anytime. You can also set up scheduled routines with cron
-            expressions.
+            run on demand. Use them to automate repetitive tasks.
           </p>
           <p className="mt-2 text-xs text-muted-foreground">
             Try asking the AI:{" "}
             <em className="text-foreground">
-              &ldquo;Create a routine to check my service uptime every 15
-              minutes&rdquo;
+              &ldquo;Create a routine to check my service uptime&rdquo;
             </em>
           </p>
         </Card>

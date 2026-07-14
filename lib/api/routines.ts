@@ -45,7 +45,6 @@ export const routinesApi = {
     name: string;
     description?: string;
     code: string;
-    schedule?: string;
   }): Promise<Routine> =>
     fetch("/api/routines", {
       method: "POST",
@@ -59,7 +58,6 @@ export const routinesApi = {
       name?: string;
       description?: string;
       code?: string;
-      schedule?: string | null;
       enabled?: boolean;
     },
   ): Promise<Routine> =>
@@ -82,5 +80,10 @@ export const routinesApi = {
   logs: (id: number, limit?: number): Promise<RoutineLog[]> =>
     fetch(`/api/routines/${id}/logs${limit ? `?limit=${limit}` : ""}`).then(
       (res) => unwrap<RoutineLog[]>(res),
+    ),
+
+  clearLogs: (id: number): Promise<{ ok: true; deleted: number }> =>
+    fetch(`/api/routines/${id}/logs`, { method: "DELETE" }).then((res) =>
+      unwrap<{ ok: true; deleted: number }>(res),
     ),
 };

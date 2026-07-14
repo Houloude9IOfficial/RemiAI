@@ -27,7 +27,6 @@ export async function PUT(
     name?: string;
     description?: string;
     code?: string;
-    schedule?: string | null;
     enabled?: boolean;
   };
 
@@ -35,7 +34,6 @@ export async function PUT(
   if (body.name !== undefined) updates.name = body.name;
   if (body.description !== undefined) updates.description = body.description;
   if (body.code !== undefined) updates.code = body.code;
-  if (body.schedule !== undefined) updates.schedule = body.schedule;
   if (body.enabled !== undefined) updates.enabled = body.enabled;
 
   await db

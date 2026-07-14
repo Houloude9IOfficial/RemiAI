@@ -154,6 +154,7 @@ export const routines = sqliteTable("routines", {
   code: text("code").notNull(),
   schedule: text("schedule"),
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  lastScheduledRun: text("last_scheduled_run"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });

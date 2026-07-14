@@ -359,7 +359,7 @@ export function ConversationList() {
                 className="inline-flex h-6 items-center gap-1 rounded px-2 text-[11px] font-medium text-destructive hover:bg-destructive/10 disabled:opacity-40 transition-colors"
               >
                 <Trash2 className="h-3 w-3" />
-                Delete
+                {/* Delete */}
               </button>
               <button
                 type="button"
