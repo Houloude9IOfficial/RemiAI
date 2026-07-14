@@ -288,15 +288,8 @@ export function ToolCallGroup({
         <div className="overflow-hidden">
           <div className="flex flex-col gap-1 p-1.5">
             {parts.map((part, idx) => (
-              <div
-                key={(part as any).toolCallId ?? idx}
-                className="animate-tool-card-in"
-                style={{ animationDelay: `${idx * 60}ms` }}
-              >
-                <ToolCallCard
-                  part={part}
-                  compact
-                />
+              <div key={(part as any).toolCallId ?? idx}>
+                <ToolCallCard part={part} compact />
               </div>
             ))}
           </div>
