@@ -36,6 +36,7 @@ import {
 } from "@/lib/tools/agent-spawner";
 import { buildTodoTools } from "@/lib/tools/todo";
 import { buildFileIndexTools } from "@/lib/tools/file-index";
+import { buildRoutinesTools } from "@/lib/tools/routines";
 import { queryRecentChanges } from "@/lib/fs/file-index";
 
 function titleFromMessage(message: UIMessage): string {
@@ -154,6 +155,9 @@ export async function POST(req: Request) {
   // Todo list tools for multi-step task planning
   const todoToolSet = buildTodoTools(conversationId);
 
+  // Routine tools (create, run, list, update, delete routines)
+  const routineToolSet = await buildRoutinesTools();
+
   // Merge all tool sets (last writer wins on name collision)
   const tools = {
     ...mcpToolSet,
@@ -167,6 +171,7 @@ export async function POST(req: Request) {
     ...agentToolSet,
     ...fileIndexToolSet,
     ...todoToolSet,
+    ...routineToolSet,
   };
 
   // Build combined system prompt with user preferences

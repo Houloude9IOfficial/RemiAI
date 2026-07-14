@@ -198,6 +198,24 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     togglable: false,
     requiresApiKey: false,
   },
+  // ── Routines (builtin, togglable — lets AI create & run reusable JS scripts) ──
+  {
+    id: "routines",
+    name: "Routines",
+    description:
+      "Create, manage, and run reusable JavaScript routines. Routines are named scripts that persist across conversations and can be scheduled with cron expressions. Includes create_routine, run_routine, list_routines, update_routine, delete_routine, and get_routine_logs.",
+    toolNames: [
+      "create_routine",
+      "run_routine",
+      "list_routines",
+      "update_routine",
+      "delete_routine",
+      "get_routine_logs",
+    ],
+    category: "builtin",
+    togglable: true,
+    requiresApiKey: false,
+  },
   // ── Firecrawl (integration, togglable, needs API key) ──
   {
     id: "firecrawl",

@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Brain, BarChart3, FolderOpen, Pen, Plug, Settings2, User, Wrench, Bot, Eye } from "lucide-react";
+import { Brain, BarChart3, FolderOpen, Pen, Plug, Settings2, User, Wrench, Bot, Eye, Terminal } from "lucide-react";
 import { conversationsApi } from "@/lib/api/conversations";
 import { ConversationList } from "./ConversationList";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -18,6 +18,7 @@ const settingsLinks = [
   { href: "/settings/directories", label: "Directories", icon: FolderOpen },
   { href: "/settings/providers", label: "Models & Providers", icon: Settings2 },
   { href: "/settings/mcp", label: "MCP Servers", icon: Plug },
+  { href: "/settings/routines", label: "Routines", icon: Terminal },
   { href: "/settings/tasks", label: "Agent Tasks", icon: Bot },
   { href: "/settings/watcher", label: "File Watcher", icon: Eye },
   { href: "/settings/usage", label: "Usage", icon: BarChart3 },

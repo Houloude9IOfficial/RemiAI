@@ -6,6 +6,7 @@ import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { eq, sql } from "drizzle-orm";
 import * as schema from "./schema";
 import { startFileWatcher } from "@/lib/fs/watcher";
+import { startRoutineScheduler } from "@/lib/routines/scheduler";
 
 const dataDir = path.join(process.cwd(), "data");
 fs.mkdirSync(dataDir, { recursive: true });
@@ -47,5 +48,9 @@ if (schema.agentTasks) {
 // Start the file watcher in the background (non-blocking).
 // It will index all watched directories and track live file changes.
 startFileWatcher(db);
+
+// Start the routine scheduler in the background.
+// It will check every 30s for due scheduled routines and execute them.
+startRoutineScheduler();
 
 export { db };

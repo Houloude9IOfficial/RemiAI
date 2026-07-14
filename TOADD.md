@@ -32,16 +32,5 @@ add a delete folder and directory tool (only in directories allowed writing and 
 
 Fix MCP page layout and on test it's modal
 
-Feature: Actions
-Descriptions: A tool (togglable) that allows the AI with javascript to create actions, be saved in a library, and be able to run them at any point.
-
-New feature:
-    Feature Name: File Watching
-    Description: Implement a feature that automatically indexes new or modified files in the background. This will keep the local context fresh without requiring manual searches or extra clicks.
-    Implementation Steps:
-        Set up a file watcher that monitors specified directories for changes.
-        Index new or modified files automatically.
-        Update the local context to include the new or modified files.
-        Ensure the feature runs in the background without disrupting the user's workflow.
-
-This feature will enhance the user experience by keeping the local context up-to-date and reducing the need for manual intervention.
+<!-- Feature: Routines
+Descriptions: A tool (togglable) that allows the AI with javascript to create routines, be saved in a library, and be able to run them at any point. -->

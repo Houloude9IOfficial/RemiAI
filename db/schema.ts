@@ -147,6 +147,29 @@ export const fileIndex = sqliteTable(
   (t) => [unique().on(t.directoryId, t.relativePath)],
 );
 
+export const routines = sqliteTable("routines", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull().unique(),
+  description: text("description").notNull().default(""),
+  code: text("code").notNull(),
+  schedule: text("schedule"),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const routineLogs = sqliteTable("routine_logs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  routineId: integer("routine_id")
+    .notNull()
+    .references(() => routines.id, { onDelete: "cascade" }),
+  status: text("status", { enum: ["running", "completed", "failed"] }).notNull(),
+  output: text("output"),
+  error: text("error"),
+  startedAt: text("started_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  completedAt: text("completed_at"),
+});
+
 export const agentTasks = sqliteTable("agent_tasks", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   conversationId: integer("conversation_id")
