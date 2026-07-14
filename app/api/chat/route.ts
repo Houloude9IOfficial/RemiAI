@@ -35,6 +35,8 @@ import {
   buildGetAgentResultTool,
 } from "@/lib/tools/agent-spawner";
 import { buildTodoTools } from "@/lib/tools/todo";
+import { buildFileIndexTools } from "@/lib/tools/file-index";
+import { queryRecentChanges } from "@/lib/fs/file-index";
 
 function titleFromMessage(message: UIMessage): string {
   const text = message.parts
@@ -146,6 +148,9 @@ export async function POST(req: Request) {
     get_agent_result: buildGetAgentResultTool(),
   };
 
+  // File index tools for querying recent changes and searching indexed files
+  const fileIndexToolSet = buildFileIndexTools();
+
   // Todo list tools for multi-step task planning
   const todoToolSet = buildTodoTools(conversationId);
 
@@ -160,6 +165,7 @@ export async function POST(req: Request) {
     ...documentToolSet,
     ...builtinToolSet,
     ...agentToolSet,
+    ...fileIndexToolSet,
     ...todoToolSet,
   };
 
@@ -186,11 +192,17 @@ export async function POST(req: Request) {
     ? `\n\n## Saved memories\nThe following are things you have remembered about the user across conversations. Use them to provide personalized and contextually relevant responses.\n${memoryRows.map((m) => `- ${m.content}`).join("\n")}`
     : "";
 
+  // Inject recent file changes into the system prompt for freshness
+  const recentChanges = await queryRecentChanges(10);
+  const fileChangeTip = recentChanges.length > 0
+    ? `\n\n## Recent file changes\nThe following files were recently modified in your watched directories. Use \`query_recent_changes\` for a fuller list, or these are the 10 most recent:\n${recentChanges.map((c) => `- [${c.changeType}] ${c.directoryLabel}/${c.relativePath} (${c.changedAt})`).join("\n")}`
+    : "";
+
   const modelMessages = await convertToModelMessages(uiMessages);
 
   const result = streamText({
     model,
-    system: SYSTEM_PROMPT + systemTip + memoryTip,
+    system: SYSTEM_PROMPT + systemTip + memoryTip + fileChangeTip,
     messages: modelMessages,
     tools: Object.keys(tools).length > 0 ? tools : undefined,
     // Allow up to 100 steps normally, or 500 in agentic/goal mode

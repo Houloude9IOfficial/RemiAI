@@ -11,6 +11,7 @@ export const directoryUpdateSchema = z.object({
   label: z.string().min(1).max(100).optional(),
   canRead: z.boolean().optional(),
   canWrite: z.boolean().optional(),
+  watchEnabled: z.boolean().optional(),
 });
 
 export const directoryValidateSchema = z.object({

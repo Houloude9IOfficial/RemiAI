@@ -7,6 +7,7 @@ export const directories = sqliteTable("directories", {
   label: text("label").notNull(),
   canRead: integer("can_read", { mode: "boolean" }).notNull().default(true),
   canWrite: integer("can_write", { mode: "boolean" }).notNull().default(false),
+  watchEnabled: integer("watch_enabled", { mode: "boolean" }).notNull().default(false),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
@@ -127,6 +128,23 @@ export const todoItems = sqliteTable(
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (t) => [unique().on(t.conversationId, t.itemId)],
+);
+
+export const fileIndex = sqliteTable(
+  "file_index",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    directoryId: integer("directory_id")
+      .notNull()
+      .references(() => directories.id, { onDelete: "cascade" }),
+    relativePath: text("relative_path").notNull(),
+    fileSize: integer("file_size").notNull().default(0),
+    modifiedAt: integer("modified_at").notNull().default(0),
+    contentHash: text("content_hash").notNull().default(""),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (t) => [unique().on(t.directoryId, t.relativePath)],
 );
 
 export const agentTasks = sqliteTable("agent_tasks", {

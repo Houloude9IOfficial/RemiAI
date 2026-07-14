@@ -10,7 +10,8 @@
     "postinstall": "drizzle-kit migrate || echo '(Migration skipped - it will run on app startup)'",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "watch:standalone": "npx tsx scripts/file-watcher.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.12",

@@ -132,6 +132,17 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     apiKeyPlaceholder: "ctx7_...",
     docsUrl: "https://context7.com/dashboard",
   },
+  // ── File index tools (builtin, always on, not togglable) ──
+  {
+    id: "file_index",
+    name: "File Index",
+    description:
+      "Query recently changed files and search the file index by path. The file index is automatically updated by a background watcher when files are created, modified, or deleted in watched directories.",
+    toolNames: ["query_recent_changes", "query_file_index"],
+    category: "builtin",
+    togglable: false,
+    requiresApiKey: false,
+  },
   // ── Delay tool (builtin, always on, not togglable) ──
   {
     id: "delay",

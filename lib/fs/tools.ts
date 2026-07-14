@@ -14,6 +14,7 @@ import {
   renameItem,
   type PermittedRoot,
 } from "./access";
+import { indexFile, removeFromIndex } from "./file-index";
 
 // ---------------------------------------------------------------------------
 // Helper
@@ -289,7 +290,13 @@ export const renameItemTool = {
   }) => {
     await ensureRoots();
     const root = await getRootById(rootId);
-    return await renameItem(root, sourceRelativePath, destRelativePath);
+    const result = await renameItem(root, sourceRelativePath, destRelativePath);
+    // Update file index: remove old path, index new path
+    removeFromIndex(rootId, sourceRelativePath).catch(() => {});
+    indexFile(rootId, destRelativePath, result.newPath).catch((err) =>
+      console.error("[fs-tools] Failed to index renamed file:", err),
+    );
+    return result;
   },
 };
 
@@ -358,7 +365,12 @@ export const writeFileTool = {
   }) => {
     await ensureRoots();
     const root = await getRootById(rootId);
-    return await writeFile(root, relativePath, content, mode ?? "overwrite");
+    const result = await writeFile(root, relativePath, content, mode ?? "overwrite");
+    // Auto-index the written file so the file index is immediately updated
+    indexFile(rootId, relativePath, result.path).catch((err) =>
+      console.error("[fs-tools] Failed to index written file:", err),
+    );
+    return result;
   },
 };
 
