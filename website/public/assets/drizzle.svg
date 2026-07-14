@@ -1,0 +1,368 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   width="385.73779"
+   height="139.22565"
+   id="svg2773"
+   sodipodi:version="0.32"
+   inkscape:version="0.46"
+   sodipodi:docname="drizzle-logotype.svg"
+   inkscape:output_extension="org.inkscape.output.svg.inkscape"
+   version="1.0">
+  <defs
+     id="defs2775">
+    <filter
+       inkscape:collect="always"
+       id="filter3493"
+       x="-0.26841506"
+       width="1.5368301"
+       y="-0.26841506"
+       height="1.5268301">
+      <feGaussianBlur
+         inkscape:collect="always"
+         stdDeviation="8.0250617"
+         id="feGaussianBlur3495" />
+    </filter>
+    <linearGradient
+       id="linearGradient3313">
+      <stop
+         id="stop3315"
+         offset="0"
+         style="stop-color:#ffffff;stop-opacity:0.80000001;" />
+      <stop
+         id="stop3317"
+         offset="1"
+         style="stop-color:#ffffff;stop-opacity:0;" />
+    </linearGradient>
+    <radialGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient3313"
+       id="radialGradient4710"
+       gradientUnits="userSpaceOnUse"
+       cx="353.16199"
+       cy="454.64709"
+       fx="353.16199"
+       fy="454.64709"
+       r="35.877548" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient4049"
+       id="linearGradient4708"
+       gradientUnits="userSpaceOnUse"
+       x1="499.44635"
+       y1="740.16034"
+       x2="439.17792"
+       y2="584.16034" />
+    <linearGradient
+       id="linearGradient3195">
+      <stop
+         style="stop-color:#ffffff;stop-opacity:1"
+         offset="0"
+         id="stop3197" />
+      <stop
+         style="stop-color:#ffffff;stop-opacity:0;"
+         offset="1"
+         id="stop3199" />
+    </linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient3195"
+       id="linearGradient4706"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="matrix(0.1695944,0.4797147,-0.6354734,0.4456833,1182.7921,-48.46627)"
+       x1="404.49457"
+       y1="653.28308"
+       x2="446.04788"
+       y2="701.67688" />
+    <filter
+       height="1.1676906"
+       y="-0.083845288"
+       width="1.2245525"
+       x="-0.11227623"
+       id="filter4045"
+       inkscape:collect="always">
+      <feGaussianBlur
+         id="feGaussianBlur4047"
+         stdDeviation="6.1626364"
+         inkscape:collect="always" />
+    </filter>
+    <clipPath
+       id="clipPath4063"
+       clipPathUnits="userSpaceOnUse">
+      <path
+         sodipodi:nodetypes="csscc"
+         id="path4065"
+         d="M 530.72222,668.39566 C 542.00637,701.51437 524.65865,734.25501 493.19179,744.97634 C 461.72492,755.69769 427.99598,740.35981 416.71183,707.2411 C 405.42767,674.1224 440.11315,626.53531 437.27418,583.96022 C 461.29072,619.81549 519.43806,635.27696 530.72222,668.39566 z"
+         style="opacity:1;fill:#000000;fill-opacity:1;stroke:none;stroke-width:12;stroke-linecap:round;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:9.99212623;stroke-opacity:1" />
+    </clipPath>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient4049"
+       id="linearGradient4704"
+       gradientUnits="userSpaceOnUse"
+       x1="499.44635"
+       y1="740.16034"
+       x2="439.17792"
+       y2="584.16034" />
+    <clipPath
+       id="clipPath4154"
+       clipPathUnits="userSpaceOnUse">
+      <path
+         sodipodi:nodetypes="csscc"
+         id="path4156"
+         d="M 530.72222,668.39566 C 542.00637,701.51437 524.65865,734.25501 493.19179,744.97634 C 461.72492,755.69769 427.99598,740.35981 416.71183,707.2411 C 405.42767,674.1224 440.11315,626.53531 437.27418,583.96022 C 461.29072,619.81549 519.43806,635.27696 530.72222,668.39566 z"
+         style="opacity:0.62189056;fill:none;fill-opacity:1;stroke:url(#linearGradient4158);stroke-width:12;stroke-linecap:round;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:9.99212623;stroke-opacity:1;filter:url(#filter4045)"
+         clip-path="url(#clipPath4063)" />
+    </clipPath>
+    <linearGradient
+       id="linearGradient4049"
+       inkscape:collect="always">
+      <stop
+         id="stop4051"
+         offset="0"
+         style="stop-color:#000000;stop-opacity:1;" />
+      <stop
+         id="stop4053"
+         offset="1"
+         style="stop-color:#000000;stop-opacity:0;" />
+    </linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient4049"
+       id="linearGradient4702"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="matrix(0.702847,0.1001749,0.1359205,1.0417171,48.996923,-82.660956)"
+       x1="388.16043"
+       y1="684.72186"
+       x2="496.396"
+       y2="698.13385" />
+    <linearGradient
+       id="linearGradient3373">
+      <stop
+         style="stop-color:#003366;stop-opacity:1;"
+         offset="0"
+         id="stop3375" />
+      <stop
+         style="stop-color:#0066ff;stop-opacity:1;"
+         offset="1"
+         id="stop3377" />
+    </linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient3373"
+       id="linearGradient4700"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="matrix(-1.3584028,-0.9860832,-1.0378472,1.4297116,1782.0525,186.98596)"
+       x1="356.29398"
+       y1="434.41211"
+       x2="353.31525"
+       y2="490.66431" />
+    <filter
+       inkscape:collect="always"
+       id="filter3651">
+      <feGaussianBlur
+         inkscape:collect="always"
+         stdDeviation="3.5080469"
+         id="feGaussianBlur3653" />
+    </filter>
+    <inkscape:perspective
+       sodipodi:type="inkscape:persp3d"
+       inkscape:vp_x="0 : 526.18109 : 1"
+       inkscape:vp_y="0 : 1000 : 0"
+       inkscape:vp_z="744.09448 : 526.18109 : 1"
+       inkscape:persp3d-origin="372.04724 : 350.78739 : 1"
+       id="perspective2781" />
+  </defs>
+  <sodipodi:namedview
+     id="base"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     gridtolerance="10000"
+     guidetolerance="10"
+     objecttolerance="10"
+     inkscape:pageopacity="0.0"
+     inkscape:pageshadow="2"
+     inkscape:zoom="0.35"
+     inkscape:cx="849.28571"
+     inkscape:cy="520"
+     inkscape:document-units="px"
+     inkscape:current-layer="layer1"
+     showgrid="false"
+     inkscape:window-width="669"
+     inkscape:window-height="701"
+     inkscape:window-x="0"
+     inkscape:window-y="22" />
+  <metadata
+     id="metadata2778">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type
+           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+        <cc:license
+           rdf:resource="http://creativecommons.org/licenses/by-sa/3.0/" />
+        <dc:creator>
+          <cc:Agent>
+            <dc:title>J. A. (Zak) Greant</dc:title>
+          </cc:Agent>
+        </dc:creator>
+        <dc:title>Drizzle Logotype</dc:title>
+        <dc:date>2008-07-26</dc:date>
+      </cc:Work>
+      <cc:License
+         rdf:about="http://creativecommons.org/licenses/by-sa/3.0/">
+        <cc:permits
+           rdf:resource="http://creativecommons.org/ns#Reproduction" />
+        <cc:permits
+           rdf:resource="http://creativecommons.org/ns#Distribution" />
+        <cc:requires
+           rdf:resource="http://creativecommons.org/ns#Notice" />
+        <cc:requires
+           rdf:resource="http://creativecommons.org/ns#Attribution" />
+        <cc:permits
+           rdf:resource="http://creativecommons.org/ns#DerivativeWorks" />
+        <cc:requires
+           rdf:resource="http://creativecommons.org/ns#ShareAlike" />
+      </cc:License>
+    </rdf:RDF>
+  </metadata>
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1"
+     transform="translate(-252.84539,-319.89221)">
+    <g
+       id="g4294"
+       transform="matrix(0.9886952,-0.1499392,0.1499392,0.9886952,72.77635,-97.30805)"
+       inkscape:export-filename="/Users/zag/Desktop/Clients/Drizzle/Graphics/drizzle-logo-1024x370.png"
+       inkscape:export-xdpi="239.18007"
+       inkscape:export-ydpi="239.18007">
+      <g
+         inkscape:export-ydpi="144.37"
+         inkscape:export-xdpi="144.37"
+         inkscape:export-filename="/Users/zag/Desktop/Clients/Drizzle/Graphics/drop+text+shadow+metal.png"
+         transform="matrix(-1,0,0,1,1009.6437,36.783528)"
+         id="g2833">
+        <path
+           inkscape:export-ydpi="115.00726"
+           inkscape:export-xdpi="115.00726"
+           inkscape:export-filename="/Users/zag/Desktop/C/Sort/Drizzle/Graphics/drop2.png"
+           style="fill:url(#linearGradient4700);fill-opacity:1;stroke:none;stroke-width:8;stroke-linecap:round;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dashoffset:9.99212623;stroke-opacity:1"
+           d="M 779.9635,455.80261 C 759.40955,484.1172 766.32426,520.51884 793.22662,540.04762 C 820.12898,559.57643 856.88189,554.8737 877.43583,526.5591 C 897.98978,498.24452 878.88993,442.54165 894.16496,402.69982 C 860.63804,429.87223 800.51745,427.48802 779.9635,455.80261 z"
+           id="path3612"
+           sodipodi:nodetypes="csscc" />
+        <path
+           transform="matrix(-0.9554769,-0.2950659,-0.2950659,0.9554769,1484.2771,-26.236007)"
+           inkscape:export-ydpi="115.00726"
+           inkscape:export-xdpi="115.00726"
+           inkscape:export-filename="/Users/zag/Desktop/C/Sort/Drizzle/Graphics/drop2.png"
+           inkscape:transform-center-y="-6.1501091"
+           inkscape:transform-center-x="-46.283661"
+           style="opacity:0.75;fill:url(#linearGradient4702);fill-opacity:1;stroke:none;stroke-width:12.99100018;stroke-linecap:round;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:9.99212623;stroke-opacity:1"
+           d="M 435.75839,579.57049 C 422.25577,590.28069 431.67171,617.83332 426.84137,627.02663 C 417.96499,643.54734 408.06367,676.89105 410.19188,692.30112 C 412.52001,723.16107 432.15559,736.09449 444.44468,744.02214 C 457.33105,752.89614 473.25041,749.42535 483.53842,742.12706 C 498.87427,733.12745 506.46127,713.20206 501.43615,692.73124 C 497.04485,669.80537 476.6837,650.8851 466.06689,615.42988 C 461.8531,608.01527 443.74597,581.4354 435.75839,579.57049 z"
+           id="path3614"
+           sodipodi:nodetypes="cccccccc"
+           clip-path="url(#clipPath4154)" />
+        <path
+           transform="matrix(-0.9554769,-0.2950659,-0.2950659,0.9554769,1484.2771,-26.236007)"
+           inkscape:export-ydpi="115.00726"
+           inkscape:export-xdpi="115.00726"
+           inkscape:export-filename="/Users/zag/Desktop/C/Sort/Drizzle/Graphics/drop2.png"
+           sodipodi:nodetypes="csscc"
+           id="path3616"
+           d="M 530.72222,668.39566 C 542.00637,701.51437 524.65865,734.25501 493.19179,744.97634 C 461.72492,755.69769 427.99598,740.35981 416.71183,707.2411 C 405.42767,674.1224 440.11315,626.53531 437.27418,583.96022 C 461.29072,619.81549 519.43806,635.27696 530.72222,668.39566 z"
+           style="opacity:0.62189056;fill:none;fill-opacity:1;stroke:url(#linearGradient4704);stroke-width:12;stroke-linecap:round;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:9.99212623;stroke-opacity:1;filter:url(#filter4045)"
+           clip-path="url(#clipPath4063)" />
+        <path
+           inkscape:export-ydpi="115.00726"
+           inkscape:export-xdpi="115.00726"
+           inkscape:export-filename="/Users/zag/Desktop/C/Sort/Drizzle/Graphics/drop2.png"
+           sodipodi:nodetypes="cccccccc"
+           id="path3632"
+           d="M 866.69949,448.59879 C 863.6309,440.38334 854.85619,438.70294 847.23127,438.81729 C 833.46347,438.89856 808.35626,444.13799 798.99504,450.80541 C 779.60165,462.93274 778.12098,475.5832 777.04917,486.10289 C 775.55855,497.32752 780.78312,507.46244 788.9947,511.45879 C 800.00668,518.0648 815.56875,515.99161 827.2691,505.74253 C 840.78621,495.04738 851.44604,480.2635 862.34029,466.27794 C 865.7776,461.0497 868.15198,454.30134 866.69949,448.59879 z"
+           style="opacity:0.75;fill:url(#linearGradient4706);fill-opacity:1;stroke:none;stroke-width:12.99100018;stroke-linecap:round;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:9.99212623;stroke-opacity:1"
+           inkscape:transform-center-x="24.578867"
+           inkscape:transform-center-y="22.233511" />
+        <path
+           transform="matrix(-0.9554769,-0.2950659,-0.2950659,0.9554769,1484.2771,-26.236007)"
+           clip-path="url(#clipPath4063)"
+           style="opacity:0.62189056;fill:none;fill-opacity:1;stroke:url(#linearGradient4708);stroke-width:12;stroke-linecap:round;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:9.99212623;stroke-opacity:1;filter:url(#filter4045)"
+           d="M 530.72222,668.39566 C 542.00637,701.51437 524.65865,734.25501 493.19179,744.97634 C 461.72492,755.69769 427.99598,740.35981 416.71183,707.2411 C 405.42767,674.1224 440.11315,626.53531 437.27418,583.96022 C 461.29072,619.81549 519.43806,635.27696 530.72222,668.39566 z"
+           id="path3638"
+           sodipodi:nodetypes="csscc"
+           inkscape:export-filename="/Users/zag/Desktop/C/Sort/Drizzle/Graphics/drop2.png"
+           inkscape:export-xdpi="115.00726"
+           inkscape:export-ydpi="115.00726" />
+      </g>
+      <path
+         sodipodi:type="arc"
+         style="fill:url(#radialGradient4710);fill-opacity:1;stroke:none;stroke-width:8;stroke-linecap:round;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:9.99212623;stroke-opacity:1;filter:url(#filter3493)"
+         id="path3618"
+         sodipodi:cx="353.16199"
+         sodipodi:cy="454.64709"
+         sodipodi:rx="35.877548"
+         sodipodi:ry="35.877548"
+         d="M 389.03954,454.64709 A 35.877548,35.877548 0 1 1 317.28444,454.64709 A 35.877548,35.877548 0 1 1 389.03954,454.64709 z"
+         transform="matrix(-1.3583192,0,0,-0.8071822,660.18198,927.24703)"
+         inkscape:export-filename="/Users/zag/Desktop/Clients/Drizzle/Graphics/drop+text+shadow+metal.png"
+         inkscape:export-xdpi="144.37"
+         inkscape:export-ydpi="144.37" />
+    </g>
+    <flowRoot
+       transform="matrix(0.8894808,0,0,0.8894808,-418.55085,-65.31289)"
+       style="font-size:120px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:100%;writing-mode:lr-tb;text-anchor:start;fill:#000000;fill-opacity:1;stroke:none;stroke-width:4;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1;font-family:Georgia;-inkscape-font-specification:Georgia"
+       id="flowRoot3667"
+       xml:space="preserve"
+       inkscape:export-filename="/Users/zag/Desktop/Clients/Drizzle/Graphics/drizzle-logo-1024x370.png"
+       inkscape:export-xdpi="239.18007"
+       inkscape:export-ydpi="239.18007"><flowRegion
+         id="flowRegion3669"><rect
+           style="font-size:120px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:100%;writing-mode:lr-tb;text-anchor:start;fill:#000000;stroke:none;stroke-width:4;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1;font-family:Georgia;-inkscape-font-specification:Georgia"
+           y="454.14984"
+           x="907.92511"
+           height="110.72153"
+           width="289.21448"
+           id="rect3671" /></flowRegion><flowPara
+         id="flowPara3673">rizzle</flowPara></flowRoot>    <g
+       id="g4317"
+       transform="translate(149.07397,-129.73106)"
+       inkscape:export-filename="/Users/zag/Desktop/Clients/Drizzle/Graphics/drizzle-logo-1024x370.png"
+       inkscape:export-xdpi="239.18007"
+       inkscape:export-ydpi="239.18007">
+      <flowRoot
+         transform="matrix(0.8894808,0,0,0.8894808,-662.68779,76.338628)"
+         style="font-size:120px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:100%;writing-mode:lr-tb;text-anchor:start;fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:8.99401093;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1;filter:url(#filter3651);font-family:Georgia;-inkscape-font-specification:Georgia"
+         id="flowRoot2862"
+         xml:space="preserve"><flowRegion
+           id="flowRegion2864"><rect
+             style="font-size:120px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:100%;writing-mode:lr-tb;text-anchor:start;fill:#000000;stroke:#000000;stroke-width:8.99401093;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1;font-family:Georgia;-inkscape-font-specification:Georgia"
+             y="454.14984"
+             x="907.92511"
+             height="213.70563"
+             width="861.61444"
+             id="rect2866" /></flowRegion><flowPara
+           id="flowPara2868">D </flowPara></flowRoot>      <flowRoot
+         xml:space="preserve"
+         id="flowRoot2873"
+         style="font-size:120px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:100%;writing-mode:lr-tb;text-anchor:start;fill:#ffffff;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;font-family:Georgia;-inkscape-font-specification:Georgia"
+         transform="matrix(0.8894808,0,0,0.8894808,-662.68779,76.33863)"><flowRegion
+           id="flowRegion2875"><rect
+             id="rect2877"
+             width="861.61444"
+             height="213.70563"
+             x="907.92511"
+             y="454.14984"
+             style="font-size:120px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:100%;writing-mode:lr-tb;text-anchor:start;fill:#ffffff;font-family:Georgia;-inkscape-font-specification:Georgia" /></flowRegion><flowPara
+           id="flowPara2879">D </flowPara></flowRoot>    </g>
+  </g>
+</svg>

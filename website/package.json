@@ -9,6 +9,10 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@tabler/icons-react": "^3.31.0",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^3.2.0",
+    "framer-motion": "^12.10.5",
     "next": "16.2.10",
     "react": "19.2.4",
     "react-dom": "19.2.4"
