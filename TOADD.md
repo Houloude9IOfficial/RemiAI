@@ -20,7 +20,7 @@ Allow AI to save memory snapshots (sentences) that will always be sent to AI at 
 
 <!-- add logo to web favicon -->
 
-add a plan mode for stuff
+<!-- add a plan mode for stuff -->
 
 <!-- add actual file attachments, and also allow ctrl + v to paste attachments or via drag-n-drop in the chat input area -->
 
