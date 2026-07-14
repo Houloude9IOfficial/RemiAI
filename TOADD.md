@@ -22,7 +22,7 @@ Allow AI to save memory snapshots (sentences) that will always be sent to AI at 
 
 add a plan mode for stuff
 
-add actual file attachments, and also allow ctrl + v to paste attachments or via drag-n-drop in the chat input area
+<!-- add actual file attachments, and also allow ctrl + v to paste attachments or via drag-n-drop in the chat input area -->
 
 <!-- add an ask questions tool and allow asking up to 7 questions with 3 choices + custom. -->
 

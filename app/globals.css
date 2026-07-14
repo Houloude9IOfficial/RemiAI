@@ -166,7 +166,7 @@
   line-height: 1.7;
   word-wrap: break-word;
   white-space: pre-wrap;
-  color: var(--foreground);
+  /* color: var(--foreground); */
 }
 
 /* Headings */
@@ -529,6 +529,34 @@
 
 .animate-float-drift-slow {
   animation: float-drift-slow 15s ease-in-out infinite;
+}
+
+/* ------------------------------------------------------------------ */
+/* File attachment & drag-drop animations                              */
+/* ------------------------------------------------------------------ */
+
+@keyframes file-chip-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-file-chip-in {
+  animation: file-chip-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes drag-pulse {
+  0%, 100% {
+    border-color: rgba(var(--primary), 0.4);
+  }
+  50% {
+    border-color: rgba(var(--primary), 0.7);
+  }
 }
 
 /* ------------------------------------------------------------------ */

@@ -180,6 +180,7 @@ function ConversationChat({
       )}
       <div className="sticky bottom-0 z-20 bg-background/95 backdrop-blur">
         <ChatInput
+          conversationId={conversationId}
           status={status}
           disabled={!providerId || !modelId}
           agentic={agenticMode}
