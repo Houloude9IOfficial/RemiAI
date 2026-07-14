@@ -32,7 +32,7 @@ add a delete folder and directory tool (only in directories allowed writing and 
 
 <!-- Fix MCP page layout and on test it's modal -->
 
-Add a slide to collapse/uncollapse extra pages in sidebar
+<!-- Add a slide to collapse/uncollapse extra pages in sidebar -->
 
 Add Built-in vector store option so the local assistant can index files for semantic search
 

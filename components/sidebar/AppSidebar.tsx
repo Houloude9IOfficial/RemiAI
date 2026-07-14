@@ -2,23 +2,27 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Brain, BarChart3, FolderOpen, Pen, Plug, Settings2, User, Wrench, Bot, Eye, Terminal } from "lucide-react";
+import { Brain, BarChart3, FolderOpen, Pen, Plug, Settings2, User, Wrench, Bot, Eye, Terminal, ChevronDown, ChevronUp } from "lucide-react";
 import { conversationsApi } from "@/lib/api/conversations";
 import { ConversationList } from "./ConversationList";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { AboutModal } from "./AboutModal";
 
-const settingsLinks = [
+const primaryLinks = [
   { href: "/settings/customize", label: "Customize", icon: User },
   { href: "/settings/tools", label: "Tools", icon: Wrench },
-  { href: "/settings/memories", label: "Memories", icon: Brain },
-  { href: "/settings/directories", label: "Directories", icon: FolderOpen },
   { href: "/settings/providers", label: "Models & Providers", icon: Settings2 },
-  { href: "/settings/mcp", label: "MCP Servers", icon: Plug },
+  { href: "/settings/directories", label: "Directories", icon: FolderOpen },
+];
+
+const extraLinks = [
+  { href: "/settings/memories", label: "Memories", icon: Brain },
   { href: "/settings/routines", label: "Routines", icon: Terminal },
+  { href: "/settings/mcp", label: "MCP Servers", icon: Plug },
   { href: "/settings/tasks", label: "Agent Tasks", icon: Bot },
   { href: "/settings/watcher", label: "File Watcher", icon: Eye },
   { href: "/settings/usage", label: "Usage", icon: BarChart3 },
@@ -54,6 +58,29 @@ export function AppSidebar() {
     },
   });
 
+  const [extraExpanded, setExtraExpanded] = useState(false);
+
+  // Hydrate from localStorage after mount (avoids SSR mismatch)
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("sidebarExtraExpanded");
+      if (stored === "true") {
+        setExtraExpanded(true);
+      }
+    } catch {
+      // localStorage unavailable
+    }
+  }, []);
+
+  // Persist to localStorage on change
+  useEffect(() => {
+    try {
+      localStorage.setItem("sidebarExtraExpanded", String(extraExpanded));
+    } catch {
+      // localStorage unavailable
+    }
+  }, [extraExpanded]);
+
   return (
     <aside className="flex h-full w-64 flex-col border-r bg-muted/30">
       <div className="flex items-center justify-between px-3 py-3">
@@ -87,12 +114,31 @@ export function AppSidebar() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-2 text-sm text-muted-foreground">
-        {/* <div className="px-2 py-1 text-xs uppercase tracking-wide">Chats</div> */}
         <ConversationList />
       </div>
 
       <nav className="flex flex-col gap-0.5 border-t px-2 py-2">
-        {settingsLinks.map(({ href, label, icon: Icon }) => (
+        {/* Collapse toggle — top of all links */}
+        <button
+          type="button"
+          onClick={() => setExtraExpanded((v) => !v)}
+          aria-expanded={extraExpanded}
+          className={cn(
+            "flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground/60 hover:text-foreground hover:bg-muted transition-colors duration-150",
+            extraExpanded && "text-muted-foreground",
+          )}
+        >
+          <ChevronUp
+            className={cn(
+              "h-3.5 w-3.5 transition-transform duration-500",
+              extraExpanded && "rotate-180",
+            )}
+          />
+          <span>{extraExpanded ? "Less" : `More (${extraLinks.length})`}</span>
+        </button>
+
+        {/* Primary links — always visible */}
+        {primaryLinks.map(({ href, label, icon: Icon }) => (
           <Link
             key={href}
             href={href}
@@ -105,6 +151,33 @@ export function AppSidebar() {
             {label}
           </Link>
         ))}
+
+        {/* Extra links — collapsible */}
+        <div
+          className={cn(
+            "overflow-hidden transition-all duration-500 ease-in-out",
+            extraExpanded
+              ? "max-h-56 opacity-100 translate-y-0"
+              : "max-h-0 opacity-0 -translate-y-1",
+          )}
+        >
+          <div className="flex flex-col gap-0.5 pt-0.5">
+            {extraLinks.map(({ href, label, icon: Icon }) => (
+              <Link
+                key={href}
+                href={href}
+                className={cn(
+                  "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors duration-150",
+                  pathname.startsWith(href) && "bg-muted text-foreground",
+                )}
+              >
+                <Icon className="h-4 w-4" />
+                {label}
+              </Link>
+            ))}
+          </div>
+        </div>
+
         <div className="mt-2 flex items-center justify-between border-t pt-2">
           <AboutModal />
           <ThemeToggle />
