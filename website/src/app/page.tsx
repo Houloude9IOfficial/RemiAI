@@ -29,22 +29,6 @@ import { GITHUB_URL, CREATIONS_URL, SITE_NAME } from "@/lib/constants";
 /*  Animation helpers                                                  */
 /* ------------------------------------------------------------------ */
 
-function FadeUp({ children, delay = 0, className = "" }: { children: React.ReactNode; delay?: number; className?: string }) {
-  const ref = useRef(null);
-  const inView = useInView(ref, { once: true, amount: 0.2 });
-  return (
-    <motion.div
-      ref={ref}
-      initial={{ opacity: 0, y: 40 }}
-      animate={inView ? { opacity: 1, y: 0 } : {}}
-      transition={{ duration: 0.7, delay, ease: [0.25, 0.1, 0, 1] }}
-      className={className}
-    >
-      {children}
-    </motion.div>
-  );
-}
-
 function StaggerFadeUp({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
     <motion.div
@@ -510,41 +494,62 @@ function HeroGrid() {
 /* ------------------------------------------------------------------ */
 
 function FeaturesSection() {
-  return (
-    <section id="features" className="py-20 md:py-28 scroll-mt-20">
-      <div className="mx-auto max-w-6xl px-6">
-        <FadeUp>
-          <div className="text-center max-w-2xl mx-auto mb-14 md:mb-18">
-            {/* <Badge variant="secondary" className="mb-4">Features</Badge> */}
-            <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-zinc-900">
-              Everything you need, locally
-            </h2>
-            <p className="mt-4 text-zinc-500 text-lg leading-relaxed">
-              RemiAI combines powerful AI capabilities with deep local integration,
-              giving you full control over your data and workflow.
-            </p>
-          </div>
-        </FadeUp>
+  const ref = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll({
+    target: ref,
+    offset: ["start end", "end start"],
+  });
 
-        <StaggerFadeUp className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {FEATURES.map((feature) => (
-            <StaggerItem key={feature.title}>
-              <div className="group relative rounded-2xl border border-zinc-100 bg-white p-6 hover:border-zinc-200 transition-all duration-300">
-                <div
-                  className={`w-11 h-11 rounded-xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-4 transition-transform duration-300 group-hover:scale-105`}
-                >
-                  <feature.icon className={`w-5 h-5 ${feature.iconColor}`} />
+  const headingY = useTransform(scrollYProgress, [0, 0.3], [40, 0]);
+  const headingScale = useTransform(scrollYProgress, [0, 0.3], [0.92, 1]);
+  const headingOpacity = useTransform(scrollYProgress, [0, 0.25], [0.5, 1]);
+  const cardsY = useTransform(scrollYProgress, [0, 0.4], [60, 0]);
+  const cardsOpacity = useTransform(scrollYProgress, [0, 0.35], [0.4, 1]);
+
+  return (
+    <section
+      id="features"
+      ref={ref}
+      className="py-20 md:py-28 scroll-mt-20"
+    >
+      <div className="mx-auto max-w-6xl px-6">
+        <motion.div
+          style={{ y: headingY, scale: headingScale, opacity: headingOpacity }}
+          className="text-center max-w-2xl mx-auto mb-14 md:mb-18"
+        >
+          {/* <Badge variant="secondary" className="mb-4">Features</Badge> */}
+          <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-zinc-900">
+            Everything you need, locally
+          </h2>
+          <p className="mt-4 text-zinc-500 text-lg leading-relaxed">
+            RemiAI combines powerful AI capabilities with deep local integration,
+            giving you full control over your data and workflow.
+          </p>
+        </motion.div>
+
+        <motion.div
+          style={{ y: cardsY, opacity: cardsOpacity, perspective: 800 }}
+        >
+          <StaggerFadeUp className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {FEATURES.map((feature) => (
+              <StaggerItem key={feature.title}>
+                <div className="group relative rounded-2xl border border-zinc-100 bg-white p-6 hover:border-zinc-200 transition-all duration-300">
+                  <div
+                    className={`w-11 h-11 rounded-xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-4 transition-transform duration-300 group-hover:scale-105`}
+                  >
+                    <feature.icon className={`w-5 h-5 ${feature.iconColor}`} />
+                  </div>
+                  <h3 className="font-semibold text-zinc-900 mb-2">
+                    {feature.title}
+                  </h3>
+                  <p className="text-sm text-zinc-500 leading-relaxed">
+                    {feature.description}
+                  </p>
                 </div>
-                <h3 className="font-semibold text-zinc-900 mb-2">
-                  {feature.title}
-                </h3>
-                <p className="text-sm text-zinc-500 leading-relaxed">
-                  {feature.description}
-                </p>
-              </div>
-            </StaggerItem>
-          ))}
-        </StaggerFadeUp>
+              </StaggerItem>
+            ))}
+          </StaggerFadeUp>
+        </motion.div>
       </div>
     </section>
   );
@@ -560,8 +565,14 @@ function TechHighlightsSection() {
     target: ref,
     offset: ["start end", "end start"],
   });
-  const scale = useTransform(scrollYProgress, [0, 0.5], [0.95, 1]);
-  const opacity = useTransform(scrollYProgress, [0, 0.3], [0.6, 1]);
+
+  const headingScale = useTransform(scrollYProgress, [0, 0.5], [0.95, 1]);
+  const headingOpacity = useTransform(scrollYProgress, [0, 0.3], [0.6, 1]);
+  const headingY = useTransform(scrollYProgress, [0, 0.4], [30, 0]);
+  const badgesY = useTransform(scrollYProgress, [0, 0.5], [50, 0]);
+  const badgesOpacity = useTransform(scrollYProgress, [0, 0.4], [0.3, 1]);
+  const statsY = useTransform(scrollYProgress, [0.2, 0.7], [40, 0]);
+  const statsOpacity = useTransform(scrollYProgress, [0.2, 0.6], [0, 1]);
 
   return (
     <section
@@ -570,7 +581,10 @@ function TechHighlightsSection() {
       className="py-20 md:py-28 scroll-mt-20"
     >
       <div className="mx-auto max-w-6xl px-6">
-        <motion.div style={{ scale, opacity }} className="text-center max-w-2xl mx-auto mb-14 md:mb-18">
+        <motion.div
+          style={{ scale: headingScale, opacity: headingOpacity, y: headingY }}
+          className="text-center max-w-2xl mx-auto mb-14 md:mb-18"
+        >
           {/* <Badge variant="secondary" className="mb-4">Tech Stack</Badge> */}
           <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-zinc-900">
             Built with modern tools
@@ -580,43 +594,50 @@ function TechHighlightsSection() {
           </p>
         </motion.div>
 
-        <StaggerFadeUp className="flex flex-wrap justify-center gap-3 max-w-3xl mx-auto">
-          {TECH_STACK.map((tech) => (
-            <StaggerItem key={tech.name}>
-              <div className="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-white border border-zinc-100 hover:border-zinc-200 transition-all duration-200 cursor-default">
-                <Image
-                  src={tech.src}
-                  alt={tech.name}
-                  width={20}
-                  height={20}
-                  draggable={false}
-                  className="w-5 h-5 object-contain"
-                />
-                <span className="text-sm font-medium text-zinc-700">{tech.name}</span>
-              </div>
-            </StaggerItem>
-          ))}
-        </StaggerFadeUp>
+        <motion.div
+          style={{ y: badgesY, opacity: badgesOpacity, perspective: 800 }}
+        >
+          <StaggerFadeUp className="flex flex-wrap justify-center gap-3 max-w-3xl mx-auto">
+            {TECH_STACK.map((tech) => (
+              <StaggerItem key={tech.name}>
+                <div className="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-white border border-zinc-100 hover:border-zinc-200 transition-all duration-200 cursor-default">
+                  <Image
+                    src={tech.src}
+                    alt={tech.name}
+                    width={20}
+                    height={20}
+                    draggable={false}
+                    className="w-5 h-5 object-contain"
+                  />
+                  <span className="text-sm font-medium text-zinc-700">{tech.name}</span>
+                </div>
+              </StaggerItem>
+            ))}
+          </StaggerFadeUp>
+        </motion.div>
 
         {/* Stats */}
-        <FadeUp delay={0.2}>
-          <div className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-            {[
-              { value: "100%", label: "Local & Private" },
-              { value: "Open Source", label: "MIT Licensed" },
-              { value: "Multi-Platform", label: "Windows / MacOS" },
-              { value: "Extensible", label: "MCP Protocol" },
-            ].map((stat) => (
-              <div
-                key={stat.label}
-                className="text-center p-5 rounded-xl bg-white border border-zinc-100"
-              >
-                <div className="text-lg md:text-xl font-bold text-zinc-900">{stat.value}</div>
-                <div className="text-xs text-zinc-500 mt-1">{stat.label}</div>
-              </div>
-            ))}
-          </div>
-        </FadeUp>
+        <motion.div
+          style={{ y: statsY, opacity: statsOpacity }}
+        >
+          <StaggerFadeUp>
+            <div className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+              {[
+                { value: "100%", label: "Local & Private" },
+                { value: "Open Source", label: "MIT Licensed" },
+                { value: "Multi-Platform", label: "Windows / MacOS" },
+                { value: "Extensible", label: "MCP Protocol" },
+              ].map((stat) => (
+                <StaggerItem key={stat.label}>
+                  <div className="text-center p-5 rounded-xl bg-white border border-zinc-100">
+                    <div className="text-lg md:text-xl font-bold text-zinc-900">{stat.value}</div>
+                    <div className="text-xs text-zinc-500 mt-1">{stat.label}</div>
+                  </div>
+                </StaggerItem>
+              ))}
+            </div>
+          </StaggerFadeUp>
+        </motion.div>
       </div>
     </section>
   );
@@ -627,54 +648,75 @@ function TechHighlightsSection() {
 /* ------------------------------------------------------------------ */
 
 function CreationsSection() {
-  return (
-    <section id="creations" className="py-20 md:py-28 scroll-mt-20">
-      <div className="mx-auto max-w-6xl px-6">
-        <FadeUp>
-          <div className="text-center max-w-2xl mx-auto mb-14 md:mb-18">
-            {/* <Badge variant="secondary" className="mb-4">Creations</Badge> */}
-            <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-zinc-900">
-              Built by RemiAI
-            </h2>
-            <p className="mt-4 text-zinc-500 text-lg leading-relaxed">
-              After building its own core, RemiAI put its coding tools to the test
-              by creating these projects from scratch.
-            </p>
-          </div>
-        </FadeUp>
+  const ref = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll({
+    target: ref,
+    offset: ["start end", "end start"],
+  });
 
-        <StaggerFadeUp className="grid sm:grid-cols-2 gap-5">
-          {CREATIONS.map((creation) => (
-            <StaggerItem key={creation.title}>
-              <a
-                href={`${CREATIONS_URL}/${creation.githubPath}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block group"
-                aria-label={`View ${creation.title} on GitHub`}
-              >
-                <div className="rounded-2xl border border-zinc-100 bg-white p-6 hover:border-zinc-200 transition-all duration-300">
-                  <div className="flex items-start justify-between mb-3">
-                    <h3 className="font-semibold text-zinc-900 group-hover:text-zinc-700 transition-colors">
-                      {creation.title}
-                    </h3>
-                    <IconArrowUpRight className="w-4 h-4 text-zinc-300 group-hover:text-zinc-500 transition-colors shrink-0" />
+  const headingY = useTransform(scrollYProgress, [0, 0.3], [30, 0]);
+  const headingScale = useTransform(scrollYProgress, [0, 0.3], [0.93, 1]);
+  const headingOpacity = useTransform(scrollYProgress, [0, 0.25], [0.5, 1]);
+  const cardsY = useTransform(scrollYProgress, [0, 0.4], [50, 0]);
+  const cardsOpacity = useTransform(scrollYProgress, [0, 0.35], [0.3, 1]);
+
+  return (
+    <section
+      id="creations"
+      ref={ref}
+      className="py-20 md:py-28 scroll-mt-20"
+    >
+      <div className="mx-auto max-w-6xl px-6">
+        <motion.div
+          style={{ y: headingY, scale: headingScale, opacity: headingOpacity }}
+          className="text-center max-w-2xl mx-auto mb-14 md:mb-18"
+        >
+          {/* <Badge variant="secondary" className="mb-4">Creations</Badge> */}
+          <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-zinc-900">
+            Built by RemiAI
+          </h2>
+          <p className="mt-4 text-zinc-500 text-lg leading-relaxed">
+            After building its own core, RemiAI put its coding tools to the test
+            by creating these projects from scratch.
+          </p>
+        </motion.div>
+
+        <motion.div
+          style={{ y: cardsY, opacity: cardsOpacity, perspective: 800 }}
+        >
+          <StaggerFadeUp className="grid sm:grid-cols-2 gap-5">
+            {CREATIONS.map((creation) => (
+              <StaggerItem key={creation.title}>
+                <a
+                  href={`${CREATIONS_URL}/${creation.githubPath}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block group"
+                  aria-label={`View ${creation.title} on GitHub`}
+                >
+                  <div className="rounded-2xl border border-zinc-100 bg-white p-6 hover:border-zinc-200 transition-all duration-300">
+                    <div className="flex items-start justify-between mb-3">
+                      <h3 className="font-semibold text-zinc-900 group-hover:text-zinc-700 transition-colors">
+                        {creation.title}
+                      </h3>
+                      <IconArrowUpRight className="w-4 h-4 text-zinc-300 group-hover:text-zinc-500 transition-colors shrink-0" />
+                    </div>
+                    <p className="text-sm text-zinc-500 leading-relaxed mb-4">
+                      {creation.description}
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {creation.tags.map((tag) => (
+                        <Badge key={tag} variant="secondary" className="text-[11px]">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
-                  <p className="text-sm text-zinc-500 leading-relaxed mb-4">
-                    {creation.description}
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {creation.tags.map((tag) => (
-                      <Badge key={tag} variant="secondary" className="text-[11px]">
-                        {tag}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              </a>
-            </StaggerItem>
-          ))}
-        </StaggerFadeUp>
+                </a>
+              </StaggerItem>
+            ))}
+          </StaggerFadeUp>
+        </motion.div>
       </div>
     </section>
   );
