@@ -16,6 +16,8 @@ import {
   IconArrowUpRight,
   IconChevronDown,
   IconStar,
+  IconSun,
+  IconMoon,
 } from "@tabler/icons-react";
 import { motion, useScroll, useTransform, useInView } from "framer-motion";
 import Image from "next/image";
@@ -252,6 +254,82 @@ const CREATIONS = [
 ];
 
 /* ------------------------------------------------------------------ */
+/*  Dashboard Image — scroll-driven parallax                           */
+/* ------------------------------------------------------------------ */
+
+function DashboardImage() {
+  const sectionRef = useRef<HTMLDivElement>(null);
+  const [showDark, setShowDark] = useState(false);
+
+  // Scroll‑driven values — progress goes 0→1 as section enters viewport
+  const { scrollYProgress } = useScroll({
+    target: sectionRef,
+    offset: ["start end", "end start"],
+  });
+
+  const y = useTransform(scrollYProgress, [0, 1], [40, -60]);
+  const scale = useTransform(scrollYProgress, [0, 1], [1.05, 0.88]);
+  const rotate = useTransform(scrollYProgress, [0, 1], [0, 2]);
+  const shadowOpacity = useTransform(scrollYProgress, [0, 0.3, 0.7, 1], [0.08, 0.15, 0.2, 0.25]);
+  const borderRadius = useTransform(scrollYProgress, [0, 1], [16, 20]);
+
+  return (
+    <div ref={sectionRef} className="relative mt-14 md:mt-20 mb-6 md:mb-10">
+      {/* Glass card wrapper */}
+      <motion.div
+        className="relative mx-auto max-w-5xl"
+        style={{ y, scale, rotate, perspective: 1200 }}
+      >
+        {/* Shadow layer */}
+        <motion.div
+          className="absolute -inset-4 rounded-2xl bg-black/5 blur-xl -z-10"
+          style={{ opacity: shadowOpacity }}
+        />
+
+        {/* Image container with subtle frame */}
+        <motion.div
+          className="relative overflow-hidden rounded-2xl bg-white shadow-xl"
+          style={{ borderRadius }}
+        >
+          <Image
+            src={showDark ? "/assets/RemiAI-Dash-Dark.png" : "/assets/RemiAI-Dash-Light.png"}
+            alt={`${SITE_NAME} Dashboard – ${showDark ? "Dark" : "Light"} theme`}
+            width={1920}
+            height={1080}
+            priority
+            draggable={false}
+            className="w-full h-auto select-none pointer-events-none"
+            sizes="(max-width: 1024px) 100vw, 1024px"
+          />
+        </motion.div>
+
+        {/* Theme toggle badge */}
+        {/* <motion.button
+          onClick={() => setShowDark((p) => !p)}
+          className="absolute -bottom-3 -right-3 md:-bottom-4 md:-right-4 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-zinc-200 shadow-sm text-[11px] font-medium text-zinc-500 hover:border-zinc-300 hover:text-zinc-700 hover:shadow-md transition-all duration-200 cursor-pointer"
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 1, duration: 0.4 }}
+          aria-label={`Switch to ${showDark ? "light" : "dark"} theme preview`}
+        >
+          {showDark ? (
+            <>
+              <IconMoon className="w-3 h-3" />
+              <span>Dark UI</span>
+            </>
+          ) : (
+            <>
+              <IconSun className="w-3 h-3" />
+              <span>Light UI</span>
+            </>
+          )}
+        </motion.button> */}
+      </motion.div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Hero144-inspired Grid Section                                      */
 /* ------------------------------------------------------------------ */
 
@@ -269,7 +347,7 @@ const TILES = [
 
 function HeroGrid() {
   return (
-    <section className="relative pt-28 pb-20 md:pt-36 md:pb-28 overflow-hidden">
+    <section className="relative pt-28 pb-20 md:pt-36 md:pb-28">
       {/* Subtle background gradient */}
       <div className="absolute inset-0 -z-10">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-gradient-to-b from-zinc-50 to-white rounded-full blur-3xl opacity-70" />
@@ -334,6 +412,9 @@ function HeroGrid() {
             </Button>
           </a>
         </motion.div>
+
+        {/* Dashboard Image — scroll‑driven animation */}
+        <DashboardImage />
 
         {/* Hero144-inspired Grid */}
         <motion.div
@@ -502,7 +583,7 @@ function TechHighlightsSection() {
         <StaggerFadeUp className="flex flex-wrap justify-center gap-3 max-w-3xl mx-auto">
           {TECH_STACK.map((tech) => (
             <StaggerItem key={tech.name}>
-              <div className="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-white border border-zinc-100 shadow-sm hover:shadow-md hover:border-zinc-200 transition-all duration-200 cursor-default">
+              <div className="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-white border border-zinc-100 hover:border-zinc-200 transition-all duration-200 cursor-default">
                 <Image
                   src={tech.src}
                   alt={tech.name}
