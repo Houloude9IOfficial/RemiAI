@@ -7,6 +7,8 @@
 
 RemiAI is a **local AI assistant** designed to help you interact with your files, run searches, and connect to external tools (MCP servers). It is built with Next.js, TypeScript, and the AI SDK libraries, offering a lightweight, self‑hosted alternative to cloud‑based assistants.
 
+### ProductHunt: https://www.producthunt.com/products/remiai
+
 ## Key Features
 - **Direct Conversational Interface** – concise, tone‑matched responses.
 - **File System Integration** – list, read, search, and write files in permitted directories.
