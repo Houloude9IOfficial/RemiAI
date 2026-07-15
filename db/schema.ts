@@ -7,6 +7,7 @@ export const directories = sqliteTable("directories", {
   label: text("label").notNull(),
   canRead: integer("can_read", { mode: "boolean" }).notNull().default(true),
   canWrite: integer("can_write", { mode: "boolean" }).notNull().default(false),
+  watchEnabled: integer("watch_enabled", { mode: "boolean" }).notNull().default(false),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
@@ -75,6 +76,7 @@ export const conversations = sqliteTable("conversations", {
     onDelete: "set null",
   }),
   modelId: text("model_id"),
+  mode: text("mode", { enum: ["chat", "goal", "plan"] }).notNull().default("chat"),
   totalInputTokens: integer("total_input_tokens").notNull().default(0),
   totalOutputTokens: integer("total_output_tokens").notNull().default(0),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
@@ -128,6 +130,47 @@ export const todoItems = sqliteTable(
   },
   (t) => [unique().on(t.conversationId, t.itemId)],
 );
+
+export const fileIndex = sqliteTable(
+  "file_index",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    directoryId: integer("directory_id")
+      .notNull()
+      .references(() => directories.id, { onDelete: "cascade" }),
+    relativePath: text("relative_path").notNull(),
+    fileSize: integer("file_size").notNull().default(0),
+    modifiedAt: integer("modified_at").notNull().default(0),
+    contentHash: text("content_hash").notNull().default(""),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (t) => [unique().on(t.directoryId, t.relativePath)],
+);
+
+export const routines = sqliteTable("routines", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull().unique(),
+  description: text("description").notNull().default(""),
+  code: text("code").notNull(),
+  schedule: text("schedule"),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  lastScheduledRun: text("last_scheduled_run"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const routineLogs = sqliteTable("routine_logs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  routineId: integer("routine_id")
+    .notNull()
+    .references(() => routines.id, { onDelete: "cascade" }),
+  status: text("status", { enum: ["running", "completed", "failed"] }).notNull(),
+  output: text("output"),
+  error: text("error"),
+  startedAt: text("started_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  completedAt: text("completed_at"),
+});
 
 export const agentTasks = sqliteTable("agent_tasks", {
   id: integer("id").primaryKey({ autoIncrement: true }),

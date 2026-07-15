@@ -561,11 +561,140 @@ export async function readMedia(
 ): Promise<MediaResult> {
   assertCanRead(root);
   const targetPath = await resolvePath(root, relativePath);
+  return readMediaFromPath(targetPath, root, relativePath);
+}
 
+/**
+ * Upload base directory — matches app/api/chat/upload/route.ts
+ */
+export const UPLOAD_BASE = path.join(process.cwd(), "data", "uploads");
+
+/**
+ * Regex to match uploaded file URLs: /api/chat/uploads/{conversationId}/{filename}
+ */
+export const UPLOAD_URL_RE = /^\/api\/chat\/uploads\/(\d+)\/(.+)$/;
+
+/**
+ * Result of parsing a chat upload URL.
+ */
+export type UploadUrlResult = {
+  conversationId: string;
+  filename: string;
+  resolvedPath: string;
+};
+
+/**
+ * Parse and validate a chat upload URL.
+ *
+ * Accepts URLs like `/api/chat/uploads/123/uuid_filename.pdf` or
+ * `http://localhost:3000/api/chat/uploads/123/uuid_filename.pdf` and
+ * resolves the file path on disk with path-traversal protection.
+ *
+ * Does NOT check that the file exists — only validates and resolves the path.
+ */
+export async function resolveUploadUrl(uploadUrl: string): Promise<UploadUrlResult> {
+  // Normalize: strip protocol + hostname if present (e.g. http://localhost:3000)
+  const normalized = uploadUrl.replace(/^https?:\/\/[^\/]+/i, "");
+
+  const match = normalized.match(UPLOAD_URL_RE);
+  if (!match) {
+    throw new FilesystemError(
+      `Invalid upload URL: "${uploadUrl}". Expected format: /api/chat/uploads/{conversationId}/{filename}`,
+      "INVALID_URL",
+    );
+  }
+
+  const conversationId = match[1];
+  const filename = decodeURIComponent(match[2]);
+
+  // Security: prevent path traversal
+  if (filename.includes("..") || filename.startsWith("/")) {
+    throw new FilesystemError(
+      "Access denied — invalid filename",
+      "ACCESS_DENIED",
+    );
+  }
+
+  const filePath = path.join(UPLOAD_BASE, conversationId, filename);
+
+  // Verify the resolved path is still within the upload directory
+  const resolvedPath = path.resolve(filePath);
+  const normalizedBase = path.resolve(UPLOAD_BASE, conversationId);
+  if (!resolvedPath.startsWith(normalizedBase + path.sep)) {
+    throw new FilesystemError(
+      "Access denied — path outside upload directory",
+      "ACCESS_DENIED",
+    );
+  }
+
+  return { conversationId, filename, resolvedPath };
+}
+
+/**
+ * Read a media file from a chat upload URL.
+ *
+ * Accepts URLs like `/api/chat/uploads/123/uuid_filename.png` and reads the
+ * file directly from `data/uploads/{conversationId}/{filename}` on disk.
+ *
+ * This allows the AI to use `read_media` on user-uploaded files even though
+ * they aren't in a configured directory root.
+ */
+export async function readMediaFromUrl(uploadUrl: string): Promise<MediaResult> {
+  const { filename, resolvedPath } = await resolveUploadUrl(uploadUrl);
+
+  // Read media from the resolved file path, using the original upload URL
+  // (not the virtual root's buildMediaUrl which would produce a broken /api/media/0/... URL)
+  const stats = await fs.stat(resolvedPath);
+  if (!stats.isFile()) {
+    throw new FilesystemError(
+      `Uploaded file not found: "${filename}"`,
+      "NOT_FOUND",
+    );
+  }
+
+  const ext = path.extname(resolvedPath).toLowerCase();
+  const mimeType = MEDIA_EXTENSIONS.get(ext) ?? "application/octet-stream";
+
+  const isImage = mimeType.startsWith("image/");
+  const isVideo = mimeType.startsWith("video/");
+
+  if (!isImage && !isVideo) {
+    throw new FilesystemError(
+      `"${filename}" is not a recognised media file (unsupported extension "${ext}")`,
+      "UNSUPPORTED_MEDIA",
+    );
+  }
+
+  if (stats.size > MAX_MEDIA_SIZE) {
+    throw new FilesystemError(
+      `Media file "${filename}" is ${(stats.size / 1024 / 1024).toFixed(1)} MB — exceeds the 20 MB limit`,
+      "FILE_TOO_LARGE",
+    );
+  }
+
+  const type: "image" | "video" = isImage ? "image" : "video";
+
+  if (isImage) {
+    const dataUrl = await createImageDataUrl(resolvedPath, mimeType, stats.size);
+    return { type, filename, mimeType, size: stats.size, url: uploadUrl, dataUrl };
+  }
+
+  return { type, filename, mimeType, size: stats.size, url: uploadUrl };
+}
+
+/**
+ * Internal: read media from a resolved file path.
+ * Used by both readMedia (root + relativePath) and readMediaFromUrl (URL).
+ */
+async function readMediaFromPath(
+  targetPath: string,
+  root: PermittedRoot,
+  displayPath: string,
+): Promise<MediaResult> {
   const stats = await fs.stat(targetPath);
   if (!stats.isFile()) {
     throw new FilesystemError(
-      `"${relativePath}" is not a file`,
+      `"${displayPath}" is not a file`,
       "NOT_A_FILE",
     );
   }
@@ -579,7 +708,7 @@ export async function readMedia(
 
   if (!isImage && !isVideo) {
     throw new FilesystemError(
-      `"${relativePath}" is not a recognised media file (unsupported extension "${ext}")`,
+      `"${displayPath}" is not a recognised media file (unsupported extension "${ext}")`,
       "UNSUPPORTED_MEDIA",
     );
   }
@@ -587,7 +716,7 @@ export async function readMedia(
   // Reject files exceeding the hard limit
   if (stats.size > MAX_MEDIA_SIZE) {
     throw new FilesystemError(
-      `Media file "${relativePath}" is ${(stats.size / 1024 / 1024).toFixed(1)} MB — exceeds the 20 MB limit`,
+      `Media file "${displayPath}" is ${(stats.size / 1024 / 1024).toFixed(1)} MB — exceeds the 20 MB limit`,
       "FILE_TOO_LARGE",
     );
   }
@@ -596,15 +725,13 @@ export async function readMedia(
   const type: "image" | "video" = isImage ? "image" : "video";
 
   // Build a server URL that the UI can fetch for the full-resolution file
-  const url = await buildMediaUrl(root, relativePath, filename);
+  const url = await buildMediaUrl(root, displayPath, filename);
 
   if (isImage) {
-    // --- Image path: always produce a dataUrl (resize if needed) ---
     const dataUrl = await createImageDataUrl(targetPath, mimeType, stats.size);
     return { type, filename, mimeType, size: stats.size, url, dataUrl };
   }
 
-  // --- Video path: no dataUrl (videos are too large even resized) ---
   return { type, filename, mimeType, size: stats.size, url };
 }
 

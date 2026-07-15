@@ -1,8 +1,14 @@
+"use client";
+
+import { useState } from "react";
 import { McpServerForm } from "@/components/settings/McpServerForm";
 import { McpServerList } from "@/components/settings/McpServerList";
-import CenteredLayout from '@/components/layout/CenteredLayout';
+import CenteredLayout from "@/components/layout/CenteredLayout";
+import type { McpServer } from "@/lib/api/mcp-servers";
 
 export default function McpSettingsPage() {
+  const [editingServer, setEditingServer] = useState<McpServer | null>(null);
+
   return (
     <CenteredLayout>
       <div className="flex max-w-3xl flex-col gap-6">
@@ -13,8 +19,12 @@ export default function McpSettingsPage() {
             Tools are automatically namespaced by server name to avoid collisions.
           </p>
         </div>
-        <McpServerForm />
-        <McpServerList />
+        <McpServerForm
+          key={editingServer?.id ?? "new"}
+          initialServer={editingServer ?? undefined}
+          onCancelEdit={() => setEditingServer(null)}
+        />
+        <McpServerList onEdit={setEditingServer} />
       </div>
     </CenteredLayout>
   );

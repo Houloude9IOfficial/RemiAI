@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 
 interface ErrorCardProps {
   /** The error object with a message */
-  error: Error | { message: string } | string;
+  error: any // Error | { message: string } | string;
   /** Called when the user clicks retry */
   onRetry?: () => void;
   /** Whether retry is currently loading */
@@ -35,7 +35,7 @@ export function ErrorCard({
   onDismiss,
   className,
 }: ErrorCardProps) {
-  const message = typeof error === "string" ? error : error.message;
+  const message = typeof error === "string" ? error : ((error.message || error.error) || error.message);
   const displayTitle = title ?? "An error occurred";
 
   return (

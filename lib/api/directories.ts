@@ -4,6 +4,7 @@ export type Directory = {
   label: string;
   canRead: boolean;
   canWrite: boolean;
+  watchEnabled: boolean;
   createdAt: string;
 };
 

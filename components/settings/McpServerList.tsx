@@ -26,12 +26,21 @@ import {
   Loader2,
   Cable,
   Globe,
+  Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { mcpServersApi, type McpTestResult } from "@/lib/api/mcp-servers";
+import {
+  mcpServersApi,
+  type McpServer,
+  type McpTestResult,
+} from "@/lib/api/mcp-servers";
 
-export function McpServerList() {
+export function McpServerList({
+  onEdit,
+}: {
+  onEdit?: (server: McpServer) => void;
+}) {
   const queryClient = useQueryClient();
   const { data: servers = [], isLoading } = useQuery({
     queryKey: ["mcp-servers"],
@@ -104,6 +113,49 @@ export function McpServerList() {
                   <Globe className="h-4 w-4 text-muted-foreground" />
                 )}
                 <span className="font-medium">{server.name}</span>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-6 w-6"
+                        disabled={testMutation.isPending && testMutation.variables === server.id}
+                        onClick={() => testMutation.mutate(server.id)}
+                      />
+                    }
+                  >
+                    {testMutation.isPending && testMutation.variables === server.id ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Plug className="h-3 w-3" />
+                    )}
+                  </TooltipTrigger>
+                  <TooltipContent>Test connection</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-6 w-6"
+                        onClick={() => onEdit?.(server)}
+                      />
+                    }
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </TooltipTrigger>
+                  <TooltipContent>Edit</TooltipContent>
+                </Tooltip>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                  onClick={() => removeMutation.mutate(server.id)}
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
                 <Badge variant="outline" className="text-[10px] uppercase">
                   {server.transport}
                 </Badge>
@@ -119,39 +171,13 @@ export function McpServerList() {
                 ) : server.lastConnectedAt ? (
                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
                 ) : null}
-              </div>
-              <Tooltip>
-                <TooltipTrigger>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-7 w-7"
-                    disabled={testMutation.isPending && testMutation.variables === server.id}
-                    onClick={() => testMutation.mutate(server.id)}
-                  >
-                    {testMutation.isPending && testMutation.variables === server.id ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Plug className="h-3.5 w-3.5" />
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Test connection</TooltipContent>
-              </Tooltip>
               <Switch
                 checked={server.enabled}
                 onCheckedChange={(enabled) =>
                   updateMutation.mutate({ id: server.id, enabled })
                 }
               />
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                onClick={() => removeMutation.mutate(server.id)}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+            </div>
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
@@ -180,7 +206,7 @@ export function McpServerList() {
           if (!open) setTestResult(null);
         }}
       >
-        <DialogContent>
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{testResult?.serverName}</DialogTitle>
             <DialogDescription>Connection test results</DialogDescription>
@@ -213,17 +239,22 @@ export function McpServerList() {
                 <div>
                   <p className="mb-1 font-medium">Available tools ({testResult.result.toolCount}):</p>
                   <div className="flex flex-wrap gap-1.5">
-                    {testResult.result.toolNames.map((name) => (
+                    {testResult.result.toolNames.slice(0, 6).map((name) => (
                       <Badge key={name} variant="secondary" className="text-xs">
                         {name}
                       </Badge>
                     ))}
+                    {testResult.result.toolNames.length > 6 && (
+                      <Badge variant="outline" className="text-xs">
+                        +{testResult.result.toolNames.length - 6} more
+                      </Badge>
+                    )}
                   </div>
                 </div>
               )}
               {testResult.result.instructions && (
                 <div>
-                  <p className="mb-1 font-medium">Server instructions:</p>
+                  <p className="mb-1 font-medium">Instructions:</p>
                   <p className="text-xs text-muted-foreground">
                     {testResult.result.instructions}
                   </p>

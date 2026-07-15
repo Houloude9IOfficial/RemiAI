@@ -21,7 +21,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ScrollArea } from "@/components/ui/scroll-area";
+
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import Link from "next/link";
@@ -351,7 +351,7 @@ export default function AgentTasksPage() {
       <div>
         <h1 className="text-lg font-semibold">Agent Tasks</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          View all spawned agent tasks with their status, progress, parent-child relationships, and token usage.
+          View all spawned agent tasks.
         </p>
       </div>
 
@@ -407,15 +407,13 @@ export default function AgentTasksPage() {
                   {data.tasks.length} total / {data.tree.length} root
                 </span>
               </CardHeader>
-              <CardContent className="p-0">
-                <ScrollArea className="max-h-[600px]">
-                  <div className="p-1 space-y-0.5">
-                    {data.tree.map((task) => (
-                      <TaskTreeNode key={task.id} task={task} depth={0} />
-                    ))}
-                  </div>
-                </ScrollArea>
-              </CardContent>
+              <div className="overflow-y-auto max-h-[65vh] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-track]:bg-transparent">
+                <div className="p-1 space-y-0.5">
+                  {data.tree.map((task) => (
+                    <TaskTreeNode key={task.id} task={task} depth={0} />
+                  ))}
+                </div>
+              </div>
             </Card>
           )}
         </>

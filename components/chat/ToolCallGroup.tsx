@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { ToolUIPart, DynamicToolUIPart } from "ai";
 import { getToolName } from "ai";
 import { cn } from "@/lib/utils";
@@ -212,6 +212,10 @@ export function ToolCallGroup({
   const running = parts.some(isPartRunning);
   const completed = parts.every(isPartComplete);
 
+  // Track whether the user manually clicked the toggle.
+  // If they did, skip auto-collapse so their intent is respected.
+  const userToggledRef = useRef(false);
+
   // Auto-expand when questions appear (output arrives after streaming completes)
   useEffect(() => {
     if (hasQuestions) {
@@ -219,16 +223,21 @@ export function ToolCallGroup({
     }
   }, [hasQuestions]);
 
-  // When all tools finish, auto-collapse if user had manually expanded.
-  // Skip auto-collapse for questions — we want the interactive cards to stay visible.
+  // When all tools finish, auto-collapse ONLY if the user never manually
+  // toggled the group open. Skip auto-collapse for questions — we want the
+  // interactive cards to stay visible.
   useEffect(() => {
     if (completed && parts.length > 0 && !hasQuestions) {
+      if (userToggledRef.current) return; // user manually toggled — keep as-is
       const timer = setTimeout(() => setIsOpen(false), 250);
       return () => clearTimeout(timer);
     }
   }, [completed, parts.length, hasQuestions]);
 
-  const toggle = useCallback(() => setIsOpen((o) => !o), []);
+  const toggle = useCallback(() => {
+    userToggledRef.current = true;
+    setIsOpen((o) => !o);
+  }, []);
 
   return (
     <div className="overflow-hidden rounded-xl border border-border/60 bg-muted/20 dark:bg-muted/10 animate-tool-slide-up">
@@ -279,15 +288,8 @@ export function ToolCallGroup({
         <div className="overflow-hidden">
           <div className="flex flex-col gap-1 p-1.5">
             {parts.map((part, idx) => (
-              <div
-                key={(part as any).toolCallId ?? idx}
-                className="animate-tool-card-in"
-                style={{ animationDelay: `${idx * 60}ms` }}
-              >
-                <ToolCallCard
-                  part={part}
-                  compact
-                />
+              <div key={(part as any).toolCallId ?? idx}>
+                <ToolCallCard part={part} compact />
               </div>
             ))}
           </div>

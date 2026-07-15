@@ -45,7 +45,7 @@ export function MediaDisplay({ data }: MediaDisplayProps) {
           src={src}
           alt={filename ?? "Image"}
           className={cn(
-            "max-h-96 w-full object-contain transition-opacity duration-300",
+            "max-h-[75vh] w-full object-contain transition-opacity duration-300",
             isLoading && "opacity-0",
           )}
           onLoad={() => setIsLoading(false)}
@@ -92,7 +92,7 @@ export function MediaDisplay({ data }: MediaDisplayProps) {
             src={src}
             controls
             preload="metadata"
-            className="max-h-96 w-full bg-black"
+            className="max-h-[75vh] w-full bg-black"
             onLoadedData={() => setIsLoading(false)}
             onError={() => setHasError(true)}
           >

@@ -166,7 +166,6 @@
   line-height: 1.7;
   word-wrap: break-word;
   white-space: pre-wrap;
-  color: var(--foreground);
 }
 
 /* Headings */
@@ -224,22 +223,32 @@
   font-size: 0.9em;
 }
 
-/* Code blocks */
+/* ------------------------------------------------------------------ */
+/* Code blocks                                                        */
+/* ------------------------------------------------------------------ */
+
 .markdown-body pre {
   position: relative;
   margin: 0.75em 0;
   padding: 1em;
   border-radius: var(--radius-md);
-  background: color-mix(in oklab, var(--muted) 70%, transparent);
   overflow-x: auto;
   font-size: 0.85em;
-  line-height: 1.5;
-  border: 1px solid var(--border);
+  line-height: 1.6;
+  border: 1px solid;
+  /* Light theme */
+  background: oklch(0.975 0.005 240);
+  border-color: oklch(0.91 0.008 240);
 }
 .markdown-body pre:first-child { margin-top: 0; }
 .markdown-body pre:last-child { margin-bottom: 0; }
 
-/* Syntax highlight overrides for highlight.js */
+.dark .markdown-body pre {
+  background: oklch(0.19 0.008 260);
+  border-color: oklch(0.28 0.015 260);
+}
+
+/* Inner code element inside pre (highlight.js container) */
 .markdown-body pre code.hljs {
   background: transparent;
   padding: 0;
@@ -260,12 +269,12 @@
   border-collapse: collapse;
   border-spacing: 0;
   width: 100%;
-  margin: 0.75em 0; /* Add some vertical margin */
+  margin: 0.75em 0;
 }
 
 .markdown-body th,
 .markdown-body td {
-  border: 1px solid var(--border); /* Use existing border variable */
+  border: 1px solid var(--border);
   padding: 10px;
   text-align: left;
   word-break: break-word;
@@ -274,11 +283,10 @@
 }
 
 .markdown-body th {
-  background-color: var(--muted); /* Use existing muted background variable */
+  background-color: var(--muted);
   font-weight: 600;
 }
 
-/* Natural text wrapping inside cells */
 .markdown-body th,
 .markdown-body td {
   word-break: break-word;
@@ -286,20 +294,17 @@
   white-space: normal;
 }
 
-/* Inline code inside table cells */
 .markdown-body td code,
 .markdown-body th code {
   font-size: 0.85em;
 }
 
-/* Empty cells get a subtle placeholder dash */
 .markdown-body td:empty::before {
   content: "—";
   color: var(--muted-foreground);
   opacity: 0.4;
 }
 
-/* Smooth fade-in animation when table first appears */
 .markdown-body .custom-scrollbar:has(table) {
   animation: table-fade-in 0.3s ease-out;
 }
@@ -343,82 +348,161 @@
 
 /* ------------------------------------------------------------------ */
 /* Syntax highlighting (highlight.js)                                 */
+/* Inspired by GitHub's color palette — high contrast, vibrant        */
 /* ------------------------------------------------------------------ */
 
-/* Light theme (default) */
+/* === Light theme === */
+
 .markdown-body .hljs-keyword,
 .markdown-body .hljs-selector-tag,
-.markdown-body .hljs-literal,
+.markdown-body .hljs-literal {
+  color: oklch(0.42 0.22 290); /* vibrant purple */
+}
 .markdown-body .hljs-section,
 .markdown-body .hljs-link {
-  color: oklch(0.44 0.21 285.42); /* purple */
+  color: oklch(0.42 0.22 290);
 }
+
 .markdown-body .hljs-string,
+.markdown-body .hljs-addition {
+  color: oklch(0.35 0.16 255); /* deep blue */
+}
+
+.markdown-body .hljs-title.function_ {
+  color: oklch(0.42 0.22 290); /* purple for functions */
+}
+.markdown-body .hljs-title.class_ {
+  color: oklch(0.5 0.2 45); /* amber for classes */
+}
 .markdown-body .hljs-title,
-.markdown-body .hljs-name,
-.markdown-body .hljs-type,
-.markdown-body .hljs-attribute,
+.markdown-body .hljs-title.class_.inherited__ {
+  color: oklch(0.5 0.2 45);
+}
+
+.markdown-body .hljs-name {
+  color: oklch(0.45 0.22 30); /* red-orange for tags */
+}
+.markdown-body .hljs-type {
+  color: oklch(0.35 0.16 255); /* blue for types */
+}
+.markdown-body .hljs-attribute {
+  color: oklch(0.45 0.15 250); /* medium blue */
+}
 .markdown-body .hljs-symbol,
-.markdown-body .hljs-bullet,
-.markdown-body .hljs-addition,
+.markdown-body .hljs-bullet {
+  color: oklch(0.45 0.18 280); /* indigo */
+}
 .markdown-body .hljs-variable,
 .markdown-body .hljs-template-tag,
 .markdown-body .hljs-template-variable {
-  color: oklch(0.46 0.17 188.69); /* teal */
+  color: oklch(0.45 0.18 40); /* warm orange-brown */
+}
+.markdown-body .hljs-number,
+.markdown-body .hljs-regexp {
+  color: oklch(0.42 0.17 260); /* blue */
+}
+.markdown-body .hljs-built_in {
+  color: oklch(0.48 0.18 45); /* amber-orange */
 }
 .markdown-body .hljs-comment,
 .markdown-body .hljs-quote,
 .markdown-body .hljs-deletion,
 .markdown-body .hljs-meta {
-  color: oklch(0.56 0 0); /* gray */
-}
-.markdown-body .hljs-number,
-.markdown-body .hljs-regexp,
-.markdown-body .hljs-literal,
-.markdown-body .hljs-built_in {
-  color: oklch(0.58 0.19 29.19); /* orange */
+  color: oklch(0.58 0.01 260); /* neutral gray */
 }
 .markdown-body .hljs-attr,
 .markdown-body .hljs-selector-class {
-  color: oklch(0.46 0.17 188.69); /* teal */
+  color: oklch(0.42 0.17 260); /* steel blue */
+}
+.markdown-body .hljs-selector-pseudo,
+.markdown-body .hljs-selector-id {
+  color: oklch(0.45 0.22 30);
+}
+.markdown-body .hljs-params {
+  color: oklch(0.45 0.22 290);
+}
+.markdown-body .hljs-punctuation {
+  color: oklch(0.45 0 0);
+}
+.markdown-body .hljs-property {
+  color: oklch(0.42 0.17 260);
 }
 
-/* Dark theme */
+/* === Dark theme === */
+
 .dark .markdown-body .hljs-keyword,
 .dark .markdown-body .hljs-selector-tag,
-.dark .markdown-body .hljs-literal,
+.dark .markdown-body .hljs-literal {
+  color: oklch(0.72 0.18 305); /* light purple */
+}
 .dark .markdown-body .hljs-section,
 .dark .markdown-body .hljs-link {
-  color: oklch(0.68 0.18 303.9); /* light purple */
+  color: oklch(0.72 0.18 305);
 }
+
 .dark .markdown-body .hljs-string,
+.dark .markdown-body .hljs-addition {
+  color: oklch(0.72 0.14 230); /* light blue */
+}
+
+.dark .markdown-body .hljs-title.function_ {
+  color: oklch(0.72 0.18 305);
+}
+.dark .markdown-body .hljs-title.class_ {
+  color: oklch(0.78 0.16 70); /* light gold */
+}
 .dark .markdown-body .hljs-title,
-.dark .markdown-body .hljs-name,
-.dark .markdown-body .hljs-type,
-.dark .markdown-body .hljs-attribute,
+.dark .markdown-body .hljs-title.class_.inherited__ {
+  color: oklch(0.78 0.16 70);
+}
+
+.dark .markdown-body .hljs-name {
+  color: oklch(0.75 0.17 30); /* light red */
+}
+.dark .markdown-body .hljs-type {
+  color: oklch(0.72 0.14 230);
+}
+.dark .markdown-body .hljs-attribute {
+  color: oklch(0.65 0.14 240); /* medium blue */
+}
 .dark .markdown-body .hljs-symbol,
-.dark .markdown-body .hljs-bullet,
-.dark .markdown-body .hljs-addition,
+.dark .markdown-body .hljs-bullet {
+  color: oklch(0.68 0.16 290); /* light indigo */
+}
 .dark .markdown-body .hljs-variable,
 .dark .markdown-body .hljs-template-tag,
 .dark .markdown-body .hljs-template-variable {
-  color: oklch(0.72 0.14 171.38); /* light teal */
+  color: oklch(0.75 0.16 55); /* light orange */
+}
+.dark .markdown-body .hljs-number,
+.dark .markdown-body .hljs-regexp {
+  color: oklch(0.68 0.16 250); /* light blue */
+}
+.dark .markdown-body .hljs-built_in {
+  color: oklch(0.76 0.15 60); /* gold-orange */
 }
 .dark .markdown-body .hljs-comment,
 .dark .markdown-body .hljs-quote,
 .dark .markdown-body .hljs-deletion,
 .dark .markdown-body .hljs-meta {
-  color: oklch(0.65 0 0); /* light gray */
-}
-.dark .markdown-body .hljs-number,
-.dark .markdown-body .hljs-regexp,
-.dark .markdown-body .hljs-literal,
-.dark .markdown-body .hljs-built_in {
-  color: oklch(0.75 0.17 59.19); /* light orange */
+  color: oklch(0.62 0.01 260); /* neutral gray */
 }
 .dark .markdown-body .hljs-attr,
 .dark .markdown-body .hljs-selector-class {
-  color: oklch(0.72 0.14 171.38); /* light teal */
+  color: oklch(0.65 0.14 240);
+}
+.dark .markdown-body .hljs-selector-pseudo,
+.dark .markdown-body .hljs-selector-id {
+  color: oklch(0.75 0.17 30);
+}
+.dark .markdown-body .hljs-params {
+  color: oklch(0.72 0.18 305);
+}
+.dark .markdown-body .hljs-punctuation {
+  color: oklch(0.65 0 0);
+}
+.dark .markdown-body .hljs-property {
+  color: oklch(0.65 0.14 240);
 }
 
 /* ------------------------------------------------------------------ */
@@ -529,6 +613,34 @@
 
 .animate-float-drift-slow {
   animation: float-drift-slow 15s ease-in-out infinite;
+}
+
+/* ------------------------------------------------------------------ */
+/* File attachment & drag-drop animations                              */
+/* ------------------------------------------------------------------ */
+
+@keyframes file-chip-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-file-chip-in {
+  animation: file-chip-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes drag-pulse {
+  0%, 100% {
+    border-color: rgba(var(--primary), 0.4);
+  }
+  50% {
+    border-color: rgba(var(--primary), 0.7);
+  }
 }
 
 /* ------------------------------------------------------------------ */

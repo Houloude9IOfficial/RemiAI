@@ -35,6 +35,9 @@ import {
   buildGetAgentResultTool,
 } from "@/lib/tools/agent-spawner";
 import { buildTodoTools } from "@/lib/tools/todo";
+import { buildFileIndexTools } from "@/lib/tools/file-index";
+import { buildRoutinesTools } from "@/lib/tools/routines";
+import { queryRecentChanges } from "@/lib/fs/file-index";
 
 function titleFromMessage(message: UIMessage): string {
   const text = message.parts
@@ -47,10 +50,9 @@ function titleFromMessage(message: UIMessage): string {
 }
 
 export async function POST(req: Request) {
-  const { conversationId, messages: uiMessages, agenticMode } = (await req.json()) as {
+  const { conversationId, messages: uiMessages = [] } = (await req.json()) as {
     conversationId: number;
-    messages: UIMessage[];
-    agenticMode?: boolean;
+    messages?: UIMessage[];
   };
 
   const conversation = await db
@@ -69,6 +71,9 @@ export async function POST(req: Request) {
     );
   }
 
+  // Read mode from the conversation in the database
+  const mode = (conversation as any).mode ?? "chat";
+
   const provider = await db
     .select()
     .from(providers)
@@ -76,6 +81,13 @@ export async function POST(req: Request) {
     .get();
   if (!provider) {
     return NextResponse.json({ error: "Provider not found" }, { status: 404 });
+  }
+
+  if (uiMessages.length === 0) {
+    return NextResponse.json(
+      { error: "No messages to process" },
+      { status: 400 },
+    );
   }
 
   const lastMessage = uiMessages[uiMessages.length - 1];
@@ -146,13 +158,50 @@ export async function POST(req: Request) {
     get_agent_result: buildGetAgentResultTool(),
   };
 
+  // File index tools for querying recent changes and searching indexed files
+  const fileIndexToolSet = buildFileIndexTools();
+
   // Todo list tools for multi-step task planning
   const todoToolSet = buildTodoTools(conversationId);
+
+  // Routine tools (create, run, list, update, delete routines)
+  const routineToolSet = await buildRoutinesTools();
+
+  // In plan mode, filter out write tools — AI can only read/plan, not modify files
+  const effectiveFsToolSet =
+    mode === "plan"
+      ? Object.fromEntries(
+          Object.entries(fsToolSet).filter(
+            ([key]) =>
+              !["write_file", "create_directory", "delete_directory", "rename_item"].includes(
+                key,
+              ),
+          ),
+        )
+      : fsToolSet;
+
+  // Build plan-mode specific system prompt instructions
+  const planModePrompt =
+    mode === "plan"
+      ? `
+
+## PLAN MODE — Read-only planning session
+
+You are currently in **Plan mode**. This means:
+- You CAN read files, list directories, search files, browse the web, and gather information.
+- You CAN use \`todos_init\` to create a step-by-step plan.
+- You CAN use \`ask_questions\` to gather information from the user.
+- You CANNOT write, create, delete, or rename any files or directories.
+- Your goal is to help the user plan their project by asking clarifying questions, researching options, and creating a detailed todo plan.
+- Focus on understanding the user's requirements, exploring their codebase, and proposing a clear implementation plan.
+- Use \`todos_init\` at the start to lay out the steps you'll help them plan.
+- Do NOT attempt to modify any files — you don't have permission to write in this mode.`
+      : "";
 
   // Merge all tool sets (last writer wins on name collision)
   const tools = {
     ...mcpToolSet,
-    ...fsToolSet,
+    ...effectiveFsToolSet,
     ...contextToolSet,
     ...memoryToolSet,
     ...integrationToolSet,
@@ -160,7 +209,9 @@ export async function POST(req: Request) {
     ...documentToolSet,
     ...builtinToolSet,
     ...agentToolSet,
+    ...fileIndexToolSet,
     ...todoToolSet,
+    ...routineToolSet,
   };
 
   // Build combined system prompt with user preferences
@@ -186,16 +237,22 @@ export async function POST(req: Request) {
     ? `\n\n## Saved memories\nThe following are things you have remembered about the user across conversations. Use them to provide personalized and contextually relevant responses.\n${memoryRows.map((m) => `- ${m.content}`).join("\n")}`
     : "";
 
+  // Inject recent file changes into the system prompt for freshness
+  const recentChanges = await queryRecentChanges(10);
+  const fileChangeTip = recentChanges.length > 0
+    ? `\n\n## Recent file changes\nThe following files were recently modified in your watched directories. Use \`query_recent_changes\` for a fuller list, or these are the 10 most recent:\n${recentChanges.map((c) => `- [${c.changeType}] ${c.directoryLabel}/${c.relativePath} (${c.changedAt})`).join("\n")}`
+    : "";
+
   const modelMessages = await convertToModelMessages(uiMessages);
 
   const result = streamText({
     model,
-    system: SYSTEM_PROMPT + systemTip + memoryTip,
+    system: SYSTEM_PROMPT + systemTip + memoryTip + fileChangeTip + planModePrompt,
     messages: modelMessages,
     tools: Object.keys(tools).length > 0 ? tools : undefined,
-    // Allow up to 100 steps normally, or 500 in agentic/goal mode
+    // Allow up to 100 steps normally (chat/plan), or 500 in goal mode
     // so the model can work autonomously until task completion
-    stopWhen: stepCountIs(agenticMode ? 500 : 100),
+    stopWhen: stepCountIs(mode === "goal" ? 500 : 100),
     onFinish: async ({ usage }) => {
       // Accumulate token usage — this callback fires before
       // toUIMessageStreamResponse's onFinish
