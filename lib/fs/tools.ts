@@ -1,4 +1,5 @@
 import { z } from "zod";
+import fs from "node:fs/promises";
 import { truncateToolResult } from "@/lib/utils";
 import {
   getPermittedRoots,
@@ -6,6 +7,8 @@ import {
   listDirectory,
   readFile,
   readMedia,
+  readMediaFromUrl,
+  resolveUploadUrl,
   searchFiles,
   globFiles,
   writeFile,
@@ -14,6 +17,7 @@ import {
   renameItem,
   type PermittedRoot,
 } from "./access";
+import { indexFile, removeFromIndex } from "./file-index";
 
 // ---------------------------------------------------------------------------
 // Helper
@@ -92,42 +96,108 @@ export const listDirectoryTool = {
 
 /**
  * Read a file's text content with optional pagination.
+ * Supports either a chat upload URL or a root file path.
  */
 export const readFileTool = {
   description:
-    "Read the text content of a file within a permitted root. Supports optional offset and limit for partial reads (useful for large files). Max 100KB per read.",
-  parameters: z.object({
-    rootId: z
-      .coerce.number()
-      .int()
-      .positive()
-      .describe("ID of the permitted root directory"),
-    relativePath: z.string().describe("Relative path to the file within the root (use forward slashes even on Windows)"),
-    offset: z
-      .number()
-      .int()
-      .min(0)
-      .optional()
-      .describe("Byte offset to start reading from (default: 0)"),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(102400)
-      .optional()
-      .describe("Maximum number of bytes to read (max 102400, default: entire file)"),
-  }),
+    "Read the text content of a file. Supports either a chat upload URL or a root file path. Max 100KB per read.\n\n**Two calling conventions:**\n1. Pass `url` for chat-uploaded files (e.g. /api/chat/uploads/123/notes.txt) — no directory root needed.\n2. Pass `rootId` + `relativePath` for files in configured directories.",
+  parameters: z
+    .object({
+      rootId: z
+        .coerce.number()
+        .int()
+        .positive()
+        .optional()
+        .describe("ID of the permitted root directory (leave empty if using `url`)"),
+      relativePath: z
+        .string()
+        .optional()
+        .describe(
+          "Relative path to the file within the root (leave empty if using `url`)",
+        ),
+      url: z
+        .string()
+        .optional()
+        .describe(
+          "Upload URL for a file the user attached via the chat input (e.g. `/api/chat/uploads/123/notes.txt`). Use this instead of rootId + relativePath for uploaded files.",
+        ),
+      offset: z
+        .number()
+        .int()
+        .min(0)
+        .optional()
+        .describe("Byte offset to start reading from (default: 0)"),
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(102400)
+        .optional()
+        .describe(
+          "Maximum number of bytes to read (max 102400, default: entire file)",
+        ),
+    })
+    .refine(
+      (data) => {
+        if (data.url) return true;
+        return Boolean(data.rootId && data.relativePath);
+      },
+      {
+        message:
+          "Either `url` (for uploaded files) or both `rootId` and `relativePath` (for directory files) are required.",
+      },
+    ),
   execute: async ({
     rootId,
     relativePath,
+    url,
     offset,
     limit,
   }: {
-    rootId: number;
-    relativePath: string;
+    rootId?: number;
+    relativePath?: string;
+    url?: string;
     offset?: number | null;
     limit?: number | null;
   }) => {
+    if (url) {
+      // Read from chat upload URL
+      const { filename, resolvedPath } = await resolveUploadUrl(url);
+      const stats = await fs.stat(resolvedPath);
+      if (!stats.isFile()) {
+        throw new Error(`File not found: "${filename}"`);
+      }
+
+      const effectiveOffset = offset ?? 0;
+      const effectiveLimit = limit ?? stats.size;
+      const bytesRemaining = Math.max(0, stats.size - effectiveOffset);
+      const readLength = Math.min(effectiveLimit, bytesRemaining);
+      const buffer = Buffer.alloc(readLength);
+      const fd = await fs.open(resolvedPath, "r");
+      try {
+        const { bytesRead } = await fd.read(
+          buffer,
+          0,
+          buffer.length,
+          effectiveOffset,
+        );
+        return {
+          content: buffer.toString("utf-8", 0, bytesRead),
+          totalBytes: stats.size,
+          offset: effectiveOffset,
+          limit: effectiveLimit,
+          isTruncated: bytesRead < bytesRemaining,
+        };
+      } finally {
+        await fd.close();
+      }
+    }
+
+    if (!rootId || !relativePath) {
+      throw new Error(
+        "Either `url` (for uploaded files) or both `rootId` and `relativePath` (for directory files) are required.",
+      );
+    }
     await ensureRoots();
     const root = await getRootById(rootId);
     return await readFile(root, relativePath, offset, limit);
@@ -201,23 +271,56 @@ export const globFilesTool = {
 export const readMediaTool = {
   description:
     "Read an image or video file and examine its content. The result has a `dataUrl` field (a base64 data URL you can look at to see the image) for images up to 128 KB. For larger images and all videos, `dataUrl` is absent and only `url` + metadata are returned. **If `dataUrl` is present, look at it and describe the image content. If `dataUrl` is absent, tell the user the file details (filename, type, size) and that it's too large to inline — offer to help with it in other ways. Always continue with a text response.** Supported formats: images (.jpg, .png, .gif, .webp, .svg, .avif) and videos (.mp4, .webm, .mov, .avi, .mkv). Max file size: 20 MB.",
-  parameters: z.object({
-    rootId: z
-      .coerce.number()
-      .int()
-      .positive()
-      .describe("ID of the permitted root directory"),
-    relativePath: z
-      .string()
-      .describe("Relative path to the media file within the root (use forward slashes even on Windows)"),
-  }),
+  parameters: z
+    .object({
+      rootId: z
+        .coerce.number()
+        .int()
+        .positive()
+        .optional()
+        .describe("ID of the permitted root directory (leave empty if using `url`)"),
+      relativePath: z
+        .string()
+        .optional()
+        .describe(
+          "Relative path to the media file within the root (leave empty if using `url`)",
+        ),
+      url: z
+        .string()
+        .optional()
+        .describe(
+          "Upload URL for a file the user attached via the chat input (e.g. `/api/chat/uploads/123/filename.png`). Use this instead of rootId + relativePath when the user sends you an image/file via markdown in their message.",
+        ),
+    })
+    .refine(
+      (data) => {
+        // Must provide either `url` OR both `rootId`+`relativePath`
+        if (data.url) return true;
+        return Boolean(data.rootId && data.relativePath);
+      },
+      {
+        message:
+          "Either `url` (for uploaded files) or both `rootId` and `relativePath` (for directory files) are required.",
+      },
+    ),
   execute: async ({
     rootId,
     relativePath,
+    url,
   }: {
-    rootId: number;
-    relativePath: string;
+    rootId?: number;
+    relativePath?: string;
+    url?: string;
   }) => {
+    if (url) {
+      // Read from chat upload URL
+      return await readMediaFromUrl(url);
+    }
+    if (!rootId || !relativePath) {
+      throw new Error(
+        "Either `url` (for uploaded files) or both `rootId` and `relativePath` (for directory files) are required.",
+      );
+    }
     await ensureRoots();
     const root = await getRootById(rootId);
     return await readMedia(root, relativePath);
@@ -289,7 +392,13 @@ export const renameItemTool = {
   }) => {
     await ensureRoots();
     const root = await getRootById(rootId);
-    return await renameItem(root, sourceRelativePath, destRelativePath);
+    const result = await renameItem(root, sourceRelativePath, destRelativePath);
+    // Update file index: remove old path, index new path
+    removeFromIndex(rootId, sourceRelativePath).catch(() => {});
+    indexFile(rootId, destRelativePath, result.newPath).catch((err) =>
+      console.error("[fs-tools] Failed to index renamed file:", err),
+    );
+    return result;
   },
 };
 
@@ -358,7 +467,12 @@ export const writeFileTool = {
   }) => {
     await ensureRoots();
     const root = await getRootById(rootId);
-    return await writeFile(root, relativePath, content, mode ?? "overwrite");
+    const result = await writeFile(root, relativePath, content, mode ?? "overwrite");
+    // Auto-index the written file so the file index is immediately updated
+    indexFile(rootId, relativePath, result.path).catch((err) =>
+      console.error("[fs-tools] Failed to index written file:", err),
+    );
+    return result;
   },
 };
 
@@ -403,10 +517,12 @@ export async function buildFilesystemTools(): Promise<Record<string, any>> {
     list_permitted_roots: withTruncation(listPermittedRootsTool),
   };
 
-  // Only expose the rest if at least one root is configured
+  // read_file is always included because it now supports URL-based usage
+  tools.read_file = withTruncation(readFileTool);
+
+  // Only expose root-dependent tools if at least one root is configured
   if (roots.length > 0) {
     tools.list_directory = withTruncation(listDirectoryTool);
-    tools.read_file = withTruncation(readFileTool);
     tools.read_media = withTruncation(readMediaTool);
     tools.search_files = withTruncation(searchFilesTool);
     tools.glob_files = withTruncation(globFilesTool);

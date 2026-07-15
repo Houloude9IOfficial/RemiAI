@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { MessageList } from "@/components/chat/MessageList";
-import { ChatInput } from "@/components/chat/ChatInput";
+import { ChatInput, type ChatMode } from "@/components/chat/ChatInput";
 import { ModelPicker } from "@/components/chat/ModelPicker";
 import { TodoProgressBar } from "@/components/chat/TodoProgressBar";
 import { ExportDialog } from "@/components/chat/ExportDialog";
@@ -56,8 +56,16 @@ function ConversationChat({
   initialMessages: Awaited<ReturnType<typeof conversationsApi.get>>["messages"];
   onConversationChanged: () => void;
 }) {
-  const [agenticMode, setAgenticMode] = useState(false);
+  const [mode, setMode] = useState<ChatMode>(
+    (initialConversation as any).mode ?? "chat",
+  );
   const { activeStreams, startStream, endStream } = useStreamingContext();
+
+  // Persist mode to DB whenever it changes
+  useEffect(() => {
+    if (mode === (initialConversation as any).mode) return;
+    conversationsApi.update(conversationId, { mode }).catch(() => {});
+  }, [mode, conversationId, initialConversation]);
 
   // Check if there's already an active stream from a previous mount
   // (navigated away while generating and came back)
@@ -69,7 +77,7 @@ function ConversationChat({
     resume,
     transport: new DefaultChatTransport({
       api: "/api/chat",
-      body: { conversationId, agenticMode },
+      body: { conversationId },
     }),
     onFinish: () => {
       onConversationChanged();
@@ -180,10 +188,11 @@ function ConversationChat({
       )}
       <div className="sticky bottom-0 z-20 bg-background/95 backdrop-blur">
         <ChatInput
+          conversationId={conversationId}
           status={status}
           disabled={!providerId || !modelId}
-          agentic={agenticMode}
-          onAgenticChange={setAgenticMode}
+          mode={mode}
+          onModeChange={setMode}
           onSend={handleSend}
           onStop={stop}
         />

@@ -1,0 +1,18 @@
+{
+  "name": "cli-text-analyzer",
+  "version": "1.0.0",
+  "description": "A simple CLI tool to analyze text files - word count, character count, and most frequent words",
+  "main": "cli.js",
+  "scripts": {
+    "start": "node cli.js",
+    "test": "node cli.js sample.txt"
+  },
+  "keywords": [
+    "cli",
+    "text-analysis",
+    "word-count",
+    "frequency-analysis"
+  ],
+  "author": "Nicolas Houloudes",
+  "license": "MIT"
+}

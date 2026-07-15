@@ -5,6 +5,12 @@ import { isTextUIPart, isToolUIPart } from "ai";
 import { Component, useRef } from "react";
 import { ToolCallGroup } from "./ToolCallGroup";
 import { MarkdownRenderer } from "./MarkdownRenderer";
+import { cn } from "@/lib/utils";
+import {
+  AttachedFileCard,
+  parseAttachments,
+  stripAttachmentMarkdown,
+} from "./AttachedFileCard";
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -160,10 +166,59 @@ export function MessageBubble({ message, isStreaming }: { message: UIMessage; is
       .join("");
     if (!inlineText) return null;
 
+    // Parse file attachments from markdown
+    const attachments = parseAttachments(inlineText);
+    const cleanText = stripAttachmentMarkdown(inlineText);
+    const hasText = cleanText.length > 0;
+
     return (
       <div className="flex justify-end">
-        <div className="max-w-[75%] rounded-2xl bg-primary px-4 py-2 text-sm text-primary-foreground">
-          <p className="whitespace-pre-wrap">{inlineText}</p>
+        <div
+          className={cn(
+            "max-w-[75%] flex flex-col gap-2",
+            // When there's text, wrap it in a rounded bubble
+            hasText &&
+              "rounded-2xl bg-primary px-4 py-2 text-sm text-primary-foreground",
+          )}
+        >
+          {/* Text content (if any) */}
+          {hasText && (
+            <div
+              className={cn(
+                "[&_.markdown-body]:[color:var(--primary-foreground)]",
+                "[&_.markdown-body_img]:my-1 [&_.markdown-body_img]:rounded-md [&_.markdown-body_img]:border [&_.markdown-body_img]:border-white/20",
+                "[&_.markdown-body_a]:text-primary-foreground/80 [&_.markdown-body_a]:underline [&_.markdown-body_a]:underline-offset-2",
+                "[&_.markdown-body_p]:mb-0",
+              )}
+            >
+              <MarkdownRenderer content={cleanText} />
+            </div>
+          )}
+
+          {/* File attachments as polished cards */}
+          {attachments.length > 0 && (
+            <div
+              className={cn(
+                "flex flex-col gap-2",
+                !hasText && "pt-0",
+              )}
+            >
+              {attachments.map((att, idx) => (
+                <AttachedFileCard
+                  key={`${att.url}-${idx}`}
+                  url={att.url}
+                  name={att.name}
+                  mimeType={att.mimeType}
+                  inUserMessage={hasText}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* No text, no attachments — shouldn't happen, but handle gracefully */}
+          {!hasText && attachments.length === 0 && (
+            <span className="text-primary-foreground/60 text-sm">Sent a file</span>
+          )}
         </div>
       </div>
     );

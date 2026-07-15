@@ -9,6 +9,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import packagejson from "../../package.json";
 
 interface PackageJson {
   name: string;
@@ -17,7 +18,7 @@ interface PackageJson {
 
 const packageJson: PackageJson = {
   name: "remiai",
-  version: "1.0.0",
+  version: packagejson.version || "N/A",
 };
 
 export function AboutModal() {

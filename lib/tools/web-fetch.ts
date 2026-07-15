@@ -1,15 +1,63 @@
 import { z } from "zod";
+import fs from "node:fs/promises";
 import { truncateToolResult } from "@/lib/utils";
+import { resolveUploadUrl, UPLOAD_URL_RE } from "@/lib/fs/access";
+
+/**
+ * Check if a URL is a chat upload path (either /api/chat/uploads/... or
+ * http://.../api/chat/uploads/...).
+ */
+function isUploadUrl(url: string): boolean {
+  // Strip protocol + hostname if present
+  const normalized = url.replace(/^https?:\/\/[^\/]+/i, "");
+  return UPLOAD_URL_RE.test(normalized);
+}
+
+/**
+ * Read an uploaded file from disk and return its text content.
+ * Used when the URL points to the local uploads directory.
+ */
+async function readUpload(url: string, maxChars: number) {
+  const { resolvedPath } = await resolveUploadUrl(url);
+  // stat checks the file exists (throws if not)
+  await fs.stat(resolvedPath);
+  const text = await fs.readFile(resolvedPath, "utf-8");
+  const contentLength = text.length;
+
+  const truncated =
+    text.length > maxChars
+      ? text.slice(0, maxChars) +
+        `\n\n[...truncated: ${(text.length - maxChars).toLocaleString()} more characters]`
+      : text;
+
+  return truncateToolResult({
+    url,
+    status: 200,
+    statusText: "OK",
+    contentType: "text/plain",
+    contentLength,
+    returnedLength: Math.min(contentLength, maxChars),
+    truncated: contentLength > maxChars,
+    source: "local_upload",
+    content: truncated,
+  });
+}
 
 /**
  * web_fetch tool — fetch a specific URL and return its content as text.
- * Uses the native fetch() API. Builtin, always available.
+ * Uses the native fetch() API for external URLs.
+ * For chat upload URLs (e.g. /api/chat/uploads/...), reads directly from disk.
  */
 export const webFetchTool = {
   description:
-    "Fetch a specific URL and return its content as text. Use this to read web pages, REST APIs, raw text files, or any publicly accessible URL directly. Returns the status code, content type, and body content.",
+    "Fetch a specific URL and return its content as text. Use this to read web pages, REST APIs, raw text files, or any publicly accessible URL directly. Also supports chat upload URLs (e.g. `/api/chat/uploads/123/filename.txt`) — these are read directly from disk. Returns the status code, content type, and body content.",
   inputSchema: z.object({
-    url: z.string().url().describe("The full URL to fetch (e.g. https://example.com/api/data)"),
+    url: z
+      .string()
+      .min(1)
+      .describe(
+        "The URL to fetch. Can be a full URL (https://...) or a path-only URL (/api/chat/uploads/...).",
+      ),
     maxChars: z
       .number()
       .int()
@@ -27,6 +75,15 @@ export const webFetchTool = {
     url: string;
     maxChars?: number;
   }) => {
+    // For upload URLs, read directly from disk instead of making an HTTP request
+    if (isUploadUrl(url)) {
+      try {
+        return await readUpload(url, maxChars);
+      } catch {
+        // Fall through to HTTP fetch if local read fails
+      }
+    }
+
     try {
       const res = await fetch(url, {
         headers: {
@@ -57,6 +114,7 @@ export const webFetchTool = {
         returnedLength: Math.min(contentLength, maxChars),
         truncated: contentLength > maxChars,
         content: truncated,
+        source: status === 200 ? "http" : "http_error",
       });
     } catch (err) {
       return truncateToolResult({

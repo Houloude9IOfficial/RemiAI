@@ -5,6 +5,7 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { eq, sql } from "drizzle-orm";
 import * as schema from "./schema";
+import { startFileWatcher } from "@/lib/fs/watcher";
 
 const dataDir = path.join(process.cwd(), "data");
 fs.mkdirSync(dataDir, { recursive: true });
@@ -42,5 +43,9 @@ if (schema.agentTasks) {
     // Table may not exist yet on first run after migration
   }
 }
+
+// Start the file watcher in the background (non-blocking).
+// It will index all watched directories and track live file changes.
+startFileWatcher(db);
 
 export { db };

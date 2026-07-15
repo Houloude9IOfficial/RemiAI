@@ -1,0 +1,4 @@
+The quick brown fox jumps over the lazy dog.
+This is a sample text file for testing the text analysis tool.
+It contains multiple sentences and words to analyze.
+The quick brown fox is quick and brown.

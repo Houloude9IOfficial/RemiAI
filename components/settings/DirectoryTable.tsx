@@ -11,7 +11,8 @@ import {
 } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
-import { Trash2 } from "lucide-react";
+import { Eye, Trash2 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { directoriesApi } from "@/lib/api/directories";
 import { toast } from "sonner";
 
@@ -23,7 +24,7 @@ export function DirectoryTable() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, ...input }: { id: number; canRead?: boolean; canWrite?: boolean }) =>
+    mutationFn: ({ id, ...input }: { id: number; canRead?: boolean; canWrite?: boolean; watchEnabled?: boolean }) =>
       directoriesApi.update(id, input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["directories"] }),
     onError: (err: Error) => toast.error(err.message),
@@ -58,6 +59,18 @@ export function DirectoryTable() {
           <TableHead>Path</TableHead>
           <TableHead className="text-center">Read</TableHead>
           <TableHead className="text-center">Write</TableHead>
+          <TableHead className="text-center">
+            <Tooltip>
+              {/* <TooltipTrigger className="inline-flex items-center gap-1 text-xs font-medium"> */}
+              <TooltipTrigger>
+                {/* <Eye className="h-3 w-3" /> */}
+                <span>Watch</span>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="text-xs">Monitor for file changes in background</p>
+              </TooltipContent>
+            </Tooltip>
+          </TableHead>
           <TableHead className="w-10" />
         </TableRow>
       </TableHeader>
@@ -78,6 +91,13 @@ export function DirectoryTable() {
               <Switch
                 checked={dir.canWrite}
                 onCheckedChange={(canWrite) => updateMutation.mutate({ id: dir.id, canWrite })}
+              />
+            </TableCell>
+            <TableCell className="text-center">
+              <Switch
+                checked={dir.watchEnabled}
+                disabled={!dir.canRead}
+                onCheckedChange={(watchEnabled) => updateMutation.mutate({ id: dir.id, watchEnabled })}
               />
             </TableCell>
             <TableCell>

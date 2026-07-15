@@ -235,23 +235,27 @@ export function ToolCallCard({
           </CompactSection>
         )}
 
-        {/* Output section */}
+        {/* Output section — media renders directly (no collapse/expand), text uses collapsible */}
         {output !== undefined && !isError && (
-          <CompactSection
-            open={outputOpen}
-            onToggle={() => setOutputOpen(!outputOpen)}
-            label="Result"
-          >
-            {isMediaResult ? (
+          isMediaResult ? (
+            <div className="border-t border-border/30">
               <MediaDisplay data={output as Record<string, unknown>} />
-            ) : isExecResult ? (
-              <TerminalOutput data={output as Record<string, unknown>} />
-            ) : isAgentResult ? (
-              <AgentResultCard data={output as Record<string, unknown>} compact />
-            ) : (
-              <JsonBlock data={output} />
-            )}
-          </CompactSection>
+            </div>
+          ) : (
+            <CompactSection
+              open={outputOpen}
+              onToggle={() => setOutputOpen(!outputOpen)}
+              label="Result"
+            >
+              {isExecResult ? (
+                <TerminalOutput data={output as Record<string, unknown>} />
+              ) : isAgentResult ? (
+                <AgentResultCard data={output as Record<string, unknown>} compact />
+              ) : (
+                <JsonBlock data={output} />
+              )}
+            </CompactSection>
+          )
         )}
 
         {/* Error */}
@@ -354,21 +358,27 @@ export function ToolCallCard({
           <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
           <span className="text-xs text-destructive">{errorText}</span>
         </div>
-      )}        {/* Output section */}
+      )}
+
+      {/* Output section — media renders directly (no collapse/expand), text uses collapsible */}
       {output !== undefined && !isError && (
-        <CollapsibleSection
-          open={outputOpen}
-          onToggle={() => setOutputOpen(!outputOpen)}
-          label="Result"
-        >
-          {isMediaResult ? (
+        isMediaResult ? (
+          <div className="border-t border-border/50">
             <MediaDisplay data={output as Record<string, unknown>} />
-          ) : isExecResult ? (
-            <TerminalOutput data={output as Record<string, unknown>} />
-          ) : (
-            <JsonBlock data={output} />
-          )}
-        </CollapsibleSection>
+          </div>
+        ) : (
+          <CollapsibleSection
+            open={outputOpen}
+            onToggle={() => setOutputOpen(!outputOpen)}
+            label="Result"
+          >
+            {isExecResult ? (
+              <TerminalOutput data={output as Record<string, unknown>} />
+            ) : (
+              <JsonBlock data={output} />
+            )}
+          </CollapsibleSection>
+        )
       )}
 
       {/* Approval denied */}

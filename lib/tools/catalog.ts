@@ -132,6 +132,17 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     apiKeyPlaceholder: "ctx7_...",
     docsUrl: "https://context7.com/dashboard",
   },
+  // ── File index tools (builtin, always on, not togglable) ──
+  {
+    id: "file_index",
+    name: "File Index",
+    description:
+      "Query recently changed files and search the file index by path. The file index is automatically updated by a background watcher when files are created, modified, or deleted in watched directories.",
+    toolNames: ["query_recent_changes", "query_file_index"],
+    category: "builtin",
+    togglable: false,
+    requiresApiKey: false,
+  },
   // ── Delay tool (builtin, always on, not togglable) ──
   {
     id: "delay",
@@ -185,6 +196,24 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     toolNames: ["spawn_agent", "get_agent_result"],
     category: "builtin",
     togglable: false,
+    requiresApiKey: false,
+  },
+  // ── Routines (builtin, togglable — lets AI create & run reusable JS scripts) ──
+  {
+    id: "routines",
+    name: "Routines",
+    description:
+      "Create, manage, and run reusable JavaScript routines. Routines are named scripts that persist across conversations and can be scheduled with cron expressions. Includes create_routine, run_routine, list_routines, update_routine, delete_routine, and get_routine_logs.",
+    toolNames: [
+      "create_routine",
+      "run_routine",
+      "list_routines",
+      "update_routine",
+      "delete_routine",
+      "get_routine_logs",
+    ],
+    category: "builtin",
+    togglable: true,
     requiresApiKey: false,
   },
   // ── Firecrawl (integration, togglable, needs API key) ──

@@ -64,6 +64,41 @@
       "when": 1783947572115,
       "tag": "0014_lazy_orphan",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1784020769697,
+      "tag": "0009_exotic_sunspot",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1784025000000,
+      "tag": "0015_actions",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1784026560000,
+      "tag": "0016_routines",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1784030400000,
+      "tag": "0017_last_scheduled_run",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1784038700000,
+      "tag": "0018_conversation_mode",
+      "breakpoints": true
     }
   ]
 }
