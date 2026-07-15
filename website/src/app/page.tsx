@@ -18,12 +18,16 @@ import {
   IconStar,
   IconSun,
   IconMoon,
+  IconBrowser,
+  IconGitBranch,
+  IconClipboard,
+  IconCheck,
 } from "@tabler/icons-react";
 import { motion, useScroll, useTransform, useInView } from "framer-motion";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { GITHUB_URL, CREATIONS_URL, SITE_NAME } from "@/lib/constants";
+import { GITHUB_URL, CREATIONS_URL, SITE_NAME, MCP_SERVERS } from "@/lib/constants";
 
 /* ------------------------------------------------------------------ */
 /*  Animation helpers                                                  */
@@ -99,6 +103,7 @@ function Header() {
           {[
             { href: "#features", label: "Features" },
             { href: "#highlights", label: "Tech" },
+            { href: "#mcp-servers", label: "MCP" },
             { href: "#creations", label: "Creations" },
           ].map((link) => (
             <a
@@ -644,6 +649,194 @@ function TechHighlightsSection() {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Copy-to-clipboard helper                                           */
+/* ------------------------------------------------------------------ */
+
+function CopyButton({ command }: { command: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(command);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback for older browsers
+      const textarea = document.createElement("textarea");
+      textarea.value = command;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="inline-flex items-center gap-1.5 text-[11px] font-medium text-zinc-400 hover:text-zinc-700 transition-colors duration-200"
+      aria-label={copied ? "Copied" : "Copy command"}
+    >
+      {copied ? (
+        <>
+          <IconCheck className="w-3 h-3 text-emerald-500" />
+          <span className="text-emerald-500">Copied</span>
+        </>
+      ) : (
+        <>
+          <IconClipboard className="w-3 h-3" />
+          <span>Copy</span>
+        </>
+      )}
+    </button>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  MCP Servers Section                                                */
+/* ------------------------------------------------------------------ */
+
+const SERVER_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  IconBrandGithub,
+  IconDatabase,
+  IconPlugConnected,
+  IconBrowser,
+  IconBrain,
+  IconFileText,
+  IconGitBranch,
+};
+
+function McpServersSection() {
+  const ref = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll({
+    target: ref,
+    offset: ["start end", "end start"],
+  });
+
+  const headingY = useTransform(scrollYProgress, [0, 0.3], [30, 0]);
+  const headingScale = useTransform(scrollYProgress, [0, 0.3], [0.93, 1]);
+  const headingOpacity = useTransform(scrollYProgress, [0, 0.25], [0.5, 1]);
+  const cardsY = useTransform(scrollYProgress, [0, 0.4], [50, 0]);
+  const cardsOpacity = useTransform(scrollYProgress, [0, 0.35], [0.3, 1]);
+
+  return (
+    <section
+      id="mcp-servers"
+      ref={ref}
+      className="py-20 md:py-28 scroll-mt-20"
+    >
+      <div className="mx-auto max-w-6xl px-6">
+        <motion.div
+          style={{ y: headingY, scale: headingScale, opacity: headingOpacity }}
+          className="text-center max-w-2xl mx-auto mb-14 md:mb-18"
+        >
+          <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-zinc-900">
+            Recommended MCP Servers
+          </h2>
+          <p className="mt-4 text-zinc-500 text-lg leading-relaxed">
+            Extend RemiAI with powerful third-party MCP servers.
+          </p>
+        </motion.div>
+
+        <motion.div
+          style={{ y: cardsY, opacity: cardsOpacity, perspective: 800 }}
+        >
+          <StaggerFadeUp className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {MCP_SERVERS.map((server) => {
+              const IconComponent = server.iconName ? SERVER_ICONS[server.iconName] : undefined;
+              return (
+                <StaggerItem key={server.name}>
+                  <div className="group relative rounded-2xl border border-zinc-100 bg-white p-6 hover:border-zinc-200 transition-all duration-300 h-full flex flex-col">
+                    {/* Icon */}
+                    <div
+                      className={`w-11 h-11 flex items-center justify-center overflow-hidden mb-4 transition-transform duration-300`}
+                    >
+                      {server.iconUrl ? (
+                        <img
+                          src={server.iconUrl}
+                          alt={`${server.name} icon`}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : IconComponent ? (
+                        <IconComponent
+                          className={`w-5 h-5 ${server.iconColor}`}
+                        />
+                      ) : null}
+                    </div>
+
+                    {/* Name + Copy row */}
+                    <div className="flex items-start justify-between mb-2">
+                      <h3 className="font-semibold text-zinc-900">
+                        {server.name}
+                      </h3>
+                      <a
+                        href={server.docsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-zinc-300 hover:text-zinc-500 transition-colors shrink-0 ml-2"
+                        aria-label={`${server.name} documentation`}
+                      >
+                        <IconArrowUpRight className="w-4 h-4" />
+                      </a>
+                    </div>
+
+                    {/* Description */}
+                    <p className="text-sm text-zinc-500 leading-relaxed mb-4 flex-1">
+                      {server.description}
+                    </p>
+
+                    {/* Package name + copy button */}
+                    {/* <div className="flex items-center justify-between mb-3">
+                      <code className="text-[11px] font-mono text-zinc-400 truncate max-w-[70%]">
+                        {server.pkg}
+                      </code>
+                      <CopyButton
+                        command={`${server.command} ${server.args.join(" ")}`}
+                      />
+                    </div> */}
+
+                    {/* Tags */}
+                    <div className="flex flex-wrap gap-1.5">
+                      {server.tags.map((tag) => (
+                        <Badge key={tag} variant="secondary" className="text-[11px]">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                </StaggerItem>
+              );
+            })}
+          </StaggerFadeUp>
+        </motion.div>
+
+        {/* Note about sources */}
+        {/* <motion.p
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          viewport={{ once: true }}
+          className="text-center text-xs text-zinc-400 mt-10"
+        >
+          All servers are from the{" "}
+          <a
+            href="https://github.com/modelcontextprotocol/servers"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-zinc-500 hover:text-zinc-700 underline underline-offset-2 transition-colors"
+          >
+            official MCP reference repository
+          </a>
+          {" "}and community. Configure them in Settings → MCP Servers.
+        </motion.p> */}
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Creations Section                                                  */
 /* ------------------------------------------------------------------ */
 
@@ -855,6 +1048,7 @@ export default function Home() {
         <HeroGrid />
         <FeaturesSection />
         <TechHighlightsSection />
+        <McpServersSection />
         <CreationsSection />
         <CTASection />
       </main>
