@@ -727,21 +727,31 @@ function CreationsSection() {
 /* ------------------------------------------------------------------ */
 
 function CTASection() {
+  const ref = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll({
+    target: ref,
+    offset: ["start end", "end start"],
+  });
+
+  const contentY = useTransform(scrollYProgress, [0, 0.4], [50, 0]);
+  const contentScale = useTransform(scrollYProgress, [0, 0.4], [0.92, 1]);
+  const contentOpacity = useTransform(scrollYProgress, [0, 0.3], [0.3, 1]);
+
   return (
-    <section className="py-20 md:py-28 bg-zinc-900 border-t border-zinc-800">
+    <section
+      ref={ref}
+      className="py-20 md:py-28 bg-zinc-900 border-t border-zinc-800"
+    >
       <div className="mx-auto max-w-3xl px-6 text-center">
         <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.7, ease: [0.25, 0.1, 0, 1] }}
+          style={{ y: contentY, scale: contentScale, opacity: contentOpacity, perspective: 800 }}
         >
-          <Badge
+          {/* <Badge
             variant="secondary"
             className="mb-4 bg-zinc-800 text-zinc-300 border-none"
           >
             Get Started
-          </Badge>
+          </Badge> */}
           <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-white">
             Ready to run locally?
           </h2>
@@ -765,7 +775,7 @@ function CTASection() {
                 Get Started on GitHub
               </Button>
             </a>
-            <a
+            {/* <a
               href={`${GITHUB_URL}#readme`}
               target="_blank"
               rel="noopener noreferrer"
@@ -778,7 +788,7 @@ function CTASection() {
               >
                 Read the Docs
               </Button>
-            </a>
+            </a> */}
           </div>
         </motion.div>
       </div>
@@ -846,7 +856,7 @@ export default function Home() {
         <FeaturesSection />
         <TechHighlightsSection />
         <CreationsSection />
-        {/* <CTASection /> */}
+        <CTASection />
       </main>
       <Footer />
     </>
