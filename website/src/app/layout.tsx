@@ -71,11 +71,7 @@ export default function RootLayout({
         <link rel="shortcut icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/RemiAI.png" />
         <link rel="manifest" href="/manifest.json" />
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `document.addEventListener("DOMContentLoaded",function(){document.querySelectorAll("a").forEach(function(el){el.setAttribute("draggable","false")})});`,
-          }}
-        />
+
       </head>
       <body className="min-h-screen bg-background text-foreground flex flex-col">
         {children}
