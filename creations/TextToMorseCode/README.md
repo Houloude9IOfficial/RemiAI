@@ -6,11 +6,11 @@ A simple command-line tool that converts text to Morse code.
 
 1. Clone the repository:
    ```sh
-   git clone https://github.com/yourusername/morse-code-converter.git
+   git clone https://github.com/Houloude9IOfficial/RemiAI.git
    ```
 2. Navigate to the project directory:
    ```sh
-   cd morse-code-converter
+   cd creations/TextToMorseCode
    ```
 3. Install the dependencies:
    ```sh

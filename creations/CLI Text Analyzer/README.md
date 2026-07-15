@@ -106,7 +106,7 @@ The project includes three sample text files for testing:
 ## Project Structure
 
 ```
-RemiAI/
+/
 ├── cli.js          # Main CLI entry point
 ├── package.json    # Project configuration
 ├── sample1.txt     # Sample text file 1
