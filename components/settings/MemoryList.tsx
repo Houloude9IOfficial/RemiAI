@@ -119,10 +119,10 @@ export function MemoryList() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredMemories.map((memory, idx) => (
+              {filteredMemories.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).map((memory, idx) => (
                 <TableRow key={memory.id} className="group">
                   <TableCell className="text-center text-xs text-muted-foreground">
-                    {idx + 1}
+                    {filteredMemories.length - idx}
                   </TableCell>
                   <TableCell 
                     className="text-sm max-w-xs overflow-hidden text-ellipsis whitespace-nowrap cursor-pointer hover:underline"
