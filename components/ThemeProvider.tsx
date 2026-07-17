@@ -35,15 +35,10 @@ const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 /**
  * Custom ThemeProvider that replaces next-themes.
  *
- * NOTE: React 19 does not allow <script> tags inside the React component tree
- * during SSR. To avoid that warning, we skip the inline theme-initialisation
- * script entirely and rely on a useEffect to set the theme class after mount.
- * This means there is a brief flash of the unstyled/incorrect theme before
- * React hydrates — acceptable for a local tool. The flash is mitigated by:
- *   1. The <html> tag in layout.tsx has suppressHydrationWarning
- *   2. The <html> tag starts with no 'light' or 'dark' class so the initial
- *      render will be whatever the browser default is (usually light), which
- *      is quickly corrected once the effect runs.
+ * Theme initialisation now happens via an inline <script> in layout.tsx's
+ * <head>, so the correct 'light'/'dark' class is applied before any paint.
+ * This completely eliminates the "flash of wrong theme" that previously
+ * occurred while waiting for React hydration.
  */
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("system");
