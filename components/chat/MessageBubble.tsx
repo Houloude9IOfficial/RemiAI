@@ -46,7 +46,7 @@ function wrapNewCharsWithFadeIn(text: string, prevLength: number): string {
       const delay = i * 12; // 12ms between each character
       // Escape HTML special characters to prevent injection
       const escaped = char === "&" ? "&amp;" : char === "<" ? "&lt;" : char === ">" ? "&gt;" : char === '"' ? "&quot;" : char;
-      result += `<span class="animate-letter-fade-in" style="animation-delay:${delay}ms">${escaped}</span>`;
+      result += `<span class="animate-letter-fade-in" style="animation-delay:${delay}ms;color:inherit">${escaped}</span>`;
     }
   }
 
