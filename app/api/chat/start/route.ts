@@ -174,18 +174,24 @@ ${timeContext}${userPrefsContext}${memoryContext}${fileChangeContext}
     messages: [{ role: "user", content: "Go ahead and start the conversation." }],
     tools,
     stopWhen: stepCountIs(100),
-    onFinish: async ({ usage }) => {
-      if (usage) {
-        await db
-          .update(conversations)
-          .set({
-            totalInputTokens:
-              sql`total_input_tokens + ${usage.inputTokens ?? 0}`,
-            totalOutputTokens:
-              sql`total_output_tokens + ${usage.outputTokens ?? 0}`,
-          })
-          .where(eq(conversations.id, conversationId));
-      }
+    onFinish: async ({ text, usage }) => {
+      // Derive a meaningful title from the AI's greeting
+      const title = text
+        ? text.length > 60
+          ? `${text.slice(0, 60)}…`
+          : text
+        : 'Conversation started by Remi';
+
+      await db
+        .update(conversations)
+        .set({
+          title: sql`CASE WHEN title = 'New chat' THEN ${title} ELSE title END`,
+          totalInputTokens:
+            sql`total_input_tokens + ${usage?.inputTokens ?? 0}`,
+          totalOutputTokens:
+            sql`total_output_tokens + ${usage?.outputTokens ?? 0}`,
+        })
+        .where(eq(conversations.id, conversationId));
     },
   });
 
@@ -203,10 +209,7 @@ ${timeContext}${userPrefsContext}${memoryContext}${fileChangeContext}
     async () => {
       await db
         .update(conversations)
-        .set({
-          updatedAt: new Date().toISOString(),
-          title: sql`CASE WHEN title = 'New chat' THEN 'Conversation started by Remi' ELSE title END`,
-        })
+        .set({ updatedAt: new Date().toISOString() })
         .where(eq(conversations.id, conversationId));
     },
   );
