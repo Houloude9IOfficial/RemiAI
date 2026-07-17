@@ -512,6 +512,55 @@
 /* Animations                                                         */
 /* ------------------------------------------------------------------ */
 
+/* Skeleton shimmer — a moving diagonal gradient */
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.animate-skeleton-shimmer {
+  background: linear-gradient(
+    110deg,
+    transparent 0%,
+    transparent 20%,
+    oklch(0.85 0 0 / 0.15) 50%,
+    transparent 80%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 2s ease-in-out infinite;
+}
+
+.dark .animate-skeleton-shimmer {
+  background: linear-gradient(
+    110deg,
+    transparent 0%,
+    transparent 20%,
+    oklch(1 0 0 / 0.06) 50%,
+    transparent 80%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+}
+
+/* Reconnecting pulse */
+@keyframes reconnect-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.animate-reconnect-pulse {
+  animation: reconnect-pulse 1.5s ease-in-out infinite;
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;

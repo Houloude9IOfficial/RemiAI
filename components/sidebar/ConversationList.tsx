@@ -299,6 +299,18 @@ export function ConversationList() {
     setSelectedIds(new Set());
   }, []);
 
+  // Prefetch conversation data on hover for instant navigation
+  const prefetchConversation = useCallback(
+    (id: number) => {
+      queryClient.prefetchQuery({
+        queryKey: ["conversation", id],
+        queryFn: () => conversationsApi.get(id),
+        staleTime: 30_000,
+      });
+    },
+    [queryClient],
+  );
+
   // Close context menu on Escape
   useEffect(() => {
     if (!contextMenuId) return;
@@ -474,11 +486,13 @@ export function ConversationList() {
                       </span>
                     </>
                   ) : (
-                    /* ---- Normal link view ---- */
+                    /* ---- Normal link view with prefetch on hover ---- */
                     <>
                       <Link
                         href={`/chat/${conversation.id}`}
                         className="flex-1 truncate"
+                        onMouseEnter={() => prefetchConversation(conversation.id)}
+                        onFocus={() => prefetchConversation(conversation.id)}
                       >
                         {isStreaming && (
                           <span className="inline-flex items-center mr-1.5">

@@ -54,7 +54,18 @@ export function AppSidebar() {
     },
     onSuccess: (conversation) => {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      // Navigate to the new chat — the ConversationPage will show a
+      // skeleton while the data is being fetched (but it's usually instant
+      // since the server just created it and it's fresh in cache).
       router.push(`/chat/${conversation.id}`);
+    },
+    onError: () => {
+      // Fallback: create a new chat without provider/model and navigate there
+      // The page will gracefully handle the empty state
+      conversationsApi.create().then((conversation) => {
+        queryClient.invalidateQueries({ queryKey: ["conversations"] });
+        router.push(`/chat/${conversation.id}`);
+      });
     },
   });
 
