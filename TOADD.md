@@ -41,4 +41,16 @@ Descriptions: A tool (togglable) that allows the AI with javascript to create ro
 
 add background voice support (e.g jarvis), play a looped smooth noise while working on request, create a new chat, allow all tools and stuff, optimize for speed. Optimize for windows & mac support
 
-create a website
+<!-- create a website -->
+
+rename customize to 'Profile' allow adding profile picture too, and other personal details for the AI to know and use. Also allow more customization of the AI.
+
+<!-- fix output/input token chat stats to always work -->
+
+<!-- make the chat on start be a sorter chat input on middle lower-center of the screen, and then smoothly extend to it's normal full size and move to the bottom -->
+
+<!-- new chats arent on top and creation/update times arent on users timezone -->
+
+<!-- Make the AI on first message consider checking time (get_time_details) and recent changes (query_recent_changes) to have more context or reply with any means. -->
+
+add a games page to include a library of games e.g tic tac toe to play with the AI, onclick opens a page specific to that game, and AI is included in, and maybe on e.g tic tac toe, it could also react to player's moves, such as 'Now you locked me bro', and others.
