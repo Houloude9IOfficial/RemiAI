@@ -6,6 +6,58 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 // ---------------------------------------------------------------------------
+// Token estimation — fallback when providers don't return usage
+// ---------------------------------------------------------------------------
+
+/**
+ * Estimate token count from text using a character-class-aware heuristic.
+ *
+ * LLM tokenizers (BPE, SentencePiece) split text differently depending on
+ * character type:
+ *   - Plain ASCII text (letters, digits, spaces):   ~4 chars/token
+ *   - Special chars / punctuation / symbols:         ~2 chars/token (more splits)
+ *   - CJK ideographs:                                ~1.5 chars/token
+ *
+ * This is approximate (±20%) but far better than showing 0 when a provider
+ * doesn't return usage data.
+ */
+export function estimateTokenCount(text: string): number {
+  if (!text) return 0;
+
+  let plainChars = 0;   // a-z, A-Z, 0-9, whitespace
+  let specialChars = 0;  // punctuation, symbols, non-ASCII-ish
+  let cjkChars = 0;      // CJK unified ideographs
+
+  for (const char of text) {
+    const code = char.codePointAt(0)!;
+
+    if (code >= 0x4E00 && code <= 0x9FFF) {
+      cjkChars++;
+    } else if (
+      (code >= 0x41 && code <= 0x5A) ||  // A-Z
+      (code >= 0x61 && code <= 0x7A) ||  // a-z
+      (code >= 0x30 && code <= 0x39) ||  // 0-9
+      code === 0x20 ||                     // space
+      code === 0x09 ||                     // tab
+      code === 0x0A ||                     // newline
+      code === 0x0D                        // carriage return
+    ) {
+      plainChars++;
+    } else if (code < 128) {
+      specialChars++;  // printable ASCII special chars
+    } else {
+      specialChars++;  // any other Unicode (accents, etc.)
+    }
+  }
+
+  const tokens = plainChars / 4 + specialChars / 2 + cjkChars / 1.5;
+  return Math.max(1, Math.ceil(tokens));
+}
+
+// ---------------------------------------------------------------------------
+// Date normalization — handle SQLite vs ISO date formats
+
+// ---------------------------------------------------------------------------
 // Date normalization — handle SQLite vs ISO date formats
 // ---------------------------------------------------------------------------
 

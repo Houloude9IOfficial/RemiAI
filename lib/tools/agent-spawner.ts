@@ -12,7 +12,7 @@ import { buildDocumentReaderTools } from "@/lib/tools/document-reader";
 import { delayTool } from "@/lib/tools/delay";
 import { webFetchTool } from "@/lib/tools/web-fetch";
 import { buildTodoTools } from "@/lib/tools/todo";
-import { truncateToolResult } from "@/lib/utils";
+import { truncateToolResult, estimateTokenCount } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // Constants & types for agent chaining
@@ -308,10 +308,24 @@ async function runAgent(
   const fullText = await stream.text;
   const usage = await stream.usage;
 
+  // Use provider's usage if available, otherwise estimate
+  const providerInputTokens = usage?.inputTokens ?? 0;
+  const providerOutputTokens = usage?.outputTokens ?? 0;
+
+  const estimatedInput =
+    providerInputTokens > 0
+      ? providerInputTokens
+      : estimateTokenCount(systemPrompt) + estimateTokenCount(task);
+
+  const estimatedOutput =
+    providerOutputTokens > 0
+      ? providerOutputTokens
+      : estimateTokenCount(fullText);
+
   return {
     text: fullText,
-    inputTokens: usage?.inputTokens ?? 0,
-    outputTokens: usage?.outputTokens ?? 0,
+    inputTokens: estimatedInput,
+    outputTokens: estimatedOutput,
   };
 }
 

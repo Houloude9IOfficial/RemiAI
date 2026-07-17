@@ -38,6 +38,7 @@ import { buildTodoTools } from "@/lib/tools/todo";
 import { buildFileIndexTools } from "@/lib/tools/file-index";
 import { buildRoutinesTools } from "@/lib/tools/routines";
 import { queryRecentChanges } from "@/lib/fs/file-index";
+import { estimateTokenCount } from "@/lib/utils";
 
 function titleFromMessage(message: UIMessage): string {
   const text = message.parts
@@ -243,6 +244,8 @@ You are currently in **Plan mode**. This means:
     ? `\n\n## Recent file changes\nThe following files were recently modified in your watched directories. Use \`query_recent_changes\` for a fuller list, or these are the 10 most recent:\n${recentChanges.map((c) => `- [${c.changeType}] ${c.directoryLabel}/${c.relativePath} (${c.changedAt})`).join("\n")}`
     : "";
 
+  const fullSystemPrompt =
+    SYSTEM_PROMPT + systemTip + memoryTip + fileChangeTip + planModePrompt;
   const modelMessages = await convertToModelMessages(uiMessages);
 
   // Track whether onFinish successfully applied tokens, so the cleanup
@@ -251,22 +254,49 @@ You are currently in **Plan mode**. This means:
 
   const result = streamText({
     model,
-    system: SYSTEM_PROMPT + systemTip + memoryTip + fileChangeTip + planModePrompt,
+    system: fullSystemPrompt,
     messages: modelMessages,
     tools: Object.keys(tools).length > 0 ? tools : undefined,
     // Allow up to 100 steps normally (chat/plan), or 500 in goal mode
     // so the model can work autonomously until task completion
     stopWhen: stepCountIs(mode === "goal" ? 500 : 100),
-    onFinish: async ({ usage }) => {
-      // Accumulate token usage — this callback fires before
-      // toUIMessageStreamResponse's onFinish
-      if (!usage || (!usage.inputTokens && !usage.outputTokens)) return;
+    onFinish: async ({ text: outputText, usage }) => {
       try {
+        // Use provider's usage if available, otherwise estimate
+        const inputTokens = usage?.inputTokens ?? 0;
+        const outputTokens = usage?.outputTokens ?? 0;
+
+        // Estimate input tokens from system prompt + all messages
+        const estimatedInput =
+          inputTokens > 0
+            ? inputTokens
+            : estimateTokenCount(
+                fullSystemPrompt +
+                  uiMessages
+                    .map(
+                      (m) =>
+                        m.parts
+                          .filter(
+                            (p): p is { type: "text"; text: string } =>
+                              p.type === "text",
+                          )
+                          .map((p) => p.text)
+                          .join(" "),
+                    )
+                    .join("\n"),
+              );
+
+        // Estimate output tokens from the generated text
+        const estimatedOutput =
+          outputTokens > 0 ? outputTokens : estimateTokenCount(outputText ?? "");
+
         await db
           .update(conversations)
           .set({
-            totalInputTokens: sql`total_input_tokens + ${usage.inputTokens ?? 0}`,
-            totalOutputTokens: sql`total_output_tokens + ${usage.outputTokens ?? 0}`,
+            totalInputTokens:
+              sql`total_input_tokens + ${estimatedInput}`,
+            totalOutputTokens:
+              sql`total_output_tokens + ${estimatedOutput}`,
           })
           .where(eq(conversations.id, conversationId));
         tokensApplied = true;
@@ -298,21 +328,43 @@ You are currently in **Plan mode**. This means:
     if (!tokensApplied) {
       try {
         const streamUsage = await result.usage;
-        if (streamUsage && (streamUsage.inputTokens || streamUsage.outputTokens)) {
-          await db
-            .update(conversations)
-            .set({
-              totalInputTokens: sql`total_input_tokens + ${streamUsage.inputTokens ?? 0}`,
-              totalOutputTokens: sql`total_output_tokens + ${streamUsage.outputTokens ?? 0}`,
-              updatedAt: new Date().toISOString(),
-            })
-            .where(eq(conversations.id, conversationId));
-        } else {
-          await db
-            .update(conversations)
-            .set({ updatedAt: new Date().toISOString() })
-            .where(eq(conversations.id, conversationId));
-        }
+        const inputTokens = streamUsage?.inputTokens ?? 0;
+        const outputTokens = streamUsage?.outputTokens ?? 0;
+
+        // Estimate input from system prompt + messages if provider didn't give usage
+        const estimatedInput =
+          inputTokens > 0
+            ? inputTokens
+            : estimateTokenCount(
+                fullSystemPrompt +
+                  uiMessages
+                    .map(
+                      (m) =>
+                        m.parts
+                          .filter(
+                            (p): p is { type: "text"; text: string } =>
+                              p.type === "text",
+                          )
+                          .map((p) => p.text)
+                          .join(" "),
+                    )
+                    .join("\n"),
+              );
+
+        // Also grab the final output text from stream usage's total
+        const estimatedOutput =
+          outputTokens > 0
+            ? outputTokens
+            : estimateTokenCount(await result.text);
+
+        await db
+          .update(conversations)
+          .set({
+            totalInputTokens: sql`total_input_tokens + ${estimatedInput}`,
+            totalOutputTokens: sql`total_output_tokens + ${estimatedOutput}`,
+            updatedAt: new Date().toISOString(),
+          })
+          .where(eq(conversations.id, conversationId));
       } catch (err) {
         console.error("Failed to update token usage in cleanup:", err);
         await db

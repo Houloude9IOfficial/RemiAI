@@ -14,6 +14,7 @@ import { webFetchTool } from "@/lib/tools/web-fetch";
 import { queryRecentChanges } from "@/lib/fs/file-index";
 import { periodicallyPersistMessages } from "@/lib/chat/persist-interval";
 import { streamRegistry } from "@/lib/chat/stream-registry";
+import { estimateTokenCount } from "@/lib/utils";
 
 /**
  * Returns structured time/date details (same as the get_time_details tool).
@@ -172,29 +173,43 @@ ${timeContext}${userPrefsContext}${memoryContext}${fileChangeContext}
   // doesn't double-count by applying the same usage again.
   let tokensApplied = false;
 
+  const fullSystemPrompt = SYSTEM_PROMPT + startPrompt;
+
   const result = streamText({
     model,
-    system: SYSTEM_PROMPT + startPrompt,
+    system: fullSystemPrompt,
     messages: [{ role: "user", content: "Go ahead and start the conversation." }],
     tools,
     stopWhen: stepCountIs(100),
-    onFinish: async ({ text, usage }) => {
+    onFinish: async ({ text: outputText, usage }) => {
       // Derive a meaningful title from the AI's greeting
-      const title = text
-        ? text.length > 60
-          ? `${text.slice(0, 60)}…`
-          : text
+      const title = outputText
+        ? outputText.length > 60
+          ? `${outputText.slice(0, 60)}…`
+          : outputText
         : 'Conversation started by Remi';
 
       try {
+        // Use provider's usage if available, otherwise estimate
+        const inputTokens = usage?.inputTokens ?? 0;
+        const outputTokens = usage?.outputTokens ?? 0;
+
+        const estimatedInput =
+          inputTokens > 0
+            ? inputTokens
+            : estimateTokenCount(fullSystemPrompt) +
+              estimateTokenCount("Go ahead and start the conversation.");
+        const estimatedOutput =
+          outputTokens > 0 ? outputTokens : estimateTokenCount(outputText ?? "");
+
         await db
           .update(conversations)
           .set({
             title: sql`CASE WHEN title = 'New chat' THEN ${title} ELSE title END`,
             totalInputTokens:
-              sql`total_input_tokens + ${usage?.inputTokens ?? 0}`,
+              sql`total_input_tokens + ${estimatedInput}`,
             totalOutputTokens:
-              sql`total_output_tokens + ${usage?.outputTokens ?? 0}`,
+              sql`total_output_tokens + ${estimatedOutput}`,
           })
           .where(eq(conversations.id, conversationId));
         tokensApplied = true;
@@ -227,23 +242,30 @@ ${timeContext}${userPrefsContext}${memoryContext}${fileChangeContext}
       // onFinish wasn't able to apply tokens — try as a fallback
       try {
         const streamUsage = await result.usage;
-        if (streamUsage && (streamUsage.inputTokens || streamUsage.outputTokens)) {
-          await db
-            .update(conversations)
-            .set({
-              totalInputTokens:
-                sql`total_input_tokens + ${streamUsage.inputTokens ?? 0}`,
-              totalOutputTokens:
-                sql`total_output_tokens + ${streamUsage.outputTokens ?? 0}`,
-              updatedAt: new Date().toISOString(),
-            })
-            .where(eq(conversations.id, conversationId));
-        } else {
-          await db
-            .update(conversations)
-            .set({ updatedAt: new Date().toISOString() })
-            .where(eq(conversations.id, conversationId));
-        }
+        const inputTokens = streamUsage?.inputTokens ?? 0;
+        const outputTokens = streamUsage?.outputTokens ?? 0;
+
+        const estimatedInput =
+          inputTokens > 0
+            ? inputTokens
+            : estimateTokenCount(fullSystemPrompt) +
+              estimateTokenCount("Go ahead and start the conversation.");
+
+        const estimatedOutput =
+          outputTokens > 0
+            ? outputTokens
+            : estimateTokenCount(await result.text);
+
+        await db
+          .update(conversations)
+          .set({
+            totalInputTokens:
+              sql`total_input_tokens + ${estimatedInput}`,
+            totalOutputTokens:
+              sql`total_output_tokens + ${estimatedOutput}`,
+            updatedAt: new Date().toISOString(),
+          })
+          .where(eq(conversations.id, conversationId));
       } catch (err) {
         console.error("Failed to update token usage in start cleanup:", err);
         await db
