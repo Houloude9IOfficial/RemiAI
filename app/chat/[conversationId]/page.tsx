@@ -142,7 +142,9 @@ function ConversationChat({
       body: { conversationId },
     }),
     onFinish: () => {
-      onConversationChanged();
+      // Small delay to ensure server-side token update completes
+      // before the sidebar refetches the conversation list.
+      setTimeout(() => onConversationChanged(), 500);
       endStream(conversationId);
     },
   });

@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { cn } from "@/lib/utils";
+import { cn, normalizeDate } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -41,7 +41,7 @@ function formatNumber(n: number): string {
 }
 
 function formatDate(dateStr: string): string {
-  const d = new Date(dateStr);
+  const d = new Date(normalizeDate(dateStr));
   const now = new Date();
   const diffMs = now.getTime() - d.getTime();
   const diffMins = Math.floor(diffMs / 60000);

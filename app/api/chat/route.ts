@@ -245,6 +245,10 @@ You are currently in **Plan mode**. This means:
 
   const modelMessages = await convertToModelMessages(uiMessages);
 
+  // Track whether onFinish successfully applied tokens, so the cleanup
+  // doesn't double-count by applying the same usage again.
+  let tokensApplied = false;
+
   const result = streamText({
     model,
     system: SYSTEM_PROMPT + systemTip + memoryTip + fileChangeTip + planModePrompt,
@@ -256,7 +260,8 @@ You are currently in **Plan mode**. This means:
     onFinish: async ({ usage }) => {
       // Accumulate token usage — this callback fires before
       // toUIMessageStreamResponse's onFinish
-      if (usage) {
+      if (!usage || (!usage.inputTokens && !usage.outputTokens)) return;
+      try {
         await db
           .update(conversations)
           .set({
@@ -264,6 +269,9 @@ You are currently in **Plan mode**. This means:
             totalOutputTokens: sql`total_output_tokens + ${usage.outputTokens ?? 0}`,
           })
           .where(eq(conversations.id, conversationId));
+        tokensApplied = true;
+      } catch (err) {
+        console.error("Failed to update token usage in onFinish:", err);
       }
     },
   });
@@ -285,10 +293,40 @@ You are currently in **Plan mode**. This means:
     if (closeMcpClients) {
       await closeMcpClients();
     }
-    await db
-      .update(conversations)
-      .set({ updatedAt: new Date().toISOString() })
-      .where(eq(conversations.id, conversationId));
+    // If onFinish failed or was skipped, apply tokens here as a fallback.
+    // Only runs if onFinish didn't already apply them (avoids double-count).
+    if (!tokensApplied) {
+      try {
+        const streamUsage = await result.usage;
+        if (streamUsage && (streamUsage.inputTokens || streamUsage.outputTokens)) {
+          await db
+            .update(conversations)
+            .set({
+              totalInputTokens: sql`total_input_tokens + ${streamUsage.inputTokens ?? 0}`,
+              totalOutputTokens: sql`total_output_tokens + ${streamUsage.outputTokens ?? 0}`,
+              updatedAt: new Date().toISOString(),
+            })
+            .where(eq(conversations.id, conversationId));
+        } else {
+          await db
+            .update(conversations)
+            .set({ updatedAt: new Date().toISOString() })
+            .where(eq(conversations.id, conversationId));
+        }
+      } catch (err) {
+        console.error("Failed to update token usage in cleanup:", err);
+        await db
+          .update(conversations)
+          .set({ updatedAt: new Date().toISOString() })
+          .where(eq(conversations.id, conversationId));
+      }
+    } else {
+      // Tokens already applied — just update updatedAt
+      await db
+        .update(conversations)
+        .set({ updatedAt: new Date().toISOString() })
+        .where(eq(conversations.id, conversationId));
+    }
   });
 
   // Build the SSE response for the client, and register the SSE stream

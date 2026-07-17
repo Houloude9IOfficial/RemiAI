@@ -229,22 +229,16 @@ export function MessageBubble({ message, isStreaming }: { message: UIMessage; is
   const hasAnyContent = segments.length > 0;
 
   // If nothing to render yet, show a streaming placeholder.
-  if (!hasAnyContent) {
-    return (
-      <div className="flex justify-start">
-        <div className="w-full max-w-[85%] px-4 py-3 text-sm">
-          <div className="flex items-center gap-2">
-            <div className="flex h-4 w-4 items-center justify-center">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-muted-foreground/40" />
+if (!hasAnyContent) {
+  return (
+          <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground/60">
+            <div className="flex h-3 w-3 items-center justify-center">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground/40" />
             </div>
-            <span className="text-xs text-muted-foreground/60">
-              Generating response...
-            </span>
+            Generating response...
           </div>
-        </div>
-      </div>
-    );
-  }
+  );
+}
 
   const showThinking = isStreaming && hasAnyContent;
 

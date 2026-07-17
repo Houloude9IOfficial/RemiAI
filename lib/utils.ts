@@ -6,6 +6,34 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 // ---------------------------------------------------------------------------
+// Date normalization — handle SQLite vs ISO date formats
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalize a date string to a format that JavaScript's `Date` constructor
+ * can reliably parse.
+ *
+ * SQLite's `CURRENT_TIMESTAMP` returns `YYYY-MM-DD HH:MM:SS` (no timezone,
+ * space separator), which browsers interpret inconsistently (some as UTC,
+ * some as local time). `new Date().toISOString()` returns
+ * `YYYY-MM-DDTHH:MM:SS.sssZ` (ISO 8601 with explicit UTC).
+ *
+ * This function:
+ * 1. Replaces ` ` with `T` (space → ISO separator)
+ * 2. Appends `Z` if no timezone indicator is present (treats as UTC, which
+ *    is what SQLite's `CURRENT_TIMESTAMP` actually stores)
+ */
+export function normalizeDate(dateStr: string): string {
+  if (!dateStr) return dateStr;
+  // Already has timezone indicator (Z, +HH:MM, -HH:MM)
+  if (/[Zz]|[+-]\d{2}:?\d{2}$/.test(dateStr)) return dateStr;
+  // Replace space with T if no T present
+  const iso = dateStr.includes("T") ? dateStr : dateStr.replace(" ", "T");
+  // Append Z for UTC
+  return iso.endsWith("Z") ? iso : iso + "Z";
+}
+
+// ---------------------------------------------------------------------------
 // Tool result truncation
 // ---------------------------------------------------------------------------
 

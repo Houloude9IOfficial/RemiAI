@@ -153,7 +153,7 @@ ${timeContext}${userPrefsContext}${memoryContext}${fileChangeContext}
    - The time of day (e.g. "Good evening" if it's evening)
    - A recent file change
    - Something you remember about them
-3. **Ask a natural question** — open-ended, like "What are you working on?" or "What's on your mind?"
+3. **Ask a natural question** — open-ended, like "What are you working on?", "What's on your mind?", etc..
 4. **Keep it brief** — 3-4 sentences: greeting, personal touch, question.
 
 ### ⚠️ CRITICAL RULES:
@@ -167,6 +167,10 @@ ${timeContext}${userPrefsContext}${memoryContext}${fileChangeContext}
   // ── StreamText ──────────────────────────────────────────────────
   // The AI SDK requires at least one message, so we pass a synthetic
   // trigger. It won't be persisted (originalMessages is empty).
+
+  // Track whether onFinish successfully applied tokens, so the cleanup
+  // doesn't double-count by applying the same usage again.
+  let tokensApplied = false;
 
   const result = streamText({
     model,
@@ -182,16 +186,21 @@ ${timeContext}${userPrefsContext}${memoryContext}${fileChangeContext}
           : text
         : 'Conversation started by Remi';
 
-      await db
-        .update(conversations)
-        .set({
-          title: sql`CASE WHEN title = 'New chat' THEN ${title} ELSE title END`,
-          totalInputTokens:
-            sql`total_input_tokens + ${usage?.inputTokens ?? 0}`,
-          totalOutputTokens:
-            sql`total_output_tokens + ${usage?.outputTokens ?? 0}`,
-        })
-        .where(eq(conversations.id, conversationId));
+      try {
+        await db
+          .update(conversations)
+          .set({
+            title: sql`CASE WHEN title = 'New chat' THEN ${title} ELSE title END`,
+            totalInputTokens:
+              sql`total_input_tokens + ${usage?.inputTokens ?? 0}`,
+            totalOutputTokens:
+              sql`total_output_tokens + ${usage?.outputTokens ?? 0}`,
+          })
+          .where(eq(conversations.id, conversationId));
+        tokensApplied = true;
+      } catch (err) {
+        console.error("Failed to update token usage in start route onFinish:", err);
+      }
     },
   });
 
@@ -207,10 +216,41 @@ ${timeContext}${userPrefsContext}${memoryContext}${fileChangeContext}
     [],
     persistBranch,
     async () => {
-      await db
-        .update(conversations)
-        .set({ updatedAt: new Date().toISOString() })
-        .where(eq(conversations.id, conversationId));
+      if (tokensApplied) {
+        // Tokens already applied by onFinish — just update updatedAt
+        await db
+          .update(conversations)
+          .set({ updatedAt: new Date().toISOString() })
+          .where(eq(conversations.id, conversationId));
+        return;
+      }
+      // onFinish wasn't able to apply tokens — try as a fallback
+      try {
+        const streamUsage = await result.usage;
+        if (streamUsage && (streamUsage.inputTokens || streamUsage.outputTokens)) {
+          await db
+            .update(conversations)
+            .set({
+              totalInputTokens:
+                sql`total_input_tokens + ${streamUsage.inputTokens ?? 0}`,
+              totalOutputTokens:
+                sql`total_output_tokens + ${streamUsage.outputTokens ?? 0}`,
+              updatedAt: new Date().toISOString(),
+            })
+            .where(eq(conversations.id, conversationId));
+        } else {
+          await db
+            .update(conversations)
+            .set({ updatedAt: new Date().toISOString() })
+            .where(eq(conversations.id, conversationId));
+        }
+      } catch (err) {
+        console.error("Failed to update token usage in start cleanup:", err);
+        await db
+          .update(conversations)
+          .set({ updatedAt: new Date().toISOString() })
+          .where(eq(conversations.id, conversationId));
+      }
     },
   );
 
