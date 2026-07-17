@@ -240,7 +240,7 @@ export function ToolCallGroup({
   }, []);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border/60 bg-muted/20 dark:bg-muted/10 animate-tool-slide-up">
+    <div className="overflow-hidden rounded-xl animate-tool-slide-up">
       {/* Header — always visible, clickable to toggle */}
       <button
         type="button"

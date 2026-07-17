@@ -182,11 +182,14 @@ function ConversationChat({
     });
   }, [onRetryable, sendMessage]);
 
+  const [sendCount, setSendCount] = useState(0);
+
   const handleSend = useCallback(
     (text: string) => {
       lastSentText.current = text;
       clearError();
       sendMessage({ text });
+      setSendCount((n) => n + 1);
     },
     [clearError, sendMessage],
   );
@@ -231,7 +234,7 @@ function ConversationChat({
 
       {/* ── Messages ── */}
       <div className="flex-1 overflow-y-auto">
-        <MessageList messages={messages} status={status} onSend={(text) => sendMessage({ text })} />
+        <MessageList messages={messages} status={status} sendCount={sendCount} onSend={(text) => sendMessage({ text })} />
       </div>
 
       {/* ── Error ── */}
