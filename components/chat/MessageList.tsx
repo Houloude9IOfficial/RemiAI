@@ -16,6 +16,7 @@ import {
   MapPin,
   Bug,
   FileText,
+  MessageCirclePlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -122,11 +123,15 @@ export function MessageList({
   status,
   sendCount = 0,
   onSend,
+  onAiStart,
+  isAiStarting,
 }: {
   messages: UIMessage[];
   status?: "submitted" | "streaming" | "ready" | "error";
   sendCount?: number;
   onSend?: (text: string) => void;
+  onAiStart?: () => void;
+  isAiStarting?: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [isScrolledUp, setIsScrolledUp] = useState(false);
@@ -273,6 +278,35 @@ export function MessageList({
             );
           })}
         </div>
+
+        {/* AI start button */}
+        {onAiStart && (
+          <div className="relative mt-4 flex items-center gap-3">
+            <div className="h-px flex-1 bg-border/30" />
+            <span className="text-xs text-muted-foreground/50">or</span>
+            <div className="h-px flex-1 bg-border/30" />
+          </div>
+        )}
+        {onAiStart && (
+          <button
+            type="button"
+            onClick={onAiStart}
+            disabled={isAiStarting}
+            className="group relative inline-flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/[0.03] px-5 py-2.5 text-sm font-medium text-primary transition-all duration-200 hover:border-primary/40 hover:bg-primary/[0.06] active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
+          >
+            {isAiStarting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Remi is thinking...</span>
+              </>
+            ) : (
+              <>
+                {/* <MessageCirclePlus className="h-4 w-4 transition-transform duration-200 group-hover:scale-110" /> */}
+                <span>Let Remi start the conversation</span>
+              </>
+            )}
+          </button>
+        )}
       </div>
     );
   }

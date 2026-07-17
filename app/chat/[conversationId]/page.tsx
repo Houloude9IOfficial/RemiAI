@@ -133,7 +133,7 @@ function ConversationChat({
   // If reconnecting, resume the active stream
   const resume = isReconnecting || activeStreams.has(conversationId);
 
-  const { messages, sendMessage, status, stop, error } = useChat({
+  const { messages, setMessages, sendMessage, status, stop, error } = useChat({
     id: String(conversationId),
     messages: initialMessages,
     resume,
@@ -183,6 +183,7 @@ function ConversationChat({
   }, [onRetryable, sendMessage]);
 
   const [sendCount, setSendCount] = useState(0);
+  const [isAiStarting, setIsAiStarting] = useState(false);
 
   const handleSend = useCallback(
     (text: string) => {
@@ -193,6 +194,85 @@ function ConversationChat({
     },
     [clearError, sendMessage],
   );
+
+  const handleAiStart = useCallback(async () => {
+    if (isAiStarting) return;
+    setIsAiStarting(true);
+    clearError();
+
+    try {
+      const response = await fetch("/api/chat/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversationId }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: "Failed to start conversation" }));
+        throw new Error(err.error ?? "Failed to start conversation");
+      }
+
+      if (!response.body) {
+        throw new Error("No response body");
+      }
+
+      startStream(conversationId);
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let sseBuffer = "";
+      let messageId = "";
+      let accumulatedText = "";
+
+      // Collect ALL text from the SSE stream first, then call setMessages
+      // ONCE at the end to avoid conflicting with useChat's internal state.
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        sseBuffer += decoder.decode(value, { stream: true });
+        const lines = sseBuffer.split("\n");
+        sseBuffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+
+          try {
+            const data = JSON.parse(line.slice(6));
+
+            if (data.type === "start") {
+              messageId = data.messageId ?? data.id ?? "";
+            }
+
+            if (data.type === "text-delta") {
+              accumulatedText += data.delta ?? "";
+            }
+            // All other chunk types (tool calls, etc.) are ignored
+          } catch {
+            // Ignore parse errors for incomplete lines
+          }
+        }
+      }
+
+      // Now set the complete message once — no duplicate risk
+      if (accumulatedText && messageId) {
+        setMessages([
+          {
+            id: messageId,
+            role: "assistant" as const,
+            parts: [{ type: "text" as const, text: accumulatedText }],
+          },
+        ]);
+      }
+
+      endStream(conversationId);
+      onConversationChanged();
+    } catch (err) {
+      handleError(err instanceof Error ? err : new Error(String(err)));
+    } finally {
+      setIsAiStarting(false);
+    }
+  }, [conversationId, isAiStarting, clearError, startStream, endStream, onConversationChanged, handleError, setMessages]);
 
   const [{ providerId, modelId }, setModel] = useState({
     providerId: initialConversation.providerId,
@@ -234,7 +314,14 @@ function ConversationChat({
 
       {/* ── Messages ── */}
       <div className="flex-1 overflow-y-auto">
-        <MessageList messages={messages} status={status} sendCount={sendCount} onSend={(text) => sendMessage({ text })} />
+        <MessageList
+          messages={messages}
+          status={status}
+          sendCount={sendCount}
+          onSend={(text) => sendMessage({ text })}
+          onAiStart={handleAiStart}
+          isAiStarting={isAiStarting}
+        />
       </div>
 
       {/* ── Error ── */}
