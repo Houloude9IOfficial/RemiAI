@@ -14,8 +14,6 @@ import {
   type GameState,
   type Player,
 } from "@/lib/games/connect-4";
-import { useTTS } from "@/lib/games/use-tts";
-import { VolumeControl } from "@/components/games/VolumeControl";
 import { RotateCcw, Circle } from "lucide-react";
 
 interface Connect4BoardProps {
@@ -24,11 +22,9 @@ interface Connect4BoardProps {
 
 export function Connect4Board({ className }: Connect4BoardProps) {
   const [state, setState] = useState<GameState>(createInitialState);
-  const [reaction, setReaction] = useState<{ emoji: string; text: string } | null>(null);
   const [moveCount, setMoveCount] = useState(0);
   const [hoverCol, setHoverCol] = useState<number | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
-  const tts = useTTS();
 
   // Refs to avoid stale closures
   const aiThinkingRef = useRef(false);
@@ -55,7 +51,6 @@ export function Connect4Board({ className }: Connect4BoardProps) {
         const latestState = stateRef.current;
         const idx = moveCountRef.current;
 
-        // Call the AI API for a move + reaction
         const res = await fetch("/api/games/move", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -71,7 +66,6 @@ export function Connect4Board({ className }: Connect4BoardProps) {
 
         if (!res.ok) {
           const err = await res.json().catch(() => ({ error: "API error" }));
-          // Fall back to random move
           const randomCol = getRandomMove(latestState.board);
           if (randomCol !== null) {
             const newState = applyAiMove(latestState, randomCol);
@@ -102,24 +96,13 @@ export function Connect4Board({ className }: Connect4BoardProps) {
         }
 
         const aiCol = data.move as number;
-
-        // Validate — if AI chose a full column, use random fallback
         const available = getAvailableColumns(latestState.board);
         const validCol = available.includes(aiCol)
           ? aiCol
           : (getRandomMove(latestState.board) ?? aiCol);
 
         const newState = applyAiMove(latestState, validCol);
-
-        // Track move history
         moveHistoryRef.current = [...moveHistoryRef.current, `Y:${validCol}`];
-
-        // If AI sent a reaction, show + speak it
-        if (data.reaction) {
-          const reactionObj = { emoji: "🤖", text: data.reaction };
-          setReaction(reactionObj);
-          tts.speak(data.reaction, "🤖");
-        }
 
         setState(newState);
         setMoveCount(idx + 1);
@@ -129,7 +112,6 @@ export function Connect4Board({ className }: Connect4BoardProps) {
           setAiError("AI chose a full column — used random fallback.");
         }
       } catch (err) {
-        // Network error — fall back to random
         const latestState = stateRef.current;
         const randomCol = getRandomMove(latestState.board);
         if (randomCol !== null) {
@@ -157,18 +139,14 @@ export function Connect4Board({ className }: Connect4BoardProps) {
       if (newState === state) return;
       setState(newState);
       setMoveCount((c) => c + 1);
-      setReaction(null);
       setAiError(null);
-      // Track the human's move
       moveHistoryRef.current = [...moveHistoryRef.current, `R:${col}`];
     },
     [state],
   );
 
   const resetGame = useCallback(() => {
-    window.speechSynthesis?.cancel();
     setState(createInitialState());
-    setReaction(null);
     setMoveCount(0);
     setAiError(null);
     aiThinkingRef.current = false;
@@ -245,13 +223,6 @@ export function Connect4Board({ className }: Connect4BoardProps) {
           Reset
         </button>
 
-        <VolumeControl
-          volume={tts.volume}
-          isMuted={tts.isMuted}
-          isSpeaking={tts.isSpeaking}
-          onVolumeChange={tts.setVolume}
-          onToggleMute={tts.toggleMute}
-        />
       </div>
 
       {/* AI Error */}
@@ -268,62 +239,45 @@ export function Connect4Board({ className }: Connect4BoardProps) {
         )}
       </AnimatePresence>
 
-      {/* Reaction banner */}
-      <AnimatePresence mode="wait">
-        {reaction && (
-          <motion.div
-            key={reaction.text + Date.now()}
-            initial={{ opacity: 0, scale: 0.8, y: -10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.8, y: 10 }}
-            transition={{ type: "spring", stiffness: 300, damping: 20 }}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5 border border-primary/10 text-sm"
-          >
-            <span className="text-lg">{reaction.emoji}</span>
-            <span className="text-foreground/80 italic">{reaction.text}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Column hover indicators */}
-      <div
-        className="grid gap-1.5"
-        style={{
-          gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))`,
-          width: `calc(${COLS} * (3rem + 0.375rem))`,
-        }}
-      >
-        {Array.from({ length: COLS }, (_, col) => (
-          <div
-            key={`indicator-${col}`}
-            className="flex justify-center h-5"
-          >
-            <AnimatePresence>
-              {hoverCol === col && isColumnAvailable(col) && state.currentPlayer === 1 && (
-                <motion.div
-                  initial={{ y: -10, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  exit={{ y: -10, opacity: 0 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 20 }}
-                >
-                  <Circle className="h-4 w-4 text-red-500/60 fill-red-500/60" />
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        ))}
-      </div>
-
-      {/* Board */}
+      {/* Board container — wraps indicators + cells for perfect alignment */}
       <div
         ref={boardRef}
-        className="relative bg-gradient-to-b from-slate-800 to-slate-900 dark:from-slate-900 dark:to-black p-3 rounded-2xl shadow-xl"
+        className="relative bg-gradient-to-b from-sky-900 to-slate-900 dark:from-slate-900 dark:to-black p-3 rounded-2xl shadow-xl ring-1 ring-white/10"
         onMouseLeave={() => setHoverCol(null)}
       >
-        {/* Column drop zones */}
+        {/* ── Column hover indicators — shares exact grid with cells ── */}
+        <div
+          className="grid gap-1.5 mb-1.5"
+          style={{ gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))` }}
+        >
+          {Array.from({ length: COLS }, (_, col) => (
+            <div
+              key={`indicator-${col}`}
+              className="flex justify-center items-center h-5"
+            >
+              <AnimatePresence>
+                {hoverCol === col && isColumnAvailable(col) && state.currentPlayer === 1 && (
+                  <motion.div
+                    initial={{ y: -8, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={{ y: -8, opacity: 0 }}
+                    transition={{ type: "spring", stiffness: 400, damping: 20 }}
+                  >
+                    <Circle className="h-4 w-4 text-red-400/80 fill-red-400/80" />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          ))}
+        </div>
+
+        {/* ── Column drop zone overlay ── */}
         <div
           className="absolute inset-0 z-10 grid"
-          style={{ gridTemplateColumns: `repeat(${COLS}, 1fr)` }}
+          style={{
+            gridTemplateColumns: `repeat(${COLS}, 1fr)`,
+            paddingTop: "calc(0.75rem + 1.25rem + 0.375rem)", /* board p-3 + indicator h-5 + mb-1.5 */
+          }}
         >
           {Array.from({ length: COLS }, (_, col) => (
             <button
@@ -343,7 +297,7 @@ export function Connect4Board({ className }: Connect4BoardProps) {
           ))}
         </div>
 
-        {/* Grid of cells */}
+        {/* ── Cells grid ── */}
         <div
           className="relative z-0 grid gap-1.5"
           style={{ gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))` }}
@@ -358,9 +312,9 @@ export function Connect4Board({ className }: Connect4BoardProps) {
                   key={`${rowIdx}-${colIdx}`}
                   className={cn(
                     "flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-full transition-all duration-300",
-                    "bg-slate-700/60 dark:bg-slate-800/60",
-                    win && "ring-2 ring-white/60 shadow-lg shadow-white/20 scale-110",
-                    last && !win && "ring-2 ring-white/30",
+                    "bg-slate-700/60 dark:bg-slate-800/50",
+                    win && "ring-2 ring-white/70 shadow-lg shadow-white/20 scale-110",
+                    last && !win && "ring-2 ring-white/40",
                   )}
                 >
                   <AnimatePresence mode="popLayout">
@@ -380,11 +334,11 @@ export function Connect4Board({ className }: Connect4BoardProps) {
                         }}
                         exit={{ scale: 0, opacity: 0 }}
                         className={cn(
-                          "h-8 w-8 sm:h-10 sm:w-10 rounded-full shadow-inner",
+                          "h-8 w-8 sm:h-10 sm:w-10 rounded-full shadow-inner shadow-black/30",
                           cell === 1
-                            ? "bg-gradient-to-b from-red-400 to-red-600 shadow-red-900/40"
-                            : "bg-gradient-to-b from-yellow-300 to-yellow-500 shadow-yellow-900/40",
-                          win && "shadow-[0_0_12px_rgba(255,255,255,0.3)]",
+                            ? "bg-gradient-to-b from-red-400 to-red-600"
+                            : "bg-gradient-to-b from-yellow-300 to-yellow-500",
+                          win && "shadow-[0_0_14px_rgba(255,255,255,0.4)]",
                         )}
                       >
                         {cell === 2 && (

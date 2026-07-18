@@ -13,11 +13,11 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { AboutModal } from "./AboutModal";
 
 const primaryLinks = [
-  { href: "/games", label: "Games", icon: Gamepad2 },
   { href: "/settings/customize", label: "Customize", icon: User },
   { href: "/settings/tools", label: "Tools", icon: Wrench },
   { href: "/settings/providers", label: "Models & Providers", icon: Settings2 },
   { href: "/settings/directories", label: "Directories", icon: FolderOpen },
+  { href: "/games", label: "Games", icon: Gamepad2 },
 ];
 
 const extraLinks = [

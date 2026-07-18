@@ -28,7 +28,6 @@ type GameMoveRequest = TicTacToeRequest | Connect4Request;
 
 interface GameMoveResponse {
   move: number;
-  reaction: string | null;
   explanation?: string;
 }
 
@@ -92,12 +91,11 @@ RULES:
 - Think 1-2 moves ahead. Block the human's threats and build your own.
 - Respond with valid JSON ONLY — no other text before or after.
 
-Your task: Pick the best strategic move and optionally generate a short, witty trash-talk reaction to the current game state. The reaction should reflect personality — cocky when ahead, respectful when outplayed, panicked when in trouble.
+Your task: Pick the best strategic move and explain your reasoning briefly.
 
 Respond with JSON:
 {
   "move": <number of chosen empty cell>,
-  "reaction": "<short witty remark about the game state, or null if nothing to say>",
   "explanation": "<brief 1-sentence reasoning>"
 }`;
 }
@@ -130,12 +128,11 @@ RULES:
 - Pick one of the available columns above.
 - Respond with valid JSON ONLY — no other text.
 
-Your task: Pick the best strategic column and optionally generate a short, witty trash-talk reaction to the current game state. Be confident when setting up threats, dramatic when the human blocks you.
+Your task: Pick the best strategic column and explain your reasoning briefly.
 
 Respond with JSON:
 {
   "move": <column number 0-6 from available columns>,
-  "reaction": "<short witty remark about the game state, or null if nothing to say>",
   "explanation": "<brief 1-sentence reasoning>"
 }`;
 }
@@ -275,7 +272,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       move,
-      reaction: parsed.reaction ?? null,
       explanation: parsed.explanation ?? null,
     });
   } catch (err) {

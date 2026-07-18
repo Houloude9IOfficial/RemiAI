@@ -1,8 +1,10 @@
 "use client";
 
-import { Connect4Board } from "@/components/games/Connect4Board";
-import { ArrowLeft, ArrowUpFromDot } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
+import { Connect4Board } from "@/components/games/Connect4Board";
+import connect4Logo from "../../../assets/games/connect4.png";
 
 export default function Connect4Page() {
   return (
@@ -18,9 +20,15 @@ export default function Connect4Page() {
             Back to games
           </Link>
 
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-yellow-500/10 border border-yellow-500/20">
-              <ArrowUpFromDot className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+          <div className="flex items-center gap-4">
+            <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl">
+              <Image
+                src={connect4Logo}
+                alt="Connect 4"
+                className="h-full w-full object-cover"
+                width={48}
+                height={48}
+              />
             </div>
             <div>
               <h1 className="text-xl font-bold">Connect 4</h1>
@@ -42,7 +50,6 @@ export default function Connect4Page() {
           <ul className="space-y-1.5 text-xs text-muted-foreground">
             <li>• The center column gives you the most control</li>
             <li>• Watch for the AI setting up multiple threats</li>
-            <li>• Sometimes blocking isn&apos;t enough, you need to build your own attack</li>
           </ul>
         </div>
       </div>

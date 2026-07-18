@@ -53,4 +53,4 @@ rename customize to 'Profile' allow adding profile picture too, and other person
 
 <!-- Make the AI on first message consider checking time (get_time_details) and recent changes (query_recent_changes) to have more context or reply with any means. -->
 
-add a games page to include a library of games e.g tic tac toe to play with the AI, onclick opens a page specific to that game, and AI is included in, and maybe on e.g tic tac toe, it could also react to player's moves, such as 'Now you locked me bro', and others.
+<!-- add a games page to include a library of games e.g tic tac toe to play with the AI, onclick opens a page specific to that game, and AI is included in, and maybe on e.g tic tac toe, it could also react to player's moves, such as 'Now you locked me bro', and others. -->

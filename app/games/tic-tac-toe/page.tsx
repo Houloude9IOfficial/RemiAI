@@ -1,8 +1,10 @@
 "use client";
 
-import { TicTacToeBoard } from "@/components/games/TicTacToeBoard";
-import { ArrowLeft, Grid3X3 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
+import { TicTacToeBoard } from "@/components/games/TicTacToeBoard";
+import tictactoeLogo from "../../../assets/games/tictactoe.avif";
 
 export default function TicTacToePage() {
   return (
@@ -18,9 +20,15 @@ export default function TicTacToePage() {
             Back to games
           </Link>
 
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10 border border-blue-500/20">
-              <Grid3X3 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+          <div className="flex items-center gap-4">
+            <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl">
+              <Image
+                src={tictactoeLogo}
+                alt="Tic Tac Toe"
+                className="h-full w-full object-cover"
+                width={48}
+                height={48}
+              />
             </div>
             <div>
               <h1 className="text-xl font-bold">Tic Tac Toe</h1>
@@ -42,7 +50,6 @@ export default function TicTacToePage() {
           <ul className="space-y-1.5 text-xs text-muted-foreground">
             <li>• Take the center square if you can</li>
             <li>• Try setting up forks (two ways to win) to force a mistake</li>
-            <li>• The AI has a personality so watch for its reactions!</li>
           </ul>
         </div>
       </div>

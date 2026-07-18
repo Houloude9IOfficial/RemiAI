@@ -12,8 +12,6 @@ import {
   type GameState,
   type Cell,
 } from "@/lib/games/tic-tac-toe";
-import { useTTS } from "@/lib/games/use-tts";
-import { VolumeControl } from "@/components/games/VolumeControl";
 import { RotateCcw, X, Circle } from "lucide-react";
 
 interface TicTacToeBoardProps {
@@ -22,10 +20,8 @@ interface TicTacToeBoardProps {
 
 export function TicTacToeBoard({ className }: TicTacToeBoardProps) {
   const [state, setState] = useState<GameState>(createInitialState);
-  const [reaction, setReaction] = useState<{ emoji: string; text: string } | null>(null);
   const [moveCount, setMoveCount] = useState(0);
   const [aiError, setAiError] = useState<string | null>(null);
-  const tts = useTTS();
 
   // Refs to avoid stale closures
   const aiThinkingRef = useRef(false);
@@ -53,7 +49,7 @@ export function TicTacToeBoard({ className }: TicTacToeBoardProps) {
         const latestState = stateRef.current;
         const idx = moveCountRef.current;
 
-        // Call the AI API for a move + reaction
+        // Call the AI API for a move
         const res = await fetch("/api/games/move", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -112,13 +108,6 @@ export function TicTacToeBoard({ className }: TicTacToeBoardProps) {
         // Track the move history
         moveHistoryRef.current = [...moveHistoryRef.current, `O:${validMove}`];
 
-        // If AI sent a reaction, show + speak it
-        if (data.reaction) {
-          const reactionObj = { emoji: "🤖", text: data.reaction };
-          setReaction(reactionObj);
-          tts.speak(data.reaction, "🤖");
-        }
-
         setState(newState);
         setMoveCount(idx + 1);
         aiThinkingRef.current = false;
@@ -155,7 +144,6 @@ export function TicTacToeBoard({ className }: TicTacToeBoardProps) {
       if (newState === state) return;
       setState(newState);
       setMoveCount((c) => c + 1);
-      setReaction(null);
       setAiError(null);
       // Track the human's move
       moveHistoryRef.current = [...moveHistoryRef.current, `X:${index}`];
@@ -164,9 +152,7 @@ export function TicTacToeBoard({ className }: TicTacToeBoardProps) {
   );
 
   const resetGame = useCallback(() => {
-    window.speechSynthesis?.cancel();
     setState(createInitialState());
-    setReaction(null);
     setMoveCount(0);
     setAiError(null);
     aiThinkingRef.current = false;
@@ -175,9 +161,9 @@ export function TicTacToeBoard({ className }: TicTacToeBoardProps) {
 
   const getCellSymbol = (cell: Cell) => {
     if (cell === "X")
-      return <X className="h-10 w-10 text-blue-600 dark:text-blue-400" strokeWidth={2.5} />;
+      return <X className="h-10 w-10 text-blue-500 dark:text-blue-400" strokeWidth={2.5} />;
     if (cell === "O")
-      return <Circle className="h-10 w-10 text-rose-600 dark:text-rose-400" strokeWidth={2.5} />;
+      return <Circle className="h-10 w-10 text-rose-500 dark:text-rose-400" strokeWidth={2.5} />;
     return null;
   };
 
@@ -220,13 +206,6 @@ export function TicTacToeBoard({ className }: TicTacToeBoardProps) {
           Reset
         </button>
 
-        <VolumeControl
-          volume={tts.volume}
-          isMuted={tts.isMuted}
-          isSpeaking={tts.isSpeaking}
-          onVolumeChange={tts.setVolume}
-          onToggleMute={tts.toggleMute}
-        />
       </div>
 
       {/* AI Error */}
@@ -243,25 +222,8 @@ export function TicTacToeBoard({ className }: TicTacToeBoardProps) {
         )}
       </AnimatePresence>
 
-      {/* Reaction banner */}
-      <AnimatePresence mode="wait">
-        {reaction && (
-          <motion.div
-            key={reaction.text + Date.now()}
-            initial={{ opacity: 0, scale: 0.8, y: -10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.8, y: 10 }}
-            transition={{ type: "spring", stiffness: 300, damping: 20 }}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5 border border-primary/10 text-sm"
-          >
-            <span className="text-lg">{reaction.emoji}</span>
-            <span className="text-foreground/80 italic">{reaction.text}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Board */}
-      <div className="grid grid-cols-3 gap-2 bg-muted/30 p-2 rounded-2xl shadow-lg">
+      <div className="grid grid-cols-3 gap-2 bg-gradient-to-br from-slate-50 to-gray-100 dark:from-slate-800 dark:to-slate-900 p-3 rounded-2xl shadow-lg ring-1 ring-black/5 dark:ring-white/10">
         {state.board.map((cell, index) => {
           const isWinCell = state.winLine?.includes(index);
           const isLastMove = state.lastMove === index;
@@ -276,12 +238,12 @@ export function TicTacToeBoard({ className }: TicTacToeBoardProps) {
               disabled={!!cell || state.status !== "playing" || state.currentPlayer !== "X" || isAiThinking}
               className={cn(
                 "relative flex h-20 w-20 items-center justify-center rounded-xl transition-all duration-200 sm:h-24 sm:w-24",
-                "bg-background hover:bg-muted/50",
-                "shadow-sm border border-border/40",
-                isWinCell && "bg-emerald-50 border-emerald-400 dark:bg-emerald-950/40 dark:border-emerald-500/50",
-                isLastMove && !isWinCell && "ring-2 ring-primary/20",
+                "bg-white dark:bg-slate-800/80 hover:bg-slate-50 dark:hover:bg-slate-700/80",
+                "shadow-sm border border-slate-200 dark:border-slate-700",
+                isWinCell && "bg-emerald-50 border-emerald-400 dark:bg-emerald-950/50 dark:border-emerald-500/60",
+                isLastMove && !isWinCell && "ring-2 ring-blue-400/30 dark:ring-blue-500/40",
                 (!!cell || state.status !== "playing" || isAiThinking) && "cursor-default",
-                !cell && state.status === "playing" && state.currentPlayer === "X" && "cursor-pointer hover:border-primary/30",
+                !cell && state.status === "playing" && state.currentPlayer === "X" && "cursor-pointer hover:border-blue-400/40 dark:hover:border-blue-500/40",
               )}
             >
               <AnimatePresence mode="popLayout">

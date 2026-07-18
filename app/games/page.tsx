@@ -1,18 +1,20 @@
+import Image from "next/image";
 import Link from "next/link";
-import { Gamepad2, Grid3X3, ArrowUpFromDot } from "lucide-react";
+import { Gamepad2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import tictactoeLogo from "../../assets/games/tictactoe.avif";
+import connect4Logo from "../../assets/games/connect4.png";
 
 const games = [
   {
     title: "Tic Tac Toe",
     description: "Classic 3-in-a-row. Play against an AI that won't go easy on you.",
     href: "/games/tic-tac-toe",
-    icon: Grid3X3,
+    logoSrc: tictactoeLogo,
     gradient: "from-blue-500/10 via-blue-500/5 to-transparent",
     borderColor: "border-blue-500/20 hover:border-blue-500/40",
-    iconBg: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
     difficulty: "Easy to learn, hard to master",
     players: "vs AI",
   },
@@ -20,10 +22,9 @@ const games = [
     title: "Connect 4",
     description: "Drop your pieces and be the first to get 4 in a row.",
     href: "/games/connect-4",
-    icon: ArrowUpFromDot,
+    logoSrc: connect4Logo,
     gradient: "from-yellow-500/10 via-yellow-500/5 to-transparent",
     borderColor: "border-yellow-500/20 hover:border-yellow-500/40",
-    iconBg: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400",
     difficulty: "Strategy required",
     players: "vs AI",
   },
@@ -49,7 +50,6 @@ export default function GamesPage() {
         {/* Game cards grid */}
         <div className="grid gap-5 sm:grid-cols-2">
           {games.map((game) => {
-            const Icon = game.icon;
             return (
               <Link key={game.href} href={game.href} className="group block">
                 <Card
@@ -64,13 +64,14 @@ export default function GamesPage() {
                   <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-br from-white/5 to-transparent" />
 
                   <CardHeader className="flex flex-row items-start gap-4">
-                    <div
-                      className={cn(
-                        "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl",
-                        game.iconBg,
-                      )}
-                    >
-                      <Icon className="h-6 w-6" />
+                    <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl">
+                      <Image
+                        src={game.logoSrc}
+                        alt={game.title}
+                        className="h-full w-full object-cover"
+                        width={48}
+                        height={48}
+                      />
                     </div>
                     <div className="flex-1 min-w-0">
                       <CardTitle className="text-lg group-hover:text-foreground transition-colors">
