@@ -6,13 +6,14 @@ import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Brain, BarChart3, FolderOpen, Pen, Plug, Settings2, User, Wrench, Bot, Eye, Terminal, ChevronDown, ChevronUp } from "lucide-react";
+import { Brain, BarChart3, FolderOpen, Pen, Plug, Settings2, User, Wrench, Bot, Eye, Terminal, Gamepad2, ChevronDown, ChevronUp } from "lucide-react";
 import { conversationsApi } from "@/lib/api/conversations";
 import { ConversationList } from "./ConversationList";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { AboutModal } from "./AboutModal";
 
 const primaryLinks = [
+  { href: "/games", label: "Games", icon: Gamepad2 },
   { href: "/settings/customize", label: "Customize", icon: User },
   { href: "/settings/tools", label: "Tools", icon: Wrench },
   { href: "/settings/providers", label: "Models & Providers", icon: Settings2 },
