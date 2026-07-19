@@ -333,8 +333,7 @@ export function ScheduledTaskList() {
           <p className="mt-3 text-xs text-muted-foreground">
             Try asking the AI:{" "}
             <em className="text-foreground">
-              &ldquo;Check at midnight if the FIFA World Cup results are out and
-              tell me&rdquo;
+              &ldquo;Remind me to check the weather at 7am tomorrow&rdquo;
             </em>
           </p>
         </Card>

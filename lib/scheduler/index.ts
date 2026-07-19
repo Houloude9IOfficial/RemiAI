@@ -7,7 +7,7 @@
  * notifying the client via SSE.
  */
 import { eq, and, lt, sql } from "drizzle-orm";
-import { streamText, stepCountIs } from "ai";
+import { generateText, stepCountIs } from "ai";
 import { db } from "@/db";
 import {
   scheduledTasks,
@@ -265,6 +265,9 @@ export async function executeTask(task: ScheduledTaskRow) {
       ask_questions: askQuestionsTool,
     };
 
+    const toolNames = Object.keys(tools);
+    console.log(`[scheduler] Task #${task.id} has ${toolNames.length} tool(s): ${toolNames.join(", ")}`);
+
     // ── Build system prompt with context ──
     const prefs = await db.select().from(userPreferences).get();
     const prefParts: string[] = [];
@@ -331,7 +334,7 @@ After completing the task, the user will receive a desktop notification with you
       scheduledTaskPrefix;
 
     // ── Generate AI response ──
-    const result = streamText({
+    const result = await generateText({
       model,
       system: fullSystemPrompt,
       messages: [
@@ -341,11 +344,24 @@ After completing the task, the user will receive a desktop notification with you
         },
       ],
       tools: Object.keys(tools).length > 0 ? tools : undefined,
-      stopWhen: stepCountIs(50), // Allow tool-calling chains
+      stopWhen: stepCountIs(50), // Allow multi-step tool-calling chains
     });
 
-    const fullText = await result.text;
-    const usage = await result.usage;
+    const fullText = result.text;
+    const usage = result.usage;
+
+    // Log which tools were actually called during execution
+    const calledTools = result.toolCalls;
+    if (calledTools && calledTools.length > 0) {
+      const toolSummary = calledTools
+        .map((tc) => `${tc.toolName}`)
+        .join(", ");
+      console.log(
+        `[scheduler] Task #${task.id} called ${calledTools.length} tool(s): ${toolSummary}`,
+      );
+    } else {
+      console.log(`[scheduler] Task #${task.id} did NOT call any tools`);
+    }
 
     // Estimate tokens if provider didn't return usage
     const inputTokens = usage?.inputTokens ?? estimateTokenCount(fullSystemPrompt);
