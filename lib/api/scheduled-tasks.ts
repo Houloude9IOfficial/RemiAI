@@ -40,4 +40,9 @@ export const scheduledTasksApi = {
     fetch(`/api/scheduled-tasks/${id}`, { method: "DELETE" }).then((res) =>
       unwrap<{ ok: true }>(res),
     ),
+
+  run: (id: number): Promise<{ ok: true; message: string }> =>
+    fetch(`/api/scheduled-tasks/${id}`, { method: "POST" }).then((res) =>
+      unwrap<{ ok: true; message: string }>(res),
+    ),
 };

@@ -41,7 +41,7 @@ import { computeNextCronTime } from "./cron";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
-type ScheduledTaskRow = {
+export type ScheduledTaskRow = {
   id: number;
   conversationId: number;
   triggerAt: string;
@@ -102,12 +102,35 @@ export function startScheduler() {
   }
 
   console.log("[scheduler] Starting background task scheduler (poll every 15s)");
+
+  // Clean up any tasks stuck in 'processing' from a previous server session
+  cleanupStaleTasks();
+
   intervalHandle = setInterval(pollDueTasks, POLL_INTERVAL_MS);
 
   // Also run an immediate check on startup
   pollDueTasks().catch((err) =>
     console.error("[scheduler] Initial poll failed:", err),
   );
+}
+
+/**
+ * Reset any tasks stuck in 'processing' back to 'pending' so they
+ * get picked up by the next poll. This handles server restarts.
+ */
+async function cleanupStaleTasks() {
+  try {
+    const result = await db
+      .update(scheduledTasks)
+      .set({ status: "pending" })
+      .where(eq(scheduledTasks.status, "processing"))
+      .run();
+    if (result.changes > 0) {
+      console.log(`[scheduler] Reset ${result.changes} stale 'processing' task(s) to 'pending'`);
+    }
+  } catch (err) {
+    console.error("[scheduler] Failed to clean up stale tasks:", err);
+  }
 }
 
 /**
@@ -154,7 +177,7 @@ async function pollDueTasks() {
 
 // ─── Execute a task ─────────────────────────────────────────────────────
 
-async function executeTask(task: ScheduledTaskRow) {
+export async function executeTask(task: ScheduledTaskRow) {
   console.log(`[scheduler] Executing task #${task.id}: "${task.task.slice(0, 60)}..."`);
 
   // Mark as processing
@@ -276,7 +299,7 @@ async function executeTask(task: ScheduledTaskRow) {
       ? `\n\nRecent file changes:\n${recentChanges.map((c) => `- [${c.changeType}] ${c.relativePath}`).join("\n")}`
       : "";
 
-    // Scheduled task execution prefix
+    // Scheduled task execution prefix — explicitly list all tools
     const scheduledTaskPrefix = `\n\n## ⏰ Scheduled Task Execution
 
 You are being triggered by a scheduled task that the user asked you to do earlier.
@@ -286,9 +309,18 @@ You are being triggered by a scheduled task that the user asked you to do earlie
 **Scheduled at:** ${task.triggerAt}
 **Current time:** ${new Date().toISOString()}
 
-Please complete this task using your available tools. Use web_fetch, news_search, or any other tools you need to gather information. Report your findings in a clear, well-formatted response.
+### Complete this task using your available tools
 
-After completing the task, the user will receive a desktop notification with your response. Make sure your answer is complete and self-contained.`;
+You have FULL access to all the same tools as a normal conversation. Use them to gather information:
+
+- **Web search**: Use fc_search (Firecrawl), news_search/top_headlines (NewsAPI), or brave_web_search (Brave) to find information on the web.
+- **Web scraping**: Use fc_scrape or web_fetch to read specific web pages.
+- **Code execution**: Use python_exec or js_exec to run code if needed.
+- **Filesystem**: Use read_file, search_files, etc. to read files.
+
+**CRITICAL: You MUST use the appropriate tools to fulfill the task. Do NOT just generate text from your training data — actively search, fetch, and verify information.**
+
+After completing the task, the user will receive a desktop notification with your response. Make sure your answer is complete, well-formatted, and includes all relevant information.`;
 
     const fullSystemPrompt =
       SYSTEM_PROMPT +

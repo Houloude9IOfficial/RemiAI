@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { TicTacToeBoard } from "@/components/games/TicTacToeBoard";
-import tictactoeLogo from "../../../assets/games/tictactoe.avif";
+import tictactoeLogo from "../../../assets/games/tictactoe.png";
 
 export default function TicTacToePage() {
   return (

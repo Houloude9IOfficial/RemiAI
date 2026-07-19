@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useEffect, useState, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
@@ -46,8 +47,22 @@ export default function ConversationPage({
 }) {
   const { conversationId: conversationIdParam } = use(params);
   const conversationId = Number(conversationIdParam);
+  const router = useRouter();
   const queryClient = useQueryClient();
   const { activeStreams } = useStreamingContext();
+
+  // Redirect invalid /chat/:id paths (e.g. /chat/conversations) to the home
+  // page, which will auto-create a new conversation if none exist.
+  useEffect(() => {
+    if (isNaN(conversationId)) {
+      router.replace("/chat");
+    }
+  }, [conversationId, router]);
+
+  // Show nothing while redirecting
+  if (isNaN(conversationId)) {
+    return null;
+  }
 
   // Check if there's an active stream BEFORE the data fetch
   const hasActiveStream = activeStreams.has(conversationId);

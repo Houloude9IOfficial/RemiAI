@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, gt } from "drizzle-orm";
 import { db } from "@/db";
 import { scheduledTasks, conversations } from "@/db/schema";
 
@@ -53,6 +53,15 @@ export async function GET(req: NextRequest) {
     if (status) {
       query = query.where(
         eq(scheduledTasks.status, status as any),
+      ) as any;
+    }
+
+    // Optional filter: only tasks completed after a specific time
+    // (used by the polling fallback to avoid stale notifications)
+    const completedAfter = searchParams.get("completedAfter");
+    if (completedAfter) {
+      query = query.where(
+        gt(scheduledTasks.completedAt, completedAfter),
       ) as any;
     }
 

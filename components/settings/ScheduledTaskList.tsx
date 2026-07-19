@@ -18,6 +18,7 @@ import {
   MessageSquare,
   ExternalLink,
   RefreshCw,
+  Play,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { scheduledTasksApi, type ScheduledTask } from "@/lib/api/scheduled-tasks";
@@ -96,8 +97,18 @@ function TaskCard({ task }: { task: ScheduledTask }) {
     onError: (err: Error) => toast.error(err.message),
   });
 
+  const runMutation = useMutation({
+    mutationFn: () => scheduledTasksApi.run(task.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["scheduled-tasks"] });
+      toast.success("Task execution started");
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
   const isPast = new Date(task.triggerAt) < new Date();
   const isPending = task.status === "pending";
+  const isRunning = cancelMutation.isPending || runMutation.isPending;
 
   return (
     <Card className={cn(
@@ -204,20 +215,39 @@ function TaskCard({ task }: { task: ScheduledTask }) {
         {/* Actions */}
         <div className="flex items-center gap-1 shrink-0">
           {task.status === "pending" && (
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              onClick={() => cancelMutation.mutate()}
-              disabled={cancelMutation.isPending}
-              className="text-muted-foreground hover:text-destructive"
-              title="Cancel task"
-            >
-              {cancelMutation.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Trash2 className="h-3.5 w-3.5" />
-              )}
-            </Button>
+            <>
+              {/* Run now button */}
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                onClick={() => runMutation.mutate()}
+                disabled={isRunning}
+                className="text-muted-foreground hover:text-emerald-500"
+                title="Run now — execute this task immediately"
+              >
+                {runMutation.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Play className="h-3.5 w-3.5" />
+                )}
+              </Button>
+
+              {/* Cancel button */}
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                onClick={() => cancelMutation.mutate()}
+                disabled={isRunning}
+                className="text-muted-foreground hover:text-destructive"
+                title="Cancel task"
+              >
+                {cancelMutation.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3.5 w-3.5" />
+                )}
+              </Button>
+            </>
           )}
         </div>
       </div>

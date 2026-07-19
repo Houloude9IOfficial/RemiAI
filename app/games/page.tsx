@@ -4,7 +4,7 @@ import { Gamepad2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import tictactoeLogo from "../../assets/games/tictactoe.avif";
+import tictactoeLogo from "../../assets/games/tictactoe.png";
 import connect4Logo from "../../assets/games/connect4.png";
 
 const games = [
