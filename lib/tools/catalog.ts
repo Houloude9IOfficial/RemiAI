@@ -87,6 +87,17 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     togglable: false,
     requiresApiKey: false,
   },
+  // ── Profile tools (builtin, always on, not togglable) ──
+  {
+    id: "profile",
+    name: "Profile",
+    description:
+      "View and update the user's permanent profile. (name, bio, location, occupation, interests, skills, pronouns, birthday, social links, and AI preferences)",
+    toolNames: ["get_profile", "update_profile"],
+    category: "builtin",
+    togglable: false,
+    requiresApiKey: false,
+  },
   // ── Brave Search (integration, togglable, needs API key) ──
   {
     id: "brave_search",

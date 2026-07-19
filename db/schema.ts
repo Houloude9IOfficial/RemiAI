@@ -66,6 +66,15 @@ export const userPreferences = sqliteTable("user_preferences", {
   preferredName: text("preferred_name").notNull().default(""),
   preferences: text("preferences").notNull().default(""),
   personality: text("personality").notNull().default("Be helpful, concise, and direct. Match the user\'s tone."),
+  avatarUrl: text("avatar_url").notNull().default(""),
+  bio: text("bio").notNull().default(""),
+  location: text("location").notNull().default(""),
+  occupation: text("occupation").notNull().default(""),
+  interests: text("interests").notNull().default(""),
+  skills: text("skills").notNull().default(""),
+  pronouns: text("pronouns").notNull().default(""),
+  birthday: text("birthday").notNull().default(""),
+  links: text("links", { mode: "json" }).$type<Record<string, string>>().notNull().default({}),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 

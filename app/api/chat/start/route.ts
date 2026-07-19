@@ -121,6 +121,30 @@ export async function POST(req: Request) {
     ? `\n\n## User preferences\n${prefParts.join("\n")}`
     : "";
 
+  // 2b. Profile details
+  const profileParts: string[] = [];
+  if (prefs?.bio) {
+    profileParts.push(`Bio: ${prefs.bio}`);
+  }
+  if (prefs?.location) {
+    profileParts.push(`Location: ${prefs.location}`);
+  }
+  if (prefs?.occupation) {
+    profileParts.push(`Occupation: ${prefs.occupation}`);
+  }
+  if (prefs?.interests) {
+    profileParts.push(`Interests: ${prefs.interests}`);
+  }
+  if (prefs?.skills) {
+    profileParts.push(`Skills: ${prefs.skills}`);
+  }
+  if (prefs?.pronouns) {
+    profileParts.push(`Pronouns: ${prefs.pronouns}`);
+  }
+  const userProfileContext = profileParts.length > 0
+    ? `\n\n## User profile\nThe following is what you know about the user from their profile:\n${profileParts.map((p) => `- ${p}`).join("\n")}`
+    : "";
+
   // 3. Saved memories
   const memoryRows = await db
     .select()
@@ -145,7 +169,7 @@ export async function POST(req: Request) {
 All the context you need has ALREADY been gathered below. Do NOT call any tools to get context — it's all right here.
 
 ### Your context (already provided):
-${timeContext}${userPrefsContext}${memoryContext}${fileChangeContext}
+${timeContext}${userPrefsContext}${userProfileContext}${memoryContext}${fileChangeContext}
 
 ### What to do:
 

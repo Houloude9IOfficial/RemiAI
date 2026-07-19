@@ -36,6 +36,7 @@ import {
 } from "@/lib/tools/agent-spawner";
 import { buildTodoTools } from "@/lib/tools/todo";
 import { buildFileIndexTools } from "@/lib/tools/file-index";
+import { buildProfileTools } from "@/lib/tools/profile";
 import { buildRoutinesTools } from "@/lib/tools/routines";
 import { queryRecentChanges } from "@/lib/fs/file-index";
 import { estimateTokenCount } from "@/lib/utils";
@@ -162,6 +163,9 @@ export async function POST(req: Request) {
   // File index tools for querying recent changes and searching indexed files
   const fileIndexToolSet = buildFileIndexTools();
 
+  // Profile tools (get_profile, update_profile)
+  const profileToolSet = buildProfileTools();
+
   // Todo list tools for multi-step task planning
   const todoToolSet = buildTodoTools(conversationId);
 
@@ -212,6 +216,7 @@ You are currently in **Plan mode**. This means:
     ...agentToolSet,
     ...fileIndexToolSet,
     ...todoToolSet,
+    ...profileToolSet,
     ...routineToolSet,
   };
 
@@ -227,6 +232,31 @@ You are currently in **Plan mode**. This means:
   if (prefs?.personality) {
     prefParts.push(`Your personality and tone should follow this guidance: ${prefs.personality}`);
   }
+
+  // Inject profile details
+  const profileParts: string[] = [];
+  if (prefs?.bio) {
+    profileParts.push(`Bio: ${prefs.bio}`);
+  }
+  if (prefs?.location) {
+    profileParts.push(`Location: ${prefs.location}`);
+  }
+  if (prefs?.occupation) {
+    profileParts.push(`Occupation: ${prefs.occupation}`);
+  }
+  if (prefs?.interests) {
+    profileParts.push(`Interests: ${prefs.interests}`);
+  }
+  if (prefs?.skills) {
+    profileParts.push(`Skills: ${prefs.skills}`);
+  }
+  if (prefs?.pronouns) {
+    profileParts.push(`Pronouns: ${prefs.pronouns}`);
+  }
+
+  const profileTip = profileParts.length > 0
+    ? `\n\n## User profile\nThe following is what you know about the user from their profile:\n${profileParts.map((p) => `- ${p}`).join("\n")}`
+    : "";
 
   const systemTip = prefParts.length > 0
     ? `\n\n## User preferences\n${prefParts.join("\n")}`
@@ -245,7 +275,7 @@ You are currently in **Plan mode**. This means:
     : "";
 
   const fullSystemPrompt =
-    SYSTEM_PROMPT + systemTip + memoryTip + fileChangeTip + planModePrompt;
+    SYSTEM_PROMPT + systemTip + profileTip + memoryTip + fileChangeTip + planModePrompt;
   const modelMessages = await convertToModelMessages(uiMessages);
 
   // Track whether onFinish successfully applied tokens, so the cleanup
