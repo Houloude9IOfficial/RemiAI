@@ -38,6 +38,7 @@ import { buildTodoTools } from "@/lib/tools/todo";
 import { buildFileIndexTools } from "@/lib/tools/file-index";
 import { buildProfileTools } from "@/lib/tools/profile";
 import { buildRoutinesTools } from "@/lib/tools/routines";
+import { buildScheduleTool } from "@/lib/tools/schedule";
 import { queryRecentChanges } from "@/lib/fs/file-index";
 import { estimateTokenCount } from "@/lib/utils";
 
@@ -172,6 +173,9 @@ export async function POST(req: Request) {
   // Routine tools (create, run, list, update, delete routines)
   const routineToolSet = await buildRoutinesTools();
 
+  // Scheduled tasks tool (schedule future tasks)
+  const scheduleToolSet = await buildScheduleTool(conversationId);
+
   // In plan mode, filter out write tools — AI can only read/plan, not modify files
   const effectiveFsToolSet =
     mode === "plan"
@@ -218,6 +222,7 @@ You are currently in **Plan mode**. This means:
     ...todoToolSet,
     ...profileToolSet,
     ...routineToolSet,
+    ...scheduleToolSet,
   };
 
   // Build combined system prompt with user preferences

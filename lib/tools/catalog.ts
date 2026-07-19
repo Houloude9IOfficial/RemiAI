@@ -242,6 +242,17 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     apiKeyPlaceholder: "YOUR_API_KEY",
     docsUrl: "https://newsapi.org/register",
   },
+  // ── Scheduled Tasks (builtin, always on, not togglable) ──
+  {
+    id: "scheduling",
+    name: "Scheduled Tasks",
+    description:
+      "Schedule tasks for future execution. The AI will execute the task at the specified time, using all available tools, and send a desktop notification with results. Perfect for reminders, timed checks, and future lookups.",
+    toolNames: ["schedule_task"],
+    category: "builtin",
+    togglable: false,
+    requiresApiKey: false,
+  },
   // ── Firecrawl (integration, togglable, needs API key) ──
   {
     id: "firecrawl",

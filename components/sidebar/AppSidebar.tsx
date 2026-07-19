@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Brain, BarChart3, FolderOpen, Pen, Plug, Settings2, User, Wrench, Bot, Eye, Terminal, Gamepad2, ChevronDown, ChevronUp } from "lucide-react";
+import { Brain, BarChart3, FolderOpen, Pen, Plug, Settings2, User, Wrench, Bot, Eye, Terminal, Gamepad2, Clock, ChevronDown, ChevronUp } from "lucide-react";
 import { conversationsApi } from "@/lib/api/conversations";
 import { ConversationList } from "./ConversationList";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -25,6 +25,7 @@ const extraLinks = [
   { href: "/settings/routines", label: "Routines", icon: Terminal },
   { href: "/settings/mcp", label: "MCP Servers", icon: Plug },
   { href: "/settings/tasks", label: "Agent Tasks", icon: Bot },
+  { href: "/settings/scheduled-tasks", label: "Scheduled Tasks", icon: Clock },
   { href: "/settings/watcher", label: "File Watcher", icon: Eye },
   { href: "/settings/usage", label: "Usage", icon: BarChart3 },
 ];
@@ -169,7 +170,7 @@ export function AppSidebar() {
           className={cn(
             "overflow-hidden transition-all duration-500 ease-in-out",
             extraExpanded
-              ? "max-h-56 opacity-100 translate-y-0"
+              ? "max-h-600 opacity-100 translate-y-0"
               : "max-h-0 opacity-0 -translate-y-1",
           )}
         >

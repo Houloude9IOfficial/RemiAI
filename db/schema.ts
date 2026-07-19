@@ -181,6 +181,29 @@ export const routineLogs = sqliteTable("routine_logs", {
   completedAt: text("completed_at"),
 });
 
+export const scheduledTasks = sqliteTable("scheduled_tasks", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  conversationId: integer("conversation_id")
+    .notNull()
+    .references(() => conversations.id, { onDelete: "cascade" }),
+  triggerAt: text("trigger_at").notNull(),
+  task: text("task").notNull(),
+  status: text("status", {
+    enum: ["pending", "processing", "completed", "failed", "cancelled"],
+  })
+    .notNull()
+    .default("pending"),
+  schedule: text("schedule"), // cron expression for recurring tasks
+  lastRunAt: text("last_run_at"), // last execution time (for recurring)
+  result: text("result"),
+  error: text("error"),
+  notificationSent: integer("notification_sent", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  completedAt: text("completed_at"),
+});
+
 export const agentTasks = sqliteTable("agent_tasks", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   conversationId: integer("conversation_id")
