@@ -227,6 +227,21 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     togglable: true,
     requiresApiKey: false,
   },
+  // ── NewsAPI (integration, togglable, needs API key) ──
+  {
+    id: "newsapi",
+    name: "NewsAPI",
+    icon: "https://newsapi.org/favicon-32x32.png",
+    description:
+      "Search news articles from thousands of sources worldwide using NewsAPI. Get headlines, descriptions, URLs, publication dates, and source info for current events and breaking stories.",
+    toolNames: ["news_search", "news_top_headlines"],
+    category: "integration",
+    togglable: true,
+    requiresApiKey: true,
+    apiKeyLabel: "NewsAPI API Key",
+    apiKeyPlaceholder: "YOUR_API_KEY",
+    docsUrl: "https://newsapi.org/register",
+  },
   // ── Firecrawl (integration, togglable, needs API key) ──
   {
     id: "firecrawl",

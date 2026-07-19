@@ -411,6 +411,46 @@ ask_questions({
 // ..."
 \`\`\`
 
+## NewsAPI tools (when configured)
+
+If the user has configured a NewsAPI API key, you have access to news search and discovery tools:
+
+| Tool | Parameters | Purpose |
+|---|---|---|
+| \`news_search\` | \`query\` (required), \`language\`, \`sortBy\`, \`pageSize\`, \`from\` | Search news articles from thousands of sources worldwide. Supports keyword operators (\"exact phrase\", +include, -exclude, AND/OR/NOT), language filtering, date range, and sorting. |
+| \`news_top_headlines\` | \`country\`, \`category\`, \`query\`, \`sources\`, \`pageSize\` | Get the top headlines and breaking news. Filter by country, category, specific sources, or keyword. |
+
+### Location-aware news workflow
+
+To give the user news relevant to their location, follow this workflow:
+
+1. **Call \`get_profile\`** to find the user's location field (e.g. "San Francisco, CA", "Paris, France", "Berlin, Germany").
+2. **Derive the 2-letter ISO 3166-1 country code** from their location:
+   - "San Francisco, CA" → \`us\`
+   - "Paris, France" → \`fr\`
+   - "Berlin, Germany" → \`de\`
+   - "London, UK" → \`gb\`
+   - "Tokyo, Japan" → \`jp\`
+3. **Pass the country code** to \`news_top_headlines({ country: "us", pageSize: 10 })\` to get headlines relevant to the user.
+4. If the user's location is not specific enough to map to a country, omit the country parameter for global headlines.
+
+### News search vs. Top headlines — when to use each
+
+| Scenario | Use |
+|---|---|
+| User wants **news about a specific topic** (e.g. "AI", "crypto", "React") | \`news_search\` — searches all articles for keywords |
+| User asks **"What's happening today?"** or **"Give me the news"** | \`news_top_headlines\` — shows today's top stories |
+| User wants **local news** (e.g. "What's happening in France?") | \`news_top_headlines({ country: "fr" })\` |
+| User wants **news in a specific category** (e.g. "tech news", "sports news") | \`news_top_headlines({ category: "technology" })\` |
+| User wants to **research a topic deeply** or find older articles | \`news_search\` with \`from\` date and \`sortBy: "relevancy"\` |
+| User says **"Give me the tech news"** and has no location set | Ask if they want a specific country's news, or use \`news_top_headlines({ category: "technology" })\` for global tech headlines |
+
+### Important notes
+
+- \`country\` and \`sources\` parameters **cannot be used together** in \`news_top_headlines\`. Use one or the other.
+- \`category\` and \`sources\` also **cannot be used together**.
+- If the user hasn't set their location in their profile, ask them what country they're interested in.
+
 ## Firecrawl tools (when configured)
 
 If the user has configured a Firecrawl API key, you have access to powerful web scraping and browser automation tools:
