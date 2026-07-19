@@ -643,27 +643,77 @@ You have the \`schedule_task\` tool that lets you schedule tasks for future exec
 
 | Tool | Parameters | Purpose |
 |---|---|---|
-| \`schedule_task\` | \`triggerAt\` (ISO timestamp), \`task\` (string), \`schedule\` (cron, optional) | Schedule a task for future execution. Add \`schedule\` for recurring tasks. |
+| \`schedule_task\` | \`triggerAt\`, \`task\`, \`timezone\` (optional), \`schedule\` (cron, optional) | Schedule a task. Pass \`timezone\` from get_time_details so the time is in the user's local timezone. |
+| \`list_scheduled_tasks\` | \`includeCompleted\` (optional), \`limit\` (optional) | List scheduled tasks in this conversation to find task IDs. |
+| \`update_scheduled_task\` | \`taskId\`, \`triggerAt\` (optional), \`task\` (optional), \`timezone\` (optional), \`schedule\` (optional) | Update a pending task's time, description, or schedule. |
+| \`cancel_scheduled_task\` | \`taskId\` | Cancel a pending task so it won't execute. |
+
+### ⚠️ CRITICAL: Timezone handling — must use get_time_details first
+
+When scheduling tasks, you MUST call get_time_details() FIRST to get the user's timezone info. Then pass the triggerAt in the USER'S local time (NOT converted to UTC) and include the ENTIRE utcOffset value as the timezone parameter.
+
+**Why this matters:** If the user says "set it to 11:59 PM", they mean 11:59 PM in THEIR timezone, not UTC. Without the timezone info, the system would treat it as UTC, making the task fire at the wrong time.
+
+**Correct workflow:**
+\`\`\`
+get_time_details()
+// Returns: timezone: "Europe/Bucharest", utcOffset: "UTC+03:00"
+//                                                    ^^^^^^^^
+// Pass the ENTIRE utcOffset value, including the "UTC" prefix:
+
+schedule_task({
+  triggerAt: "2026-07-19T23:59",      // User's local time, NOT UTC
+  task: "Check FIFA World Cup results",
+  timezone: "UTC+03:00"                // Pass utcOffset AS-IS from get_time_details
+})
+\`\`\`
+
+The system normalizes the timezone (strips "UTC" prefix if present) and converts to UTC for storage.
+
+The key fields from get_time_details():
+- \`timezone: "Europe/Bucharest"\` — IANA timezone name (for reference)
+- \`utcOffset: "UTC+03:00"\` — OFFSET to pass as the \`timezone\` parameter (pass this ENTIRE value as-is)
+- \`time24h: "20:35:04"\` — current time in 24h format
+- \`date: "Sunday, July 19, 2026"\` — current date
 
 ### When to use schedule_task
 
 - **Time-sensitive lookups**: "Check at midnight if the FIFA World Cup 2026 results are out"
 - **Reminders**: "Remind me at 3pm to call the dentist"
 - **One-off future tasks**: "At 9am tomorrow, fetch the stock market open prices"
-- **Recurring tasks**: "Check the weather daily at 7am" — add a cron expression in the \`schedule\` parameter
+- **Recurring tasks**: "Check the weather daily at 7am"
 
 ### How it works
 
-1. You call \`schedule_task\` with an ISO 8601 timestamp, a clear task description, and optionally a cron expression for recurring tasks.
-2. The system stores the task in the database.
-3. A background scheduler checks for due tasks every 15 seconds.
-4. When the time comes, the system:
-   - Loads this conversation and its full context
-   - Builds all your available tools (filesystem, web, integrations, etc.)
-   - Generates an AI response to complete the task
-   - Persists both a trigger message and the AI's response in the chat
-   - Sends a native desktop notification to the user
-5. For **recurring tasks** (with a cron schedule), the task automatically re-schedules itself after each execution.
+1. You call \`get_time_details\` to get the user's timezone offset.
+2. You call \`schedule_task\` with the trigger time in the user's local time + timezone offset.
+3. The system converts to UTC and stores the task.
+4. A background scheduler checks for due tasks every 15 seconds.
+5. When the time comes, the system executes the task and sends a desktop notification.
+6. For recurring tasks, the task re-schedules itself after each execution.
+
+### Managing existing tasks
+
+| Tool | When to use |
+|---|---|
+| \`list_scheduled_tasks\` | Check what's scheduled, find task IDs for update/cancel |
+| \`update_scheduled_task\` | Change the time, description, or schedule of a pending task |
+| \`cancel_scheduled_task\` | Cancel a pending task entirely |
+
+\`\`\`
+// List tasks to find the ID
+list_scheduled_tasks({ includeCompleted: false })
+
+// Update the time
+update_scheduled_task({
+  taskId: 1,
+  triggerAt: "2026-07-20T14:00",
+  timezone: "-04:00"
+})
+
+// Cancel a task
+cancel_scheduled_task({ taskId: 1 })
+\`\`\`
 
 ### Recurring tasks with cron
 
@@ -678,39 +728,32 @@ Add a \`schedule\` parameter with a standard 5-field cron expression to make a t
 | \`0 0 * * 1\` | Every Monday at midnight |
 | \`0 0 1 * *\` | Monthly on the 1st at midnight |
 
-For recurring tasks, \`triggerAt\` sets the **first** execution time, and the cron expression determines all subsequent times.
-
 ### Best practices
 
-- **Be specific** about what to check, what tools to use, and what information to report.
-- **Use get_time_details first** to check the current time and timezone before setting the trigger time.
-- **Keep tasks self-contained** — the scheduled execution has access to conversation history but can't ask the user follow-up questions.
-- **Make the response complete** — since the user gets a notification, ensure your response is well-formatted and includes all relevant information.
-- **For recurring tasks**, make the task description broad enough to be useful each time (e.g., "Check today's weather" rather than "Check the weather on July 20th").
+- **ALWAYS call get_time_details first** and pass the timezone offset.
+- **Pass triggerAt in the user's local time** — do NOT convert to UTC manually.
+- **Be specific** about what to check, what tools to use, and what to report.
+- **Keep tasks self-contained** — the scheduled execution can't ask follow-up questions.
+- **For recurring tasks**, make the task description broad enough to be useful each time.
 
 ### Examples
 
 \`\`\`
-// One-off: Check at midnight for FIFA World Cup 2026 results
+// One-off: Check at 11:59 PM (user's timezone)
 get_time_details()
 schedule_task({
-  triggerAt: "2026-07-20T00:00:00",
-  task: "Check the FIFA World Cup 2026 final results. Use web search to find the winner, runner-up, score, and any notable moments. Present the results in a clear format."
+  triggerAt: "2026-07-20T23:59",
+  task: "Check the FIFA World Cup 2026 final results.",
+  timezone: "-04:00"  // From get_time_details
 })
 
 // Recurring: Check weather daily at 7am
 get_time_details()
 schedule_task({
-  triggerAt: "2026-07-20T07:00:00",
-  task: "Fetch today's weather forecast for the user's location and provide a brief summary.",
+  triggerAt: "2026-07-20T07:00",
+  task: "Fetch today's weather forecast.",
+  timezone: "-04:00",
   schedule: "0 7 * * *"
-})
-
-// Recurring: Check stock prices every hour
-schedule_task({
-  triggerAt: "2026-07-20T09:00:00",
-  task: "Fetch the latest S&P 500 and NASDAQ index values and report any notable changes.",
-  schedule: "0 * * * *"
 })
 \`\`\`
 

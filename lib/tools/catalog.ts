@@ -248,7 +248,7 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     name: "Scheduled Tasks",
     description:
       "Schedule tasks for future execution. The AI will execute the task at the specified time, using all available tools, and send a desktop notification with results. Perfect for reminders, timed checks, and future lookups.",
-    toolNames: ["schedule_task"],
+    toolNames: ["schedule_task", "list_scheduled_tasks", "update_scheduled_task", "cancel_scheduled_task"],
     category: "builtin",
     togglable: false,
     requiresApiKey: false,
