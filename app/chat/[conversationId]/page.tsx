@@ -388,21 +388,6 @@ function ConversationChat({
         )}
         <span className="text-sm font-medium truncate">{initialConversation.title}</span>
         <div className="ml-auto flex items-center gap-2">
-          {/* ── Audio Controls ── */}
-          <AudioControls
-            ambientVolume={ambient.volume}
-            ambientPlaying={ambient.isPlaying}
-            ambientMuted={ambient.isMuted}
-            ttsSpeaking={tts.isSpeaking}
-            ttsVolume={tts.volume}
-            ttsMuted={tts.isMuted}
-            ttsEngine={tts.engine}
-            onAmbientVolumeChange={ambient.setVolume}
-            onAmbientToggleMute={ambient.toggleMute}
-            onTtsVolumeChange={tts.setVolume}
-            onTtsToggleMute={tts.toggleMute}
-            onTtsEngineChange={tts.setEngine}
-          />
           <ModelPicker providerId={providerId} modelId={modelId} onChange={handleModelChange} />
         </div>
       </div>
