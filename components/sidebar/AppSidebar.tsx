@@ -11,9 +11,9 @@ import { conversationsApi } from "@/lib/api/conversations";
 import { ConversationList } from "./ConversationList";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { AboutModal } from "./AboutModal";
+import { SidebarProfile } from "./SidebarProfile";
 
 const primaryLinks = [
-  { href: "/settings/profile", label: "Profile", icon: User },
   { href: "/settings/tools", label: "Tools", icon: Wrench },
   { href: "/settings/providers", label: "Models & Providers", icon: Settings2 },
   { href: "/settings/directories", label: "Directories", icon: FolderOpen },
@@ -29,6 +29,7 @@ const extraLinks = [
   { href: "/settings/watcher", label: "File Watcher", icon: Eye },
   { href: "/settings/backup", label: "Backup", icon: Shield },
   { href: "/settings/usage", label: "Usage", icon: BarChart3 },
+  { href: "/settings/profile", label: "Profile", icon: User },
 ];
 
 export function AppSidebar() {
@@ -192,7 +193,12 @@ export function AppSidebar() {
           </div>
         </div>
 
-        <div className="mt-2 flex items-center justify-between border-t pt-2">
+        {/* Profile badge */}
+        <div className="mt-1 border-t pt-1.5">
+          <SidebarProfile />
+        </div>
+
+        <div className="flex items-center justify-between px-2.5 py-1">
           <AboutModal />
           <ThemeToggle />
         </div>

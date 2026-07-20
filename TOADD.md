@@ -59,4 +59,4 @@ add background voice support (e.g jarvis), play a looped smooth noise while work
 
 Fix screenshot reading
 
-show profile on bottom of sidebar like chatgpt.com
+<!-- show profile on bottom of sidebar like chatgpt.com -->
