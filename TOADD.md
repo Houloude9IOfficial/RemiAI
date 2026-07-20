@@ -34,7 +34,7 @@ add a delete folder and directory tool (only in directories allowed writing and 
 
 <!-- Add a slide to collapse/uncollapse extra pages in sidebar -->
 
-Add Built-in vector store option so the local assistant can index files for semantic search
+<!-- Add Built-in vector store option so the local assistant can index files for semantic search (Added & Removed, took up a lot of uneeded memory) -->
 
 <!-- Feature: Routines
 Descriptions: A tool (togglable) that allows the AI with javascript to create routines, be saved in a library, and be able to run them at any point. -->
