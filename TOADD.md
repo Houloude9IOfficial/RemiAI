@@ -55,7 +55,7 @@ add background voice support (e.g jarvis), play a looped smooth noise while work
 
 <!-- add a games page to include a library of games e.g tic tac toe to play with the AI, onclick opens a page specific to that game, and AI is included in, and maybe on e.g tic tac toe, it could also react to player's moves, such as 'Now you locked me bro', and others. -->
 
-Allow backing up and restoring user data & api keys (encrypted with password) (for e.g db cleanups on migrations, to not get all data removed and have to start all over)
+<!-- Allow backing up and restoring user data & api keys (encrypted with password) (for e.g db cleanups on migrations, to not get all data removed and have to start all over) -->
 
 Fix screenshot reading
 
