@@ -71,7 +71,12 @@ export async function POST(request: Request) {
 
       // Generate a unique filename to prevent collisions
       const uuid = crypto.randomUUID().slice(0, 8);
-      const safeName = `${uuid}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      const namePart = file.name
+        ? file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
+        : file.type.startsWith("image/")
+          ? `Screenshot.png`
+          : `Clipboard-file`;
+      const safeName = `${uuid}_${namePart}`;
       const filePath = path.join(uploadDir, safeName);
 
       // Write file to disk

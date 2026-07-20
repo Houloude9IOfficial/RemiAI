@@ -92,8 +92,8 @@ const TOOL_LABELS: Record<string, ToolLabel> = {
     icon: FileText,
   },
   read_media: {
-    present: "Reading media",
-    past: "Read media",
+    present: "Scanning image",
+    past: "Scanned image",
     icon: Image,
   },
   search_files: {

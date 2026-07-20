@@ -523,7 +523,10 @@ export async function buildFilesystemTools(): Promise<Record<string, any>> {
   // Only expose root-dependent tools if at least one root is configured
   if (roots.length > 0) {
     tools.list_directory = withTruncation(listDirectoryTool);
-    tools.read_media = withTruncation(readMediaTool);
+    // read_media intentionally skips truncation — the AI needs the full base64
+    // dataUrl to examine image content. Truncation would produce an invalid
+    // data URL that neither the AI nor the UI can render.
+    tools.read_media = readMediaTool;
     tools.search_files = withTruncation(searchFilesTool);
     tools.glob_files = withTruncation(globFilesTool);
     tools.write_file = withTruncation(writeFileTool);
