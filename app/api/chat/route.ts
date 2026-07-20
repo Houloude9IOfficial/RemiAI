@@ -41,6 +41,10 @@ import { buildRoutinesTools } from "@/lib/tools/routines";
 import { buildScheduleTool } from "@/lib/tools/schedule";
 import { queryRecentChanges } from "@/lib/fs/file-index";
 import { estimateTokenCount } from "@/lib/utils";
+import {
+  extractImageAttachments,
+  stripImageMarkdown,
+} from "@/lib/chat/process-images";
 
 function titleFromMessage(message: UIMessage): string {
   const text = message.parts
@@ -282,6 +286,72 @@ You are currently in **Plan mode**. This means:
   const fullSystemPrompt =
     SYSTEM_PROMPT + systemTip + profileTip + memoryTip + fileChangeTip + planModePrompt;
   const modelMessages = await convertToModelMessages(uiMessages);
+
+  // ── Native image processing ───────────────────────────────────
+  // Scan user messages for image upload markdown references (`![...](/api/chat/uploads/...)`)
+  // and inject the raw image data as native multimodal content parts.
+  // Modern LLMs (Claude 3.5, GPT-4o, Gemini) process these natively via their vision
+  // encoder — far more efficient and reliable than the old read_media tool approach.
+  for (const msg of modelMessages) {
+    if (msg.role !== "user") continue;
+    const content = msg.content;
+    if (typeof content === "string") {
+      const attachments = await extractImageAttachments(content);
+      if (attachments.length > 0) {
+        const cleanText = stripImageMarkdown(content);
+        const parts: any[] = [];
+        if (cleanText) {
+          parts.push({ type: "text" as const, text: cleanText });
+        }
+        for (const att of attachments) {
+          parts.push({
+            type: "image" as const,
+            image: att.buffer,
+            mimeType: att.mimeType,
+          });
+        }
+        msg.content = parts;
+      }
+    } else if (Array.isArray(content)) {
+      // Check if any text part contains image references
+      let hasImages = false;
+      for (const part of content) {
+        if (part.type === "text") {
+          const attachments = await extractImageAttachments(part.text);
+          if (attachments.length > 0) {
+            hasImages = true;
+            break;
+          }
+        }
+      }
+      if (hasImages) {
+        const newParts: any[] = [];
+        for (const part of content) {
+          if (part.type === "text") {
+            const attachments = await extractImageAttachments(part.text);
+            if (attachments.length > 0) {
+              const cleanText = stripImageMarkdown(part.text);
+              if (cleanText) {
+                newParts.push({ type: "text" as const, text: cleanText });
+              }
+              for (const att of attachments) {
+                newParts.push({
+                  type: "image" as const,
+                  image: att.buffer,
+                  mimeType: att.mimeType,
+                });
+              }
+            } else {
+              newParts.push(part);
+            }
+          } else {
+            newParts.push(part);
+          }
+        }
+        msg.content = newParts;
+      }
+    }
+  }
 
   // Track whether onFinish successfully applied tokens, so the cleanup
   // doesn't double-count by applying the same usage again.

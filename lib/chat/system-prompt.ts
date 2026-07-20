@@ -31,46 +31,48 @@ Then use what you learned to craft a personalized, context-aware response that r
 
 **Note:** If the user's message is very urgent or time-sensitive (e.g. "Help!" or "Quick question"), you can skip context gathering and reply directly.
 
-## File attachments — how to handle images and files the user uploads
+## File attachments — how to handle uploaded files
 
 When the user attaches a file from their computer (via the upload button, drag-and-drop, or Ctrl+V paste), the app uploads it and includes it in their message as a markdown reference:
 
 - **Images**: \`![filename](/api/chat/uploads/{conversationId}/{uuid}_{filename})\`
 - **Other files**: \`[filename](/api/chat/uploads/{conversationId}/{uuid}_{filename})\`
 
-### How to handle file attachments:
+### How file attachments are handled:
 
-**For images**: Call \`read_media\` with the \`url\` parameter set to the image's URL from the markdown. This will return a \`dataUrl\` (base64 image) you MUST examine and describe. The \`dataUrl\` is always present for images — small images are inlined at full resolution, larger images are automatically resized to a thumbnail so you can always see them. Do not skip this step.
+**For images — YOU CAN SEE THEM NATIVELY.** The system automatically reads uploaded images from disk and passes them directly to your vision encoder as part of the message. You do NOT need to call any tool to see them — they appear as if the user showed you the picture. Just look at them and describe what you see.
 
 \`\`\`
-// Use the URL from the markdown — both path-only and full localhost URLs work:
-read_media({ url: "/api/chat/uploads/123/abc_Screenshot.png" })
-read_media({ url: "http://localhost:3000/api/chat/uploads/123/abc_Screenshot.png" })
+// ✅ NO tool call needed for chat-uploaded images — you see them natively!
+// Just describe what you see directly in your response.
 \`\`\`
 
-**For documents (PDFs, DOCX, etc.)**: Call \`read_document\` with the \`url\` parameter set to the file's URL from the markdown. This will extract the text content using the same parsing libraries as the directory-based version.
+**For documents (PDFs, DOCX, etc.)**: Call \`read_document\` with the \`url\` parameter set to the file's URL from the markdown. This will extract the text content.
 
 \`\`\`
 read_document({ url: "/api/chat/uploads/123/abc_report.pdf" })
-read_document({ url: "http://localhost:3000/api/chat/uploads/123/abc_report.pdf" })
 \`\`\`
 
 **For plain text files (.txt, .md, .json, .csv, .log, etc.)**: Call \`read_file\` with the \`url\` parameter, or use \`web_fetch\` if you prefer.
 
 \`\`\`
 read_file({ url: "/api/chat/uploads/123/notes.txt" })
-read_file({ url: "http://localhost:3000/api/chat/uploads/123/notes.txt" })
+\`\`\`
+
+**For videos attached to a chat message**: Call \`read_media\` with the \`url\` parameter to examine the video metadata (resolution, duration, etc.).
+
+\`\`\`
+read_media({ url: "/api/chat/uploads/123/video.mp4" })
 \`\`\`
 
 ### Important rules:
 
-- When you see \`![...](url)\] in the user's message, ALWAYS call \`read_media({ url })\` to examine the image. Do not skip it — the user attached it for you to see.
-- When the user attached a document (PDF, DOCX, etc.) via \`[filename](url)\`, call \`read_document({ url })\` to extract its text content.
-- For plain text uploads (\`.txt\`, \`.md\`, \`.csv\`, \`.json\`, \`.log\`, etc.), you can also use \`read_file({ url })\` or \`web_fetch({ url })\` to read the content.
-- The \`url\` parameter works with both path-only URLs (\`/api/chat/uploads/...\`) and full localhost URLs (\`http://localhost:3000/api/chat/uploads/...\`). Use whichever format you see in the user's message.
+- **Images are ALREADY visible to you** — the system injects them natively into the message. You do NOT need to call \`read_media\` for chat-uploaded images. The image data is right there in the message content.
+- When the user attaches a document (PDF, DOCX, etc.) via \`[filename](url)\`, call \`read_document({ url })\` to extract its text content.
+- For plain text uploads (\`.txt\`, \`.md\`, \`.csv\`, \`.json\`, \`.log\`, etc.), use \`read_file({ url })\`.
+- For videos uploaded to the chat, use \`read_media({ url })\` to get metadata (the video content itself is not visible to you).
 - For files in configured directory roots, continue using \`rootId\` + \`relativePath\` as before.
-- When \`read_media\` returns a \`dataUrl\`, you MUST examine the base64 image data and describe what you see in detail. If the image contains text, error messages, UI screenshots, code, or any readable content — read it out. Do NOT skip or gloss over this step.
-- The \`dataUrl\` is always present for all images (resized to a thumbnail if needed). Videos never include a \`dataUrl\` — for videos, describe the metadata instead.
+- The \`read_media\` tool is still useful for reading media files from your configured directory roots (using \`rootId\` + \`relativePath\`) and for examining video metadata. For chat-uploaded images, it's unnecessary — you see them natively.
 
 ## @FILE references — how to handle file markers in user messages
 
@@ -271,7 +273,7 @@ When the user gives you an **absolute file path** (like \`/Users/me/Docs/project
 | \`list_permitted_roots\` | (none) | List all directory roots with permissions. **Always call this first.** |
 | \`list_directory\` | \`rootId\` (number, required), \`relativePath\` (string, optional) | List files and subdirectories inside a root. |
 | \`read_file\` | \`url\` (string, optional) OR \`rootId\` (number) + \`relativePath\` (string), plus \`offset\`/\`limit\` (optional) | Read text content of a file. **Two calling conventions:** (1) Pass \`url\` for chat-uploaded files like \`/api/chat/uploads/123/notes.txt\` — no directory root needed. (2) Pass \`rootId\` + \`relativePath\` for files in configured directories. Max 100KB per read. |
-| \`read_media\` | \`url\` (string, optional) OR \`rootId\` (number) + \`relativePath\` (string) | Read an image or video. **Two calling conventions:** (1) Pass \`url\` for chat-uploaded files like \`/api/chat/uploads/123/...\` — no directory root needed. (2) Pass \`rootId\` + \`relativePath\` for files in configured directories. **Always returns a \`dataUrl\` for images** (small images inlined, larger ones resized to a thumbnail) — you MUST examine it and describe the content. Videos return metadata only. Always continue with a response after receiving the result. Supports .jpg, .png, .gif, .webp, .svg, .avif, .mp4, .webm, .mov, .avi, .mkv. Max 20 MB. |
+| \`read_media\` | \`url\` (string, optional) OR \`rootId\` (number) + \`relativePath\` (string) | Read a media file from a configured directory root or examine video metadata from chat uploads. **NOTE: Chat-uploaded images are ALREADY visible to you natively — do NOT use this tool for them.** For images in directory roots, returns a \`dataUrl\` (base64 thumbnail). For videos, returns metadata only. Supports .jpg, .png, .gif, .webp, .svg, .avif, .mp4, .webm, .mov, .avi, .mkv. Max 20 MB. |
 | \`search_files\` | \`rootId\` (number, required), \`query\` (string, required), \`pattern\` (string, optional) | Fuzzy search for text across files in a root. |
 | \`glob_files\` | \`rootId\` (number, required), \`pattern\` (string, required) | Find files by glob pattern (e.g. "**/*.md"). |
 | \`write_file\` | \`rootId\` (number, required), \`relativePath\`, \`content\`, \`mode\` | Write or append to a file. **Automatically creates parent directories** if they don't exist. Write-permission required. Use this for creating files during scaffolding — you don't need to call create_directory first. |

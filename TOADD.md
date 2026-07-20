@@ -57,6 +57,6 @@ add background voice support (e.g jarvis), play a looped smooth noise while work
 
 <!-- Allow backing up and restoring user data & api keys (encrypted with password) (for e.g db cleanups on migrations, to not get all data removed and have to start all over) -->
 
-Fix screenshot reading
+<!-- Fix screenshot reading -->
 
 <!-- show profile on bottom of sidebar like chatgpt.com -->

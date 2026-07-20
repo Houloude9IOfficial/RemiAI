@@ -270,7 +270,7 @@ export const globFilesTool = {
  */
 export const readMediaTool = {
   description:
-    "Read an image or video file and examine its content. Returns a `dataUrl` field (a base64 data URL you MUST look at to see the image) for ALL images — small images are inlined at full resolution, larger images are resized to a thumbnail so you can always see them. Videos never include a `dataUrl`. **CRITICAL: When `dataUrl` is present, you MUST examine the base64 image data and describe what you see in detail. If the image contains text, read it out. Never skip this step — the user attached the image because they want you to see it.** For videos, describe the metadata (filename, type, size, duration if available). Always continue with a text response after calling this tool. Supported formats: images (.jpg, .png, .gif, .webp, .svg, .avif) and videos (.mp4, .webm, .mov, .avi, .mkv). Max file size: 20 MB.",
+    "Read a media file from a configured directory root. For images, returns a `dataUrl` (base64 thumbnail) you can examine. For videos, returns metadata (filename, type, size) — you can also check the `url` to reference the video. **NOTE: Chat-uploaded images are ALREADY visible to you natively via your vision encoder — do NOT use this tool for those.** This tool is for reading media files from your configured directory roots (using `rootId` + `relativePath`) or for examining video metadata from chat uploads. Supported formats: images (.jpg, .png, .gif, .webp, .svg, .avif) and videos (.mp4, .webm, .mov, .avi, .mkv). Max file size: 20 MB.",
   parameters: z
     .object({
       rootId: z
