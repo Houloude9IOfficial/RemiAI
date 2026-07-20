@@ -13,6 +13,7 @@ import {
   XCircle,
   AlertCircle,
   Terminal,
+  Image,
 } from "lucide-react";
 import { MediaDisplay } from "./MediaDisplay";
 import { QuestionsCard } from "./QuestionsCard";
@@ -94,6 +95,20 @@ export function ToolCallCard({
     state === "approval-responded";
   const isError = state === "output-error";
 
+  // Extract readable filename from the read_media input (shown in scanning indicator)
+  const mediaFilename =
+    input &&
+    typeof input === "object" &&
+    !Array.isArray(input)
+      ? (input as Record<string, unknown>).url ??
+        (input as Record<string, unknown>).relativePath ??
+        undefined
+      : undefined;
+  const shortMediaName = mediaFilename
+    ? String(mediaFilename).split("/").pop()?.replace(/^[a-f0-9]{8}_/, "") ??
+      String(mediaFilename)
+    : undefined;
+
   // Detect if the output is a media result (from read_media tool)
   const isMediaResult =
     output !== undefined &&
@@ -117,6 +132,9 @@ export function ToolCallCard({
     output !== null &&
     typeof output === "object" &&
     (output as Record<string, unknown>).type === "questions";
+
+  // Check if this is a read_media tool call (use endsWith for MCP namespace tolerance)
+  const isReadMedia = toolName.endsWith("read_media");
 
   // Detect if the output is a todo list (from todos_init / todos_update / todos_view)
   const isTodoList =
@@ -233,6 +251,36 @@ export function ToolCallCard({
           >
             <JsonBlock data={input} />
           </CompactSection>
+        )}
+
+        {/* Scanning indicator — shown while read_media is running but hasn't produced output yet */}
+        {!isComplete && !isError && isReadMedia && (
+          <div className="border-t border-blue-500/10 bg-blue-500/[0.03]">
+            <div className="flex items-start gap-3 px-3 py-3">
+              {/* Scanning animation */}
+              <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 ring-1 ring-blue-500/20">
+                <Image className="h-5 w-5 text-blue-500" />
+                <div className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-blue-500 shadow-sm shadow-blue-500/20">
+                  <Loader2 className="h-3 w-3 animate-spin text-white" />
+                </div>
+              </div>
+              {/* Text */}
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                  Scanning image
+                </span>
+                {shortMediaName && (
+                  <span className="truncate text-xs text-blue-600/60 dark:text-blue-400/60">
+                    {shortMediaName}
+                  </span>
+                )}
+                {/* Animated scanning bar */}
+                <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-blue-500/10">
+                  <div className="h-full w-full origin-left animate-[scan-progress_2s_ease-in-out_infinite] rounded-full bg-gradient-to-r from-blue-500/0 via-blue-500/50 to-blue-500/0" />
+                </div>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Output section — media renders directly (no collapse/expand), text uses collapsible */}

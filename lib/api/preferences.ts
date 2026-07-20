@@ -2,6 +2,15 @@ export type UserPreferences = {
   preferredName: string;
   preferences: string;
   personality: string;
+  avatarUrl: string;
+  bio: string;
+  location: string;
+  occupation: string;
+  interests: string;
+  skills: string;
+  pronouns: string;
+  birthday: string;
+  links: Record<string, string>;
 };
 
 async function get(): Promise<UserPreferences> {
@@ -10,7 +19,9 @@ async function get(): Promise<UserPreferences> {
   return res.json();
 }
 
-async function update(data: Partial<UserPreferences>): Promise<UserPreferences> {
+async function update(
+  data: Partial<UserPreferences>,
+): Promise<UserPreferences> {
   const res = await fetch("/api/preferences", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },

@@ -16,11 +16,11 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 
           // Variants
           variant === "primary" &&
-            "bg-zinc-900 text-white shadow-sm hover:bg-zinc-800 active:scale-[0.97]",
+            "bg-zinc-900 text-white shadow-sm hover:bg-zinc-800 active:bg-zinc-700",
           variant === "secondary" &&
-            "bg-zinc-100 text-zinc-900 hover:bg-zinc-200 active:scale-[0.97]",
+            "bg-zinc-100 text-zinc-900 hover:bg-zinc-200 active:bg-zinc-300",
           variant === "outline" &&
-            "border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 active:scale-[0.97]",
+            "border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 active:bg-zinc-100 active:text-zinc-900",
           variant === "ghost" &&
             "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900",
 

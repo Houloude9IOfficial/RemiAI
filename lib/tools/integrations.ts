@@ -5,6 +5,7 @@ import { buildBraveSearchTool } from "./brave-search";
 import { buildNotionTools } from "./notion";
 import { buildContext7Tool } from "./context7";
 import { buildFirecrawlTools } from "./firecrawl";
+import { buildNewsApiTool } from "./newsapi";
 
 /**
  * Build integration tools based on saved configs from the DB.
@@ -29,6 +30,9 @@ export async function buildIntegrationTools(): Promise<Record<string, any>> {
         break;
       case "firecrawl":
         Object.assign(tools, buildFirecrawlTools(config.apiKey));
+        break;
+      case "newsapi":
+        Object.assign(tools, buildNewsApiTool(config.apiKey));
         break;
     }
   }

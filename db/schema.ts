@@ -66,6 +66,15 @@ export const userPreferences = sqliteTable("user_preferences", {
   preferredName: text("preferred_name").notNull().default(""),
   preferences: text("preferences").notNull().default(""),
   personality: text("personality").notNull().default("Be helpful, concise, and direct. Match the user\'s tone."),
+  avatarUrl: text("avatar_url").notNull().default(""),
+  bio: text("bio").notNull().default(""),
+  location: text("location").notNull().default(""),
+  occupation: text("occupation").notNull().default(""),
+  interests: text("interests").notNull().default(""),
+  skills: text("skills").notNull().default(""),
+  pronouns: text("pronouns").notNull().default(""),
+  birthday: text("birthday").notNull().default(""),
+  links: text("links", { mode: "json" }).$type<Record<string, string>>().notNull().default({}),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
@@ -170,6 +179,41 @@ export const routineLogs = sqliteTable("routine_logs", {
   error: text("error"),
   startedAt: text("started_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   completedAt: text("completed_at"),
+});
+
+export const scheduledTasks = sqliteTable("scheduled_tasks", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  conversationId: integer("conversation_id")
+    .notNull()
+    .references(() => conversations.id, { onDelete: "cascade" }),
+  triggerAt: text("trigger_at").notNull(),
+  task: text("task").notNull(),
+  status: text("status", {
+    enum: ["pending", "processing", "completed", "failed", "cancelled"],
+  })
+    .notNull()
+    .default("pending"),
+  schedule: text("schedule"), // cron expression for recurring tasks
+  lastRunAt: text("last_run_at"), // last execution time (for recurring)
+  result: text("result"),
+  error: text("error"),
+  notificationSent: integer("notification_sent", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  completedAt: text("completed_at"),
+});
+
+export const backupHistory = sqliteTable("backup_history", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  exportedAt: text("exported_at").notNull(),
+  totalSize: integer("total_size").notNull().default(0),
+  includesFiles: integer("includes_files", { mode: "boolean" }).notNull().default(true),
+  tableStats: text("table_stats", { mode: "json" }).$type<Record<string, number>>().notNull().default({}),
+  uploadCount: integer("upload_count").notNull().default(0),
+  avatarCount: integer("avatar_count").notNull().default(0),
+  appVersion: text("app_version").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const agentTasks = sqliteTable("agent_tasks", {

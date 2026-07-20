@@ -99,6 +99,34 @@
       "when": 1784038700000,
       "tag": "0018_conversation_mode",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1784446500000,
+      "tag": "0019_user_profile_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "6",
+      "when": 1784479400000,
+      "tag": "0020_scheduled_tasks",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1784479410000,
+      "tag": "0021_scheduled_tasks_recurring",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1784539200000,
+      "tag": "0022_backup_history",
+      "breakpoints": true
     }
   ]
 }

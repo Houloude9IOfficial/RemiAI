@@ -6,26 +6,31 @@ import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Brain, BarChart3, FolderOpen, Pen, Plug, Settings2, User, Wrench, Bot, Eye, Terminal, ChevronDown, ChevronUp } from "lucide-react";
+import { Brain, BarChart3, FolderOpen, Pen, Plug, Settings2, User, Wrench, Bot, Eye, Terminal, Gamepad2, Clock, ChevronDown, ChevronUp, Shield, Radio } from "lucide-react";
 import { conversationsApi } from "@/lib/api/conversations";
 import { ConversationList } from "./ConversationList";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { AboutModal } from "./AboutModal";
+import { SidebarProfile } from "./SidebarProfile";
 
 const primaryLinks = [
-  { href: "/settings/customize", label: "Customize", icon: User },
-  { href: "/settings/tools", label: "Tools", icon: Wrench },
+  { href: "/talk", label: "Talk", icon: Radio },
   { href: "/settings/providers", label: "Models & Providers", icon: Settings2 },
   { href: "/settings/directories", label: "Directories", icon: FolderOpen },
+  { href: "/games", label: "Games", icon: Gamepad2 },
 ];
 
 const extraLinks = [
+  { href: "/settings/tools", label: "Tools", icon: Wrench },
   { href: "/settings/memories", label: "Memories", icon: Brain },
   { href: "/settings/routines", label: "Routines", icon: Terminal },
   { href: "/settings/mcp", label: "MCP Servers", icon: Plug },
   { href: "/settings/tasks", label: "Agent Tasks", icon: Bot },
+  { href: "/settings/scheduled-tasks", label: "Scheduled Tasks", icon: Clock },
   { href: "/settings/watcher", label: "File Watcher", icon: Eye },
+  { href: "/settings/backup", label: "Backup", icon: Shield },
   { href: "/settings/usage", label: "Usage", icon: BarChart3 },
+  { href: "/settings/profile", label: "Profile", icon: User },
 ];
 
 export function AppSidebar() {
@@ -54,7 +59,18 @@ export function AppSidebar() {
     },
     onSuccess: (conversation) => {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      // Navigate to the new chat — the ConversationPage will show a
+      // skeleton while the data is being fetched (but it's usually instant
+      // since the server just created it and it's fresh in cache).
       router.push(`/chat/${conversation.id}`);
+    },
+    onError: () => {
+      // Fallback: create a new chat without provider/model and navigate there
+      // The page will gracefully handle the empty state
+      conversationsApi.create().then((conversation) => {
+        queryClient.invalidateQueries({ queryKey: ["conversations"] });
+        router.push(`/chat/${conversation.id}`);
+      });
     },
   });
 
@@ -143,7 +159,7 @@ export function AppSidebar() {
             key={href}
             href={href}
             className={cn(
-              "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors duration-150",
+              "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors duration-450",
               pathname.startsWith(href) && "bg-muted text-foreground",
             )}
           >
@@ -155,10 +171,10 @@ export function AppSidebar() {
         {/* Extra links — collapsible */}
         <div
           className={cn(
-            "overflow-hidden transition-all duration-500 ease-in-out",
+            "overflow-hidden transition-all duration-550 ease-in-out",
             extraExpanded
-              ? "max-h-56 opacity-100 translate-y-0"
-              : "max-h-0 opacity-0 -translate-y-1",
+              ? "max-h-600 opacity-100"
+              : "max-h-0 opacity-100",
           )}
         >
           <div className="flex flex-col gap-0.5 pt-0.5">
@@ -167,7 +183,7 @@ export function AppSidebar() {
                 key={href}
                 href={href}
                 className={cn(
-                  "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors duration-150",
+                  "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors duration-750",
                   pathname.startsWith(href) && "bg-muted text-foreground",
                 )}
               >
@@ -178,7 +194,12 @@ export function AppSidebar() {
           </div>
         </div>
 
-        <div className="mt-2 flex items-center justify-between border-t pt-2">
+        {/* Profile badge */}
+        <div className="mt-1 border-t pt-1.5">
+          <SidebarProfile />
+        </div>
+
+        <div className="flex items-center justify-between px-2.5 py-1">
           <AboutModal />
           <ThemeToggle />
         </div>

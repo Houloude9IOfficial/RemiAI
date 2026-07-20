@@ -44,6 +44,28 @@ export default function RootLayout({
       className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
+      {/*
+        Inline theme initialisation — runs synchronously before any paint.
+        This prevents the "flash of wrong theme" by applying the correct
+        'light'/'dark' class to <html> before the browser renders anything.
+        Must mirror the logic in ThemeProvider.tsx.
+      */}
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                var t=localStorage.getItem("theme");
+                var r="light";
+                if(t==="dark"||t==="light"){r=t}
+                else{r=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}
+                document.documentElement.classList.add(r);
+                document.documentElement.style.colorScheme=r;
+              } catch(e){}
+            `,
+          }}
+        />
+      </head>
       <body className="min-h-full flex flex-col">
         <Providers>
           <ThemeFavicon />

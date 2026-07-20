@@ -34,11 +34,29 @@ add a delete folder and directory tool (only in directories allowed writing and 
 
 <!-- Add a slide to collapse/uncollapse extra pages in sidebar -->
 
-Add Built-in vector store option so the local assistant can index files for semantic search
+<!-- Add Built-in vector store option so the local assistant can index files for semantic search (Added & Removed, took up a lot of uneeded memory) -->
 
 <!-- Feature: Routines
 Descriptions: A tool (togglable) that allows the AI with javascript to create routines, be saved in a library, and be able to run them at any point. -->
 
-add background voice support (e.g jarvis), play a looped smooth noise while working on request, create a new chat, allow all tools and stuff, optimize for speed. Optimize for windows & mac support
+<!-- add background voice support (e.g jarvis), play a looped smooth noise while working on request, create a new chat, allow all tools and stuff, optimize for speed. Optimize for windows & mac support -->
 
-create a website
+<!-- create a website -->
+
+<!-- rename customize to 'Profile' allow adding profile picture too, and other personal details for the AI to know and use. Also allow more customization of the AI. -->
+
+<!-- fix output/input token chat stats to always work -->
+
+<!-- make the chat on start be a sorter chat input on middle lower-center of the screen, and then smoothly extend to it's normal full size and move to the bottom -->
+
+<!-- new chats arent on top and creation/update times arent on users timezone -->
+
+<!-- Make the AI on first message consider checking time (get_time_details) and recent changes (query_recent_changes) to have more context or reply with any means. -->
+
+<!-- add a games page to include a library of games e.g tic tac toe to play with the AI, onclick opens a page specific to that game, and AI is included in, and maybe on e.g tic tac toe, it could also react to player's moves, such as 'Now you locked me bro', and others. -->
+
+<!-- Allow backing up and restoring user data & api keys (encrypted with password) (for e.g db cleanups on migrations, to not get all data removed and have to start all over) -->
+
+<!-- Fix screenshot reading -->
+
+<!-- show profile on bottom of sidebar like chatgpt.com -->

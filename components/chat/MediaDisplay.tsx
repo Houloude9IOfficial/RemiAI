@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { ImageIcon, Play, Film, FileWarning } from "lucide-react";
 
@@ -18,6 +18,18 @@ export function MediaDisplay({ data }: MediaDisplayProps) {
   const size = data.size as number | undefined;
   const [hasError, setHasError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [useUrlFallback, setUseUrlFallback] = useState(false);
+
+  // Reset fallback state when data changes (new media result)
+  useEffect(() => {
+    setUseUrlFallback(false);
+    setHasError(false);
+    setIsLoading(true);
+  }, [data.dataUrl, data.url]);
+
+  // If dataUrl is present but fails to load (e.g. truncated by tool result
+  // truncation), fall back to the server-served URL so the image still displays.
+  const src = useUrlFallback || !dataUrl ? url : dataUrl;
 
   if (hasError) {
     return (
@@ -33,7 +45,6 @@ export function MediaDisplay({ data }: MediaDisplayProps) {
 
   // Images
   if (type === "image") {
-    const src = dataUrl ?? url;
     if (!src) {
       return <MissingInfo />;
     }
@@ -49,12 +60,29 @@ export function MediaDisplay({ data }: MediaDisplayProps) {
             isLoading && "opacity-0",
           )}
           onLoad={() => setIsLoading(false)}
-          onError={() => setHasError(true)}
+          onError={() => {
+            // If dataUrl failed (likely truncated by tool result truncation),
+            // fall back to the server URL before showing an error.
+            if (dataUrl && url && !useUrlFallback) {
+              setUseUrlFallback(true);
+            } else {
+              setHasError(true);
+            }
+          }}
           loading="lazy"
         />
         {isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-muted/30">
-            <ImageIcon className="h-6 w-6 animate-pulse text-muted-foreground/50" />
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-muted/30 backdrop-blur-[1px]">
+            <div className="flex items-center gap-2">
+              <ImageIcon className="h-5 w-5 animate-pulse text-blue-500/60" />
+              <span className="text-xs font-medium text-blue-600/60 dark:text-blue-400/60">
+                Analyzing image…
+              </span>
+            </div>
+            {/* Scanning bar */}
+            <div className="h-1 w-24 overflow-hidden rounded-full bg-blue-500/10">
+              <div className="h-full w-full origin-left animate-[scan-progress_2s_ease-in-out_infinite] rounded-full bg-gradient-to-r from-blue-500/0 via-blue-500/50 to-blue-500/0" />
+            </div>
           </div>
         )}
         {/* Footer overlay */}
@@ -80,7 +108,6 @@ export function MediaDisplay({ data }: MediaDisplayProps) {
 
   // Videos
   if (type === "video") {
-    const src = dataUrl ?? url;
     if (!src) {
       return <MissingInfo />;
     }
@@ -94,7 +121,13 @@ export function MediaDisplay({ data }: MediaDisplayProps) {
             preload="metadata"
             className="max-h-[75vh] w-full bg-black"
             onLoadedData={() => setIsLoading(false)}
-            onError={() => setHasError(true)}
+            onError={() => {
+              if (dataUrl && url && !useUrlFallback) {
+                setUseUrlFallback(true);
+              } else {
+                setHasError(true);
+              }
+            }}
           >
             Your browser does not support the video element.
           </video>

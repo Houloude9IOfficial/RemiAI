@@ -1,10 +1,14 @@
-import { CustomizeForm } from "@/components/settings/CustomizeForm";
-import CenteredLayout from '@/components/layout/CenteredLayout';
+"use client";
 
-export default function CustomizeSettingsPage() {
-  return (
-    <CenteredLayout>
-      <CustomizeForm />
-    </CenteredLayout>
-  );
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+
+export default function OldCustomizeRedirect() {
+  const router = useRouter();
+
+  useEffect(() => {
+    router.replace("/settings/profile");
+  }, [router]);
+
+  return null;
 }

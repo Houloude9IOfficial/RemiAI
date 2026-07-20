@@ -25,7 +25,14 @@ export async function POST(req: Request) {
 
   const row = await db
     .insert(conversations)
-    .values({ providerId: body.providerId ?? null, modelId: body.modelId ?? null })
+    .values({
+      providerId: body.providerId ?? null,
+      modelId: body.modelId ?? null,
+      // Use ISO dates consistently — SQLite's CURRENT_TIMESTAMP lacks
+      // timezone info and causes inconsistent sort/display behavior
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    })
     .returning()
     .get();
 

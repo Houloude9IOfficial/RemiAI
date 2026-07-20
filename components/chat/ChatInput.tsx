@@ -22,6 +22,35 @@ import { FileAttachmentPreview, type AttachedFile } from "./FileAttachmentPrevie
 import { formatFileSize } from "@/lib/file-types";
 import type { ChatStatus } from "ai";
 
+/** Generate a descriptive filename for clipboard items that lack one. */
+function getClipboardFileName(file: File): string {
+  if (file.name) return file.name;
+
+  // Clipboard screenshots (macOS Cmd+Shift+4, Windows Win+Shift+S) often
+  // have an empty name AND empty type — default to PNG for this common case.
+  const now = new Date();
+  const ts = now.toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const type = file.type;
+
+  if (!type) {
+    // No MIME type info and no name — almost certainly a clipboard screenshot
+    return `Screenshot-${ts}.png`;
+  }
+
+  if (type.startsWith("image/")) {
+    const extMap: Record<string, string> = {
+      "image/png": ".png",
+      "image/jpeg": ".jpg",
+      "image/webp": ".webp",
+      "image/gif": ".gif",
+    };
+    const ext = extMap[type] || ".png";
+    return `Screenshot-${ts}${ext}`;
+  }
+
+  return `Clipboard-${ts}`;
+}
+
 const LINE_HEIGHT = 24;
 const MAX_LINES = 3;
 const MAX_HEIGHT = LINE_HEIGHT * MAX_LINES;
@@ -358,7 +387,7 @@ export function ChatInput({
   );
 
   // -----------------------------------------------------------------------
-  // Paste handler (Ctrl+V for clipboard images/files)
+  // Paste handler (Ctrl+V / Cmd+V for clipboard images/files)
   // -----------------------------------------------------------------------
 
   const handlePaste = useCallback(
@@ -368,15 +397,32 @@ export function ChatInput({
       const pastedText = e.clipboardData.getData("text");
 
       if (fileItems.length > 0) {
-        // Extract files from clipboard
+        // Extract files from clipboard, giving them proper names if missing
         const files: File[] = [];
         for (const item of fileItems) {
-          const file = item.getAsFile();
-          if (file) files.push(file);
+          const rawFile = item.getAsFile();
+          if (!rawFile) continue;
+
+          const name = getClipboardFileName(rawFile);
+          // File objects from clipboard are immutable — create a new one with
+          // a proper name so the upload API and preview display correctly.
+          const file =
+            name !== rawFile.name
+              ? new File([rawFile], name, { type: rawFile.type || "image/png" })
+              : rawFile;
+          files.push(file);
         }
 
         if (files.length > 0) {
           e.preventDefault(); // prevent binary garbage in textarea
+
+          // Notify the user that a clipboard image was detected
+          if (files.length === 1 && files[0].type.startsWith("image/")) {
+            // toast.success("Screenshot detected — attaching...", {
+            //   duration: 2000,
+            // });
+            // Better commented out now.
+          }
 
           // If there's also text content, insert it manually
           if (pastedText) {

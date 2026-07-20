@@ -526,12 +526,13 @@ const MEDIA_EXTENSIONS = new Map<string, string>([
 
 const MAX_MEDIA_SIZE = 20 * 1024 * 1024; // 20 MB hard limit for any media file
 
-// When an image is larger than this threshold, we resize it server-side with
-// sharp to create a small thumbnail data URL the model can still "see".
-const DATA_URL_THRESHOLD = 128 * 1024; // 128 KB
+// Images up to this size are inlined at full resolution (as base64 in the dataUrl).
+// Larger images are resized via sharp to a thumbnail for the AI to examine.
+const DATA_URL_THRESHOLD = 512 * 1024; // 512 KB
 
 // Max dimension for the resized thumbnail sent to the model.
-const THUMBNAIL_MAX_WIDTH = 800; // pixels
+// Higher values (1200+) help the AI read text in screenshots.
+const THUMBNAIL_MAX_WIDTH = 1200; // pixels
 
 export type MediaResult = {
   type: "image" | "video" | "unknown";
@@ -541,10 +542,11 @@ export type MediaResult = {
   /** Server URL for the UI to fetch and display the media. */
   url: string;
   /**
-   * Base64 data URL — always present for images.
-   * Small images (≤ 128 KB) are inlined at full resolution.
+   * Base64 data URL — always present for images (except in rare fallback
+   * cases where sharp is unavailable AND the image is very large).
+   * Small images (≤ 512 KB) are inlined at full resolution.
    * Larger images are resized to max {THUMBNAIL_MAX_WIDTH}px wide via sharp
-   * so the data URL stays small enough for the model to process.
+   * so the data URL stays compact enough for the model to process.
    * Videos never include a data URL.
    */
   dataUrl?: string;
@@ -555,6 +557,10 @@ export type MediaResult = {
  * always a base64 data URL for images (resized server-side if needed so
  * the model can "see" the content regardless of original file size).
  */
+// Fallback threshold: if sharp fails and the image exceeds this size, skip the
+// dataUrl entirely rather than inlining a multi-megabyte base64 string.
+const FALLBACK_INLINE_MAX = 2 * 1024 * 1024; // 2 MB
+
 export async function readMedia(
   root: PermittedRoot,
   relativePath: string,
@@ -738,16 +744,18 @@ async function readMediaFromPath(
 /**
  * Create a base64 data URL for an image file.
  *
- * - Images ≤ 128 KB: inlined at their original resolution (fast, lossless).
- * - Images > 128 KB: resized to max {THUMBNAIL_MAX_WIDTH}px wide via sharp,
- *   encoded as JPEG quality 80. This keeps the data URL small (~50–100 KB)
- *   while preserving enough detail for the model to recognise content.
+ * - Images ≤ 512 KB: inlined at their original resolution (fast, lossless).
+ * - Images > 512 KB: resized to max {THUMBNAIL_MAX_WIDTH}px wide via sharp,
+ *   encoded as JPEG quality 85. This keeps the data URL compact (~80-200 KB)
+ *   while preserving enough detail for the model to read text and recognise content.
+ * - Fallback: if sharp is unavailable or fails, attempts a direct inline instead
+ *   of returning an empty data URL the AI can't use.
  */
 async function createImageDataUrl(
   filePath: string,
   mimeType: string,
   fileSize: number,
-): Promise<string> {
+): Promise<string | undefined> {
   // Small images: inline the original buffer directly
   if (fileSize <= DATA_URL_THRESHOLD) {
     const buffer = await fs.readFile(filePath);
@@ -763,22 +771,25 @@ async function createImageDataUrl(
         withoutEnlargement: true, // never upscale
         fit: "inside",            // maintain aspect ratio
       })
-      .jpeg({ quality: 80, mozjpeg: true })
+      .jpeg({ quality: 85, mozjpeg: true })
       .toBuffer();
 
     return `data:image/jpeg;base64,${resized.toString("base64")}`;
   } catch {
-    // If sharp fails (e.g. unsupported format like SVG), only inline the
-    // original file if it's small enough — otherwise return empty.
-    if (fileSize <= DATA_URL_THRESHOLD) {
+    // If sharp fails (e.g. unsupported format like SVG, memory pressure),
+    // try to inline the original directly — but only if it's reasonably small
+    // to avoid blowing up the model's context window with a huge base64 string.
+    if (fileSize <= FALLBACK_INLINE_MAX) {
       try {
         const buffer = await fs.readFile(filePath);
         return `data:${mimeType};base64,${buffer.toString("base64")}`;
       } catch {
-        // read error — fall through to empty
+        // read error — fall through to undefined
       }
     }
-    return `data:${mimeType};base64,`; // empty data URL as last resort
+    // File too large to safely inline, or read error — return no dataUrl.
+    // The caller will still have `url` + metadata for the UI to display.
+    return undefined;
   }
 }
 

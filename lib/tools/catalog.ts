@@ -15,8 +15,10 @@ export interface ToolDefinition {
   extraFields?: {
     key: string;
     label: string;
-    placeholder: string;
-    type: "text" | "password";
+    placeholder?: string;
+    type: "text" | "password" | "toggle" | "select";
+    options?: { value: string; label: string }[];
+    description?: string;
   }[];
 }
 
@@ -84,6 +86,17 @@ export const TOOL_CATALOG: ToolDefinition[] = [
       "Save and recall facts about the user across conversations. The AI can remember preferences, interests, and personal details.",
     toolNames: ["remember", "search_memories", "get_recent_memories"],
     category: "memory",
+    togglable: false,
+    requiresApiKey: false,
+  },
+  // ── Profile tools (builtin, always on, not togglable) ──
+  {
+    id: "profile",
+    name: "Profile",
+    description:
+      "View and update the user's permanent profile. (name, bio, location, occupation, interests, skills, pronouns, birthday, social links, and AI preferences)",
+    toolNames: ["get_profile", "update_profile"],
+    category: "builtin",
     togglable: false,
     requiresApiKey: false,
   },
@@ -215,6 +228,78 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     category: "builtin",
     togglable: true,
     requiresApiKey: false,
+  },
+  // ── NewsAPI (integration, togglable, needs API key) ──
+  {
+    id: "newsapi",
+    name: "NewsAPI",
+    icon: "https://newsapi.org/favicon-32x32.png",
+    description:
+      "Search news articles from thousands of sources worldwide using NewsAPI. Get headlines, descriptions, URLs, publication dates, and source info for current events and breaking stories.",
+    toolNames: ["news_search", "news_top_headlines"],
+    category: "integration",
+    togglable: true,
+    requiresApiKey: true,
+    apiKeyLabel: "NewsAPI API Key",
+    apiKeyPlaceholder: "YOUR_API_KEY",
+    docsUrl: "https://newsapi.org/register",
+  },
+  // ── Scheduled Tasks (builtin, always on, not togglable) ──
+  {
+    id: "scheduling",
+    name: "Scheduled Tasks",
+    description:
+      "Schedule tasks for future execution. The AI will execute the task at the specified time, using all available tools, and send a desktop notification with results. Perfect for reminders, timed checks, and future lookups.",
+    toolNames: ["schedule_task", "list_scheduled_tasks", "update_scheduled_task", "cancel_scheduled_task"],
+    category: "builtin",
+    togglable: false,
+    requiresApiKey: false,
+  },
+  // ── ElevenLabs Voice (integration, togglable, needs API key) ──
+  {
+    id: "elevenlabs",
+    name: "ElevenLabs Voice",
+    icon: "https://11labs-nonprd-15f22c1d.s3.eu-west-3.amazonaws.com/a2ea339b-8b5e-41bb-b706-24eda8a4c9e3/elevenlabs-symbol.png",
+    description:
+      "Premium AI voice and speech recognition. When enabled with an API key, responses are spoken with lifelike ElevenLabs voices. Configure which features are active below.",
+    toolNames: [],
+    category: "integration",
+    togglable: true,
+    requiresApiKey: true,
+    apiKeyLabel: "ElevenLabs API Key",
+    apiKeyPlaceholder: "sk_...",
+    docsUrl: "https://elevenlabs.io/app/settings/api-keys",
+    extraFields: [
+      {
+        key: "tts_enabled",
+        label: "Text-to-Speech",
+        type: "toggle",
+        description: "Speak AI responses aloud using ElevenLabs voice",
+      },
+      {
+        key: "stt_enabled",
+        label: "Speech-to-Text",
+        type: "toggle",
+        description: "Enable voice input via speech recognition in Talk mode",
+      },
+      {
+        key: "voice_id",
+        label: "Voice Profile",
+        type: "select",
+        placeholder: "Select a voice...",
+        description: "Which ElevenLabs voice to use for TTS",
+        options: [
+          { value: "pNInz6obpgDQGcFmaJgB", label: "Adam — Deep, warm (Jarvis-like)" },
+          { value: "21m00Tcm4TlvDq8ikWAM", label: "Rachel — Clear, friendly" },
+          { value: "EXAVITQu4vrRV7JRYJfU", label: "Bella — Soft, warm" },
+          { value: "TxGEqnHWrfWFTfGW9XjX", label: "Josh — Deep, resonant" },
+          { value: "ODq5zmih8GrVes37Dizd", label: "Patrick — Professional, engaging" },
+          { value: "ThT5KcBeYPX3keUQqHPh", label: "Dorothy — Warm, mature" },
+          { value: "OeT7wF4h3aXNBcVF9JtV", label: "Liam — Authoritative, calm" },
+          { value: "XrExE9yKIg1WjnnlVkGX", label: "Fin — Energetic, bright" },
+        ],
+      },
+    ],
   },
   // ── Firecrawl (integration, togglable, needs API key) ──
   {

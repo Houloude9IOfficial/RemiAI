@@ -26,6 +26,7 @@
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
+  --color-border-focus: var(--border-focus);
   --color-destructive: var(--destructive);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
@@ -65,6 +66,7 @@
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
+  --border-focus: oklch(0.72 0 0); /* darker gray */
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
   --chart-1: oklch(0.87 0 0);
@@ -100,6 +102,7 @@
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
+  --border-focus: oklch(1 0 0 / 28%); /* brighter for dark mode */
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
   --chart-1: oklch(0.87 0 0);
@@ -128,9 +131,12 @@
     @apply font-sans;
   }
 
-  /* Smooth color/background/border transitions for theme changes */
+  /* Smooth background/border/box-shadow transitions for theme changes */
+  /* NOTE: color is intentionally excluded because CSS custom-property
+     transitions (var(--foreground) etc.) can interpolate through
+     invisible intermediate values, hiding text during theme switches. */
   *, *::before, *::after {
-    transition: background-color 0.2s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+    transition: background-color 0.2s ease, border-color 0.15s ease, box-shadow 0.15s ease;
   }
 }
 
@@ -509,6 +515,55 @@
 /* Animations                                                         */
 /* ------------------------------------------------------------------ */
 
+/* Skeleton shimmer — a moving diagonal gradient */
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.animate-skeleton-shimmer {
+  background: linear-gradient(
+    110deg,
+    transparent 0%,
+    transparent 20%,
+    oklch(0.85 0 0 / 0.15) 50%,
+    transparent 80%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 2s ease-in-out infinite;
+}
+
+.dark .animate-skeleton-shimmer {
+  background: linear-gradient(
+    110deg,
+    transparent 0%,
+    transparent 20%,
+    oklch(1 0 0 / 0.06) 50%,
+    transparent 80%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+}
+
+/* Reconnecting pulse */
+@keyframes reconnect-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.animate-reconnect-pulse {
+  animation: reconnect-pulse 1.5s ease-in-out infinite;
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;
@@ -675,4 +730,17 @@
 
 .animate-tool-card-in {
   animation: tool-card-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ------------------------------------------------------------------ */
+/* Image scanning progress bar                                         */
+/* ------------------------------------------------------------------ */
+
+@keyframes scan-progress {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
 }

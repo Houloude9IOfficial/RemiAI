@@ -12,7 +12,7 @@ export const toolsApi = {
 
   update: (
     toolId: string,
-    input: { enabled?: boolean; apiKey?: string | null },
+    input: { enabled?: boolean; apiKey?: string | null; config?: Record<string, string> },
   ): Promise<{ ok: true }> =>
     fetch("/api/tools", {
       method: "PATCH",

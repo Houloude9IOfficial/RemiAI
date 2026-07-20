@@ -36,8 +36,15 @@ import {
 } from "@/lib/tools/agent-spawner";
 import { buildTodoTools } from "@/lib/tools/todo";
 import { buildFileIndexTools } from "@/lib/tools/file-index";
+import { buildProfileTools } from "@/lib/tools/profile";
 import { buildRoutinesTools } from "@/lib/tools/routines";
+import { buildScheduleTool } from "@/lib/tools/schedule";
 import { queryRecentChanges } from "@/lib/fs/file-index";
+import { estimateTokenCount } from "@/lib/utils";
+import {
+  extractImageAttachments,
+  stripImageMarkdown,
+} from "@/lib/chat/process-images";
 
 function titleFromMessage(message: UIMessage): string {
   const text = message.parts
@@ -161,11 +168,17 @@ export async function POST(req: Request) {
   // File index tools for querying recent changes and searching indexed files
   const fileIndexToolSet = buildFileIndexTools();
 
+  // Profile tools (get_profile, update_profile)
+  const profileToolSet = buildProfileTools();
+
   // Todo list tools for multi-step task planning
   const todoToolSet = buildTodoTools(conversationId);
 
   // Routine tools (create, run, list, update, delete routines)
   const routineToolSet = await buildRoutinesTools();
+
+  // Scheduled tasks tool (schedule future tasks)
+  const scheduleToolSet = await buildScheduleTool(conversationId);
 
   // In plan mode, filter out write tools — AI can only read/plan, not modify files
   const effectiveFsToolSet =
@@ -211,7 +224,9 @@ You are currently in **Plan mode**. This means:
     ...agentToolSet,
     ...fileIndexToolSet,
     ...todoToolSet,
+    ...profileToolSet,
     ...routineToolSet,
+    ...scheduleToolSet,
   };
 
   // Build combined system prompt with user preferences
@@ -226,6 +241,31 @@ You are currently in **Plan mode**. This means:
   if (prefs?.personality) {
     prefParts.push(`Your personality and tone should follow this guidance: ${prefs.personality}`);
   }
+
+  // Inject profile details
+  const profileParts: string[] = [];
+  if (prefs?.bio) {
+    profileParts.push(`Bio: ${prefs.bio}`);
+  }
+  if (prefs?.location) {
+    profileParts.push(`Location: ${prefs.location}`);
+  }
+  if (prefs?.occupation) {
+    profileParts.push(`Occupation: ${prefs.occupation}`);
+  }
+  if (prefs?.interests) {
+    profileParts.push(`Interests: ${prefs.interests}`);
+  }
+  if (prefs?.skills) {
+    profileParts.push(`Skills: ${prefs.skills}`);
+  }
+  if (prefs?.pronouns) {
+    profileParts.push(`Pronouns: ${prefs.pronouns}`);
+  }
+
+  const profileTip = profileParts.length > 0
+    ? `\n\n## User profile\nThe following is what you know about the user from their profile:\n${profileParts.map((p) => `- ${p}`).join("\n")}`
+    : "";
 
   const systemTip = prefParts.length > 0
     ? `\n\n## User preferences\n${prefParts.join("\n")}`
@@ -243,27 +283,130 @@ You are currently in **Plan mode**. This means:
     ? `\n\n## Recent file changes\nThe following files were recently modified in your watched directories. Use \`query_recent_changes\` for a fuller list, or these are the 10 most recent:\n${recentChanges.map((c) => `- [${c.changeType}] ${c.directoryLabel}/${c.relativePath} (${c.changedAt})`).join("\n")}`
     : "";
 
+  const fullSystemPrompt =
+    SYSTEM_PROMPT + systemTip + profileTip + memoryTip + fileChangeTip + planModePrompt;
   const modelMessages = await convertToModelMessages(uiMessages);
+
+  // ── Native image processing ───────────────────────────────────
+  // Scan user messages for image upload markdown references (`![...](/api/chat/uploads/...)`)
+  // and inject the raw image data as native multimodal content parts.
+  // Modern LLMs (Claude 3.5, GPT-4o, Gemini) process these natively via their vision
+  // encoder — far more efficient and reliable than the old read_media tool approach.
+  for (const msg of modelMessages) {
+    if (msg.role !== "user") continue;
+    const content = msg.content;
+    if (typeof content === "string") {
+      const attachments = await extractImageAttachments(content);
+      if (attachments.length > 0) {
+        const cleanText = stripImageMarkdown(content);
+        const parts: any[] = [];
+        if (cleanText) {
+          parts.push({ type: "text" as const, text: cleanText });
+        }
+        for (const att of attachments) {
+          parts.push({
+            type: "image" as const,
+            image: att.buffer,
+            mimeType: att.mimeType,
+          });
+        }
+        msg.content = parts;
+      }
+    } else if (Array.isArray(content)) {
+      // Check if any text part contains image references
+      let hasImages = false;
+      for (const part of content) {
+        if (part.type === "text") {
+          const attachments = await extractImageAttachments(part.text);
+          if (attachments.length > 0) {
+            hasImages = true;
+            break;
+          }
+        }
+      }
+      if (hasImages) {
+        const newParts: any[] = [];
+        for (const part of content) {
+          if (part.type === "text") {
+            const attachments = await extractImageAttachments(part.text);
+            if (attachments.length > 0) {
+              const cleanText = stripImageMarkdown(part.text);
+              if (cleanText) {
+                newParts.push({ type: "text" as const, text: cleanText });
+              }
+              for (const att of attachments) {
+                newParts.push({
+                  type: "image" as const,
+                  image: att.buffer,
+                  mimeType: att.mimeType,
+                });
+              }
+            } else {
+              newParts.push(part);
+            }
+          } else {
+            newParts.push(part);
+          }
+        }
+        msg.content = newParts;
+      }
+    }
+  }
+
+  // Track whether onFinish successfully applied tokens, so the cleanup
+  // doesn't double-count by applying the same usage again.
+  let tokensApplied = false;
 
   const result = streamText({
     model,
-    system: SYSTEM_PROMPT + systemTip + memoryTip + fileChangeTip + planModePrompt,
+    system: fullSystemPrompt,
     messages: modelMessages,
     tools: Object.keys(tools).length > 0 ? tools : undefined,
     // Allow up to 100 steps normally (chat/plan), or 500 in goal mode
     // so the model can work autonomously until task completion
     stopWhen: stepCountIs(mode === "goal" ? 500 : 100),
-    onFinish: async ({ usage }) => {
-      // Accumulate token usage — this callback fires before
-      // toUIMessageStreamResponse's onFinish
-      if (usage) {
+    onFinish: async ({ text: outputText, usage }) => {
+      try {
+        // Use provider's usage if available, otherwise estimate
+        const inputTokens = usage?.inputTokens ?? 0;
+        const outputTokens = usage?.outputTokens ?? 0;
+
+        // Estimate input tokens from system prompt + all messages
+        const estimatedInput =
+          inputTokens > 0
+            ? inputTokens
+            : estimateTokenCount(
+                fullSystemPrompt +
+                  uiMessages
+                    .map(
+                      (m) =>
+                        m.parts
+                          .filter(
+                            (p): p is { type: "text"; text: string } =>
+                              p.type === "text",
+                          )
+                          .map((p) => p.text)
+                          .join(" "),
+                    )
+                    .join("\n"),
+              );
+
+        // Estimate output tokens from the generated text
+        const estimatedOutput =
+          outputTokens > 0 ? outputTokens : estimateTokenCount(outputText ?? "");
+
         await db
           .update(conversations)
           .set({
-            totalInputTokens: sql`total_input_tokens + ${usage.inputTokens ?? 0}`,
-            totalOutputTokens: sql`total_output_tokens + ${usage.outputTokens ?? 0}`,
+            totalInputTokens:
+              sql`total_input_tokens + ${estimatedInput}`,
+            totalOutputTokens:
+              sql`total_output_tokens + ${estimatedOutput}`,
           })
           .where(eq(conversations.id, conversationId));
+        tokensApplied = true;
+      } catch (err) {
+        console.error("Failed to update token usage in onFinish:", err);
       }
     },
   });
@@ -285,10 +428,62 @@ You are currently in **Plan mode**. This means:
     if (closeMcpClients) {
       await closeMcpClients();
     }
-    await db
-      .update(conversations)
-      .set({ updatedAt: new Date().toISOString() })
-      .where(eq(conversations.id, conversationId));
+    // If onFinish failed or was skipped, apply tokens here as a fallback.
+    // Only runs if onFinish didn't already apply them (avoids double-count).
+    if (!tokensApplied) {
+      try {
+        const streamUsage = await result.usage;
+        const inputTokens = streamUsage?.inputTokens ?? 0;
+        const outputTokens = streamUsage?.outputTokens ?? 0;
+
+        // Estimate input from system prompt + messages if provider didn't give usage
+        const estimatedInput =
+          inputTokens > 0
+            ? inputTokens
+            : estimateTokenCount(
+                fullSystemPrompt +
+                  uiMessages
+                    .map(
+                      (m) =>
+                        m.parts
+                          .filter(
+                            (p): p is { type: "text"; text: string } =>
+                              p.type === "text",
+                          )
+                          .map((p) => p.text)
+                          .join(" "),
+                    )
+                    .join("\n"),
+              );
+
+        // Also grab the final output text from stream usage's total
+        const estimatedOutput =
+          outputTokens > 0
+            ? outputTokens
+            : estimateTokenCount(await result.text);
+
+        await db
+          .update(conversations)
+          .set({
+            totalInputTokens: sql`total_input_tokens + ${estimatedInput}`,
+            totalOutputTokens: sql`total_output_tokens + ${estimatedOutput}`,
+            updatedAt: new Date().toISOString(),
+          })
+          .where(eq(conversations.id, conversationId));
+      } catch (err) {
+        console.error("Failed to update token usage in cleanup:", err);
+        await db
+          .update(conversations)
+          .set({ updatedAt: new Date().toISOString() })
+          .where(eq(conversations.id, conversationId));
+      }
+    } else {
+      // Tokens already applied — just update updatedAt
+      await db
+        .update(conversations)
+        .set({ updatedAt: new Date().toISOString() })
+        .where(eq(conversations.id, conversationId));
+    }
   });
 
   // Build the SSE response for the client, and register the SSE stream

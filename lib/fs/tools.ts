@@ -270,7 +270,7 @@ export const globFilesTool = {
  */
 export const readMediaTool = {
   description:
-    "Read an image or video file and examine its content. The result has a `dataUrl` field (a base64 data URL you can look at to see the image) for images up to 128 KB. For larger images and all videos, `dataUrl` is absent and only `url` + metadata are returned. **If `dataUrl` is present, look at it and describe the image content. If `dataUrl` is absent, tell the user the file details (filename, type, size) and that it's too large to inline — offer to help with it in other ways. Always continue with a text response.** Supported formats: images (.jpg, .png, .gif, .webp, .svg, .avif) and videos (.mp4, .webm, .mov, .avi, .mkv). Max file size: 20 MB.",
+    "Read a media file from a configured directory root. For images, returns a `dataUrl` (base64 thumbnail) you can examine. For videos, returns metadata (filename, type, size) — you can also check the `url` to reference the video. **NOTE: Chat-uploaded images are ALREADY visible to you natively via your vision encoder — do NOT use this tool for those.** This tool is for reading media files from your configured directory roots (using `rootId` + `relativePath`) or for examining video metadata from chat uploads. Supported formats: images (.jpg, .png, .gif, .webp, .svg, .avif) and videos (.mp4, .webm, .mov, .avi, .mkv). Max file size: 20 MB.",
   parameters: z
     .object({
       rootId: z
@@ -523,7 +523,10 @@ export async function buildFilesystemTools(): Promise<Record<string, any>> {
   // Only expose root-dependent tools if at least one root is configured
   if (roots.length > 0) {
     tools.list_directory = withTruncation(listDirectoryTool);
-    tools.read_media = withTruncation(readMediaTool);
+    // read_media intentionally skips truncation — the AI needs the full base64
+    // dataUrl to examine image content. Truncation would produce an invalid
+    // data URL that neither the AI nor the UI can render.
+    tools.read_media = readMediaTool;
     tools.search_files = withTruncation(searchFilesTool);
     tools.glob_files = withTruncation(globFilesTool);
     tools.write_file = withTruncation(writeFileTool);

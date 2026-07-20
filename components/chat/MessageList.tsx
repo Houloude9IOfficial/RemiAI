@@ -1,7 +1,7 @@
 "use client";
 
 import type { UIMessage } from "ai";
-import { useEffect, useRef, useState, useMemo, type ComponentType } from "react";
+import { useLayoutEffect, useEffect, useRef, useState, useMemo, type ComponentType } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { preferencesApi } from "@/lib/api/preferences";
 import { MessageBubble } from "./MessageBubble";
@@ -16,6 +16,7 @@ import {
   MapPin,
   Bug,
   FileText,
+  MessageCirclePlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -109,19 +110,33 @@ const PARTICLES = [
   },
 ];
 
+// ── Direct scroll helper (sets scrollTop with optional offset clamping) ──
+function scrollTo(el: HTMLElement, target: number) {
+  const max = el.scrollHeight - el.clientHeight;
+  el.scrollTop = Math.max(0, Math.min(target, max));
+}
+
+// ── Component ────────────────────────────────────────────────────────
+
 export function MessageList({
   messages,
   status,
+  sendCount = 0,
   onSend,
+  onAiStart,
+  isAiStarting,
 }: {
   messages: UIMessage[];
   status?: "submitted" | "streaming" | "ready" | "error";
+  sendCount?: number;
   onSend?: (text: string) => void;
+  onAiStart?: () => void;
+  isAiStarting?: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
   const [isScrolledUp, setIsScrolledUp] = useState(false);
-  const dismissedRef = useRef(false);
+  const autoScrollRef = useRef(true);
+  const prevSendCountRef = useRef(sendCount);
 
   // Fetch user preferences so we can personalise the empty-state greeting
   const { data: prefs } = useQuery({
@@ -143,51 +158,63 @@ export function MessageList({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preferredName]);
 
-  // Track scroll position — any scroll away from bottom shows the button.
-  // Skip while the button was just dismissed by a click so it hides instantly.
-  // Re-enable tracking only after the smooth scroll fully settles (scrollend).
+  // Track scroll position — shows "New messages below" button when user scrolls up.
+  // Also disables auto-follow when user manually scrolls up.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
 
     const handleScroll = () => {
-      if (dismissedRef.current) return;
       const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-      setIsScrolledUp(distFromBottom > 10);
-    };
-
-    const handleScrollEnd = () => {
-      if (!dismissedRef.current) return;
-      dismissedRef.current = false;
-      // Check position once scroll has settled
-      const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-      setIsScrolledUp(distFromBottom > 10);
+      const scrolledUp = distFromBottom > 10;
+      setIsScrolledUp(scrolledUp);
+      if (scrolledUp && autoScrollRef.current) {
+        autoScrollRef.current = false;
+      }
     };
 
     el.addEventListener("scroll", handleScroll, { passive: true });
-    el.addEventListener("scrollend", handleScrollEnd, { passive: true });
     handleScroll();
-    return () => {
-      el.removeEventListener("scroll", handleScroll);
-      el.removeEventListener("scrollend", handleScrollEnd);
-    };
+    return () => el.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Auto-scroll while AI is streaming and user is at the bottom.
-  // Use setTimeout so React has committed the new content before scrolling.
-  useEffect(() => {
-    if (isScrolledUp) return;
-    const timer = setTimeout(() => {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-    }, 50);
-    return () => clearTimeout(timer);
+  // ── RELIABLE SCROLL LOGIC ──
+  // Uses sendCount (regular React state from parent) as trigger instead of
+  // messages reference (useSyncExternalStore — unreliable timing).
+  // Direct scrollTop assignment + CSS scroll-smooth for animation.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    // Primary trigger: sendCount increments when user sends a message
+    if (sendCount > prevSendCountRef.current) {
+      prevSendCountRef.current = sendCount;
+      autoScrollRef.current = true;
+      setIsScrolledUp(false);
+
+      const els = el.querySelectorAll<HTMLElement>("[data-message-id]");
+      const lastMsg = els[els.length - 1];
+      if (lastMsg && el.contains(lastMsg)) {
+        // Way upper: message at ~2% from top, massive space below
+        scrollTo(el, lastMsg.offsetTop - el.clientHeight * 0.02);
+      } else {
+        scrollTo(el, el.scrollHeight);
+      }
+      return;
+    }
+
+    // Streaming follow: keep at bottom if user hasn't scrolled up
+    if (status === "streaming" && autoScrollRef.current && !isScrolledUp) {
+      scrollTo(el, el.scrollHeight);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages.length, messages[messages.length - 1]?.parts.length, status]);
+  }, [sendCount, status, isScrolledUp]);
 
   const scrollToBottom = () => {
-    dismissedRef.current = true;
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    autoScrollRef.current = true;
     setIsScrolledUp(false);
+    const el = scrollRef.current;
+    if (el) scrollTo(el, el.scrollHeight);
   };
 
   const lastMessage = messages[messages.length - 1];
@@ -251,6 +278,35 @@ export function MessageList({
             );
           })}
         </div>
+
+        {/* AI start button */}
+        {onAiStart && (
+          <div className="relative mt-4 flex items-center gap-3">
+            <div className="h-px flex-1 bg-border/30" />
+            <span className="text-xs text-muted-foreground/50">or</span>
+            <div className="h-px flex-1 bg-border/30" />
+          </div>
+        )}
+        {onAiStart && (
+          <button
+            type="button"
+            onClick={onAiStart}
+            disabled={isAiStarting}
+            className="group relative inline-flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/[0.03] px-5 py-2.5 text-sm font-medium text-primary transition-all duration-200 hover:border-primary/40 hover:bg-primary/[0.06] active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
+          >
+            {isAiStarting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Remi is thinking...</span>
+              </>
+            ) : (
+              <>
+                {/* <MessageCirclePlus className="h-4 w-4 transition-transform duration-200 group-hover:scale-110" /> */}
+                <span>Let Remi start the conversation</span>
+              </>
+            )}
+          </button>
+        )}
       </div>
     );
   }
@@ -260,12 +316,12 @@ export function MessageList({
       <div className="relative flex flex-1 flex-col">
         <div
           ref={scrollRef}
-          className="flex flex-1 flex-col overflow-y-auto p-6"
+          className="flex flex-1 flex-col overflow-y-auto p-6 scroll-smooth"
         >
           <div className="flex flex-col gap-4">
             {messages.map((message, idx) => {
               return (
-                <div key={message.id}>
+                <div key={message.id} data-message-id={message.id}>
                   <MessageBubble
                     message={message}
                     isStreaming={
@@ -277,8 +333,8 @@ export function MessageList({
             })}
 
             {isWaiting && (
-              <div className="flex justify-start">
-                <div className="w-full max-w-[85%] rounded-xl border border-border/50 bg-muted/30 px-4 py-3 text-sm text-foreground">
+              <div className="flex justify-start animate-fade-in">
+                <div className="w-full max-w-[85%] px-4 py-3 text-sm text-foreground">
                   <div className="flex items-center gap-2">
                     <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                     <span className="text-muted-foreground">Thinking...</span>
@@ -286,8 +342,10 @@ export function MessageList({
                 </div>
               </div>
             )}
+
+            {/* Spacer — massive breathing room for AI response to stream into */}
+            <div className="h-64 shrink-0" />
           </div>
-          <div ref={bottomRef} />
         </div>
 
       {/* Scroll-to-bottom floating button — bottom center */}

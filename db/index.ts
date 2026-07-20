@@ -48,4 +48,12 @@ if (schema.agentTasks) {
 // It will index all watched directories and track live file changes.
 startFileWatcher(db);
 
+// Start the background scheduler for executing due scheduled tasks.
+// Uses dynamic import to avoid circular dependency (scheduler imports db).
+setTimeout(() => {
+  import("@/lib/scheduler")
+    .then(({ startScheduler }) => startScheduler())
+    .catch((err) => console.error("[scheduler] Failed to start:", err));
+}, 0);
+
 export { db };
