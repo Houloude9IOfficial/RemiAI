@@ -39,7 +39,7 @@ add a delete folder and directory tool (only in directories allowed writing and 
 <!-- Feature: Routines
 Descriptions: A tool (togglable) that allows the AI with javascript to create routines, be saved in a library, and be able to run them at any point. -->
 
-add background voice support (e.g jarvis), play a looped smooth noise while working on request, create a new chat, allow all tools and stuff, optimize for speed. Optimize for windows & mac support
+<!-- add background voice support (e.g jarvis), play a looped smooth noise while working on request, create a new chat, allow all tools and stuff, optimize for speed. Optimize for windows & mac support -->
 
 <!-- create a website -->
 

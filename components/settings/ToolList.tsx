@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import {
   BookOpen,
   FileSearch,
   Clock,
+  Mic,
 } from "lucide-react";
 import { toast } from "sonner";
 import { toolsApi } from "@/lib/api/tools";
@@ -33,6 +34,23 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+
+// ── STT browser support check ──────────────────────────────────────
+
+function getSttSupport(): { supported: boolean; browser: string } {
+  if (typeof window === "undefined") return { supported: false, browser: "Server" };
+  const hasApi =
+    typeof window.SpeechRecognition !== "undefined" ||
+    typeof window.webkitSpeechRecognition !== "undefined";
+  // Detect browser
+  const ua = navigator.userAgent;
+  let browser = "Unknown";
+  if (ua.includes("Chrome")) browser = "Chrome";
+  else if (ua.includes("Firefox")) browser = "Firefox";
+  else if (ua.includes("Safari")) browser = "Safari";
+  else if (ua.includes("Edg")) browser = "Edge";
+  return { supported: hasApi, browser };
+}
 
 const CATEGORY_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   builtin: Wrench,
@@ -67,6 +85,7 @@ export function ToolList() {
   const [apiKeyInputs, setApiKeyInputs] = useState<Record<string, string>>({});
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [confirmTool, setConfirmTool] = useState<ToolWithConfig | null>(null);
+  const sttSupport = getSttSupport();
 
   const updateMutation = useMutation({
     mutationFn: ({
@@ -76,6 +95,7 @@ export function ToolList() {
       toolId: string;
       enabled?: boolean;
       apiKey?: string | null;
+      config?: Record<string, string>;
     }) => toolsApi.update(toolId, input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tools"] });
@@ -133,6 +153,28 @@ export function ToolList() {
       },
     );
   };
+
+  // ── Extra field handlers ───────────────────────────────────────
+
+  const handleExtraToggle = useCallback(
+    (toolId: string, key: string, value: boolean) => {
+      updateMutation.mutate({
+        toolId,
+        config: { [key]: value ? "true" : "false" },
+      });
+    },
+    [updateMutation],
+  );
+
+  const handleExtraSelect = useCallback(
+    (toolId: string, key: string, value: string) => {
+      updateMutation.mutate({
+        toolId,
+        config: { [key]: value },
+      });
+    },
+    [updateMutation],
+  );
 
   if (isLoading) {
     return (
@@ -226,7 +268,7 @@ export function ToolList() {
 
                   {/* API key section for integrations */}
                   {tool.requiresApiKey && (
-                    <CardContent className="border-t border-border/30 px-4 py-3">
+                    <CardContent className="border-t border-border/30 px-4 py-3 space-y-3">
                       {tool.config.hasApiKey ? (
                         <div className="flex items-center gap-2">
                           <div className="flex flex-1 items-center gap-2">
@@ -326,6 +368,103 @@ export function ToolList() {
                               </a>
                             )}
                           </div>
+                        </div>
+                      )}
+
+                      {/* ── Extra configuration fields (toggles, selects) ── */}
+                      {tool.config.hasApiKey && tool.extraFields && tool.extraFields.length > 0 && (
+                        <div className="border-t border-border/20 pt-3 space-y-3">
+                          <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/50">
+                            Configuration
+                          </span>
+
+                          {tool.extraFields.map((field) => {
+                            const currentValue =
+                              (tool.config.extraValues ?? {})[field.key] ??
+                              (field.type === "toggle" ? "false" : "");
+
+                            if (field.type === "toggle") {
+                              const isChecked = currentValue === "true";
+                              return (
+                                <div key={field.key} className="flex items-center justify-between gap-3">
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="text-xs font-medium text-foreground/80">
+                                      {field.label}
+                                    </span>
+                                    {field.description && (
+                                      <span className="text-[10px] text-muted-foreground/50">
+                                        {field.description}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <Switch
+                                    checked={isChecked}
+                                    onCheckedChange={(v) => handleExtraToggle(tool.id, field.key, v)}
+                                    disabled={isUpdating}
+                                  />
+                                </div>
+                              );
+                            }
+
+                            if (field.type === "select") {
+                              return (
+                                <div key={field.key} className="flex flex-col gap-1.5">
+                                  <Label className="text-[11px] text-muted-foreground">
+                                    {field.label}
+                                  </Label>
+                                  {field.description && (
+                                    <span className="text-[10px] text-muted-foreground/50 -mt-0.5">
+                                      {field.description}
+                                    </span>
+                                  )}
+                                  <select
+                                    value={currentValue}
+                                    onChange={(e) => handleExtraSelect(tool.id, field.key, e.target.value)}
+                                    disabled={isUpdating}
+                                    className={cn(
+                                      "flex h-8 w-full rounded-md border border-input bg-transparent px-3 py-1 text-xs shadow-sm",
+                                      "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                                      "disabled:cursor-not-allowed disabled:opacity-50",
+                                    )}
+                                  >
+                                    <option value="" disabled>
+                                      {field.placeholder ?? "Select..."}
+                                    </option>
+                                    {field.options?.map((opt) => (
+                                      <option key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              );
+                            }
+
+                            return null;
+                          })}
+                        </div>
+                      )}
+
+                      {/* ── STT browser support (for ElevenLabs) ── */}
+                      {tool.id === "elevenlabs" &&
+                        (tool.config.extraValues?.stt_enabled === "true") && (
+                        <div className="flex items-center gap-2 border-t border-border/20 pt-3">
+                          <div
+                            className={cn(
+                              "flex items-center gap-1.5 rounded-md px-2 py-1",
+                              sttSupport.supported
+                                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                                : "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                            )}
+                          >
+                            <Mic className="h-3 w-3" />
+                            <span className="text-[10px] font-medium">
+                              STT: {sttSupport.supported ? "Supported" : "Not supported"}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-muted-foreground/40">
+                            ({sttSupport.browser})
+                          </span>
                         </div>
                       )}
                     </CardContent>

@@ -16,6 +16,9 @@ import { ErrorCard } from "@/components/ui/error-card";
 import { useErrorHandler } from "@/lib/hooks/use-error-handler";
 import { conversationsApi } from "@/lib/api/conversations";
 import { useStreamingContext } from "@/lib/chat/streaming-context";
+import { useAmbientSound } from "@/lib/audio/use-ambient-sound";
+import { usePremiumTTS } from "@/lib/audio/use-premium-tts";
+import { AudioControls } from "@/components/chat/AudioControls";
 
 
 // ── Reconnecting Banner ─────────────────────────────────────────────
@@ -291,6 +294,69 @@ function ConversationChat({
     }
   }, [conversationId, isAiStarting, clearError, startStream, endStream, onConversationChanged, handleError, setMessages]);
 
+  // ── Audio System ───────────────────────────────────────────────
+
+  const ambient = useAmbientSound();
+  const tts = usePremiumTTS();
+
+  // Track previous streaming status for edge detection
+  const wasStreamingRef = useRef(false);
+
+  // Initialize with the last assistant message text so we don't re-speak on mount
+  const lastAssistantTextRef = useRef<string>(
+    (() => {
+      const msgs = initialMessages;
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        const m = msgs[i];
+        if (m.role === "assistant") {
+          const text = (m as any).parts
+            ?.filter((p: any) => p.type === "text")
+            .map((p: any) => p.text)
+            .join("\n");
+          if (text) return text;
+        }
+      }
+      return "";
+    })(),
+  );
+
+  // Start ambient sound when streaming begins, stop when it ends
+  useEffect(() => {
+    const isStreaming = status === "submitted" || status === "streaming";
+    const wasStreaming = wasStreamingRef.current;
+    wasStreamingRef.current = isStreaming;
+
+    if (isStreaming && !wasStreaming) {
+      // Streaming just started — fade in ambient sound
+      ambient.startAmbient();
+    } else if (!isStreaming && wasStreaming) {
+      // Streaming just ended — fade out ambient
+      ambient.stopAmbient();
+    }
+  }, [status, ambient]);
+
+  // Speak the last assistant message when streaming finishes
+  useEffect(() => {
+    if (messages.length === 0) return;
+
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg.role === "assistant" && status !== "streaming" && status !== "submitted") {
+      // Extract text from message parts
+      const textContent = lastMsg.parts
+        .filter((p) => p.type === "text")
+        .map((p) => (p as any).text)
+        .join("\n");
+
+      if (textContent && textContent !== lastAssistantTextRef.current) {
+        lastAssistantTextRef.current = textContent;
+        // Short delay to allow ambient fade-out to start first
+        setTimeout(() => {
+          tts.speak(textContent);
+        }, 300);
+      }
+    }
+  }, [messages, status, tts]);
+
   const [{ providerId, modelId }, setModel] = useState({
     providerId: initialConversation.providerId,
     modelId: initialConversation.modelId,
@@ -321,7 +387,22 @@ function ConversationChat({
           <ExportDialog messages={messages} title={initialConversation.title} />
         )}
         <span className="text-sm font-medium truncate">{initialConversation.title}</span>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          {/* ── Audio Controls ── */}
+          <AudioControls
+            ambientVolume={ambient.volume}
+            ambientPlaying={ambient.isPlaying}
+            ambientMuted={ambient.isMuted}
+            ttsSpeaking={tts.isSpeaking}
+            ttsVolume={tts.volume}
+            ttsMuted={tts.isMuted}
+            ttsEngine={tts.engine}
+            onAmbientVolumeChange={ambient.setVolume}
+            onAmbientToggleMute={ambient.toggleMute}
+            onTtsVolumeChange={tts.setVolume}
+            onTtsToggleMute={tts.toggleMute}
+            onTtsEngineChange={tts.setEngine}
+          />
           <ModelPicker providerId={providerId} modelId={modelId} onChange={handleModelChange} />
         </div>
       </div>

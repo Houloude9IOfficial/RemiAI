@@ -14,8 +14,8 @@ import {
 import { cn } from "@/lib/utils";
 
 interface DatePickerProps {
-  value?: Date | any;
-  onChange?: (date: Date | undefined | any ) => void;
+  value?: Date | string | null;
+  onChange?: (date: Date | undefined) => void;
   className?: string;
   placeholder?: string;
 }
@@ -26,6 +26,16 @@ export default function DatePicker({
   className,
   placeholder = "Pick a date",
 }: DatePickerProps) {
+  // Normalise to Date | undefined — Calendar's mode="single" expects Date,
+  // not a raw string. Passing a string causes `.getMonth()` to fail inside
+  // the year-grid year button onClick handler.
+  const dateValue = React.useMemo(() => {
+    if (!value) return undefined;
+    if (value instanceof Date) return value;
+    const parsed = new Date(value);
+    return isNaN(parsed.getTime()) ? undefined : parsed;
+  }, [value]);
+
   return (
     <Popover>
       <PopoverTrigger
@@ -34,21 +44,23 @@ export default function DatePicker({
             variant="outline"
             className={cn(
               "w-[240px] justify-start text-left font-normal",
-              !value && "text-muted-foreground",
+              !dateValue && "text-muted-foreground",
               className
             )}
           />
         }
       >
         <CalendarIcon className="mr-2 h-4 w-4" />
-        {value ? format(value, "PPP") : <span>{placeholder}</span>}
+        {dateValue ? format(dateValue, "PPP") : <span>{placeholder}</span>}
       </PopoverTrigger>
 
       <PopoverContent className="w-auto p-0" align="start">
         <Calendar
           mode="single"
-          selected={value}
-          onSelect={onChange}
+          selected={dateValue}
+          onSelect={(date) => {
+            onChange?.(date);
+          }}
           autoFocus
         />
       </PopoverContent>

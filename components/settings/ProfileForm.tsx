@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import DatePicker from "@/components/date-picker/date-picker";
+import { format } from "date-fns";
 import {
   Card,
   CardContent,
@@ -366,7 +367,7 @@ export function ProfileForm() {
   onChange={(date) =>
     setForm({
       ...form,
-      birthday: date,
+      birthday: date ? format(date, "yyyy-MM-dd") : "",
     })
   }
 />

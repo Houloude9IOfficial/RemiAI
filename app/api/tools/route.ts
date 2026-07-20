@@ -10,6 +10,7 @@ export type ToolWithConfig = ToolDefinition & {
     apiKey: string | null; // masked preview
     hasApiKey: boolean;
     apiKeyValue?: string | null; // only used for saving, never displayed
+    extraValues?: Record<string, string>; // values for extraFields (toggles, selects, etc.)
   };
 };
 
@@ -32,6 +33,7 @@ export async function GET() {
         apiKey: maskKey(saved?.apiKey ?? null),
         hasApiKey: !!saved?.apiKey,
         apiKeyValue: saved?.apiKey ?? null, // kept for save flow, never rendered
+        extraValues: (saved?.config as Record<string, string>) ?? {},
       },
     };
   });
@@ -44,6 +46,7 @@ export async function PATCH(req: Request) {
     toolId: string;
     enabled?: boolean;
     apiKey?: string | null;
+    config?: Record<string, string>;
   };
 
   const def = TOOL_CATALOG.find((t) => t.id === body.toolId);
@@ -57,9 +60,16 @@ export async function PATCH(req: Request) {
     .where(eq(toolConfigs.toolId, body.toolId))
     .get();
 
+  // Merge the existing config JSON with any new config values
+  let mergedConfig = (existing?.config as Record<string, string>) ?? {};
+  if (body.config) {
+    mergedConfig = { ...mergedConfig, ...body.config };
+  }
+
   const data: Record<string, any> = {};
   if (body.enabled !== undefined) data.enabled = body.enabled;
   if (body.apiKey !== undefined) data.apiKey = body.apiKey || null;
+  if (body.config !== undefined) data.config = mergedConfig;
   data.updatedAt = new Date().toISOString();
 
   if (existing) {
@@ -72,6 +82,7 @@ export async function PATCH(req: Request) {
       toolId: body.toolId,
       enabled: body.enabled ?? false,
       apiKey: body.apiKey ?? null,
+      config: mergedConfig,
     });
   }
 
