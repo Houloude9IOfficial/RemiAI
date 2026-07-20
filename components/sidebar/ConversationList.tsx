@@ -175,6 +175,19 @@ export function ConversationList() {
     queryFn: conversationsApi.list,
   });
 
+  // Filter out empty conversations (no tokens consumed) unless they're the
+  // currently active conversation or actively streaming. This prevents
+  // freshly created chats from cluttering the sidebar until the user
+  // actually sends a message.
+  const activeStreams = useActiveStreams();
+  const filteredConversations = conversations.filter(
+    (c) =>
+      c.totalInputTokens > 0 ||
+      c.totalOutputTokens > 0 ||
+      pathname === `/chat/${c.id}` ||
+      activeStreams.has(c.id),
+  );
+
   // Rename state
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -287,12 +300,12 @@ export function ConversationList() {
   }, []);
 
   const toggleSelectAll = useCallback(() => {
-    if (selectedIds.size === conversations.length) {
+    if (selectedIds.size === filteredConversations.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(conversations.map((c) => c.id)));
+      setSelectedIds(new Set(filteredConversations.map((c) => c.id)));
     }
-  }, [conversations, selectedIds]);
+  }, [filteredConversations, selectedIds]);
 
   const exitSelectMode = useCallback(() => {
     setSelectMode(false);
@@ -324,9 +337,7 @@ export function ConversationList() {
     return () => document.removeEventListener("keydown", handler);
   }, [contextMenuId]);
 
-  const activeStreams = useActiveStreams();
-
-  if (conversations.length === 0) {
+  if (filteredConversations.length === 0) {
     return (
       <p className="px-2 py-1 text-xs text-muted-foreground/70">
         No conversations yet
@@ -346,12 +357,12 @@ export function ConversationList() {
                 onClick={toggleSelectAll}
                 className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:text-foreground transition-colors"
                 title={
-                  selectedIds.size === conversations.length
-                    ? "Deselect all"
-                    : "Select all"
+                  selectedIds.size === filteredConversations.length
+                      ? "Deselect all"
+                      : "Select all"
                 }
               >
-                {selectedIds.size === conversations.length ? (
+                {selectedIds.size === filteredConversations.length ? (
                   <CheckSquare className="h-4 w-4" />
                 ) : (
                   <Square className="h-4 w-4" />
@@ -400,7 +411,7 @@ export function ConversationList() {
       </div>
 
       <div className="flex flex-col gap-0.5">
-        {conversations.map((conversation) => {
+        {filteredConversations.map((conversation) => {
           const isActive = pathname === `/chat/${conversation.id}`;
           const isSelected = selectedIds.has(conversation.id);
           const isStreaming = activeStreams.has(conversation.id);
@@ -656,7 +667,7 @@ export function ConversationList() {
 
       {/* Right-click context menu (portal) */}
       {contextMenuId !== null && contextMenuPos && (() => {
-        const conversation = conversations.find((c) => c.id === contextMenuId);
+        const conversation = filteredConversations.find((c) => c.id === contextMenuId);
         if (!conversation) return null;
         return (
           <ContextMenuPortal
