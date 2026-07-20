@@ -43,7 +43,7 @@ add background voice support (e.g jarvis), play a looped smooth noise while work
 
 <!-- create a website -->
 
-rename customize to 'Profile' allow adding profile picture too, and other personal details for the AI to know and use. Also allow more customization of the AI.
+<!-- rename customize to 'Profile' allow adding profile picture too, and other personal details for the AI to know and use. Also allow more customization of the AI. -->
 
 <!-- fix output/input token chat stats to always work -->
 
@@ -55,6 +55,8 @@ rename customize to 'Profile' allow adding profile picture too, and other person
 
 <!-- add a games page to include a library of games e.g tic tac toe to play with the AI, onclick opens a page specific to that game, and AI is included in, and maybe on e.g tic tac toe, it could also react to player's moves, such as 'Now you locked me bro', and others. -->
 
-Allow backing up user data & api keys (encrypted with password)
+Allow backing up and restoring user data & api keys (encrypted with password) (for e.g db cleanups on migrations, to not get all data removed and have to start all over)
 
 Fix screenshot reading
+
+show profile on bottom of sidebar like chatgpt.com

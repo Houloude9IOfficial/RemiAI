@@ -204,6 +204,18 @@ export const scheduledTasks = sqliteTable("scheduled_tasks", {
   completedAt: text("completed_at"),
 });
 
+export const backupHistory = sqliteTable("backup_history", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  exportedAt: text("exported_at").notNull(),
+  totalSize: integer("total_size").notNull().default(0),
+  includesFiles: integer("includes_files", { mode: "boolean" }).notNull().default(true),
+  tableStats: text("table_stats", { mode: "json" }).$type<Record<string, number>>().notNull().default({}),
+  uploadCount: integer("upload_count").notNull().default(0),
+  avatarCount: integer("avatar_count").notNull().default(0),
+  appVersion: text("app_version").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const agentTasks = sqliteTable("agent_tasks", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   conversationId: integer("conversation_id")

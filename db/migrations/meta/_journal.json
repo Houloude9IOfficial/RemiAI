@@ -120,6 +120,13 @@
       "when": 1784479410000,
       "tag": "0021_scheduled_tasks_recurring",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1784539200000,
+      "tag": "0022_backup_history",
+      "breakpoints": true
     }
   ]
 }

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import DatePicker from "@/components/date-picker/date-picker";
 import {
   Card,
   CardContent,
@@ -360,14 +361,15 @@ export function ProfileForm() {
                 <Cake className="h-3 w-3 text-muted-foreground/60" />
                 Birthday
               </Label>
-              <Input
-                id="birthday"
-                type="date"
-                value={form.birthday}
-                onChange={(e) =>
-                  setForm({ ...form, birthday: e.target.value })
-                }
-              />
+<DatePicker
+  value={form.birthday}
+  onChange={(date) =>
+    setForm({
+      ...form,
+      birthday: date,
+    })
+  }
+/>
             </div>
 
             {/* Location */}
