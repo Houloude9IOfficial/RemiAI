@@ -270,7 +270,7 @@ export const globFilesTool = {
  */
 export const readMediaTool = {
   description:
-    "Read an image or video file and examine its content. The result has a `dataUrl` field (a base64 data URL you can look at to see the image) for images up to 128 KB. For larger images and all videos, `dataUrl` is absent and only `url` + metadata are returned. **If `dataUrl` is present, look at it and describe the image content. If `dataUrl` is absent, tell the user the file details (filename, type, size) and that it's too large to inline — offer to help with it in other ways. Always continue with a text response.** Supported formats: images (.jpg, .png, .gif, .webp, .svg, .avif) and videos (.mp4, .webm, .mov, .avi, .mkv). Max file size: 20 MB.",
+    "Read an image or video file and examine its content. Returns a `dataUrl` field (a base64 data URL you MUST look at to see the image) for ALL images — small images are inlined at full resolution, larger images are resized to a thumbnail so you can always see them. Videos never include a `dataUrl`. **CRITICAL: When `dataUrl` is present, you MUST examine the base64 image data and describe what you see in detail. If the image contains text, read it out. Never skip this step — the user attached the image because they want you to see it.** For videos, describe the metadata (filename, type, size, duration if available). Always continue with a text response after calling this tool. Supported formats: images (.jpg, .png, .gif, .webp, .svg, .avif) and videos (.mp4, .webm, .mov, .avi, .mkv). Max file size: 20 MB.",
   parameters: z
     .object({
       rootId: z

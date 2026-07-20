@@ -40,7 +40,7 @@ When the user attaches a file from their computer (via the upload button, drag-a
 
 ### How to handle file attachments:
 
-**For images**: Call \`read_media\` with the \`url\` parameter set to the image's URL from the markdown. This will return a \`dataUrl\` (base64 image) you can look at to describe the image content.
+**For images**: Call \`read_media\` with the \`url\` parameter set to the image's URL from the markdown. This will return a \`dataUrl\` (base64 image) you MUST examine and describe. The \`dataUrl\` is always present for images — small images are inlined at full resolution, larger images are automatically resized to a thumbnail so you can always see them. Do not skip this step.
 
 \`\`\`
 // Use the URL from the markdown — both path-only and full localhost URLs work:
@@ -69,8 +69,8 @@ read_file({ url: "http://localhost:3000/api/chat/uploads/123/notes.txt" })
 - For plain text uploads (\`.txt\`, \`.md\`, \`.csv\`, \`.json\`, \`.log\`, etc.), you can also use \`read_file({ url })\` or \`web_fetch({ url })\` to read the content.
 - The \`url\` parameter works with both path-only URLs (\`/api/chat/uploads/...\`) and full localhost URLs (\`http://localhost:3000/api/chat/uploads/...\`). Use whichever format you see in the user's message.
 - For files in configured directory roots, continue using \`rootId\` + \`relativePath\` as before.
-- If \`read_media\` returns a \`dataUrl\`, look at it and describe what you see.
-- If the file is too large (no \`dataUrl\`), tell the user the file name, type, and size.
+- When \`read_media\` returns a \`dataUrl\`, you MUST examine the base64 image data and describe what you see in detail. If the image contains text, error messages, UI screenshots, code, or any readable content — read it out. Do NOT skip or gloss over this step.
+- The \`dataUrl\` is always present for all images (resized to a thumbnail if needed). Videos never include a \`dataUrl\` — for videos, describe the metadata instead.
 
 ## @FILE references — how to handle file markers in user messages
 
@@ -271,7 +271,7 @@ When the user gives you an **absolute file path** (like \`/Users/me/Docs/project
 | \`list_permitted_roots\` | (none) | List all directory roots with permissions. **Always call this first.** |
 | \`list_directory\` | \`rootId\` (number, required), \`relativePath\` (string, optional) | List files and subdirectories inside a root. |
 | \`read_file\` | \`url\` (string, optional) OR \`rootId\` (number) + \`relativePath\` (string), plus \`offset\`/\`limit\` (optional) | Read text content of a file. **Two calling conventions:** (1) Pass \`url\` for chat-uploaded files like \`/api/chat/uploads/123/notes.txt\` — no directory root needed. (2) Pass \`rootId\` + \`relativePath\` for files in configured directories. Max 100KB per read. |
-| \`read_media\` | \`url\` (string, optional) OR \`rootId\` (number) + \`relativePath\` (string) | Read an image or video. **Two calling conventions:** (1) Pass \`url\` for chat-uploaded files like \`/api/chat/uploads/123/...\` — no directory root needed. (2) Pass \`rootId\` + \`relativePath\` for files in configured directories. Small images (under 128KB) include a \`dataUrl\` you can look at. Larger media returns \`url\` + metadata only. Always continue with a response after receiving the result. Supports .jpg, .png, .gif, .webp, .svg, .avif, .mp4, .webm, .mov, .avi, .mkv. Max 20 MB. |
+| \`read_media\` | \`url\` (string, optional) OR \`rootId\` (number) + \`relativePath\` (string) | Read an image or video. **Two calling conventions:** (1) Pass \`url\` for chat-uploaded files like \`/api/chat/uploads/123/...\` — no directory root needed. (2) Pass \`rootId\` + \`relativePath\` for files in configured directories. **Always returns a \`dataUrl\` for images** (small images inlined, larger ones resized to a thumbnail) — you MUST examine it and describe the content. Videos return metadata only. Always continue with a response after receiving the result. Supports .jpg, .png, .gif, .webp, .svg, .avif, .mp4, .webm, .mov, .avi, .mkv. Max 20 MB. |
 | \`search_files\` | \`rootId\` (number, required), \`query\` (string, required), \`pattern\` (string, optional) | Fuzzy search for text across files in a root. |
 | \`glob_files\` | \`rootId\` (number, required), \`pattern\` (string, required) | Find files by glob pattern (e.g. "**/*.md"). |
 | \`write_file\` | \`rootId\` (number, required), \`relativePath\`, \`content\`, \`mode\` | Write or append to a file. **Automatically creates parent directories** if they don't exist. Write-permission required. Use this for creating files during scaffolding — you don't need to call create_directory first. |
