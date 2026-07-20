@@ -60,3 +60,5 @@ Descriptions: A tool (togglable) that allows the AI with javascript to create ro
 <!-- Fix screenshot reading -->
 
 <!-- show profile on bottom of sidebar like chatgpt.com -->
+
+Add news page
