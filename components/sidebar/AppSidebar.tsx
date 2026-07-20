@@ -156,7 +156,7 @@ export function AppSidebar() {
             key={href}
             href={href}
             className={cn(
-              "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors duration-150",
+              "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors duration-450",
               pathname.startsWith(href) && "bg-muted text-foreground",
             )}
           >
@@ -168,10 +168,10 @@ export function AppSidebar() {
         {/* Extra links — collapsible */}
         <div
           className={cn(
-            "overflow-hidden transition-all duration-1000 ease-in-out",
+            "overflow-hidden transition-all duration-550 ease-in-out",
             extraExpanded
-              ? "max-h-600 opacity-100 translate-y-0"
-              : "max-h-0 opacity-0 -translate-y-1",
+              ? "max-h-600 opacity-100"
+              : "max-h-0 opacity-100",
           )}
         >
           <div className="flex flex-col gap-0.5 pt-0.5">
