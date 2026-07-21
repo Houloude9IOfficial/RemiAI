@@ -88,8 +88,9 @@ async function promptForMode(): Promise<"web" | "electron"> {
     });
   }
 
-  // inquirer exports differ between CJS and ESM interop — handle both.
-  const inq = (inquirer.default ?? inquirer) as typeof inquirer;
+  // inquirer is ESM-only ("type": "module"), so default is the API object.
+  // Fallback to inquirer itself for edge-case CJS interop scenarios.
+  const inq = (inquirer.default ?? inquirer) as unknown as typeof inquirer.default;
   const { mode } = await inq.prompt([
     {
       type: "list",

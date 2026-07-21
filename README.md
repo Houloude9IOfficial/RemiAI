@@ -207,8 +207,9 @@ RemiAI has a comprehensive settings system with dedicated pages for every aspect
 
 ### Prerequisites
 
-- **Node.js** >= 18
+- **Node.js** >= 18 (v22 recommended — see `.nvmrc`)
 - **npm**
+- **nvm** or **fnm** (optional) — to auto-select the Node version via `.nvmrc`
 
 ### Quick Start
 
@@ -308,6 +309,30 @@ npm run db:migrate
 
 Then restart the app. (Auto-migration on startup should handle this automatically in most cases.)
 
+### Native module mismatch (`better-sqlite3` / `NODE_MODULE_VERSION`)
+
+If the build fails with:
+
+```
+Error: The module '.../better-sqlite3/build/Release/better_sqlite3.node'
+was compiled against a different Node.js version using
+NODE_MODULE_VERSION 148. This version of Node.js requires
+NODE_MODULE_VERSION 127.
+```
+
+The native `better-sqlite3` binary was compiled for a different Node.js version than the one you're currently running. Rebuild it:
+
+```bash
+npm rebuild better-sqlite3
+```
+
+If the issue persists, try a full clean rebuild:
+
+```bash
+rm -rf node_modules
+npm install
+```
+
 ### `<button> cannot be a descendant of <button>` hydration error
 
 This happens when a `<button>` is nested inside a Base UI compound component that renders its own `<button>` (like `DialogTrigger`). Pass `className` and `aria-label` directly to the trigger instead of wrapping it.
@@ -324,9 +349,133 @@ const nextConfig: NextConfig = {
 };
 ```
 
+### Port already in use
+
+If port 3000 (or 3456 for Electron) is already taken:
+
+```bash
+# Kill the process on that port
+lsof -ti:3000 | xargs kill -9
+
+# Or specify a different port
+PORT=3001 npm run dev
+```
+
+### Stale build cache
+
+If you see strange build errors after updating dependencies or switching branches:
+
+```bash
+rm -rf .next
+npm run build
+```
+
+### Sharp installation issues
+
+Next.js uses `sharp` for image processing. If it fails to install or load:
+
+```bash
+# Rebuild sharp's native bindings
+npm rebuild sharp
+
+# If that doesn't work, clear sharp's cache and reinstall
+rm -rf node_modules/sharp
+npm install
+```
+
+On macOS, avoid installing libvips via Homebrew — it can conflict with sharp's bundled version.
+
+### Electron build / code signing errors (macOS)
+
+When building the macOS desktop app (`npm run dist:mac`), you may encounter code signing errors:
+
+```
+Error: code signing is required for product type Application
+```
+
+For development builds, skip signing:
+
+```bash
+npx electron-builder --mac --config.forceCodeSigning=false
+```
+
+For distribution builds, you'll need a valid Apple Developer ID certificate. See [electron-builder's macOS docs](https://www.electron.build/code-signing).
+
+### Ollama connection refused
+
+If you're using Ollama as a local provider and get `Connection refused`:
+
+```bash
+# Check if Ollama is running
+ollama serve
+
+# Verify the endpoint
+curl http://localhost:11434/api/tags
+```
+
+Ollama must be running on `http://localhost:11434` (or your configured endpoint) before starting RemiAI.
+
+### Missing Python for `python_exec` tool
+
+The AI's `python_exec` tool requires Python 3. Verify it's available:
+
+```bash
+python3 --version
+```
+
+If missing, install Python from [python.org](https://python.org) or via Homebrew:
+
+```bash
+brew install python
+```
+
+### Database migration conflicts
+
+If Drizzle reports a migration conflict after pulling changes:
+
+```bash
+# Delete the stale database (your data will be lost!)
+rm -f data/remiai.sqlite
+
+# Or snapshot-export first, then re-run migrations
+npm run db:migrate
+```
+
+To avoid data loss, use the **Backup** page in Settings to export an encrypted backup before resetting.
+
 ### Windows path issues
 
 The project handles Windows path normalization automatically. Use forward slashes (`/`) in all paths when talking to the AI.
+
+### Runtime Issues
+
+#### Ollama connection refused
+
+If you're using Ollama as a local provider and get `Connection refused`:
+
+```bash
+# Check if Ollama is running
+ollama serve
+
+# Verify the endpoint
+curl http://localhost:11434/api/tags
+```
+
+Ollama must be running on `http://localhost:11434` (or your configured endpoint) before starting RemiAI.
+
+#### Missing Python for `python_exec` tool
+
+The AI's `python_exec` tool requires Python 3. Verify it's available:
+
+```bash
+python3 --version
+```
+
+If missing, install Python from [python.org](https://python.org) or via Homebrew:
+
+```bash
+brew install python
+```
 
 ---
 

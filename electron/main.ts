@@ -287,11 +287,21 @@ function createWindow(): void {
 function createTray(): void {
   let icon: Electron.NativeImage;
 
-  const iconPath = path.join(APP_ROOT, "public", "favicon-16x16-Light.png");
-  if (fs.existsSync(iconPath)) {
-    icon = nativeImage.createFromPath(iconPath);
+  // Use the generated 22×22 icon from build/.  Fall back to public favicon
+  // in dev if the icon hasn't been generated yet.
+  const trayIconPath = path.join(APP_ROOT, "build", "icon-tray.png");
+  const trayIcon2xPath = path.join(APP_ROOT, "build", "icon-tray@2x.png");
+  const faviconPath = path.join(APP_ROOT, "public", "favicon-16x16-Light.png");
+
+  // Try Retina first, then standard, then fallback
+  const resolvedIcon = [trayIcon2xPath, trayIconPath, faviconPath].find((p) =>
+    fs.existsSync(p),
+  );
+
+  if (resolvedIcon) {
+    icon = nativeImage.createFromPath(resolvedIcon);
   } else {
-    // Fallback: 16×16 transparent PNG (1-pixel)
+    // Last resort: 1-pixel transparent PNG
     icon = nativeImage.createFromBuffer(
       Buffer.from(
         "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMklEQVQ4T2NkYPj/n4EBBJgYKAQMowYM\nA4YRBUYUGFFgRIERBUYUGFFgRIHhpgAALikDBy3pS9sAAAAASUVORK5CYII=",
