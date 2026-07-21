@@ -357,6 +357,11 @@ You are currently in **Plan mode**. This means:
   // doesn't double-count by applying the same usage again.
   let tokensApplied = false;
 
+  // Capture the full error object from streamText's onError callback so we
+  // can enrich the error chunk sent to the client (the SDK's default error
+  // chunk only contains a generic "An error occurred." message).
+  let capturedError: unknown = null;
+
   const result = streamText({
     model,
     system: fullSystemPrompt,
@@ -365,6 +370,10 @@ You are currently in **Plan mode**. This means:
     // Allow up to 100 steps normally (chat/plan), or 500 in goal mode
     // so the model can work autonomously until task completion
     stopWhen: stepCountIs(mode === "goal" ? 500 : 100),
+    onError: (err) => {
+      capturedError = err;
+      console.error("[stream] Provider error:", err);
+    },
     onFinish: async ({ text: outputText, usage }) => {
       try {
         // Use provider's usage if available, otherwise estimate
@@ -420,6 +429,55 @@ You are currently in **Plan mode**. This means:
 
   // Tee the stream: [persistBranch, responseBranch]
   const [persistBranch, responseBranch] = uiMessageStream.tee();
+
+  // Pipe the response branch through a transform that enriches error chunks
+  // with the full error details captured from onError.  Without this, the
+  // client only sees "Error: An error occurred." instead of the actual
+  // status code, response body, and other debugging information.
+  const enrichedBranch = responseBranch.pipeThrough(
+    new TransformStream({
+      transform(chunk, controller) {
+        if (chunk.type === "error" && capturedError) {
+          const err = capturedError as Record<string, unknown>;
+
+          // For AI_RetryError the responseBody lives on nested errors
+          const errs = (Array.isArray(err.errors) ? err.errors : []) as Array<Record<string, unknown>>;
+          const responseBody = err.responseBody ?? (errs[0]?.responseBody ?? null);
+          const statusCode = err.statusCode ?? (errs[0]?.statusCode ?? null);
+          const url = err.url ?? (errs[0]?.url ?? null);
+
+          controller.enqueue({
+            type: "error",
+            errorText: [
+              `${err.name || "Error"}: ${err.message ?? ""}`,
+              statusCode != null ? `\nStatus: ${statusCode}` : "",
+              url ? `URL: ${url}` : "",
+              responseBody
+                ? `\nResponse:\n${typeof responseBody === "string" ? responseBody : JSON.stringify(responseBody, null, 2)}`
+                : "",
+              err.reason ? `\nReason: ${err.reason}` : "",
+              errs.length > 0
+                ? `\nRetries (${errs.length}): ` +
+                  errs
+                    .slice(0, 3)
+                    .map(
+                      (e, i) =>
+                        `[${i + 1}] ${e.name || "Error"}: ${e.message ?? ""}` +
+                        (e.statusCode != null ? ` (${e.statusCode})` : ""),
+                    )
+                    .join(" → ") +
+                  (errs.length > 3 ? ` +${errs.length - 3} more` : "")
+                : "",
+            ]
+              .filter(Boolean)
+              .join("\n"),
+          } as any);
+        } else {
+          controller.enqueue(chunk);
+        }
+      },
+    }),
+  );
 
   // Periodically persist partial messages to the DB (every 2s).
   // This ensures a page refresh shows partial AI responses.
@@ -489,7 +547,7 @@ You are currently in **Plan mode**. This means:
   // Build the SSE response for the client, and register the SSE stream
   // for reconnection support.
   return createUIMessageStreamResponse({
-    stream: responseBranch,
+    stream: enrichedBranch,
     consumeSseStream: ({ stream }) => {
       streamRegistry.register(conversationId, stream);
     },

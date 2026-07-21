@@ -39,6 +39,12 @@ yarn-error.log*
 # local app data (sqlite db, provider keys)
 /data/
 
+# electron build output
+/electron-dist/
+
+# electron-builder output (installers)
+/release/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

@@ -180,7 +180,7 @@ function ConversationChat({
     retry,
     clearError,
     onRetryable,
-  } = useErrorHandler({ showToast: true });
+  } = useErrorHandler({ showToast: false });
 
   // Sync AI SDK error to our handler
   useEffect(() => {
