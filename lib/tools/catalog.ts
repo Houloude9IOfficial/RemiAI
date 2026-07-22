@@ -173,7 +173,7 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     name: "Ask Questions",
     description:
       "Ask the user up to 7 structured questions at once, each with 3 predefined choices plus optional custom answers. Use this to gather multiple pieces of information from the user efficiently.",
-    toolNames: ["ask_questions"],
+    toolNames: ["ask_questions", "suggest_followups"],
     category: "builtin",
     togglable: false,
     requiresApiKey: false,

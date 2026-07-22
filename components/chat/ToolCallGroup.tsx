@@ -65,6 +65,16 @@ function isQuestionsPart(part: AnyToolPart): boolean {
   );
 }
 
+function isSuggestionsPart(part: AnyToolPart): boolean {
+  const output = getOutput(part);
+  return (
+    output !== undefined &&
+    output !== null &&
+    typeof output === "object" &&
+    (output as Record<string, unknown>).type === "suggestions"
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Tool-specific action labels & icons
 // ---------------------------------------------------------------------------
@@ -202,12 +212,14 @@ export function ToolCallGroup({
 }) {
   const { present, past, icon: ActionIcon } = getGroupLabel(parts);
 
-  // Detect if any part has questions output — keep expanded so the user can see
-  // and interact with the question cards.
+  // Detect if any part has questions or suggestions output — keep expanded so the user can see
+  // and interact with the cards.
   const hasQuestions = parts.some(isQuestionsPart);
+  const hasSuggestions = parts.some(isSuggestionsPart);
+  const keepOpen = hasQuestions || hasSuggestions;
 
-  // Start expanded if the group contains questions, otherwise collapsed.
-  const [isOpen, setIsOpen] = useState(hasQuestions);
+  // Start expanded if the group contains questions or suggestions, otherwise collapsed.
+  const [isOpen, setIsOpen] = useState(keepOpen);
 
   const running = parts.some(isPartRunning);
   const completed = parts.every(isPartComplete);
@@ -216,23 +228,23 @@ export function ToolCallGroup({
   // If they did, skip auto-collapse so their intent is respected.
   const userToggledRef = useRef(false);
 
-  // Auto-expand when questions appear (output arrives after streaming completes)
+  // Auto-expand when questions or suggestions appear (output arrives after streaming completes)
   useEffect(() => {
-    if (hasQuestions) {
+    if (keepOpen) {
       setIsOpen(true);
     }
-  }, [hasQuestions]);
+  }, [keepOpen]);
 
   // When all tools finish, auto-collapse ONLY if the user never manually
-  // toggled the group open. Skip auto-collapse for questions — we want the
+  // toggled the group open. Skip auto-collapse for questions and suggestions — we want the
   // interactive cards to stay visible.
   useEffect(() => {
-    if (completed && parts.length > 0 && !hasQuestions) {
+    if (completed && parts.length > 0 && !keepOpen) {
       if (userToggledRef.current) return; // user manually toggled — keep as-is
       const timer = setTimeout(() => setIsOpen(false), 250);
       return () => clearTimeout(timer);
     }
-  }, [completed, parts.length, hasQuestions]);
+  }, [completed, parts.length, keepOpen]);
 
   const toggle = useCallback(() => {
     userToggledRef.current = true;

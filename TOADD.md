@@ -70,3 +70,5 @@ create into electron app, add mac/windows support, native features & include CI/
 tell ai if needed to add followup suggestions on bottom, in a specific format.
 
 if using ollama provider, make it include <think> process as tool.
+
+on message send scroll bottom in chat content, and focus on msg input.

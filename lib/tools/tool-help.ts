@@ -168,6 +168,37 @@ ask_questions({
 })
 \`\`\``,
 
+  "suggest-followups": `## Suggest Followups tool
+
+Use \`suggest_followups\` to offer the user 2-6 clickable followup questions at the bottom of your response.
+
+### How to use:
+1. Call \`suggest_followups({ suggestions: [...] })\` with 2-6 complete question strings.
+2. These appear as clickable chips below your response text.
+3. The user can click any suggestion to send it as their next message.
+
+### When to use:
+- After explaining a concept — offer deeper exploration
+- After completing a task — suggest next steps
+- When the user seems engaged — suggest related topics
+
+### Good example:
+\`\`\`
+suggest_followups({
+  suggestions: [
+    "What is the difference between var, let, and const?",
+    "Show me a real-world example",
+    "How does hoisting work in JavaScript?",
+  ]
+})
+\`\`\`
+
+### Tips:
+- Each suggestion must be a complete, self-contained question or prompt
+- Vary the types: deep dive, example, related concept
+- 3-4 suggestions is the sweet spot
+- Don't use on every response — only when followups make sense`,
+
   "agent-spawner": `## Agent Spawner — spawn sub-agents for complex tasks
 
 **Tools available:**
@@ -605,6 +636,10 @@ const KEYWORD_SYNONYMS: Record<string, string> = {
   question: "ask-questions",
   "ask question": "ask-questions",
   poll: "ask-questions",
+  followup: "suggest-followups",
+  "follow up": "suggest-followups",
+  suggestion: "suggest-followups",
+  "suggest followup": "suggest-followups",
   "user profile": "profile",
   "change profile": "profile",
   bio: "profile",
@@ -656,7 +691,7 @@ function getAvailableTopicsText(): string {
 // Use a shorter inline list for the tool description (the full list is in the
 // system prompt and is returned when the user asks for an invalid topic)
 const SHORT_TOPIC_LIST =
-  "filesystem, memory, profile, todo, file-index, ask-questions, agent-spawner, scheduled-tasks, routines, delay, newsapi, firecrawl, brave-search, notion, context7, elevenlabs, code-execution, document-reader, @FILE-references, scaffolding, absolute-paths, web-fetch, mcp-tools, file-attachments, start-of-conversation";
+  "filesystem, memory, profile, todo, file-index, ask-questions, suggest-followups, agent-spawner, scheduled-tasks, routines, delay, newsapi, firecrawl, brave-search, notion, context7, elevenlabs, code-execution, document-reader, @FILE-references, scaffolding, absolute-paths, web-fetch, mcp-tools, file-attachments, start-of-conversation";
 
 // ---------------------------------------------------------------------------
 // Cached listing for list_available_tools — built once from TOOL_CATALOG
