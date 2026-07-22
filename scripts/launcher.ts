@@ -93,7 +93,7 @@ async function promptForMode(): Promise<"web" | "electron"> {
   const inq = (inquirer.default ?? inquirer) as unknown as typeof inquirer.default;
   const { mode } = await inq.prompt([
     {
-      type: "list",
+      type: "select",
       name: "mode",
       message: "How would you like to run RemiAI?",
       choices,

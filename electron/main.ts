@@ -275,7 +275,8 @@ function createWindow(): void {
   });
 
   // DevTools in dev mode
-  if (isDev) {
+  const shouldOpenDevTools = false; // Hey friend! Set to true if you want DevTools to open automatically in dev
+  if (isDev && shouldOpenDevTools) {
     mainWindow.webContents.openDevTools();
   }
 }

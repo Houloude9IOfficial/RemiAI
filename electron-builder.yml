@@ -23,7 +23,6 @@ directories:
 # override the default and leave out critical runtime deps like
 # node_modules/ (required by electron-updater, better-sqlite3, etc.).
 files:
-  # Exclude dev-only files
   - "!**/*.ts"
   - "!**/*.tsx"
   - "!**/*.map"
@@ -32,17 +31,29 @@ files:
   - "!**/*.d.ts"
   - "!node_modules/.cache/**"
 
+  # Next.js dev artifacts
+  - "!**/.next/dev/**"
+  - "!**/.next/cache/**"
+  - "!**/.next/**/cache/**"
+
+  # Previous builds
+  - "!release/**"
+  - "!data/**"
+
 # ── Native modules (better-sqlite3) must be unpacked from asar ──────
 # child_process.fork/spawn cannot read from inside the asar archive, so
 # any binary that needs to be launched as a subprocess must be unpacked.
 asar: true
 asarUnpack:
-  # Native .node binaries (better-sqlite3)
+  # Native .node binaries
   - "**/*.node"
   - "**/better-sqlite3/**"
-  # Next.js server — spawned as a forked child process
-  - ".next/**/*"
-  # The `next` CLI itself needs to be accessible on disk for fork()
+
+  # Only unpack production Next runtime files
+  - ".next/standalone/**/*"
+  - ".next/server/**/*"
+
+  # Next runtime dependencies
   - "node_modules/next/**/*"
   - "node_modules/.bin/**"
 
