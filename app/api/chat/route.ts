@@ -39,6 +39,7 @@ import { buildFileIndexTools } from "@/lib/tools/file-index";
 import { buildProfileTools } from "@/lib/tools/profile";
 import { buildRoutinesTools } from "@/lib/tools/routines";
 import { buildScheduleTool } from "@/lib/tools/schedule";
+import { buildToolHelpTool, buildListAvailableToolsTool } from "@/lib/tools/tool-help";
 import { queryRecentChanges } from "@/lib/fs/file-index";
 import { estimateTokenCount } from "@/lib/utils";
 import {
@@ -152,11 +153,13 @@ export async function POST(req: Request) {
   // Gather document reader tools (read_document)
   const documentToolSet = await buildDocumentReaderTools();
 
-  // Built-in always-on tools (delay, web_fetch, ask_questions)
+  // Built-in always-on tools (delay, web_fetch, ask_questions, get_tool_help, list_available_tools)
   const builtinToolSet = {
     delay: delayTool,
     web_fetch: webFetchTool,
     ask_questions: askQuestionsTool,
+    ...buildToolHelpTool(),
+    ...buildListAvailableToolsTool(),
   };
 
   // Agent spawner tools with chaining support
@@ -283,8 +286,32 @@ You are currently in **Plan mode**. This means:
     ? `\n\n## Recent file changes\nThe following files were recently modified in your watched directories. Use \`query_recent_changes\` for a fuller list, or these are the 10 most recent:\n${recentChanges.map((c) => `- [${c.changeType}] ${c.directoryLabel}/${c.relativePath} (${c.changedAt})`).join("\n")}`
     : "";
 
+  // Adaptive system prompt: detect lower-end models and give them a shorter prompt
+  const modelId = conversation.modelId.toLowerCase();
+  // Detect lower-end models by checking for known small-model patterns.
+  // "Small" = models under ~30B params or known to have <32K context or poor
+  // instruction-following. Only models flagged as low-capability get an even
+  // shorter prompt to avoid filling their limited context window.
+  const isLowCapability =
+    // Small parameter-count models
+    /\b(3b|7b|8b|2b|1\.5b|0\.5b|1b|1\.1b|1\.3b|1\.6b|2\.7b|3\.8b)\b/i.test(
+      modelId,
+    ) ||
+    // Low-capability model families (explicitly small variants only)
+    /(llama-3\.2-(1b|3b)|phi-3-(mini|small)|gemma-2-(2b|9b)|mistral-7b|mixtral-8x7b|falcon-7b|deepseek-(coder|lite|r1-distill)|qwen-2\.5-(0\.5b|1\.5b|3b|7b)|olmo-7b|granite-3b|aya-(8b|23b)|command-r(\+|7b)?-04b|smollm2|stablelm-2|internlm2-(1\.8b|7b))/.test(
+      modelId,
+    );
+
   const fullSystemPrompt =
-    SYSTEM_PROMPT + systemTip + profileTip + memoryTip + fileChangeTip + planModePrompt;
+    (isLowCapability
+      ? SYSTEM_PROMPT +
+        `\n\n**CRITICAL: Keep responses very short and focused.** Use the simplest tool for each task. If unsure about a tool, call \`get_tool_help\`. Avoid multi-step planning unless the task truly requires it.`
+      : SYSTEM_PROMPT) +
+    systemTip +
+    profileTip +
+    memoryTip +
+    fileChangeTip +
+    planModePrompt;
   const modelMessages = await convertToModelMessages(uiMessages);
 
   // ── Native image processing ───────────────────────────────────
