@@ -71,4 +71,4 @@ create into electron app, add mac/windows support, native features & include CI/
 
 if using ollama provider, make it include <think> process as tool.
 
-on message send scroll bottom in chat content, and focus on msg input.
+<!-- on message send scroll bottom in chat content, and focus on msg input. -->
