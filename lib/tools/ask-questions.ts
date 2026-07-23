@@ -13,7 +13,9 @@ export const askQuestionsTool = {
     "Use this when you need to gather multiple specific pieces of information from the user in a structured way — for example, " +
     "when setting up a project you can ask about tech stack, features, design preferences, etc. " +
     "After calling this tool, present the questions to the user in your response and wait for their answers. " +
-    "Each question can have up to 3 predefined options plus the ability for the user to provide their own custom answer.",
+    "Each question can have up to 3 predefined options plus the ability for the user to provide their own custom answer." +
+    "Do NOT repeat the questions in your response — the user sees them in an interactive UI. " +
+    "Simply ask the user to answer by clicking options or typing custom answers.",
 
   inputSchema: z.object({
     title: z
@@ -43,9 +45,9 @@ export const askQuestionsTool = {
           options: z
             .array(z.string().min(1).max(200))
             .min(2)
-            .max(3)
+            .max(7)
             .describe(
-              "2-3 predefined answer choices the user can pick from. Make them concise and distinct.",
+              "2-7 predefined answer choices the user can pick from. Make them concise and distinct.",
             ),
           allowCustom: z
             .boolean()
@@ -87,9 +89,8 @@ export const askQuestionsTool = {
         allowCustom: q.allowCustom ?? true,
       })),
       instruction:
-        `Present these ${questionCount} question${questionCount === 1 ? "" : "s"} to the user in your response. ` +
-        `For each question, list the 2-3 predefined options and mention they can provide their own custom answer if "allowCustom" is true. ` +
-        `Ask the user to respond with their answers, specifying which question they're answering or answering them in order.`,
+        `Do NOT repeat the questions in your response — the user sees them in an interactive UI. ` +
+        `Simply ask the user to answer by clicking options or typing custom answers.`,
     });
   },
 };

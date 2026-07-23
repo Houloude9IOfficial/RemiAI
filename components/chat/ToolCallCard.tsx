@@ -494,6 +494,9 @@ function AgentResultCard({
   ) {
     const resultText = data.result as string;
     const usage = data.usage as Record<string, unknown> | undefined;
+    const inTokens = Number(usage?.inputTokens ?? 0);
+    const outTokens = Number(usage?.outputTokens ?? 0);
+    const hasUsage = inTokens > 0 || outTokens > 0;
 
     return (
       <div className="rounded-md overflow-hidden">
@@ -506,9 +509,9 @@ function AgentResultCard({
         >
           <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
           <span className="text-xs font-semibold">{agentLabel} result</span>
-          {usage && (
+          {hasUsage && (
             <span className="ml-auto text-[10px] text-muted-foreground tabular-nums">
-              {String(usage.inputTokens ?? 0)} in / {String(usage.outputTokens ?? 0)} out tokens
+              {inTokens} in / {outTokens} out tokens
             </span>
           )}
         </div>
@@ -527,15 +530,18 @@ function AgentResultCard({
   if (type === "agent_status" && status === "completed") {
     const resultText = data.result as string;
     const usage = data.usage as Record<string, unknown> | undefined;
+    const inTokens = Number(usage?.inputTokens ?? 0);
+    const outTokens = Number(usage?.outputTokens ?? 0);
+    const hasUsage = inTokens > 0 || outTokens > 0;
 
     return (
       <div className="rounded-md overflow-hidden">
         <div className="flex items-center gap-2 bg-emerald-500/10 px-2.5 py-2 text-emerald-700 dark:text-emerald-300">
           <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
           <span className="text-xs font-semibold">{agentLabel} ready</span>
-          {usage && (
+          {hasUsage && (
             <span className="ml-auto text-[10px] text-muted-foreground tabular-nums">
-              {String(usage.inputTokens ?? 0)} in / {String(usage.outputTokens ?? 0)} out
+              {inTokens} in / {outTokens} out
             </span>
           )}
         </div>

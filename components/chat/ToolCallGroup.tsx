@@ -141,6 +141,11 @@ const TOOL_LABELS: Record<string, ToolLabel> = {
     past: "Ran JavaScript",
     icon: Terminal,
   },
+  bash_exec: {
+    present: "Running shell command",
+    past: "Ran shell command",
+    icon: Terminal,
+  },
   read_document: {
     present: "Reading document",
     past: "Read document",

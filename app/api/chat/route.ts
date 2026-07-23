@@ -148,7 +148,7 @@ export async function POST(req: Request) {
   // Gather integration tools (Brave Search, Notion, Context7) based on config
   const integrationToolSet = await buildIntegrationTools();
 
-  // Gather code execution tools (python_exec, js_exec)
+  // Gather code execution tools (python_exec, js_exec, bash_exec)
   const executionToolSet = await buildExecutionTools();
 
   // Gather document reader tools (read_document)
