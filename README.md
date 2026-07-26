@@ -278,6 +278,7 @@ After building RemiAI, I put its coding capabilities to the test by having it bu
 | [Text to Speech](./creations/Text2Speech/) | Convert text to natural-sounding speech | Python |
 | [Text to Morse Code](./creations/TextToMorseCode/) | Convert text to Morse code and back | Node.js |
 | [CLI Text Analyzer](./creations/CLI%20Text%20Analyzer/) | Command-line text analysis tool | Node.js |
+| [Aura](./creations/Aura/) | Minimalist personal dashboard | Vite.JS |
 
 Each creation includes the exact AI conversation that produced it — check the `PROJECT.md` files for the full story.
 

@@ -50,3 +50,4 @@ yarn-error.log*
 next-env.d.ts
 /website/.next
 /website/node_modules
+/creations/*/node_modules
