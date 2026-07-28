@@ -227,7 +227,9 @@ npm run dev
 
 Then visit **http://127.0.0.1:3000**.
 
-The database is **automatically migrated** on startup, so you don't need to run any migration commands manually.
+The database is **automatically migrated** on startup, so you don't need to run any migration commands manually. On the first run, the server prints a one-time signup code in the terminal. Enter that code in the browser to create the first account. The code is stored only as a hash and is consumed once.
+
+Your local database, uploaded files, provider credentials, and other app data are stored under `data/`. This directory is intentionally gitignored — protect it like application data and use the encrypted Backup page before moving or resetting an installation.
 
 ### Production Build
 
@@ -235,6 +237,59 @@ The database is **automatically migrated** on startup, so you don't need to run 
 npm run build
 npm start
 ```
+
+The built-in launcher keeps the web server on `127.0.0.1` by default. Set `PORT` to change the local port:
+
+```bash
+PORT=3001 npm start
+```
+
+### Docker deployment
+
+Docker is the recommended way to run the web application on a server. The image runs Next.js in standalone production mode as a non-root user and persists application data in `/app/data`.
+
+With Docker Compose:
+
+```bash
+docker compose up --build -d
+docker compose logs -f remiai
+```
+
+The included Compose file binds the app to `127.0.0.1:3000`, so place a TLS reverse proxy such as Caddy, Nginx, or Traefik in front of it for a public URL. Do not expose the container directly over plain HTTP. The first-run signup code appears in the container logs:
+
+```bash
+docker compose logs remiai
+```
+
+The named `remiai-data` volume contains the SQLite database, uploads, API keys, and account data. Back it up before upgrades or migration work:
+
+```bash
+docker compose exec remiai sh -c 'tar -czf - -C /app/data .' > remiai-data-backup.tgz
+```
+
+To stop the service without deleting data:
+
+```bash
+docker compose down
+```
+
+Do not run `docker compose down -v` unless you intentionally want to delete the persistent volume. Review [SECURITY.md](./SECURITY.md) before enabling remote access, MCP servers, code execution, or write access to host directories.
+
+For a direct Docker run, publish the port only on localhost and mount a persistent volume:
+
+```bash
+docker build -t remiai .
+docker volume create remiai-data
+docker run -d --name remiai \
+  --restart unless-stopped \
+  --publish 127.0.0.1:3000:3000 \
+  --volume remiai-data:/app/data \
+  --security-opt no-new-privileges:true \
+  --cap-drop ALL \
+  remiai
+```
+
+The container listens on `0.0.0.0:3000` internally. TLS termination, firewall rules, DNS, and authentication at the reverse proxy remain the operator's responsibility.
 
 ### Manual Database Commands
 
@@ -265,6 +320,18 @@ Once running, you'll be greeted by RemiAI in a new conversation. Here's what you
 2. **Grant file access** — go to Settings - Directories to add folders the AI can read/write
 3. **Connect MCP servers** — go to Settings - MCP Servers to add external tool servers
 4. **Set up integrations** — go to Settings - Tools to enable and configure external services
+
+### Authentication and password recovery
+
+RemiAI uses a single local account. Login sessions are stored server-side and delivered through an HttpOnly, SameSite cookie. Changing the password revokes all active sessions.
+
+If you lose the password, run the reset command on the machine hosting RemiAI:
+
+```bash
+npm run auth:reset
+```
+
+For Docker Compose, run it inside the container only if the image includes the project CLI environment; otherwise use the encrypted backup/restore workflow or recreate the account from a protected data backup. Never publish the signup code, database, or Docker volume contents.
 
 ---
 

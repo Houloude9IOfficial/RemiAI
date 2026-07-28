@@ -47,7 +47,7 @@ export function AuthWall({ children }: { children: React.ReactNode }) {
     if (!form.email.trim()) next.email = "Enter your email address.";
     else if (!/^\S+@\S+\.\S+$/.test(form.email.trim())) next.email = "Enter a valid email address.";
     if (!form.password) next.password = "Enter your password.";
-    else if (mode === "signup" && form.password.length < 8) next.password = "Use at least 8 characters.";
+    else if (mode === "signup" && (form.password.length < 8 || form.password.length > 256)) next.password = "Use between 8 and 256 characters.";
     if (mode === "signup") {
       if (!form.displayName.trim()) next.displayName = "Enter your name.";
       if (!form.code.trim()) next.code = "Enter the signup code from the server console.";

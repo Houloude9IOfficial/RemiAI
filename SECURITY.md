@@ -111,6 +111,20 @@ RemiAI uses a **local, single-account authentication layer**:
 
 The app should still run on `127.0.0.1` by default. Authentication protects the application but does not make arbitrary remote exposure safe: review MCP servers, code execution, directory permissions, and network access before exposing RemiAI beyond localhost.
 
+### Docker and public deployment
+
+The included `Dockerfile` runs the production standalone server as the unprivileged `node` user. The only intended writable location is `/app/data`, which contains the SQLite database, uploads, provider credentials, and other user data. Keep that volume private and back it up securely.
+
+For a public deployment:
+
+1. Put the container behind a TLS reverse proxy and forward only to `127.0.0.1:3000` (the included Compose file uses this binding).
+2. Do not publish port 3000 directly to the Internet or run the container with `--privileged`.
+3. Use a strong account password, restrict access to the one-time signup code, and remove/restrict server-console log access after first setup.
+4. Review MCP servers, external provider keys, watched directories, and code-execution tools before allowing any remote access.
+5. Preserve the named Docker volume and test encrypted backups; losing `/app/data` loses the account and stored credentials.
+
+`npm audit --omit=dev` may still report advisories for nested packages shipped by the currently published Next.js 16.2.x release. Do not use `npm audit fix --force` here: it proposes an incompatible downgrade of Next.js. Re-run the audit after each Next.js release and upgrade when a compatible patched release is available.
+
 ---
 
 ## Best Practices

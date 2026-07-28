@@ -90,10 +90,10 @@ export async function exportBackup(
   const tableStats: Record<string, number> = {};
 
   for (const t of tables) {
-    // Backup history is metadata, and active sessions/bootstrap state must
-    // never leave the installation. The account credential is encrypted in
-    // the backup so a full restore can recover the installation identity.
-    if (t.name === "backup_history" || t.name === "auth_sessions" || t.name === "auth_bootstrap") continue;
+    // Backup history and authentication state are installation-local metadata,
+    // not application data. Never export credentials, sessions, or bootstrap
+    // secrets.
+    if (["backup_history", "auth_accounts", "auth_sessions", "auth_bootstrap"].includes(t.name)) continue;
 
     const rows = db.all(
       sql`SELECT * FROM ${sql.identifier(t.name)}`,

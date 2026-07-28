@@ -9,6 +9,20 @@ const PUBLIC_AUTH_PATHS = new Set([
 
 export async function proxy(request: NextRequest) {
   if (!request.nextUrl.pathname.startsWith("/api/")) return NextResponse.next();
+  if (["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) {
+    const origin = request.headers.get("origin");
+    const host = request.headers.get("host");
+    if (origin && host) {
+      try {
+        if (new URL(origin).host !== host) return NextResponse.json({ error: "Cross-site request blocked." }, { status: 403 });
+      } catch {
+        return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
+      }
+    }
+    if (request.headers.get("sec-fetch-site") === "cross-site") {
+      return NextResponse.json({ error: "Cross-site request blocked." }, { status: 403 });
+    }
+  }
   if (PUBLIC_AUTH_PATHS.has(request.nextUrl.pathname)) return NextResponse.next();
   if (!request.cookies.has("remiai_session")) {
     return NextResponse.json({ error: "Authentication required." }, { status: 401 });

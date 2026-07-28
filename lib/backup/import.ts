@@ -10,7 +10,7 @@ import {
   type BackupFiles,
   type RestoreResult,
 } from "./types";
-import { hasAccount, revokeAllSessions } from "@/lib/auth/service";
+import { revokeAllSessions } from "@/lib/auth/service";
 
 // ---------------------------------------------------------------------------
 // Path helpers
@@ -326,8 +326,6 @@ export async function importBackup(
   const currentTableMap = new Map<string, Set<string>>(
     currentTables.map((t) => [t.name, new Set(t.columns)]),
   );
-  const preserveCurrentAccount = hasAccount();
-
   // ── Wipe existing data (skipping backup_history) ────────────────────────
   deleteAllData();
 
@@ -351,7 +349,6 @@ export async function importBackup(
     "routine_logs",
     "scheduled_tasks",
     "agent_tasks",
-    "auth_accounts",
   ];
 
   // Sort: known tables in preferred order, then alphabetically
@@ -379,11 +376,11 @@ export async function importBackup(
         continue;
       }
 
-      // Never import live sessions or the pending bootstrap secret. Preserve
-      // the current account when restoring into an authenticated install;
-      // restore the encrypted account credential only on a fresh install.
-      if (tableName === "auth_sessions" || tableName === "auth_bootstrap" || (tableName === "auth_accounts" && preserveCurrentAccount)) {
-        warnings.push(`Table "${tableName}" was skipped to preserve local authentication state.`);
+      // Authentication is installation-local and was not part of the
+      // original backup format. Ignore it even for interim auth-aware backup
+      // files so restore can never replace the current account.
+      if (["auth_accounts", "auth_sessions", "auth_bootstrap"].includes(tableName)) {
+        warnings.push(`Table "${tableName}" was skipped because authentication is not part of application backups.`);
         continue;
       }
 

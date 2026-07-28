@@ -83,13 +83,17 @@ export const backupApi = {
     file: File,
     password: string,
   ): Promise<ImportResponse> => {
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("password", password);
+    // Send the encrypted text as the raw request body. This avoids both
+    // multipart parsing differences and JSON body limits for large backups.
+    const encrypted = await file.text();
 
     const res = await fetch("/api/backup/import", {
       method: "POST",
-      body: formData,
+      headers: {
+        "Content-Type": "text/plain;charset=UTF-8",
+        "X-RemiAI-Backup-Password": password,
+      },
+      body: encrypted,
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? "Import failed");

@@ -1,0 +1,13 @@
+node_modules
+.next
+.git
+.gitignore
+.env*
+data
+release
+electron-dist
+coverage
+*.log
+website/node_modules
+website/.next
+creations/*/node_modules

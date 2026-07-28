@@ -92,13 +92,14 @@ export async function GET(
         "Content-Length": String(stat.size),
         "Cache-Control": "private, max-age=3600",
         // Prevent browser navigation for non-media types
-        ...(mimeType.startsWith("image/") || mimeType.startsWith("video/")
+        ...(mimeType.startsWith("image/") && mimeType !== "image/svg+xml" || mimeType.startsWith("video/")
           ? {}
-          : { "Content-Disposition": "inline" }),
+          : { "Content-Disposition": "attachment" }),
       },
     });
-  } catch (err: any) {
-    if (err.code === "ENOENT") {
+  } catch (err: unknown) {
+    const code = typeof err === "object" && err !== null && "code" in err ? err.code : undefined;
+    if (code === "ENOENT") {
       return new NextResponse("File not found", { status: 404 });
     }
     console.error("Upload serving error:", err);
