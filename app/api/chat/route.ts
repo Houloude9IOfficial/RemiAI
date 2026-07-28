@@ -29,6 +29,7 @@ import { buildExecutionTools } from "@/lib/tools/exec";
 import { buildDocumentReaderTools } from "@/lib/tools/document-reader";
 import { delayTool } from "@/lib/tools/delay";
 import { webFetchTool } from "@/lib/tools/web-fetch";
+import { createVisualTool } from "@/lib/tools/create-visual";
 import { askQuestionsTool } from "@/lib/tools/ask-questions";
 import { suggestFollowupsTool } from "@/lib/tools/suggest-followups";
 import {
@@ -160,6 +161,7 @@ export async function POST(req: Request) {
     web_fetch: webFetchTool,
     ask_questions: askQuestionsTool,
     suggest_followups: suggestFollowupsTool,
+    create_visual: createVisualTool,
     ...buildToolHelpTool(),
     ...buildListAvailableToolsTool(),
   };

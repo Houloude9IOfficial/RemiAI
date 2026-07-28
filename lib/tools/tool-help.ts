@@ -554,6 +554,56 @@ delay({ ms: 2000 })
 - Max wait is 5 minutes (300,000 ms).
 - The tool reports both the requested and actual wait time (actual may differ slightly).`,
 
+  "create-visual": `## Create Visual — render dynamic visuals in the chat
+
+The \`create_visual\` tool lets you generate SVG or HTML visuals and display them directly inline in the chat. This is perfect for when you want to show the user a visual representation instead of plain text.
+
+### Two content types:
+
+| Type | Best for |
+|---|---|
+| **SVG** (\`type: "svg"\`) | Charts (bar, line, pie, area), diagrams, graphs, icons, any 2D graphics |
+| **HTML** (\`type: "html"\`) | Rich cards, dashboards, stats panels, comparison grids, timelines, layouts |
+
+### Design guidelines:
+- **Use a TRANSPARENT background** by default — do NOT add background colors to the root SVG or HTML body. The visual should blend seamlessly into the chat theme.
+- Keep it **clean and minimal** — use whitespace, subtle colors, and clear typography.
+- Use responsive widths (\`100%\`) so visuals adapt to the chat container.
+- For SVG: use a \`viewBox\` for scalability. Include axis labels for charts.
+- For HTML: use flexbox/grid for layout. Subtle shadows and rounded corners look great.
+- Font sizes: 14-16px for body text, 20-32px for headings/metrics.
+
+### When to use:
+- User asks about data trends → create a chart
+- User wants to see progress → create a timeline or step-by-step
+- User wants a summary → create metrics cards or a dashboard
+- User wants to understand a process → create a flow diagram
+- User asks for visual comparison → create a comparison table
+
+### Parameter hints:
+- \`title\` — A short, descriptive header shown above the visual
+- \`content\` — The raw SVG markup or HTML markup
+- \`options.caption\` — Optional footnote/text shown below the visual
+- \`options.width\` / \`options.height\` — Control dimensions if the default doesn't work
+
+### Example — a simple bar chart:
+\`\`\`
+create_visual({
+  type: "svg",
+  title: "Monthly Revenue",
+  content: '<svg viewBox="0 0 500 300" xmlns="http://www.w3.org/2000/svg"><rect x="50" y="200" width="40" height="80" fill="#6366f1" rx="4"/><rect x="110" y="150" width="40" height="130" fill="#6366f1" rx="4"/><rect x="170" y="100" width="40" height="180" fill="#6366f1" rx="4"/><text x="70" y="295" text-anchor="middle" font-size="12" fill="#6b7280">Jan</text><text x="130" y="295" text-anchor="middle" font-size="12" fill="#6b7280">Feb</text><text x="190" y="295" text-anchor="middle" font-size="12" fill="#6b7280">Mar</text></svg>'
+})
+\`\`\`
+
+### Example — a metrics card:
+\`\`\`
+create_visual({
+  type: "html",
+  title: "Project Overview",
+  content: '<div style="display:flex;gap:16px;flex-wrap:wrap"><div style="background:rgba(99,102,241,0.1);border-radius:12px;padding:20px;min-width:140px"><p style="font-size:12px;color:#6b7280;margin:0 0 4px">Total Users</p><p style="font-size:28px;font-weight:700;margin:0;color:#6366f1">2,847</p></div><div style="background:rgba(34,197,94,0.1);border-radius:12px;padding:20px;min-width:140px"><p style="font-size:12px;color:#6b7280;margin:0 0 4px">Active Today</p><p style="font-size:28px;font-weight:700;margin:0;color:#22c55e">1,203</p></div><div style="background:rgba(234,179,8,0.1);border-radius:12px;padding:20px;min-width:140px"><p style="font-size:12px;color:#6b7280;margin:0 0 4px">Revenue</p><p style="font-size:28px;font-weight:700;margin:0;color:#eab308">$12.4k</p></div></div>'
+})
+\`\`\``,
+
   "elevenlabs": `## ElevenLabs Voice (when configured)
 
 ElevenLabs provides premium AI voice capabilities. When configured with an API key, it powers two features:
@@ -683,6 +733,16 @@ const KEYWORD_SYNONYMS: Record<string, string> = {
   "speech to text": "elevenlabs",
   "voice settings": "elevenlabs",
   voice: "elevenlabs",
+  "create visual": "create-visual",
+  "create-visual": "create-visual",
+  chart: "create-visual",
+  graph: "create-visual",
+  diagram: "create-visual",
+  timeline: "create-visual",
+  dashboard: "create-visual",
+  "data viz": "create-visual",
+  visualization: "create-visual",
+  "metrics card": "create-visual",
 };
 
 // ---------------------------------------------------------------------------
@@ -698,7 +758,7 @@ function getAvailableTopicsText(): string {
 // Use a shorter inline list for the tool description (the full list is in the
 // system prompt and is returned when the user asks for an invalid topic)
 const SHORT_TOPIC_LIST =
-  "filesystem, memory, profile, todo, file-index, ask-questions, suggest-followups, agent-spawner, scheduled-tasks, routines, delay, newsapi, firecrawl, brave-search, notion, context7, elevenlabs, code-execution, document-reader, @FILE-references, scaffolding, absolute-paths, web-fetch, mcp-tools, file-attachments, start-of-conversation";
+  "filesystem, memory, profile, todo, file-index, ask-questions, suggest-followups, agent-spawner, scheduled-tasks, routines, delay, create-visual, newsapi, firecrawl, brave-search, notion, context7, elevenlabs, code-execution, document-reader, @FILE-references, scaffolding, absolute-paths, web-fetch, mcp-tools, file-attachments, start-of-conversation";
 
 // ---------------------------------------------------------------------------
 // Cached listing for list_available_tools — built once from TOOL_CATALOG
@@ -737,6 +797,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   newsapi: "News search",
   scheduling: "Scheduled tasks",
   elevenlabs: "ElevenLabs voice",
+  create_visual: "Dynamic visuals (SVG / HTML)",
   firecrawl: "Web scraping (Firecrawl)",
 };
 
@@ -760,6 +821,7 @@ const HELP_TOPIC_MAP: Record<string, string | null> = {
   newsapi: "newsapi",
   scheduling: "scheduled-tasks",
   elevenlabs: "elevenlabs",
+  create_visual: "create-visual",
   firecrawl: "firecrawl",
 };
 

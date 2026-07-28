@@ -19,6 +19,7 @@ import { MediaDisplay } from "./MediaDisplay";
 import { QuestionsCard } from "./QuestionsCard";
 import { FollowupSuggestions } from "./FollowupSuggestions";
 import { TodoBoard } from "./TodoBoard";
+import { VisualCard } from "./VisualCard";
 
 type AnyToolPart = ToolUIPart<any> | DynamicToolUIPart;
 
@@ -151,6 +152,13 @@ export function ToolCallCard({
     typeof output === "object" &&
     (output as Record<string, unknown>).type === "todo_list";
 
+  // Detect if the output is a visual result (from create_visual)
+  const isVisualResult =
+    output !== undefined &&
+    output !== null &&
+    typeof output === "object" &&
+    (output as Record<string, unknown>).type === "visual";
+
   // Detect if the output is an agent spawn/result
   const isAgentResult =
     output !== undefined &&
@@ -191,6 +199,11 @@ export function ToolCallCard({
     // For todo list output, render the visual TodoBoard
     if (isTodoList && output && isComplete) {
       return <TodoBoard data={output} />;
+    }
+
+    // For visual results, render the VisualCard
+    if (isVisualResult && output && isComplete) {
+      return <VisualCard data={output} />;
     }
 
     // For agent results, render the AgentResultCard

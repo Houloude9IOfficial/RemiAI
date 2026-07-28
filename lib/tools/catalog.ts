@@ -255,6 +255,17 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     togglable: false,
     requiresApiKey: false,
   },
+  // ── Create Visual (builtin, always on, not togglable) ──
+  {
+    id: "create_visual",
+    name: "Create Visual",
+    description:
+      "Generate dynamic visuals — SVG charts, diagrams, and HTML cards/dashboards — rendered directly in the chat. The AI uses this automatically when it needs to show data visually.",
+    toolNames: ["create_visual"],
+    category: "builtin",
+    togglable: false,
+    requiresApiKey: false,
+  },
   // ── ElevenLabs Voice (integration, togglable, needs API key) ──
   {
     id: "elevenlabs",
