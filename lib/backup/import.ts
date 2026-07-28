@@ -10,6 +10,7 @@ import {
   type BackupFiles,
   type RestoreResult,
 } from "./types";
+import { hasAccount, revokeAllSessions } from "@/lib/auth/service";
 
 // ---------------------------------------------------------------------------
 // Path helpers
@@ -175,7 +176,7 @@ function deleteAllData(): void {
     tx.run(sql`PRAGMA foreign_keys = OFF`);
 
     for (const t of tables) {
-      if (t.name === "backup_history") continue;
+      if (["backup_history", "auth_accounts", "auth_sessions", "auth_bootstrap"].includes(t.name)) continue;
       tx.run(sql`DELETE FROM ${sql.identifier(t.name)}`);
     }
 
@@ -325,6 +326,7 @@ export async function importBackup(
   const currentTableMap = new Map<string, Set<string>>(
     currentTables.map((t) => [t.name, new Set(t.columns)]),
   );
+  const preserveCurrentAccount = hasAccount();
 
   // ── Wipe existing data (skipping backup_history) ────────────────────────
   deleteAllData();
@@ -349,6 +351,7 @@ export async function importBackup(
     "routine_logs",
     "scheduled_tasks",
     "agent_tasks",
+    "auth_accounts",
   ];
 
   // Sort: known tables in preferred order, then alphabetically
@@ -376,6 +379,14 @@ export async function importBackup(
         continue;
       }
 
+      // Never import live sessions or the pending bootstrap secret. Preserve
+      // the current account when restoring into an authenticated install;
+      // restore the encrypted account credential only on a fresh install.
+      if (tableName === "auth_sessions" || tableName === "auth_bootstrap" || (tableName === "auth_accounts" && preserveCurrentAccount)) {
+        warnings.push(`Table "${tableName}" was skipped to preserve local authentication state.`);
+        continue;
+      }
+
       const count = insertRows(tableName, rows, currentCols, warnings);
       if (count > 0) tableCounts[tableName] = count;
     }
@@ -387,6 +398,8 @@ export async function importBackup(
   const fileStats = payload.includesFiles
     ? await restoreFiles(payload.files)
     : { uploads: 0, avatars: 0 };
+
+  revokeAllSessions();
 
   // ── Build result ────────────────────────────────────────────────────────
   return {

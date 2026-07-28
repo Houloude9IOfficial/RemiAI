@@ -98,11 +98,18 @@ The background file watcher indexes files in watched directories:
 
 ### Authentication
 
-RemiAI is designed as a **local, single-user application**:
+RemiAI uses a **local, single-account authentication layer**:
 
-- There is **no authentication layer** — the app is intended to run on `127.0.0.1` (localhost only)
-- **Do not expose RemiAI to the internet** or a network without adding authentication
-- If you need remote access, use a reverse proxy with authentication (e.g., nginx + basic auth, Tailscale, Cloudflare Tunnel with Access policies)
+- The first startup with no account generates a one-time signup code and prints it to the server console
+- Signup requires that code plus an email and password; the code is stored only as a hash and is consumed once
+- Passwords are stored using salted Node.js `scrypt` hashes; plaintext passwords are never persisted
+- Protected API requests require an opaque, server-side session stored in an HttpOnly SameSite cookie
+- Sessions are revocable and expire; users may choose a browser-only session or a 30-day remembered session
+- Changing the password revokes all sessions, and `npm run auth:reset` provides a local console recovery path
+- Existing pre-auth databases are preserved and claimed by the first account
+- Encrypted backups preserve account credentials when restoring to a fresh installation, but never include active sessions or bootstrap secrets
+
+The app should still run on `127.0.0.1` by default. Authentication protects the application but does not make arbitrary remote exposure safe: review MCP servers, code execution, directory permissions, and network access before exposing RemiAI beyond localhost.
 
 ---
 

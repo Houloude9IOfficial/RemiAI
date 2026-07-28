@@ -17,7 +17,7 @@
     "npm": ">=9"
   },
   "scripts": {
-    "dev": "npx tsx scripts/launcher.ts",
+    "dev": "npx tsx scripts/launcher.ts --dev",
     "dev:web": "next dev -H 127.0.0.1",
     "dev:electron": "npx tsc -p electron/tsconfig.json && npx electron electron-dist/main.js",
     "build": "next build",
@@ -36,7 +36,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "watch:standalone": "npx tsx scripts/file-watcher.ts"
+    "watch:standalone": "npx tsx scripts/file-watcher.ts",
+    "auth:reset": "npx tsx scripts/auth-reset.ts"
   },
   "main": "electron-dist/main.js",
   "dependencies": {

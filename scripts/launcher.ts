@@ -200,9 +200,13 @@ async function main(): Promise<void> {
   // Determine dev vs production mode
   // If the script is invoked as `npm run dev`, NODE_ENV may not be set
   // Heuristic: if the Next.js app hasn't been built yet, assume dev mode.
+  // `npm run dev` must remain development mode even when a previous
+  // production build left a `.next/BUILD_ID` behind. Use the lifecycle name
+  // as the source of truth; `npm run start` is the production entrypoint.
   const devMode =
-    process.env.NODE_ENV === "development" ||
-    !fs.existsSync(path.join(PROJECT_ROOT, ".next", "BUILD_ID"));
+    process.argv.includes("--dev") ||
+    process.env.npm_lifecycle_event === "dev" ||
+    process.env.NODE_ENV === "development";
 
   const forcedMode = getModeFromArgs();
   const mode = forcedMode ?? (await promptForMode());
