@@ -106,7 +106,7 @@ export function AuthWall({ children }: { children: React.ReactNode }) {
         </div>
         <Button type="submit" className="h-9 w-full" disabled={pending}>{pending ? <><Loader2 className="animate-spin" /> {mode === "login" ? "Signing in…" : "Creating account…"}</> : mode === "login" ? "Sign in" : "Create account"}</Button>
       </form>
-      {configured && mode === "login" && <p className="mt-5 text-center text-xs text-muted-foreground">Need to reset your password? Run <code className="rounded bg-muted px-1 py-0.5">npm run auth:reset</code> in the server terminal.</p>}
+      {configured && mode === "login" && <p className="mt-5 letter-spacing: var(--tracking-widest); text-center text-xs text-muted-foreground">Need to reset your password? Run <code className="rounded bg-muted px-1 py-0.5">npm run auth:reset</code> in the server terminal.</p>}
     </div>
   </main>;
 }

@@ -159,7 +159,7 @@ export function AppSidebar() {
             key={href}
             href={href}
             className={cn(
-              "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors duration-450",
+              "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors duration-150",
               pathname.startsWith(href) && "bg-muted text-foreground",
             )}
           >
@@ -171,7 +171,7 @@ export function AppSidebar() {
         {/* Extra links — collapsible */}
         <div
           className={cn(
-            "overflow-hidden transition-all duration-550 ease-in-out",
+            "overflow-hidden transition-all duration-150 ease-in-out",
             extraExpanded
               ? "max-h-600 opacity-100"
               : "max-h-0 opacity-100",
@@ -183,7 +183,7 @@ export function AppSidebar() {
                 key={href}
                 href={href}
                 className={cn(
-                  "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors duration-750",
+                  "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors duration-150",
                   pathname.startsWith(href) && "bg-muted text-foreground",
                 )}
               >

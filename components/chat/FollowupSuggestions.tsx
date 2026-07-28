@@ -114,10 +114,10 @@ function SuggestionsForm({ data }: { data: SuggestionsData }) {
                 className={cn(
                   "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-colors duration-200",
                   isClicked
-                    ? "bg-primary/10 text-primary"
+                    ? "text-primary"
                     : isDisabled
-                      ? "bg-muted-foreground/5 text-muted-foreground/30"
-                      : "bg-muted-foreground/10 text-muted-foreground/50 group-hover:bg-primary/10 group-hover:text-primary",
+                      ? "text-muted-foreground/30"
+                      : "text-muted-foreground/50 group-hover:bg-primary/10 group-hover:text-primary",
                 )}
               >
                 {isClicked ? (
