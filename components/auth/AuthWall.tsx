@@ -15,32 +15,24 @@ const emptyErrors: FormErrors = {};
 
 export function AuthWall({ children }: { children: React.ReactNode }) {
   const { loading, configured, account, refresh } = useAuth();
-  const [mode, setMode] = useState<Mode>(configured ? "login" : "signup");
   const [form, setForm] = useState({ email: "", password: "", displayName: "", code: "", remember: true });
   const [errors, setErrors] = useState<FormErrors>(emptyErrors);
   const [submitError, setSubmitError] = useState("");
   const [pending, setPending] = useState(false);
   const emailRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (!configured) setMode("signup");
-  }, [configured]);
+  // When an account already exists, only show login. Otherwise show signup.
+  const mode: Mode = configured ? "login" : "signup";
 
   useEffect(() => {
     if (!loading && !account) {
       const timer = window.setTimeout(() => emailRef.current?.focus(), 120);
       return () => window.clearTimeout(timer);
     }
-  }, [loading, account, mode]);
+  }, [loading, account]);
 
   if (loading) return <div className="flex h-screen items-center justify-center bg-background"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
   if (account) return <>{children}</>;
-
-  const updateMode = (nextMode: Mode) => {
-    setMode(nextMode);
-    setErrors(emptyErrors);
-    setSubmitError("");
-  };
 
   const validate = (): FormErrors => {
     const next: FormErrors = {};
@@ -91,10 +83,6 @@ export function AuthWall({ children }: { children: React.ReactNode }) {
         <p className="mt-1 text-sm text-muted-foreground">{mode === "login" ? "Continue to your private RemiAI workspace." : "One account keeps your RemiAI workspace private."}</p>
       </div>
 
-      <div role="tablist" aria-label="Authentication" className="mb-6 grid grid-cols-2 rounded-lg bg-muted p-1">
-        {(["login", "signup"] as const).map((tab) => <button key={tab} type="button" role="tab" aria-selected={mode === tab} onClick={() => updateMode(tab)} className={cn("rounded-md px-3 py-1.5 text-sm transition-all", mode === tab ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>{tab === "login" ? "Sign in" : "Create account"}</button>)}
-      </div>
-
       <form key={mode} onSubmit={submit} noValidate className="space-y-4" aria-busy={pending}>
         {mode === "signup" && <div className="space-y-1.5"><Label htmlFor="displayName">Name</Label><Input id="displayName" value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} autoComplete="name" autoFocus={!form.email} aria-invalid={Boolean(fieldError("displayName"))} aria-describedby={fieldError("displayName") ? "displayName-error" : undefined} />{fieldError("displayName") && <FieldError id="displayName-error">{fieldError("displayName")}</FieldError>}</div>}
         <div className="space-y-1.5"><Label htmlFor="email">Email</Label><Input ref={emailRef} id="email" type="email" value={form.email} onChange={(e) => { setForm({ ...form, email: e.target.value }); setErrors({ ...errors, email: undefined }); }} autoComplete="email" aria-invalid={Boolean(fieldError("email"))} aria-describedby={fieldError("email") ? "email-error" : undefined} />{fieldError("email") && <FieldError id="email-error">{fieldError("email")}</FieldError>}</div>
@@ -106,7 +94,7 @@ export function AuthWall({ children }: { children: React.ReactNode }) {
         </div>
         <Button type="submit" className="h-9 w-full" disabled={pending}>{pending ? <><Loader2 className="animate-spin" /> {mode === "login" ? "Signing in…" : "Creating account…"}</> : mode === "login" ? "Sign in" : "Create account"}</Button>
       </form>
-      {configured && mode === "login" && <p className="mt-5 letter-spacing: var(--tracking-widest); text-center text-xs text-muted-foreground">Need to reset your password? Run <code className="rounded bg-muted px-1 py-0.5">npm run auth:reset</code> in the server terminal.</p>}
+      {configured && <p className="mt-5 text-center text-xs text-muted-foreground">Need to reset your password? Run <code className="rounded bg-muted px-1 py-0.5">npm run auth:reset</code> in the server terminal.</p>}
     </div>
   </main>;
 }
