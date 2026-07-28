@@ -144,8 +144,17 @@ function ConversationChat({
     conversationsApi.update(conversationId, { mode }).catch(() => {});
   }, [mode, conversationId, initialConversation]);
 
-  // If reconnecting, resume the active stream
-  const resume = isReconnecting || activeStreams.has(conversationId);
+  // ── Resume (reconnection) ──────────────────────────────────────
+  // `resume` must be captured once on mount and never change at runtime.
+  // If it's tied to the live `activeStreams` set, calling `startStream`
+  // (e.g. from `handleAiStart`) can flip resume to `true` mid-session,
+  // which triggers a second `resumeStream()` → `makeRequest()` call.
+  // Two concurrent `makeRequest()` calls share the same `this.activeResponse`
+  // field on the `AbstractChat` instance. Whichever finishes first sets it
+  // to `undefined` in its `finally` block, causing the other to crash with:
+  //   "can't access property 'state', this.activeResponse is undefined"
+  const resumeRef = useRef(isReconnecting);
+  const resume = resumeRef.current;
 
   const { messages, setMessages, sendMessage, status, stop, error } = useChat({
     id: String(conversationId),
