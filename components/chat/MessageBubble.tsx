@@ -1,9 +1,10 @@
 "use client";
 
 import type { UIMessage } from "ai";
-import { isTextUIPart, isToolUIPart } from "ai";
+import { isTextUIPart, isToolUIPart, getToolName } from "ai";
 import { Component, useRef } from "react";
 import { ToolCallGroup } from "./ToolCallGroup";
+import { VisualCard } from "./VisualCard";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { cn } from "@/lib/utils";
 import {
@@ -123,7 +124,8 @@ function StreamingSafeMarkdown({ content, isStreaming }: { content: string; isSt
 
 type Segment =
   | { type: "text"; text: string }
-  | { type: "tool"; parts: UIMessage["parts"] };
+  | { type: "tool"; parts: UIMessage["parts"] }
+  | { type: "visual"; part: UIMessage["parts"][number] };
 
 /**
  * Walk through `parts` in order and produce interleaved segments.
@@ -144,11 +146,28 @@ function buildSegments(parts: UIMessage["parts"]): Segment[] {
         segments.push({ type: "text", text: part.text });
       }
     } else if (isToolUIPart(part)) {
-      const last = segments[segments.length - 1];
-      if (last?.type === "tool") {
-        last.parts.push(part);
+      // Detect create_visual tool calls and promote them to inline visual cards
+      // instead of nesting them inside a ToolCallGroup.
+      const toolName = (() => {
+        try {
+          return getToolName(part);
+        } catch {
+          return null;
+        }
+      })();
+
+      if (
+        toolName !== null &&
+        toolName.toLowerCase().replace(/^.*__/, "") === "create_visual"
+      ) {
+        segments.push({ type: "visual", part });
       } else {
-        segments.push({ type: "tool", parts: [part] });
+        const last = segments[segments.length - 1];
+        if (last?.type === "tool") {
+          last.parts.push(part);
+        } else {
+          segments.push({ type: "tool", parts: [part] });
+        }
       }
     }
     // Skip step-start, source, file parts
@@ -254,6 +273,8 @@ if (!hasAnyContent) {
                 content={segment.text}
                 isStreaming={isStreaming && idx === segments.length - 1}
               />
+            ) : segment.type === "visual" ? (
+              <VisualCardSegment key={`visual-${idx}`} part={segment.part} />
             ) : (
               <ToolCallGroup key={`tool-${idx}`} parts={segment.parts as any} />
             ),
@@ -272,4 +293,64 @@ if (!hasAnyContent) {
       </div>
     </div>
   );
+}
+
+// ── Visual card segment — extracts output from a create_visual tool part ──
+
+function VisualCardSegment({ part }: { part: UIMessage["parts"][number] }) {
+  // Safely extract output and state from the tool part
+  const partObj = part as Record<string, unknown>;
+  const state = (partObj.state as string) ?? "call-result";
+  const output = partObj.output;
+
+  const isComplete = state === "output-available" || state === "approval-responded";
+  const isError = state === "output-error";
+
+  // Show error state if the tool call failed
+  if (isError) {
+    return (
+      <div className="overflow-hidden rounded-xl border border-destructive/20 bg-destructive/[0.04] p-4 text-sm text-destructive">
+        Visual could not be generated — the tool call encountered an error.
+      </div>
+    );
+  }
+
+  // While the tool is still being called (input being constructed or executing),
+  // show a compact loading placeholder so the user knows a visual is coming.
+  if (!isComplete) {
+    return (
+      <div className="overflow-hidden rounded-xl border border-indigo-500/15 bg-indigo-500/[0.04]">
+        <div className="flex items-center gap-2.5 px-3.5 py-3">
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-indigo-500/10">
+            <svg className="h-3.5 w-3.5 animate-spin text-indigo-500" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4 31.4" strokeLinecap="round" />
+            </svg>
+          </div>
+          <span className="text-sm font-medium text-indigo-600 dark:text-indigo-400">
+            Generating visual...
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  // Check that the output has the expected visual shape
+  if (!output || typeof output !== "object") {
+    return (
+      <div className="overflow-hidden rounded-xl border border-destructive/20 bg-destructive/[0.04] p-4 text-sm text-destructive">
+        Visual could not be rendered — unexpected output format.
+      </div>
+    );
+  }
+
+  const outputObj = output as Record<string, unknown>;
+  if (outputObj.type !== "visual") {
+    return (
+      <div className="overflow-hidden rounded-xl border border-destructive/20 bg-destructive/[0.04] p-4 text-sm text-destructive">
+        Visual could not be rendered — unexpected output type.
+      </div>
+    );
+  }
+
+  return <VisualCard data={output} />;
 }

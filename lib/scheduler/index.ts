@@ -34,6 +34,7 @@ import { buildFileIndexTools } from "@/lib/tools/file-index";
 import { buildProfileTools } from "@/lib/tools/profile";
 import { buildRoutinesTools } from "@/lib/tools/routines";
 import { buildScheduleTool } from "@/lib/tools/schedule";
+import { buildToolHelpTool, buildListAvailableToolsTool } from "@/lib/tools/tool-help";
 import { createMcpToolsManager } from "@/lib/mcp/tools";
 import { queryRecentChanges } from "@/lib/fs/file-index";
 import { estimateTokenCount } from "@/lib/utils";
@@ -263,6 +264,8 @@ export async function executeTask(task: ScheduledTaskRow) {
       delay: delayTool,
       web_fetch: webFetchTool,
       ask_questions: askQuestionsTool,
+      ...buildToolHelpTool(),
+      ...buildListAvailableToolsTool(),
     };
 
     const toolNames = Object.keys(tools);
@@ -302,7 +305,7 @@ export async function executeTask(task: ScheduledTaskRow) {
       ? `\n\nRecent file changes:\n${recentChanges.map((c) => `- [${c.changeType}] ${c.relativePath}`).join("\n")}`
       : "";
 
-    // Scheduled task execution prefix — explicitly list all tools
+    // Scheduled task execution prefix
     const scheduledTaskPrefix = `\n\n## ⏰ Scheduled Task Execution
 
 You are being triggered by a scheduled task that the user asked you to do earlier.
@@ -314,12 +317,7 @@ You are being triggered by a scheduled task that the user asked you to do earlie
 
 ### Complete this task using your available tools
 
-You have FULL access to all the same tools as a normal conversation. Use them to gather information:
-
-- **Web search**: Use fc_search (Firecrawl), news_search/top_headlines (NewsAPI), or brave_web_search (Brave) to find information on the web.
-- **Web scraping**: Use fc_scrape or web_fetch to read specific web pages.
-- **Code execution**: Use python_exec or js_exec to run code if needed.
-- **Filesystem**: Use read_file, search_files, etc. to read files.
+You have FULL access to all the same tools as a normal conversation. Use them to gather information. If you need detailed usage guidance, call \`get_tool_help({ topic: "..." })\`.
 
 **CRITICAL: You MUST use the appropriate tools to fulfill the task. Do NOT just generate text from your training data — actively search, fetch, and verify information.**
 

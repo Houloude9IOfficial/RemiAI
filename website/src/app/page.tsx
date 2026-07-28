@@ -240,6 +240,13 @@ const CREATIONS = [
     tags: ["Node.js", "Analysis", "CLI"],
     githubPath: "CLI%20Text%20Analyzer",
   },
+  {
+    title: "Aura",
+    description:
+      "A dark monochrome personal dashboard built with ViteJS, featuring support for tasks, documents, and links.",
+    tags: ["Vite.JS", "Dashboard", "Minimal"],
+    githubPath: "Aura",
+  },
 ];
 
 /* ------------------------------------------------------------------ */

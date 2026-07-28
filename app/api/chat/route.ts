@@ -18,7 +18,7 @@ import {
   memories,
 } from "@/db/schema";
 import { getLanguageModel } from "@/lib/providers/factory";
-import { SYSTEM_PROMPT } from "@/lib/chat/system-prompt";
+import { SYSTEM_PROMPT_BASE, CREATE_VISUAL_SECTION } from "@/lib/chat/system-prompt";
 import { persistUIMessage } from "@/lib/chat/persist";
 import { createMcpToolsManager } from "@/lib/mcp/tools";
 import { buildFilesystemTools } from "@/lib/fs/tools";
@@ -29,7 +29,9 @@ import { buildExecutionTools } from "@/lib/tools/exec";
 import { buildDocumentReaderTools } from "@/lib/tools/document-reader";
 import { delayTool } from "@/lib/tools/delay";
 import { webFetchTool } from "@/lib/tools/web-fetch";
+import { buildCreateVisualTool } from "@/lib/tools/create-visual";
 import { askQuestionsTool } from "@/lib/tools/ask-questions";
+import { suggestFollowupsTool } from "@/lib/tools/suggest-followups";
 import {
   buildMainSpawnAgentTool,
   buildGetAgentResultTool,
@@ -39,6 +41,7 @@ import { buildFileIndexTools } from "@/lib/tools/file-index";
 import { buildProfileTools } from "@/lib/tools/profile";
 import { buildRoutinesTools } from "@/lib/tools/routines";
 import { buildScheduleTool } from "@/lib/tools/schedule";
+import { buildToolHelpTool, buildListAvailableToolsTool } from "@/lib/tools/tool-help";
 import { queryRecentChanges } from "@/lib/fs/file-index";
 import { estimateTokenCount } from "@/lib/utils";
 import {
@@ -146,17 +149,25 @@ export async function POST(req: Request) {
   // Gather integration tools (Brave Search, Notion, Context7) based on config
   const integrationToolSet = await buildIntegrationTools();
 
-  // Gather code execution tools (python_exec, js_exec)
+  // Gather code execution tools (python_exec, js_exec, bash_exec)
   const executionToolSet = await buildExecutionTools();
 
   // Gather document reader tools (read_document)
   const documentToolSet = await buildDocumentReaderTools();
 
-  // Built-in always-on tools (delay, web_fetch, ask_questions)
+  // Build create visual tool (conditionally based on user setting)
+  const createVisualToolSet = await buildCreateVisualTool();
+  const createVisualEnabled = "create_visual" in createVisualToolSet;
+
+  // Built-in tools (delay, web_fetch, ask_questions, suggest_followups, get_tool_help, list_available_tools)
   const builtinToolSet = {
     delay: delayTool,
     web_fetch: webFetchTool,
     ask_questions: askQuestionsTool,
+    suggest_followups: suggestFollowupsTool,
+    ...createVisualToolSet,
+    ...buildToolHelpTool(),
+    ...buildListAvailableToolsTool(),
   };
 
   // Agent spawner tools with chaining support
@@ -283,8 +294,35 @@ You are currently in **Plan mode**. This means:
     ? `\n\n## Recent file changes\nThe following files were recently modified in your watched directories. Use \`query_recent_changes\` for a fuller list, or these are the 10 most recent:\n${recentChanges.map((c) => `- [${c.changeType}] ${c.directoryLabel}/${c.relativePath} (${c.changedAt})`).join("\n")}`
     : "";
 
+  // Adaptive system prompt: detect lower-end models and give them a shorter prompt
+  const modelId = conversation.modelId.toLowerCase();
+  // Detect lower-end models by checking for known small-model patterns.
+  // "Small" = models under ~30B params or known to have <32K context or poor
+  // instruction-following. Only models flagged as low-capability get an even
+  // shorter prompt to avoid filling their limited context window.
+  const isLowCapability =
+    // Small parameter-count models
+    /\b(3b|7b|8b|2b|1\.5b|0\.5b|1b|1\.1b|1\.3b|1\.6b|2\.7b|3\.8b)\b/i.test(
+      modelId,
+    ) ||
+    // Low-capability model families (explicitly small variants only)
+    /(llama-3\.2-(1b|3b)|phi-3-(mini|small)|gemma-2-(2b|9b)|mistral-7b|mixtral-8x7b|falcon-7b|deepseek-(coder|lite|r1-distill)|qwen-2\.5-(0\.5b|1\.5b|3b|7b)|olmo-7b|granite-3b|aya-(8b|23b)|command-r(\+|7b)?-04b|smollm2|stablelm-2|internlm2-(1\.8b|7b))/.test(
+      modelId,
+    );
+
+  // Conditionally include create-visual instructions based on tool toggle
+  const visualSection = createVisualEnabled ? CREATE_VISUAL_SECTION : '';
+
   const fullSystemPrompt =
-    SYSTEM_PROMPT + systemTip + profileTip + memoryTip + fileChangeTip + planModePrompt;
+    (isLowCapability
+      ? SYSTEM_PROMPT_BASE + visualSection +
+        `\n\n**CRITICAL: Keep responses very short and focused.** Use the simplest tool for each task. If unsure about a tool, call \`get_tool_help\`. Avoid multi-step planning unless the task truly requires it.`
+      : SYSTEM_PROMPT_BASE + visualSection) +
+    systemTip +
+    profileTip +
+    memoryTip +
+    fileChangeTip +
+    planModePrompt;
   const modelMessages = await convertToModelMessages(uiMessages);
 
   // ── Native image processing ───────────────────────────────────
@@ -357,6 +395,11 @@ You are currently in **Plan mode**. This means:
   // doesn't double-count by applying the same usage again.
   let tokensApplied = false;
 
+  // Capture the full error object from streamText's onError callback so we
+  // can enrich the error chunk sent to the client (the SDK's default error
+  // chunk only contains a generic "An error occurred." message).
+  let capturedError: unknown = null;
+
   const result = streamText({
     model,
     system: fullSystemPrompt,
@@ -365,6 +408,10 @@ You are currently in **Plan mode**. This means:
     // Allow up to 100 steps normally (chat/plan), or 500 in goal mode
     // so the model can work autonomously until task completion
     stopWhen: stepCountIs(mode === "goal" ? 500 : 100),
+    onError: (err) => {
+      capturedError = err;
+      console.error("[stream] Provider error:", err);
+    },
     onFinish: async ({ text: outputText, usage }) => {
       try {
         // Use provider's usage if available, otherwise estimate
@@ -420,6 +467,55 @@ You are currently in **Plan mode**. This means:
 
   // Tee the stream: [persistBranch, responseBranch]
   const [persistBranch, responseBranch] = uiMessageStream.tee();
+
+  // Pipe the response branch through a transform that enriches error chunks
+  // with the full error details captured from onError.  Without this, the
+  // client only sees "Error: An error occurred." instead of the actual
+  // status code, response body, and other debugging information.
+  const enrichedBranch = responseBranch.pipeThrough(
+    new TransformStream({
+      transform(chunk, controller) {
+        if (chunk.type === "error" && capturedError) {
+          const err = capturedError as Record<string, unknown>;
+
+          // For AI_RetryError the responseBody lives on nested errors
+          const errs = (Array.isArray(err.errors) ? err.errors : []) as Array<Record<string, unknown>>;
+          const responseBody = err.responseBody ?? (errs[0]?.responseBody ?? null);
+          const statusCode = err.statusCode ?? (errs[0]?.statusCode ?? null);
+          const url = err.url ?? (errs[0]?.url ?? null);
+
+          controller.enqueue({
+            type: "error",
+            errorText: [
+              `${err.name || "Error"}: ${err.message ?? ""}`,
+              statusCode != null ? `\nStatus: ${statusCode}` : "",
+              url ? `URL: ${url}` : "",
+              responseBody
+                ? `\nResponse:\n${typeof responseBody === "string" ? responseBody : JSON.stringify(responseBody, null, 2)}`
+                : "",
+              err.reason ? `\nReason: ${err.reason}` : "",
+              errs.length > 0
+                ? `\nRetries (${errs.length}): ` +
+                  errs
+                    .slice(0, 3)
+                    .map(
+                      (e, i) =>
+                        `[${i + 1}] ${e.name || "Error"}: ${e.message ?? ""}` +
+                        (e.statusCode != null ? ` (${e.statusCode})` : ""),
+                    )
+                    .join(" → ") +
+                  (errs.length > 3 ? ` +${errs.length - 3} more` : "")
+                : "",
+            ]
+              .filter(Boolean)
+              .join("\n"),
+          } as any);
+        } else {
+          controller.enqueue(chunk);
+        }
+      },
+    }),
+  );
 
   // Periodically persist partial messages to the DB (every 2s).
   // This ensures a page refresh shows partial AI responses.
@@ -489,7 +585,7 @@ You are currently in **Plan mode**. This means:
   // Build the SSE response for the client, and register the SSE stream
   // for reconnection support.
   return createUIMessageStreamResponse({
-    stream: responseBranch,
+    stream: enrichedBranch,
     consumeSseStream: ({ stream }) => {
       streamRegistry.register(conversationId, stream);
     },

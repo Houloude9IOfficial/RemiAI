@@ -61,7 +61,7 @@ export const listPermittedRootsTool = {
  */
 export const listDirectoryTool = {
   description:
-    "List files and directories inside a permitted root directory (or subdirectory). Returns entries sorted with directories first, then alphabetically, with file sizes and types.",
+    "List files and directories inside a permitted root directory (or subdirectory). Returns entries sorted with directories first, then alphabetically, with file sizes and types.\n\n**Workflow:** Call `list_permitted_roots` first to discover available rootIds, then pass the numeric rootId here to browse its contents. Leave relativePath empty to list the root itself. Pass a relativePath to browse a subdirectory.",
   parameters: z.object({
     rootId: z
       .coerce.number()
@@ -209,7 +209,7 @@ export const readFileTool = {
  */
 export const searchFilesTool = {
   description:
-    "Search for a text string inside files within a permitted root. Uses ripgrep if available (much faster), otherwise falls back to a Node.js line-by-line search. Optionally filter by glob pattern.",
+    "Search for a text string inside files within a permitted root. Uses ripgrep if available (much faster), otherwise falls back to a Node.js line-by-line search. Optionally filter by glob pattern.\n\n**Workflow:** Call `list_permitted_roots` first for the rootId, then search with your query. Use the pattern parameter to narrow by file extension (e.g. \"*.ts\", \"*.md\").",
   parameters: z.object({
     rootId: z
       .coerce.number()
@@ -332,7 +332,7 @@ export const readMediaTool = {
  */
 export const createDirectoryTool = {
   description:
-    "Create one or more directories (folders) at the specified path within a permitted root. Creates parent directories automatically if they don't exist. Requires write permission on the root. Use this to organise files into folders or create project structures.",
+    "Create one or more directories (folders) at the specified path within a permitted root. Creates parent directories automatically if they don't exist. Requires write permission on the root.\n\n**Note:** Most of the time you don't need this — `write_file` already creates parent directories automatically. Only use `create_directory` when the user explicitly asks for an empty folder that won't have files written to it yet.",
   parameters: z.object({
     rootId: z
       .coerce.number()
@@ -438,7 +438,7 @@ export const deleteDirectoryTool = {
  */
 export const writeFileTool = {
   description:
-    "Write content to a file within a permitted root. Creates parent directories if needed. By default overwrites the file; use mode='append' to append instead.",
+    "Write content to a file within a permitted root. **Creates parent directories automatically** — no need to call create_directory first. By default overwrites the file; use mode='append' to append instead.\n\n**Workflow:** Call `list_permitted_roots` to get the rootId, then write files directly. write_file handles all directory creation automatically.",
   parameters: z.object({
     rootId: z
       .coerce.number()

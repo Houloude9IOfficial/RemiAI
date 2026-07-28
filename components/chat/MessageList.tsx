@@ -136,7 +136,8 @@ export function MessageList({
   const scrollRef = useRef<HTMLDivElement>(null);
   const [isScrolledUp, setIsScrolledUp] = useState(false);
   const autoScrollRef = useRef(true);
-  const prevSendCountRef = useRef(sendCount);
+  const prevSendCountRef = useRef(0);
+  const prevMsgCountRef = useRef(0);
 
   // Fetch user preferences so we can personalise the empty-state greeting
   const { data: prefs } = useQuery({
@@ -179,36 +180,51 @@ export function MessageList({
   }, []);
 
   // ── RELIABLE SCROLL LOGIC ──
-  // Uses sendCount (regular React state from parent) as trigger instead of
-  // messages reference (useSyncExternalStore — unreliable timing).
-  // Direct scrollTop assignment + CSS scroll-smooth for animation.
+  // Two independent triggers keep scrolling reliable:
+  //   1. sendCount — incremented by parent on every user send
+  //   2. messages.length — catches any message addition (including initial mount)
+  // Uses scrollIntoView so the browser finds the actual scroll container,
+  // regardless of which ancestor handles the overflow.
   useLayoutEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
+    const msgCount = messages.length;
+    const shouldScroll =
+      sendCount > prevSendCountRef.current ||
+      msgCount > prevMsgCountRef.current;
 
-    // Primary trigger: sendCount increments when user sends a message
-    if (sendCount > prevSendCountRef.current) {
+    if (shouldScroll) {
       prevSendCountRef.current = sendCount;
+      prevMsgCountRef.current = msgCount;
       autoScrollRef.current = true;
       setIsScrolledUp(false);
 
-      const els = el.querySelectorAll<HTMLElement>("[data-message-id]");
-      const lastMsg = els[els.length - 1];
-      if (lastMsg && el.contains(lastMsg)) {
-        // Way upper: message at ~2% from top, massive space below
-        scrollTo(el, lastMsg.offsetTop - el.clientHeight * 0.02);
+      const el = scrollRef.current;
+      // Use the last message element if available; scrollIntoView finds the
+      // nearest scrollable ancestor automatically.
+      const els = el?.querySelectorAll<HTMLElement>("[data-message-id]");
+      const lastMsg = els?.[els.length - 1] ?? null;
+      if (lastMsg) {
+        lastMsg.scrollIntoView({ block: "end" });
       } else {
-        scrollTo(el, el.scrollHeight);
+        el?.scrollTo({ top: el.scrollHeight });
       }
       return;
     }
 
     // Streaming follow: keep at bottom if user hasn't scrolled up
     if (status === "streaming" && autoScrollRef.current && !isScrolledUp) {
-      scrollTo(el, el.scrollHeight);
+      const el = scrollRef.current;
+      if (el) {
+        const els = el.querySelectorAll<HTMLElement>("[data-message-id]");
+        const lastMsg = els[els.length - 1];
+        if (lastMsg) {
+          lastMsg.scrollIntoView({ block: "end" });
+        } else {
+          el.scrollTo({ top: el.scrollHeight });
+        }
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sendCount, status, isScrolledUp]);
+  }, [sendCount, status, isScrolledUp, messages.length]);
 
   const scrollToBottom = () => {
     autoScrollRef.current = true;
@@ -316,7 +332,7 @@ export function MessageList({
       <div className="relative flex flex-1 flex-col">
         <div
           ref={scrollRef}
-          className="flex flex-1 flex-col overflow-y-auto p-6 scroll-smooth"
+          className="flex flex-1 flex-col p-6"
         >
           <div className="flex flex-col gap-4">
             {messages.map((message, idx) => {

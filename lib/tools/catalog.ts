@@ -61,8 +61,8 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     id: "code_execution",
     name: "Code Execution",
     description:
-      "Run Python or JavaScript code on your machine. Useful for executing code snippets, analysis, and experimentation. Includes python_exec and js_exec with console output.",
-    toolNames: ["python_exec", "js_exec"],
+      "Run Python or JavaScript code, or shell commands on your machine. Useful for executing code snippets, analysis, experimentation, and running CLI tools. Includes python_exec, js_exec, and bash_exec with console output.",
+    toolNames: ["python_exec", "js_exec", "bash_exec"],
     category: "builtin",
     togglable: true,
     requiresApiKey: false,
@@ -173,7 +173,7 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     name: "Ask Questions",
     description:
       "Ask the user up to 7 structured questions at once, each with 3 predefined choices plus optional custom answers. Use this to gather multiple pieces of information from the user efficiently.",
-    toolNames: ["ask_questions"],
+    toolNames: ["ask_questions", "suggest_followups"],
     category: "builtin",
     togglable: false,
     requiresApiKey: false,
@@ -251,6 +251,17 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     description:
       "Schedule tasks for future execution. The AI will execute the task at the specified time, using all available tools, and send a desktop notification with results. Perfect for reminders, timed checks, and future lookups.",
     toolNames: ["schedule_task", "list_scheduled_tasks", "update_scheduled_task", "cancel_scheduled_task"],
+    category: "builtin",
+    togglable: false,
+    requiresApiKey: false,
+  },
+  // ── Create Visual (builtin, togglable) ──
+  {
+    id: "create_visual",
+    name: "Create Visual",
+    description:
+      "Generate dynamic visuals — SVG charts, diagrams, and HTML cards/dashboards — rendered directly in the chat. The AI uses this automatically when it needs to show data visually.",
+    toolNames: ["create_visual"],
     category: "builtin",
     togglable: false,
     requiresApiKey: false,

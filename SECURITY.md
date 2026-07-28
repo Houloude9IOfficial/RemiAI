@@ -98,11 +98,32 @@ The background file watcher indexes files in watched directories:
 
 ### Authentication
 
-RemiAI is designed as a **local, single-user application**:
+RemiAI uses a **local, single-account authentication layer**:
 
-- There is **no authentication layer** — the app is intended to run on `127.0.0.1` (localhost only)
-- **Do not expose RemiAI to the internet** or a network without adding authentication
-- If you need remote access, use a reverse proxy with authentication (e.g., nginx + basic auth, Tailscale, Cloudflare Tunnel with Access policies)
+- The first startup with no account generates a one-time signup code and prints it to the server console
+- Signup requires that code plus an email and password; the code is stored only as a hash and is consumed once
+- Passwords are stored using salted Node.js `scrypt` hashes; plaintext passwords are never persisted
+- Protected API requests require an opaque, server-side session stored in an HttpOnly SameSite cookie
+- Sessions are revocable and expire; users may choose a browser-only session or a 30-day remembered session
+- Changing the password revokes all sessions, and `npm run auth:reset` provides a local console recovery path
+- Existing pre-auth databases are preserved and claimed by the first account
+- Encrypted backups preserve account credentials when restoring to a fresh installation, but never include active sessions or bootstrap secrets
+
+The app should still run on `127.0.0.1` by default. Authentication protects the application but does not make arbitrary remote exposure safe: review MCP servers, code execution, directory permissions, and network access before exposing RemiAI beyond localhost.
+
+### Docker and public deployment
+
+The included `Dockerfile` runs the production standalone server as the unprivileged `node` user. The only intended writable location is `/app/data`, which contains the SQLite database, uploads, provider credentials, and other user data. Keep that volume private and back it up securely.
+
+For a public deployment:
+
+1. Put the container behind a TLS reverse proxy and forward only to `127.0.0.1:3000` (the included Compose file uses this binding).
+2. Do not publish port 3000 directly to the Internet or run the container with `--privileged`.
+3. Use a strong account password, restrict access to the one-time signup code, and remove/restrict server-console log access after first setup.
+4. Review MCP servers, external provider keys, watched directories, and code-execution tools before allowing any remote access.
+5. Preserve the named Docker volume and test encrypted backups; losing `/app/data` loses the account and stored credentials.
+
+`npm audit --omit=dev` may still report advisories for nested packages shipped by the currently published Next.js 16.2.x release. Do not use `npm audit fix --force` here: it proposes an incompatible downgrade of Next.js. Re-run the audit after each Next.js release and upgrade when a compatible patched release is available.
 
 ---
 
@@ -116,7 +137,7 @@ To keep your RemiAI installation secure:
 4. **Keep dependencies updated** — run `npm audit` periodically and update packages
 5. **Secure your API keys** — treat API keys stored in RemiAI with the same care as any other credential store
 6. **Review MCP servers** — only add MCP servers from trusted sources
-7. **Be cautious with code execution** — the exec tools (`python_exec`, `js_exec`) have full filesystem access
+7. **Be cautious with code execution** — the exec tools (`python_exec`, `js_exec`, `bash_exec`) have full filesystem access
 8. **Don't disable the file watcher security** — keep watched directories limited to what you need
 9. **Backup regularly** — use encrypted backups to protect your data and API keys
 10. **Monitor the data directory** — the SQLite database at `data/remiai.sqlite` contains all your data and API keys

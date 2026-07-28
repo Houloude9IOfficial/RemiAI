@@ -90,8 +90,10 @@ export async function exportBackup(
   const tableStats: Record<string, number> = {};
 
   for (const t of tables) {
-    // Skip the backup_history table — it's metadata, not user data
-    if (t.name === "backup_history") continue;
+    // Backup history and authentication state are installation-local metadata,
+    // not application data. Never export credentials, sessions, or bootstrap
+    // secrets.
+    if (["backup_history", "auth_accounts", "auth_sessions", "auth_bootstrap"].includes(t.name)) continue;
 
     const rows = db.all(
       sql`SELECT * FROM ${sql.identifier(t.name)}`,

@@ -154,14 +154,14 @@ You have access to web_fetch (for reading web pages), delay (for rate limiting),
 
 ## Guidelines
 - Write clean, well-documented, production-quality code.
-- Use python_exec or js_exec to test your code before returning it.
+- Use python_exec, js_exec, or bash_exec to test your code before returning it.
 - If the task involves fixing a bug, first diagnose the issue, then provide the fix.
 - Explain your approach briefly before showing the code.
 - For file operations, use the filesystem tools (list_directory, read_file, write_file).
 - Always test your code with exec tools and fix any errors.
 
 ## Available tools
-You have access to python_exec, js_exec (for code execution), filesystem tools (for reading/writing files), delay (for rate limiting), and web_fetch (for documentation). Use them as needed.`,
+You have access to python_exec, js_exec, bash_exec (for code execution), filesystem tools (for reading/writing files), delay (for rate limiting), and web_fetch (for documentation). Use them as needed.`,
   },
   analyst: {
     label: "Analyst",
@@ -170,14 +170,14 @@ You have access to python_exec, js_exec (for code execution), filesystem tools (
     systemPrompt: `You are a Data Analysis Specialist. Your job is to analyze data thoroughly and provide clear, actionable insights.
 
 ## Guidelines
-- Use python_exec or js_exec for calculations, statistics, and data processing.
+- Use python_exec, js_exec, or bash_exec for calculations, statistics, and data processing.
 - Present your findings clearly with numbers, trends, and comparisons.
 - Use tables or structured formats for presenting data.
 - Explain your methodology briefly so the user understands how you reached your conclusions.
 - If the data is insufficient for a definitive answer, explain what additional data would help.
 
 ## Available tools
-You have access to python_exec, js_exec (for data processing), filesystem tools (for reading data files), web_fetch (for additional data sources), and delay (for rate limiting). Use them as needed.`,
+You have access to python_exec, js_exec, bash_exec (for data processing), filesystem tools (for reading data files), web_fetch (for additional data sources), and delay (for rate limiting). Use them as needed.`,
   },
   summarizer: {
     label: "Summarizer",
@@ -207,6 +207,21 @@ You have access to filesystem tools (for reading files), web_fetch (for reading 
 // Build tools for sub-agents
 // ---------------------------------------------------------------------------
 
+/**
+ * Normalise a tool object so it always has an `inputSchema` property.
+ * Some tools in the codebase use `parameters` instead of `inputSchema`
+ * (the Vercel AI SDK v7 property). The main chat route works either way
+ * because tools are spread into a loosely-typed Record, but in a nested
+ * streamText context the SDK expects `inputSchema` to be present.
+ */
+function normaliseTool(tool: any): any {
+  if (tool.inputSchema) return tool;
+  if (tool.parameters) {
+    return { ...tool, inputSchema: tool.parameters };
+  }
+  return tool;
+}
+
 async function buildAgentTools(): Promise<Record<string, any>> {
   const [fsTools, memoryTools, integrationTools, executionTools, docTools] =
     await Promise.all([
@@ -217,7 +232,11 @@ async function buildAgentTools(): Promise<Record<string, any>> {
       buildDocumentReaderTools(),
     ]);
 
-  return {
+  // Normalise every tool to ensure inputSchema is present (SDK v7
+  // nested streamText contexts require it). Some tools in the codebase
+  // use `parameters` instead of `inputSchema` — this adds the missing
+  // property so the SDK can always find it.
+  const allTools = {
     ...fsTools,
     ...memoryTools,
     ...integrationTools,
@@ -226,6 +245,10 @@ async function buildAgentTools(): Promise<Record<string, any>> {
     delay: delayTool,
     web_fetch: webFetchTool,
   };
+
+  return Object.fromEntries(
+    Object.entries(allTools).map(([name, tool]) => [name, normaliseTool(tool)]),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -305,7 +328,8 @@ async function runAgent(
   // Final progress update
   await updateAgentProgress(taskRecordId, accumulatedText);
 
-  const fullText = await stream.text;
+  // Read usage from the stream (textStream is already consumed above,
+  // so we use accumulatedText instead of stream.text which returns empty)
   const usage = await stream.usage;
 
   // Use provider's usage if available, otherwise estimate
@@ -320,10 +344,10 @@ async function runAgent(
   const estimatedOutput =
     providerOutputTokens > 0
       ? providerOutputTokens
-      : estimateTokenCount(fullText);
+      : estimateTokenCount(accumulatedText);
 
   return {
-    text: fullText,
+    text: accumulatedText,
     inputTokens: estimatedInput,
     outputTokens: estimatedOutput,
   };

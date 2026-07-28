@@ -60,3 +60,15 @@ Descriptions: A tool (togglable) that allows the AI with javascript to create ro
 <!-- Fix screenshot reading -->
 
 <!-- show profile on bottom of sidebar like chatgpt.com -->
+
+create into electron app, add mac/windows support, native features & include CI/CD to build the app installer.
+
+<!-- make app have logo, and optimize for MacOS -->
+
+<!-- move tools into a tool search tool, so it doesn't overload context from beggining if not needed (14k+ tokens down to 3k tokens) -->
+
+<!-- tell ai if needed to add followup suggestions on bottom, in a specific format. -->
+
+<!-- if using ollama provider, make it include <think> process as tool. -->
+
+<!-- on message send scroll bottom in chat content, and focus on msg input. -->

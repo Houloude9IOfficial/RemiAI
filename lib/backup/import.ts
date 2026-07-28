@@ -10,6 +10,7 @@ import {
   type BackupFiles,
   type RestoreResult,
 } from "./types";
+import { revokeAllSessions } from "@/lib/auth/service";
 
 // ---------------------------------------------------------------------------
 // Path helpers
@@ -175,7 +176,7 @@ function deleteAllData(): void {
     tx.run(sql`PRAGMA foreign_keys = OFF`);
 
     for (const t of tables) {
-      if (t.name === "backup_history") continue;
+      if (["backup_history", "auth_accounts", "auth_sessions", "auth_bootstrap"].includes(t.name)) continue;
       tx.run(sql`DELETE FROM ${sql.identifier(t.name)}`);
     }
 
@@ -325,7 +326,6 @@ export async function importBackup(
   const currentTableMap = new Map<string, Set<string>>(
     currentTables.map((t) => [t.name, new Set(t.columns)]),
   );
-
   // ── Wipe existing data (skipping backup_history) ────────────────────────
   deleteAllData();
 
@@ -376,6 +376,14 @@ export async function importBackup(
         continue;
       }
 
+      // Authentication is installation-local and was not part of the
+      // original backup format. Ignore it even for interim auth-aware backup
+      // files so restore can never replace the current account.
+      if (["auth_accounts", "auth_sessions", "auth_bootstrap"].includes(tableName)) {
+        warnings.push(`Table "${tableName}" was skipped because authentication is not part of application backups.`);
+        continue;
+      }
+
       const count = insertRows(tableName, rows, currentCols, warnings);
       if (count > 0) tableCounts[tableName] = count;
     }
@@ -387,6 +395,8 @@ export async function importBackup(
   const fileStats = payload.includesFiles
     ? await restoreFiles(payload.files)
     : { uploads: 0, avatars: 0 };
+
+  revokeAllSessions();
 
   // ── Build result ────────────────────────────────────────────────────────
   return {

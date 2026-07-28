@@ -207,8 +207,9 @@ RemiAI has a comprehensive settings system with dedicated pages for every aspect
 
 ### Prerequisites
 
-- **Node.js** >= 18
+- **Node.js** >= 18 (v22 recommended — see `.nvmrc`)
 - **npm**
+- **nvm** or **fnm** (optional) — to auto-select the Node version via `.nvmrc`
 
 ### Quick Start
 
@@ -226,7 +227,9 @@ npm run dev
 
 Then visit **http://127.0.0.1:3000**.
 
-The database is **automatically migrated** on startup, so you don't need to run any migration commands manually.
+The database is **automatically migrated** on startup, so you don't need to run any migration commands manually. On the first run, the server prints a one-time signup code in the terminal. Enter that code in the browser to create the first account. The code is stored only as a hash and is consumed once.
+
+Your local database, uploaded files, provider credentials, and other app data are stored under `data/`. This directory is intentionally gitignored — protect it like application data and use the encrypted Backup page before moving or resetting an installation.
 
 ### Production Build
 
@@ -234,6 +237,59 @@ The database is **automatically migrated** on startup, so you don't need to run 
 npm run build
 npm start
 ```
+
+The built-in launcher keeps the web server on `127.0.0.1` by default. Set `PORT` to change the local port:
+
+```bash
+PORT=3001 npm start
+```
+
+### Docker deployment
+
+Docker is the recommended way to run the web application on a server. The image runs Next.js in standalone production mode as a non-root user and persists application data in `/app/data`.
+
+With Docker Compose:
+
+```bash
+docker compose up --build -d
+docker compose logs -f remiai
+```
+
+The included Compose file binds the app to `127.0.0.1:3000`, so place a TLS reverse proxy such as Caddy, Nginx, or Traefik in front of it for a public URL. Do not expose the container directly over plain HTTP. The first-run signup code appears in the container logs:
+
+```bash
+docker compose logs remiai
+```
+
+The named `remiai-data` volume contains the SQLite database, uploads, API keys, and account data. Back it up before upgrades or migration work:
+
+```bash
+docker compose exec remiai sh -c 'tar -czf - -C /app/data .' > remiai-data-backup.tgz
+```
+
+To stop the service without deleting data:
+
+```bash
+docker compose down
+```
+
+Do not run `docker compose down -v` unless you intentionally want to delete the persistent volume. Review [SECURITY.md](./SECURITY.md) before enabling remote access, MCP servers, code execution, or write access to host directories.
+
+For a direct Docker run, publish the port only on localhost and mount a persistent volume:
+
+```bash
+docker build -t remiai .
+docker volume create remiai-data
+docker run -d --name remiai \
+  --restart unless-stopped \
+  --publish 127.0.0.1:3000:3000 \
+  --volume remiai-data:/app/data \
+  --security-opt no-new-privileges:true \
+  --cap-drop ALL \
+  remiai
+```
+
+The container listens on `0.0.0.0:3000` internally. TLS termination, firewall rules, DNS, and authentication at the reverse proxy remain the operator's responsibility.
 
 ### Manual Database Commands
 
@@ -265,6 +321,18 @@ Once running, you'll be greeted by RemiAI in a new conversation. Here's what you
 3. **Connect MCP servers** — go to Settings - MCP Servers to add external tool servers
 4. **Set up integrations** — go to Settings - Tools to enable and configure external services
 
+### Authentication and password recovery
+
+RemiAI uses a single local account. Login sessions are stored server-side and delivered through an HttpOnly, SameSite cookie. Changing the password revokes all active sessions.
+
+If you lose the password, run the reset command on the machine hosting RemiAI:
+
+```bash
+npm run auth:reset
+```
+
+For Docker Compose, run it inside the container only if the image includes the project CLI environment; otherwise use the encrypted backup/restore workflow or recreate the account from a protected data backup. Never publish the signup code, database, or Docker volume contents.
+
 ---
 
 ## Creations
@@ -277,6 +345,7 @@ After building RemiAI, I put its coding capabilities to the test by having it bu
 | [Text to Speech](./creations/Text2Speech/) | Convert text to natural-sounding speech | Python |
 | [Text to Morse Code](./creations/TextToMorseCode/) | Convert text to Morse code and back | Node.js |
 | [CLI Text Analyzer](./creations/CLI%20Text%20Analyzer/) | Command-line text analysis tool | Node.js |
+| [Aura](./creations/Aura/) | Minimalist personal dashboard | Vite.JS |
 
 Each creation includes the exact AI conversation that produced it — check the `PROJECT.md` files for the full story.
 
@@ -308,6 +377,30 @@ npm run db:migrate
 
 Then restart the app. (Auto-migration on startup should handle this automatically in most cases.)
 
+### Native module mismatch (`better-sqlite3` / `NODE_MODULE_VERSION`)
+
+If the build fails with:
+
+```
+Error: The module '.../better-sqlite3/build/Release/better_sqlite3.node'
+was compiled against a different Node.js version using
+NODE_MODULE_VERSION 148. This version of Node.js requires
+NODE_MODULE_VERSION 127.
+```
+
+The native `better-sqlite3` binary was compiled for a different Node.js version than the one you're currently running. Rebuild it:
+
+```bash
+npm rebuild better-sqlite3
+```
+
+If the issue persists, try a full clean rebuild:
+
+```bash
+rm -rf node_modules
+npm install
+```
+
 ### `<button> cannot be a descendant of <button>` hydration error
 
 This happens when a `<button>` is nested inside a Base UI compound component that renders its own `<button>` (like `DialogTrigger`). Pass `className` and `aria-label` directly to the trigger instead of wrapping it.
@@ -324,9 +417,133 @@ const nextConfig: NextConfig = {
 };
 ```
 
+### Port already in use
+
+If port 3000 (or 3456 for Electron) is already taken:
+
+```bash
+# Kill the process on that port
+lsof -ti:3000 | xargs kill -9
+
+# Or specify a different port
+PORT=3001 npm run dev
+```
+
+### Stale build cache
+
+If you see strange build errors after updating dependencies or switching branches:
+
+```bash
+rm -rf .next
+npm run build
+```
+
+### Sharp installation issues
+
+Next.js uses `sharp` for image processing. If it fails to install or load:
+
+```bash
+# Rebuild sharp's native bindings
+npm rebuild sharp
+
+# If that doesn't work, clear sharp's cache and reinstall
+rm -rf node_modules/sharp
+npm install
+```
+
+On macOS, avoid installing libvips via Homebrew — it can conflict with sharp's bundled version.
+
+### Electron build / code signing errors (macOS)
+
+When building the macOS desktop app (`npm run dist:mac`), you may encounter code signing errors:
+
+```
+Error: code signing is required for product type Application
+```
+
+For development builds, skip signing:
+
+```bash
+npx electron-builder --mac --config.forceCodeSigning=false
+```
+
+For distribution builds, you'll need a valid Apple Developer ID certificate. See [electron-builder's macOS docs](https://www.electron.build/code-signing).
+
+### Ollama connection refused
+
+If you're using Ollama as a local provider and get `Connection refused`:
+
+```bash
+# Check if Ollama is running
+ollama serve
+
+# Verify the endpoint
+curl http://localhost:11434/api/tags
+```
+
+Ollama must be running on `http://localhost:11434` (or your configured endpoint) before starting RemiAI.
+
+### Missing Python for `python_exec` tool
+
+The AI's `python_exec` tool requires Python 3. Verify it's available:
+
+```bash
+python3 --version
+```
+
+If missing, install Python from [python.org](https://python.org) or via Homebrew:
+
+```bash
+brew install python
+```
+
+### Database migration conflicts
+
+If Drizzle reports a migration conflict after pulling changes:
+
+```bash
+# Delete the stale database (your data will be lost!)
+rm -f data/remiai.sqlite
+
+# Or snapshot-export first, then re-run migrations
+npm run db:migrate
+```
+
+To avoid data loss, use the **Backup** page in Settings to export an encrypted backup before resetting.
+
 ### Windows path issues
 
 The project handles Windows path normalization automatically. Use forward slashes (`/`) in all paths when talking to the AI.
+
+### Runtime Issues
+
+#### Ollama connection refused
+
+If you're using Ollama as a local provider and get `Connection refused`:
+
+```bash
+# Check if Ollama is running
+ollama serve
+
+# Verify the endpoint
+curl http://localhost:11434/api/tags
+```
+
+Ollama must be running on `http://localhost:11434` (or your configured endpoint) before starting RemiAI.
+
+#### Missing Python for `python_exec` tool
+
+The AI's `python_exec` tool requires Python 3. Verify it's available:
+
+```bash
+python3 --version
+```
+
+If missing, install Python from [python.org](https://python.org) or via Homebrew:
+
+```bash
+brew install python
+```
 
 ---
 

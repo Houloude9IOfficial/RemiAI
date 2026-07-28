@@ -18,11 +18,25 @@ import { importBackup } from "@/lib/backup/import";
  */
 export async function POST(req: NextRequest) {
   try {
-    const formData = await req.formData();
-    const file = formData.get("file") as File | null;
-    const password = formData.get("password") as string | null;
+    const contentType = req.headers.get("content-type") ?? "";
+    let encrypted: string | null = null;
+    let password: string | null = null;
 
-    if (!file) {
+    if (contentType.toLowerCase().includes("multipart/form-data")) {
+      const formData = await req.formData();
+      const file = formData.get("file");
+      password = typeof formData.get("password") === "string" ? formData.get("password") as string : null;
+      encrypted = file instanceof File ? await file.text() : null;
+    } else if (contentType.toLowerCase().startsWith("text/plain") || contentType.toLowerCase().startsWith("application/octet-stream")) {
+      encrypted = await req.text();
+      password = req.headers.get("x-remiai-backup-password");
+    } else {
+      const body = await req.json() as { encrypted?: unknown; password?: unknown };
+      encrypted = typeof body.encrypted === "string" ? body.encrypted : null;
+      password = typeof body.password === "string" ? body.password : null;
+    }
+
+    if (!encrypted) {
       return NextResponse.json(
         { error: "No backup file provided." },
         { status: 400 },
@@ -35,9 +49,6 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
-
-    // Read the file content as text (it's base64-encoded)
-    const encrypted = await file.text();
 
     if (!encrypted || encrypted.length < 64) {
       return NextResponse.json(

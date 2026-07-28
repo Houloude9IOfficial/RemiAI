@@ -1,0 +1,23 @@
+services:
+  remiai:
+    build: .
+    restart: unless-stopped
+    ports:
+      # Keep the app private to the host; terminate TLS in a reverse proxy.
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - remiai-data:/app/data
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+
+volumes:
+  remiai-data:

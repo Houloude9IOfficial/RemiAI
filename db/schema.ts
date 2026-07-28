@@ -241,3 +241,29 @@ export const agentTasks = sqliteTable("agent_tasks", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   completedAt: text("completed_at"),
 });
+
+export const authAccounts = sqliteTable("auth_accounts", {
+  id: integer("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  displayName: text("display_name").notNull().default(""),
+  passwordHash: text("password_hash").notNull(),
+  passwordSalt: text("password_salt").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const authSessions = sqliteTable("auth_sessions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: text("expires_at").notNull(),
+  persistent: integer("persistent", { mode: "boolean" }).notNull().default(false),
+  revokedAt: text("revoked_at"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const authBootstrap = sqliteTable("auth_bootstrap", {
+  id: integer("id").primaryKey(),
+  codeHash: text("code_hash").notNull(),
+  consumedAt: text("consumed_at"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});

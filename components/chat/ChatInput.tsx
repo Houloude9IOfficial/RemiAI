@@ -482,12 +482,18 @@ export function ChatInput({
         onSend(finalText);
         setText("");
         setAttachedFiles([]);
-        requestAnimationFrame(resize);
+        requestAnimationFrame(() => {
+          resize();
+          inputRef.current?.focus();
+        });
       }
     } else if (text.trim()) {
       onSend(text.trim());
       setText("");
-      requestAnimationFrame(resize);
+      requestAnimationFrame(() => {
+        resize();
+        inputRef.current?.focus();
+      });
     }
   }, [disabled, attachedFiles, text, onSend, resize]);
 

@@ -184,10 +184,20 @@ export function ToolList() {
     );
   }
 
-  // Group tools by category
+  // Group tools by category, with togglable tools sorted to the end of each group
   const groups = [
-    { label: "Built-in", tools: tools.filter((t) => t.category === "builtin" || t.category === "memory") },
-    { label: "Integrations", tools: tools.filter((t) => t.category === "integration") },
+    {
+      label: "Built-in",
+      tools: tools
+        .filter((t) => t.category === "builtin" || t.category === "memory")
+        .sort((a, b) => (a.togglable ? 1 : 0) - (b.togglable ? 1 : 0)),
+    },
+    {
+      label: "Integrations",
+      tools: tools
+        .filter((t) => t.category === "integration")
+        .sort((a, b) => (a.togglable ? 1 : 0) - (b.togglable ? 1 : 0)),
+    },
   ].filter((g) => g.tools.length > 0);
 
   return (
