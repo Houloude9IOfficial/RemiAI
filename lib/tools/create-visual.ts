@@ -1,5 +1,8 @@
 import { z } from "zod";
 import { truncateToolResult } from "@/lib/utils";
+import { db } from "@/db";
+import { toolConfigs } from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 // ---------------------------------------------------------------------------
 // SVG wrapper — minimal, transparent-friendly shell
@@ -184,3 +187,28 @@ Before designing, think about what the data or concept is about. Let the subject
     return truncateToolResult(result);
   },
 };
+
+// ---------------------------------------------------------------------------
+// Builder function for the chat route
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the create_visual tool. Respects the user's toggle setting in DB.
+ * Enabled by default for backward compatibility (was previously always-on).
+ */
+export async function buildCreateVisualTool(): Promise<Record<string, any>> {
+  const config = await db
+    .select()
+    .from(toolConfigs)
+    .where(eq(toolConfigs.toolId, "create_visual"))
+    .get();
+
+  // Default to enabled if no config exists (backward compatible)
+  if (config && !config.enabled) {
+    return {};
+  }
+
+  return {
+    create_visual: createVisualTool,
+  };
+}

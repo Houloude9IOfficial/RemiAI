@@ -18,7 +18,7 @@ import {
   memories,
 } from "@/db/schema";
 import { getLanguageModel } from "@/lib/providers/factory";
-import { SYSTEM_PROMPT } from "@/lib/chat/system-prompt";
+import { SYSTEM_PROMPT_BASE, CREATE_VISUAL_SECTION } from "@/lib/chat/system-prompt";
 import { persistUIMessage } from "@/lib/chat/persist";
 import { createMcpToolsManager } from "@/lib/mcp/tools";
 import { buildFilesystemTools } from "@/lib/fs/tools";
@@ -29,7 +29,7 @@ import { buildExecutionTools } from "@/lib/tools/exec";
 import { buildDocumentReaderTools } from "@/lib/tools/document-reader";
 import { delayTool } from "@/lib/tools/delay";
 import { webFetchTool } from "@/lib/tools/web-fetch";
-import { createVisualTool } from "@/lib/tools/create-visual";
+import { buildCreateVisualTool } from "@/lib/tools/create-visual";
 import { askQuestionsTool } from "@/lib/tools/ask-questions";
 import { suggestFollowupsTool } from "@/lib/tools/suggest-followups";
 import {
@@ -155,13 +155,17 @@ export async function POST(req: Request) {
   // Gather document reader tools (read_document)
   const documentToolSet = await buildDocumentReaderTools();
 
-  // Built-in always-on tools (delay, web_fetch, ask_questions, suggest_followups, get_tool_help, list_available_tools)
+  // Build create visual tool (conditionally based on user setting)
+  const createVisualToolSet = await buildCreateVisualTool();
+  const createVisualEnabled = "create_visual" in createVisualToolSet;
+
+  // Built-in tools (delay, web_fetch, ask_questions, suggest_followups, get_tool_help, list_available_tools)
   const builtinToolSet = {
     delay: delayTool,
     web_fetch: webFetchTool,
     ask_questions: askQuestionsTool,
     suggest_followups: suggestFollowupsTool,
-    create_visual: createVisualTool,
+    ...createVisualToolSet,
     ...buildToolHelpTool(),
     ...buildListAvailableToolsTool(),
   };
@@ -306,11 +310,14 @@ You are currently in **Plan mode**. This means:
       modelId,
     );
 
+  // Conditionally include create-visual instructions based on tool toggle
+  const visualSection = createVisualEnabled ? CREATE_VISUAL_SECTION : '';
+
   const fullSystemPrompt =
     (isLowCapability
-      ? SYSTEM_PROMPT +
+      ? SYSTEM_PROMPT_BASE + visualSection +
         `\n\n**CRITICAL: Keep responses very short and focused.** Use the simplest tool for each task. If unsure about a tool, call \`get_tool_help\`. Avoid multi-step planning unless the task truly requires it.`
-      : SYSTEM_PROMPT) +
+      : SYSTEM_PROMPT_BASE + visualSection) +
     systemTip +
     profileTip +
     memoryTip +

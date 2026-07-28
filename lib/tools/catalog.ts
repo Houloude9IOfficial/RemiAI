@@ -255,7 +255,7 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     togglable: false,
     requiresApiKey: false,
   },
-  // ── Create Visual (builtin, always on, not togglable) ──
+  // ── Create Visual (builtin, togglable) ──
   {
     id: "create_visual",
     name: "Create Visual",

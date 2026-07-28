@@ -19,6 +19,8 @@
   "scripts": {
     "dev": "npx tsx scripts/launcher.ts --dev",
     "dev:web": "next dev -H 127.0.0.1",
+    "rebuild:electron": "npx electron-rebuild -w better-sqlite3",
+    "rebuild:node": "npm rebuild better-sqlite3",
     "dev:electron": "npx tsc -p electron/tsconfig.json && npx electron electron-dist/main.js",
     "build": "next build",
     "build:electron": "npx tsc -p electron/tsconfig.json",
@@ -80,6 +82,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.2.0",
     "@tailwindcss/postcss": "^4",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20",

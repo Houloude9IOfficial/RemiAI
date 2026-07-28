@@ -9,9 +9,11 @@
  *   - Checks for app updates via electron-updater (GitHub Releases)
  *
  * Architecture note:
- *   Next.js server is spawned as a **forked** Node.js process using
- *   `ELECTRON_RUN_AS_NODE=1` so that the same Electron-bundled Node.js runtime
- *   is reused instead of starting a second Electron instance.
+ *   Next.js server is spawned as a child process using the **system Node.js**
+ *   binary (\`node\`) rather than Electron's bundled Node.js. This avoids the
+ *   native module ABI mismatch problem — \`better-sqlite3\` only needs to be
+ *   compiled for one Node.js version (the system one), and both the web app
+ *   and Electron desktop share the same compiled binary.
  */
 
 import {
@@ -26,7 +28,7 @@ import {
   shell,
   type OpenDialogOptions,
 } from "electron";
-import { fork, type ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import http from "node:http";
 import path from "node:path";
 import fs from "node:fs";
@@ -134,22 +136,20 @@ function startNextServer(): Promise<void> {
   return new Promise((resolve, reject) => {
     const { script, args, cwd } = getNextCommand();
 
-    console.log(`[electron] Starting Next.js server via fork...`);
+    console.log(`[electron] Starting Next.js server via system node...`);
     console.log(`[electron]   script: ${script}`);
     console.log(`[electron]   args:   ${args.join(" ")}`);
     console.log(`[electron]   cwd:    ${cwd}`);
 
-    // Use fork() with ELECTRON_RUN_AS_NODE=1 so the Electron-bundled
-    // Node.js runtime is reused — without this, process.execPath would
-    // start a second Electron instance.
-    // fork() automatically sets up an IPC channel; we must include
-    // "ipc" in stdio to preserve it while piping stdout/stderr.
-    serverProcess = fork(script, args, {
+    // Spawn with the system Node.js binary instead of Electron's bundled
+    // Node.js. This avoids native module ABI mismatches — better-sqlite3
+    // only needs to be compiled for system Node.js, and both the dev:web
+    // and dev:electron workflows share the same compiled binary.
+    serverProcess = spawn("node", [script, ...args], {
       cwd,
-      stdio: ["ignore", "pipe", "pipe", "ipc"],
+      stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...process.env,
-        ELECTRON_RUN_AS_NODE: "1",
         NODE_ENV: isDev ? "development" : "production",
         PORT: String(PORT),
       },
