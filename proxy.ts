@@ -30,14 +30,19 @@ export async function proxy(request: NextRequest) {
   // Proxy runs before route handlers, so validate the opaque session through
   // the public status handler. The handler performs the database lookup and
   // checks expiry/revocation; the proxy only supplies the early auth wall.
+  // Use localhost for the internal fetch instead of the public request URL.
+  // The public URL may not be reachable from inside the Docker container
+  // (DNS resolution, TLS termination, or reverse proxy routing issues).
   try {
-    const status = await fetch(new URL("/api/auth/status", request.url), {
+    const port = process.env.PORT || "3000";
+    const status = await fetch(`http://127.0.0.1:${port}/api/auth/status`, {
       headers: { cookie: request.headers.get("cookie") ?? "" },
       cache: "no-store",
     });
     const data = await status.json() as { authenticated?: boolean };
     if (!data.authenticated) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
-  } catch {
+  } catch (e) {
+    console.error("[proxy] Auth status check failed:", e);
     return NextResponse.json({ error: "Authentication service unavailable." }, { status: 503 });
   }
   return NextResponse.next();
