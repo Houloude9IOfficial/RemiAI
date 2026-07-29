@@ -65,16 +65,6 @@ function isQuestionsPart(part: AnyToolPart): boolean {
   );
 }
 
-function isSuggestionsPart(part: AnyToolPart): boolean {
-  const output = getOutput(part);
-  return (
-    output !== undefined &&
-    output !== null &&
-    typeof output === "object" &&
-    (output as Record<string, unknown>).type === "suggestions"
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Tool-specific action labels & icons
 // ---------------------------------------------------------------------------
@@ -217,11 +207,10 @@ export function ToolCallGroup({
 }) {
   const { present, past, icon: ActionIcon } = getGroupLabel(parts);
 
-  // Detect if any part has questions or suggestions output — keep expanded so the user can see
+  // Detect if any part has questions output — keep expanded so the user can see
   // and interact with the cards.
   const hasQuestions = parts.some(isQuestionsPart);
-  const hasSuggestions = parts.some(isSuggestionsPart);
-  const keepOpen = hasQuestions || hasSuggestions;
+  const keepOpen = hasQuestions;
 
   // Start expanded if the group contains questions or suggestions, otherwise collapsed.
   const [isOpen, setIsOpen] = useState(keepOpen);

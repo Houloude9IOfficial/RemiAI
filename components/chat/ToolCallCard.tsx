@@ -17,7 +17,6 @@ import {
 } from "lucide-react";
 import { MediaDisplay } from "./MediaDisplay";
 import { QuestionsCard } from "./QuestionsCard";
-import { FollowupSuggestions } from "./FollowupSuggestions";
 import { TodoBoard } from "./TodoBoard";
 import { VisualCard } from "./VisualCard";
 
@@ -135,13 +134,6 @@ export function ToolCallCard({
     typeof output === "object" &&
     (output as Record<string, unknown>).type === "questions";
 
-  // Detect if the output is a suggestions result (from suggest_followups)
-  const isSuggestionsResult =
-    output !== undefined &&
-    output !== null &&
-    typeof output === "object" &&
-    (output as Record<string, unknown>).type === "suggestions";
-
   // Check if this is a read_media tool call (use endsWith for MCP namespace tolerance)
   const isReadMedia = toolName.endsWith("read_media");
 
@@ -189,11 +181,6 @@ export function ToolCallCard({
     // For questions output, render the interactive QuestionsCard instead
     if (isQuestionsResult && output && isComplete) {
       return <QuestionsCard data={output} />;
-    }
-
-    // For suggestions output, render the clickable FollowupSuggestions
-    if (isSuggestionsResult && output && isComplete) {
-      return <FollowupSuggestions data={output} />;
     }
 
     // For todo list output, render the visual TodoBoard

@@ -71,7 +71,7 @@ function SuggestionsForm({ data }: { data: SuggestionsData }) {
   return (
     <div
       ref={containerRef}
-      className="overflow-hidden rounded-xl border border-border/50 bg-gradient-to-b from-muted/30 to-background shadow-sm"
+      className="overflow-hidden rounded-xl from-muted/30 to-background"
     >
       {/* Header */}
       <div className="flex items-center gap-2 border-b border-border/30 px-3.5 py-2.5">
@@ -106,7 +106,7 @@ function SuggestionsForm({ data }: { data: SuggestionsData }) {
                   ? "border-primary/40 bg-primary/5 text-foreground shadow-sm"
                   : isDisabled
                     ? "border-border/20 bg-muted/10 text-muted-foreground/40 cursor-default"
-                    : "border-border/40 bg-background/60 text-muted-foreground hover:border-primary/30 hover:bg-primary/[0.03] hover:text-foreground hover:shadow-sm cursor-pointer",
+                    : "border-border/40 bg-background/60 text-muted-foreground hover:border-primary/30 hover:cursor-pointer",
               )}
             >
               {/* Icon */}
@@ -117,7 +117,7 @@ function SuggestionsForm({ data }: { data: SuggestionsData }) {
                     ? "text-primary"
                     : isDisabled
                       ? "text-muted-foreground/30"
-                      : "text-muted-foreground/50 group-hover:bg-primary/10 group-hover:text-primary",
+                      : "text-muted-foreground/50 group-hover:text-primary",
                 )}
               >
                 {isClicked ? (

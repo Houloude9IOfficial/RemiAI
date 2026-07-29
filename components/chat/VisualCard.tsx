@@ -257,20 +257,20 @@ export function VisualCard({ data }: { data: unknown }) {
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border/50 bg-background/50 shadow-sm backdrop-blur-sm transition-all duration-200 hover:shadow-md">
+    <div className="overflow-hidden rounded-xl transition-all duration-200">
       {/* Header */}
-      <div className="flex items-center gap-2.5 border-b border-border/30 bg-muted/20 px-4 py-2.5">
-        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-indigo-500/10">
+      <div className="flex items-center gap-2.5 py-2.5">
+        {/* <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-indigo-500/10">
           <Palette className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
-        </div>
+        </div> */}
         <span className="text-sm font-semibold text-foreground truncate">
           {title}
         </span>
-        {visualType && (
+        {/* {visualType && (
           <span className="shrink-0 rounded bg-indigo-500/10 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
             {visualType}
           </span>
-        )}
+        )} */}
       </div>
 
       {/* Content area — transparent background so it blends into the chat */}
@@ -287,7 +287,7 @@ export function VisualCard({ data }: { data: unknown }) {
 
       {/* Optional caption */}
       {caption && (
-        <div className="border-t border-border/20 px-4 py-2">
+        <div className="border-t text-center border-border/20 px-4 py-2">
           <p className="text-[11px] text-muted-foreground/70 italic leading-relaxed">
             {caption}
           </p>

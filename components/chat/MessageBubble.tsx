@@ -5,6 +5,7 @@ import { isTextUIPart, isToolUIPart, getToolName } from "ai";
 import { Component, useRef } from "react";
 import { ToolCallGroup } from "./ToolCallGroup";
 import { VisualCard } from "./VisualCard";
+import { FollowupSuggestions } from "./FollowupSuggestions";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { cn } from "@/lib/utils";
 import {
@@ -125,7 +126,8 @@ function StreamingSafeMarkdown({ content, isStreaming }: { content: string; isSt
 type Segment =
   | { type: "text"; text: string }
   | { type: "tool"; parts: UIMessage["parts"] }
-  | { type: "visual"; part: UIMessage["parts"][number] };
+  | { type: "visual"; part: UIMessage["parts"][number] }
+  | { type: "suggestions"; data: unknown };
 
 /**
  * Walk through `parts` in order and produce interleaved segments.
@@ -146,6 +148,25 @@ function buildSegments(parts: UIMessage["parts"]): Segment[] {
         segments.push({ type: "text", text: part.text });
       }
     } else if (isToolUIPart(part)) {
+      // Detect suggest_followups output and promote to inline followup card
+      // instead of nesting inside a ToolCallGroup.
+      const partObj = part as Record<string, unknown>;
+      const partState = partObj.state as string | undefined;
+      const partOutput = partObj.output;
+      const isComplete =
+        partState === "output-available" ||
+        partState === "approval-responded";
+      const isSuggestions =
+        partOutput !== undefined &&
+        partOutput !== null &&
+        typeof partOutput === "object" &&
+        (partOutput as Record<string, unknown>).type === "suggestions";
+
+      if (isSuggestions && isComplete) {
+        segments.push({ type: "suggestions", data: partOutput });
+        continue;
+      }
+
       // Detect create_visual tool calls and promote them to inline visual cards
       // instead of nesting them inside a ToolCallGroup.
       const toolName = (() => {
@@ -266,19 +287,31 @@ if (!hasAnyContent) {
       <div className="w-full max-w-[85%] px-4 py-3 text-sm text-foreground">
         {/* Render segments in their original interleaved order */}
         <div className="flex flex-col gap-3">
-          {segments.map((segment, idx) =>
-            segment.type === "text" ? (
-              <StreamingSafeMarkdown
-                key={`text-${idx}`}
-                content={segment.text}
-                isStreaming={isStreaming && idx === segments.length - 1}
-              />
-            ) : segment.type === "visual" ? (
-              <VisualCardSegment key={`visual-${idx}`} part={segment.part} />
-            ) : (
-              <ToolCallGroup key={`tool-${idx}`} parts={segment.parts as any} />
-            ),
-          )}
+          {/* Render non-suggestions segments in their original interleaved order */}
+          {segments
+            .filter((s) => s.type !== "suggestions")
+            .map((segment, idx) =>
+              segment.type === "text" ? (
+                <StreamingSafeMarkdown
+                  key={`text-${idx}`}
+                  content={segment.text}
+                  isStreaming={isStreaming && idx === segments.length - 1}
+                />
+              ) : segment.type === "visual" ? (
+                <VisualCardSegment key={`visual-${idx}`} part={segment.part} />
+              ) : (
+                <ToolCallGroup key={`tool-${idx}`} parts={segment.parts as any} />
+              ),
+            )}
+
+          {/* Suggestions always rendered at the bottom, cleanly separated */}
+          {segments
+            .filter((s): s is Segment & { type: "suggestions" } => s.type === "suggestions")
+            .map((segment, idx) => (
+              <div key={`suggestions-${idx}`} className="mt-1">
+                <FollowupSuggestions data={segment.data} />
+              </div>
+            ))}
         </div>
 
         {/* Thinking indicator — shown under content while AI is still processing */}

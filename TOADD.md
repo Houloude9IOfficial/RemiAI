@@ -72,3 +72,7 @@ create into electron app, add mac/windows support, native features & include CI/
 <!-- if using ollama provider, make it include <think> process as tool. -->
 
 <!-- on message send scroll bottom in chat content, and focus on msg input. -->
+
+make the dashboard fully mobile friendly, and allow to be used on mobile devices, and also allow to be installed as a PWA (Progressive Web App) on mobile devices.
+
+<!-- remove shadows, border and additional text from visualizations, and make them more clean and simple. -->
