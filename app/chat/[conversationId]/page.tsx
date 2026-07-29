@@ -12,6 +12,7 @@ import { ChatSkeleton } from "@/components/chat/ChatSkeleton";
 import { ModelPicker } from "@/components/chat/ModelPicker";
 import { TodoProgressBar } from "@/components/chat/TodoProgressBar";
 import { ExportDialog } from "@/components/chat/ExportDialog";
+import { MobileChatHeader, DesktopChatHeader } from "@/components/chat/MobileChatHeader";
 import { ErrorCard } from "@/components/ui/error-card";
 import { useErrorHandler } from "@/lib/hooks/use-error-handler";
 import { conversationsApi } from "@/lib/api/conversations";
@@ -323,16 +324,22 @@ function ConversationChat({
 
   return (
     <div className="flex flex-1 flex-col h-full">
-      {/* ── Header ── */}
-      <div className="flex items-center gap-2 border-b px-4 py-2 bg-background/95 backdrop-blur sticky top-0 z-20">
-        {messages.length > 0 && (
-          <ExportDialog messages={messages} title={initialConversation.title} />
-        )}
-        <span className="text-sm font-medium truncate">{initialConversation.title}</span>
-        <div className="ml-auto flex items-center gap-2">
-          <ModelPicker providerId={providerId} modelId={modelId} onChange={handleModelChange} />
-        </div>
-      </div>
+      {/* ── Mobile Header ── */}
+      <MobileChatHeader
+        title={initialConversation.title}
+        providerId={providerId}
+        modelId={modelId}
+        onModelChange={handleModelChange}
+      />
+
+      {/* ── Desktop Header ── */}
+      <DesktopChatHeader
+        title={initialConversation.title}
+        providerId={providerId}
+        modelId={modelId}
+        onModelChange={handleModelChange}
+        extra={messages.length > 0 && <ExportDialog messages={messages} title={initialConversation.title} />}
+      />
 
       {/* ── Todo progress ── */}
       <TodoProgressBar conversationId={conversationId} />
@@ -362,7 +369,7 @@ function ConversationChat({
       )}
 
       {/* ── Input ── */}
-      <div className="sticky bottom-0 z-20 bg-background/95 backdrop-blur">
+      <div className="sticky bottom-0 z-20 bg-background/95 backdrop-blur supports-[padding-bottom:env(safe-area-inset-bottom)]:pb-[env(safe-area-inset-bottom)]">
         <ChatInput
           conversationId={conversationId}
           status={status}

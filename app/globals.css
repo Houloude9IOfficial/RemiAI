@@ -138,6 +138,45 @@
   *, *::before, *::after {
     transition: background-color 0.2s ease, border-color 0.15s ease, box-shadow 0.15s ease;
   }
+
+  /* Safe area insets for mobile notches and home indicators */
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .safe-area-left {
+    padding-left: env(safe-area-inset-left, 0px);
+  }
+  .safe-area-right {
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+
+  /* Prevent text-size adjustment on orientation change */
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* Disable callout on long-press on mobile */
+  * {
+    -webkit-touch-callout: default;
+  }
+
+  /* Smoother tap highlight */
+  a, button, [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Prevent pull-to-refresh in the app */
+  body {
+    overscroll-behavior: none;
+  }
+
+  /* Improve scrolling on iOS */
+  .ios-scroll {
+    -webkit-overflow-scrolling: touch;
+  }
 }
 
 /* Custom scrollbar (thin, subtle, works in both light/dark) */

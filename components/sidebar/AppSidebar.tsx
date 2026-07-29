@@ -34,6 +34,11 @@ const extraLinks = [
 ];
 
 export function AppSidebar() {
+  // Hide on mobile — MobileSidebar takes over
+  return <DesktopSidebar />;
+}
+
+function DesktopSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -98,7 +103,7 @@ export function AppSidebar() {
   }, [extraExpanded]);
 
   return (
-    <aside className="flex h-full w-64 flex-col border-r bg-muted/30">
+    <aside className="hidden md:flex h-full w-64 flex-col border-r bg-muted/30">
       <div className="flex items-center justify-between px-3 py-3">
         <button
           type="button"

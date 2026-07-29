@@ -512,7 +512,7 @@ export function ChatInput({
   // -----------------------------------------------------------------------
 
   return (
-    <div className="relative border-none p-8">
+    <div className="relative border-none max-md:p-4 p-8">
       <div className="pointer-events-none absolute inset-x-0 -top-6 z-10 h-6 bg-gradient-to-b from-transparent to-background backdrop-blur-[1px]" />
 
       <div
@@ -547,7 +547,125 @@ export function ChatInput({
           )}
         </AnimatePresence>
 
-        {/* Main input area */}
+        {/* Mobile controls row — above the input, only when not streaming */}
+        {!isStreaming && (
+          <div className="flex items-center gap-2 pb-1.5 md:hidden">
+            {/* File attachment buttons */}
+            <button
+              type="button"
+              onClick={openFilePicker}
+              disabled={disabled}
+              className={cn(
+                "flex h-8 shrink-0 items-center gap-1 rounded-lg border px-2 text-xs font-medium transition-all duration-200",
+                "border-border/60 bg-transparent text-muted-foreground hover:border-muted-foreground/30 hover:text-foreground",
+                disabled && "opacity-40 pointer-events-none",
+              )}
+              title="Upload a file"
+            >
+              <Upload className="h-3.5 w-3.5" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setFileDialogOpen(true)}
+              disabled={disabled}
+              className={cn(
+                "flex h-8 shrink-0 items-center gap-1 rounded-lg border px-2 text-xs font-medium transition-all duration-200",
+                "border-border/60 bg-transparent text-muted-foreground hover:border-muted-foreground/30 hover:text-foreground",
+                disabled && "opacity-40 pointer-events-none",
+              )}
+              title="Attach a file"
+            >
+              <Paperclip className="h-3.5 w-3.5" />
+            </button>
+
+            {/* Mode selector — mobile row */}
+            {onModeChange && (
+              <div className="flex shrink-0 rounded-lg border border-border/60 p-0.5 bg-muted/20">
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <button
+                        type="button"
+                        onClick={() => onModeChange("chat")}
+                        disabled={disabled}
+                        className={cn(
+                          "flex h-7 items-center gap-1 rounded-md px-1.5 text-xs font-medium transition-all duration-200",
+                          mode === "chat"
+                            ? "bg-background text-foreground shadow-sm border border-border/40"
+                            : "text-muted-foreground hover:text-foreground border border-transparent",
+                          disabled && "opacity-40 pointer-events-none",
+                        )}
+                      />
+                    }
+                  >
+                    <MessageCircle className="h-3.5 w-3.5" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top" align="center" className="text-center">
+                    <p className="font-semibold text-xs">Chat mode</p>
+                    <p className="text-[10px] opacity-80">Normal conversation with the AI</p>
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <button
+                        type="button"
+                        onClick={() => onModeChange("goal")}
+                        disabled={disabled}
+                        className={cn(
+                          "flex h-7 items-center gap-1 rounded-md px-1.5 text-xs font-medium transition-all duration-200",
+                          mode === "goal"
+                            ? "bg-background text-cyan-600 dark:text-cyan-400 shadow-sm border border-cyan-400/40"
+                            : "text-muted-foreground hover:text-foreground border border-transparent",
+                          disabled && "opacity-40 pointer-events-none",
+                        )}
+                      />
+                    }
+                  >
+                    {mode === "goal" ? (
+                      <Sparkles className="h-3.5 w-3.5 animate-pulse" />
+                    ) : (
+                      <Target className="h-3.5 w-3.5" />
+                    )}
+                  </TooltipTrigger>
+                  <TooltipContent side="top" align="center" className="text-center">
+                    <p className="font-semibold text-xs">Goal mode</p>
+                    <p className="text-[10px] opacity-80">AI works autonomously until task is complete</p>
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <button
+                        type="button"
+                        onClick={() => onModeChange("plan")}
+                        disabled={disabled}
+                        className={cn(
+                          "flex h-7 items-center gap-1 rounded-md px-1.5 text-xs font-medium transition-all duration-200",
+                          mode === "plan"
+                            ? "bg-background text-emerald-600 dark:text-emerald-400 shadow-sm border border-emerald-400/40"
+                            : "text-muted-foreground hover:text-foreground border border-transparent",
+                          disabled && "opacity-40 pointer-events-none",
+                        )}
+                      />
+                    }
+                  >
+                    <ListChecks className="h-3.5 w-3.5" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top" align="center" className="text-center">
+                    <p className="font-semibold text-xs">Plan mode</p>
+                    <p className="text-[10px] opacity-80">AI helps plan without modifying any files</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            )}
+
+            <div className="flex-1" />
+          </div>
+        )}
+
+        {/* Main input row — textarea + send button */}
         <div
           className={cn(
             "relative flex items-end bg-background gap-2 rounded-2xl border p-2 transition-all duration-200",
@@ -591,7 +709,7 @@ export function ChatInput({
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.5 }}
                   className={cn(
-                    "text-[10px] font-medium tracking-wide",
+                    "hidden md:inline text-[10px] font-medium tracking-wide",
                     mode === "goal" ? "text-cyan-400/80" : "text-emerald-400/80",
                   )}
                 >
@@ -633,11 +751,9 @@ export function ChatInput({
             />
           </div>
 
-          {/* File attachment buttons */}
+          {/* Desktop: file attachment buttons beside input */}
           {!isStreaming && (
-            <>
-
-              {/* Upload files from your computer */}
+            <div className="hidden md:flex items-center gap-2">
               <button
                 type="button"
                 onClick={openFilePicker}
@@ -653,7 +769,6 @@ export function ChatInput({
                 <span className="hidden sm:inline">Attach</span>
               </button>
 
-              {/* Browse files from configured directories */}
               <button
                 type="button"
                 onClick={() => setFileDialogOpen(true)}
@@ -668,12 +783,12 @@ export function ChatInput({
                 <Paperclip className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">File</span>
               </button>
-            </>
+            </div>
           )}
 
+          {/* Desktop: mode selector beside input */}
           {!isStreaming && onModeChange && (
-            <div className="flex shrink-0 rounded-lg border border-border/60 p-0.5 bg-muted/20">
-              {/* Chat mode */}
+            <div className="hidden md:flex shrink-0 rounded-lg border border-border/60 p-0.5 bg-muted/20">
               <Tooltip>
                 <TooltipTrigger
                   render={
@@ -700,7 +815,6 @@ export function ChatInput({
                 </TooltipContent>
               </Tooltip>
 
-              {/* Goal mode */}
               <Tooltip>
                 <TooltipTrigger
                   render={
@@ -731,7 +845,6 @@ export function ChatInput({
                 </TooltipContent>
               </Tooltip>
 
-              {/* Plan mode */}
               <Tooltip>
                 <TooltipTrigger
                   render={
