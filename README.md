@@ -367,6 +367,22 @@ npm run dev
 
 ---
 
+## Dependency Security & npm Overrides
+
+Both the root project and `website/` ship npm `overrides` entries that pin vulnerable transitive dependencies to patched versions. These are intentional — do not remove them when tidying dependencies:
+
+| Override | Why it exists |
+|---|---|
+| `next` → `postcss: 8.5.25` | `next` pins `postcss@8.4.31`, which is vulnerable (source map disclosure / path traversal). Forces the patched line while keeping Next.js's expected API. |
+| `sharp: ^0.35.3` | `next` declares `sharp@^0.34.5` as an optional dependency; the older line inherits libvips CVEs. |
+| `fast-uri: ^3.1.5` | `fast-uri@3.1.3` has a host-confusion vulnerability; `^3.1.5` is the patched line. |
+| `@modelcontextprotocol/sdk: ^1.30.0` + `@hono/node-server: ^2.0.12` | `@hono/node-server@1.x` has a Windows path-traversal; SDK `1.30.0` is the first release that supports the patched `2.x` adapter. |
+| `tar: ^7.5.22` | `tar@<=7.5.20` has a stack-overflow DoS (via node-gyp / electron-builder). |
+| `minimatch@9.0.9` / `minimatch@10.2.5` → `brace-expansion: 5.0.9` | `brace-expansion@<=5.0.7` has an unbounded-expansion DoS. Scoped (not global) because `minimatch@3.x`/`5.x` call `brace-expansion` as a function, which the patched `5.x` object API breaks. |
+| `@esbuild-kit/core-utils` → `esbuild: ^0.25.12` | `@esbuild-kit` pins `esbuild@~0.18.20`, which has the dev-server SSRF/request-read vulnerability. |
+
+> **Known residual:** `npm audit` still reports `brace-expansion` (and its `minimatch`/`eslint`/`electron-builder` chain) as high. Those instances are **dev-time only** (eslint, electron-builder, drizzle-kit) and cannot be upgraded without breaking those tools — the patched `brace-expansion@5.x` is API-incompatible with the `minimatch@3.x`/`5.x` they pin, and upstream hasn't released compatible versions yet. They never ship in the app runtime, and the DoS requires processing attacker-controlled glob patterns that never reach these dev tools.
+
 ## Troubleshooting
 
 ### "no such table" database errors

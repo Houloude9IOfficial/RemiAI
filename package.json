@@ -70,7 +70,7 @@
     "next": "16.2.12",
     "next-themes": "^0.4.6",
     "pdf-parse": "^1.1.1",
-    "postcss": "8.5.24",
+    "postcss": "8.5.25",
     "react": "19.2.4",
     "react-day-picker": "^10.0.1",
     "react-dom": "19.2.4",
@@ -95,5 +95,24 @@
     "eslint-config-next": "16.2.10",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "overrides": {
+    "next": {
+      "postcss": "8.5.25"
+    },
+    "sharp": "^0.35.3",
+    "fast-uri": "^3.1.5",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@hono/node-server": "^2.0.12",
+    "tar": "^7.5.22",
+    "minimatch@9.0.9": {
+      "brace-expansion": "5.0.9"
+    },
+    "minimatch@10.2.5": {
+      "brace-expansion": "5.0.9"
+    },
+    "@esbuild-kit/core-utils": {
+      "esbuild": "^0.25.12"
+    }
   }
 }
