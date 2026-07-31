@@ -18,7 +18,7 @@ import { toolConfigs } from "@/db/schema";
 export type ExecResult = SandboxResult;
 
 // ---------------------------------------------------------------------------
-// Shared subprocess runner (used by Python, JS, and Bash)
+// Shared subprocess runner (used by Python and JS)
 // ---------------------------------------------------------------------------
 
 /**
@@ -128,40 +128,6 @@ async function spawnSubprocess(
       }
     });
   });
-}
-
-// ---------------------------------------------------------------------------
-// Bash / Shell execution
-// ---------------------------------------------------------------------------
-
-/**
- * Execute a shell command as a subprocess in an isolated temp directory.
- * - macOS/Linux: runs via \`bash -c "<command>"\`
- * - Windows: runs via \`cmd.exe /c "<command>"\`
- *
- * The temp dir is the cwd and is cleaned up after execution.
- * Environment variables are stripped (only PATH + SYSTEMROOT kept).
- */
-async function runBash(
-  command: string,
-  timeoutMs: number = 30_000,
-): Promise<SandboxResult> {
-  const start = Date.now();
-  const sandboxDir = await createSandboxDir();
-
-  try {
-    const isWin = process.platform === "win32";
-    const shell = isWin ? "cmd.exe" : "bash";
-    const args = isWin ? ["/c", command] : ["-c", command];
-
-    return await spawnSubprocess(shell, args, {
-      cwd: sandboxDir,
-      timeoutMs,
-      start,
-    });
-  } finally {
-    await cleanupSandboxDir(sandboxDir);
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -389,58 +355,6 @@ ${code}
 // ---------------------------------------------------------------------------
 
 /**
- * Execute a shell command and return its output (stdout, stderr, exit code).
- * Runs in an isolated temp directory with env vars stripped.
- * Uses bash on macOS/Linux and cmd.exe on Windows.
- */
-export const bashExecTool = {
-  description: `Execute a shell command and return its output (stdout, stderr, exit code).
-
-${SANDBOX_WARNING}
-
-Use this to:
-- Run terminal commands, build scripts, git operations
-- Install packages, run tests, execute CLI tools
-- Automate system tasks and development workflows
-
-On macOS/Linux: runs via bash -c
-On Windows: runs via cmd.exe /c
-Default timeout: 30s, max: 120s.`,
-  parameters: z.object({
-    command: z
-      .string()
-      .min(1)
-      .describe(
-        "Shell command to execute. Runs via bash -c (macOS/Linux) or cmd.exe /c (Windows).",
-      ),
-    timeout: z
-      .number()
-      .int()
-      .positive()
-      .max(120_000)
-      .optional()
-      .default(30_000)
-      .describe("Timeout in milliseconds (default: 30s, max: 120s)"),
-  }),
-  execute: async ({
-    command,
-    timeout,
-  }: {
-    command: string;
-    timeout?: number;
-  }) => {
-    const result = await runBash(command, timeout ?? 30_000);
-    return truncateToolResult({
-      stdout: result.stdout,
-      stderr: result.stderr,
-      exitCode: result.exitCode,
-      timedOut: result.timedOut,
-      duration: `${result.durationMs}ms`,
-    });
-  },
-};
-
-/**
  * Execute Python code and return the console output.
  * The code runs in an isolated temp directory with env vars stripped.
  * NOTE: absolute paths still work — this is NOT a security boundary.
@@ -563,6 +477,5 @@ export async function buildExecutionTools(): Promise<Record<string, any>> {
   return {
     python_exec: pythonExecTool,
     js_exec: javaScriptExecTool,
-    bash_exec: bashExecTool,
   };
 }

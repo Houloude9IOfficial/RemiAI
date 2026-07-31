@@ -208,7 +208,6 @@ function ConversationChat({
     });
   }, [onRetryable, sendMessage]);
 
-  const [sendCount, setSendCount] = useState(0);
   const [isAiStarting, setIsAiStarting] = useState(false);
 
   const handleSend = useCallback(
@@ -216,7 +215,6 @@ function ConversationChat({
       lastSentText.current = text;
       clearError();
       sendMessage({ text });
-      setSendCount((n) => n + 1);
     },
     [clearError, sendMessage],
   );
@@ -349,7 +347,6 @@ function ConversationChat({
         <MessageList
           messages={messages}
           status={status}
-          sendCount={sendCount}
           onSend={(text) => sendMessage({ text })}
           onAiStart={handleAiStart}
           isAiStarting={isAiStarting}

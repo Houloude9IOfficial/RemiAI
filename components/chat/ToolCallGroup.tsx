@@ -24,6 +24,9 @@ import {
   ClipboardList,
   RefreshCw,
   Eye,
+  Brain,
+  User,
+  UserRoundPen,
 } from "lucide-react";
 
 type AnyToolPart = ToolUIPart<any> | DynamicToolUIPart;
@@ -72,7 +75,7 @@ function isQuestionsPart(part: AnyToolPart): boolean {
 interface ToolLabel {
   present: string;
   past: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: React.ComponentType<{ className?: string }> | null;
 }
 
 const TOOL_LABELS: Record<string, ToolLabel> = {
@@ -85,6 +88,11 @@ const TOOL_LABELS: Record<string, ToolLabel> = {
     present: "Listing files",
     past: "Listed files",
     icon: List,
+  },
+  create_directory: {
+    present: "Creating directory",
+    past: "Created directory",
+    icon: FolderSearch,
   },
   read_file: {
     present: "Reading file",
@@ -131,11 +139,6 @@ const TOOL_LABELS: Record<string, ToolLabel> = {
     past: "Ran JavaScript",
     icon: Terminal,
   },
-  bash_exec: {
-    present: "Running shell command",
-    past: "Ran shell command",
-    icon: Terminal,
-  },
   read_document: {
     present: "Reading document",
     past: "Read document",
@@ -171,6 +174,61 @@ const TOOL_LABELS: Record<string, ToolLabel> = {
     past: "Viewed tasks",
     icon: Eye,
   },
+  list_available_tools: {
+    present: "Discovering tools",
+    past: "Discovered tools",
+    icon: Search,
+  },
+  get_tool_details: {
+    present: "Checking tool",
+    past: "Checked tool",
+    icon: Search,
+  },
+  query_file_index: {
+    present: "Searching file index",
+    past: "Searched file index",
+    icon: Search,
+  },
+  get_tool_help: {
+    present: "Getting help",
+    past: "Got help",
+    icon: HelpCircle,
+  },
+  get_recent_memories: {
+    present: "Recalling memory",
+    past: "Recalled memory",
+    icon: Brain,
+  },
+  search_memories: {
+    present: "Searching memory",
+    past: "Searched memory",
+    icon: Search,
+  },
+  get_profile: {
+    present: "Checking profile",
+    past: "Checked profile",
+    icon: User,
+  },
+  update_profile: {
+    present: "Updating profile",
+    past: "Updated profile",
+    icon: UserRoundPen,
+  },
+  remember: {
+    present: "Saving to memory",
+    past: "Saved to memory",
+    icon: Brain,
+  },
+  fc_search: {
+    present: "Searching web",
+    past: "Searched web",
+    icon: Search,
+  },
+  fc_scrape: {
+    present: "Scraping web",
+    past: "Scraped web",
+    icon: Search,
+  },
 };
 
 const FALLBACK_LABEL: ToolLabel = {
@@ -200,12 +258,34 @@ function getGroupLabel(parts: AnyToolPart[]): ToolLabel {
   return best ?? FALLBACK_LABEL;
 }
 
+// Detect MCP tool calls — MCP tools arrive namespaced as "serverName__toolName".
+// Returns the first MCP server name found, or undefined if the group is pure built-in.
+function getMcpServerName(parts: AnyToolPart[]): string | undefined {
+  for (const part of parts) {
+    if (!part || typeof part !== "object") continue;
+    let name: string;
+    try {
+      name = getToolName(part);
+    } catch {
+      continue;
+    }
+    if (name.includes("__")) {
+      return name.split("__")[0];
+    }
+  }
+  return undefined;
+}
+
 export function ToolCallGroup({
   parts,
 }: {
   parts: AnyToolPart[];
 }) {
   const { present, past, icon: ActionIcon } = getGroupLabel(parts);
+
+  // MCP tools arrive namespaced as "serverName__toolName" — surface a badge
+  // so the user can see at a glance when the AI is talking to an MCP server.
+  const mcpServer = getMcpServerName(parts);
 
   // Detect if any part has questions output — keep expanded so the user can see
   // and interact with the cards.
@@ -246,7 +326,7 @@ export function ToolCallGroup({
   }, []);
 
   return (
-    <div className="overflow-hidden rounded-xl animate-tool-slide-up">
+    <div className={`overflow-hidden animate-tool-slide-up ${isOpen ? 'rounded-lg' : 'rounded-xl'}`}>
       {/* Header — always visible, clickable to toggle */}
       <button
         type="button"
@@ -257,31 +337,43 @@ export function ToolCallGroup({
         )}
       >
         {/* Icon */}
-        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-muted-foreground/10">
-          {running ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-          ) : (
-            <ActionIcon className="h-3.5 w-3.5 text-muted-foreground" />
-          )}
-        </div>
+        {ActionIcon && (
+<div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md">
+  {running ? (
+    <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+  ) : ActionIcon ? (
+    <ActionIcon className="h-3.5 w-3.5 text-muted-foreground" />
+  ) : null}
+</div>
+)}
 
         {/* Label */}
         <span className="text-sm font-medium text-foreground">
           {running ? present : past}
         </span>
 
+        {/* MCP badge — shown when any call in the group hits an MCP server */}
+        {mcpServer && (
+          <span className="shrink-0 rounded-full bg-primary/5 px-1.5 py-px text-[10px] font-small leading-4 text-primary">
+            MCP · {mcpServer}
+          </span>
+        )}
+
         {/* Count */}
         <span className="ml-auto text-xs tabular-nums text-muted-foreground">
-          {parts.length} {parts.length === 1 ? "call" : "calls"}
+          {parts.length > 1 ? `${parts.length} ` : null}
+          {parts.length === 1 ? "" : "calls"}
         </span>
 
         {/* Chevron */}
+        { parts.length > 1 &&
         <ChevronDown
           className={cn(
             "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ease-out",
             isOpen && "rotate-180",
           )}
         />
+}
       </button>
 
       {/* Collapsible body — animated via grid-rows trick */}

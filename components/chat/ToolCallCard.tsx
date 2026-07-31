@@ -216,8 +216,8 @@ export function ToolCallCard({
             className={cn(
               "flex h-5 w-5 shrink-0 items-center justify-center rounded",
               isError && "bg-destructive/10 text-destructive",
-              isComplete && "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-              !isError && !isComplete && "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+              isComplete && "text-emerald-600 dark:text-emerald-400",
+              !isError && !isComplete && "text-blue-600 dark:text-blue-400",
             )}
           >
             {isError ? (

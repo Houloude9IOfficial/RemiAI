@@ -61,7 +61,7 @@ Descriptions: A tool (togglable) that allows the AI with javascript to create ro
 
 <!-- show profile on bottom of sidebar like chatgpt.com -->
 
-create into electron app, add mac/windows support, native features & include CI/CD to build the app installer.
+<!-- create into electron app, add mac/windows support, native features & include CI/CD to build the app installer. -->
 
 <!-- make app have logo, and optimize for MacOS -->
 
@@ -76,3 +76,5 @@ create into electron app, add mac/windows support, native features & include CI/
 make the dashboard fully mobile friendly, and allow to be used on mobile devices, and also allow to be installed as a PWA (Progressive Web App) on mobile devices.
 
 <!-- remove shadows, border and additional text from visualizations, and make them more clean and simple. -->
+
+<!-- remove icon background from tool calling visual text -->
