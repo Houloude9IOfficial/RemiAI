@@ -61,8 +61,8 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     id: "code_execution",
     name: "Code Execution",
     description:
-      "Run Python or JavaScript code, or shell commands on your machine. Useful for executing code snippets, analysis, experimentation, and running CLI tools. Includes python_exec, js_exec, and bash_exec with console output.",
-    toolNames: ["python_exec", "js_exec", "bash_exec"],
+      "Run Python or JavaScript code on your machine. Useful for executing code snippets, analysis, experimentation, and running CLI tools. Includes python_exec and js_exec with console output.",
+    toolNames: ["python_exec", "js_exec"],
     category: "builtin",
     togglable: true,
     requiresApiKey: false,

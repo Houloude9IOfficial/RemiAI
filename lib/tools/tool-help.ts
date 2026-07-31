@@ -388,18 +388,15 @@ context7_get_docs({ library: "react", query: "useActionState" })
 |---|---|---|
 | \`python_exec\` | \`code\`, \`timeout\` (optional, max 120s) | Execute Python code in a subprocess. Returns stdout, stderr, exit code. |
 | \`js_exec\` | \`code\`, \`timeout\` (optional, max 60s) | Execute JavaScript in a sandboxed Node.js VM. Supports console.log, await. No fs/network/timers access. |
-| \`bash_exec\` | \`command\`, \`timeout\` (optional, max 120s) | Execute a shell command via bash (macOS/Linux) or cmd.exe (Windows). Returns stdout, stderr, exit code. |
 
 ### Use cases:
 - Run calculations, algorithms, or data processing
 - Test code snippets before writing to files
 - Generate or transform data
 - Solve programming problems
-- Run terminal commands, build scripts, git operations, CLI tools
 
 For \`python_exec\`: use print() to see output.
-For \`js_exec\`: use console.log() to see output. \`await\` is supported at top level.
-For \`bash_exec\`: the command runs in an isolated temp directory with stripped environment variables.`,
+For \`js_exec\`: use console.log() to see output. \`await\` is supported at top level.`,
 
   "document-reader": `## Document reader tool
 
@@ -670,10 +667,6 @@ const KEYWORD_SYNONYMS: Record<string, string> = {
   documentation: "context7",
   "library docs": "context7",
   "code exec": "code-execution",
-  bash: "code-execution",
-  shell: "code-execution",
-  "shell command": "code-execution",
-  "terminal": "code-execution",
   python: "code-execution",
   javascript: "code-execution",
   js: "code-execution",

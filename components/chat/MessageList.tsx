@@ -1,14 +1,13 @@
 "use client";
 
 import type { UIMessage } from "ai";
-import { useLayoutEffect, useEffect, useRef, useState, useMemo, type ComponentType } from "react";
+import { useMemo, type ComponentType } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { preferencesApi } from "@/lib/api/preferences";
 import { MessageBubble } from "./MessageBubble";
 import { ChatMessageProvider } from "./ChatMessageContext";
 import {
   Loader2,
-  ChevronDown,
   Sparkles,
   Feather,
   Atom,
@@ -18,7 +17,6 @@ import {
   FileText,
   MessageCirclePlus,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 // ── Greeting phrases ──────────────────────────────────────────────────
 
@@ -110,35 +108,21 @@ const PARTICLES = [
   },
 ];
 
-// ── Direct scroll helper (sets scrollTop with optional offset clamping) ──
-function scrollTo(el: HTMLElement, target: number) {
-  const max = el.scrollHeight - el.clientHeight;
-  el.scrollTop = Math.max(0, Math.min(target, max));
-}
-
 // ── Component ────────────────────────────────────────────────────────
 
 export function MessageList({
   messages,
   status,
-  sendCount = 0,
   onSend,
   onAiStart,
   isAiStarting,
 }: {
   messages: UIMessage[];
   status?: "submitted" | "streaming" | "ready" | "error";
-  sendCount?: number;
   onSend?: (text: string) => void;
   onAiStart?: () => void;
   isAiStarting?: boolean;
 }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [isScrolledUp, setIsScrolledUp] = useState(false);
-  const autoScrollRef = useRef(true);
-  const prevSendCountRef = useRef(0);
-  const prevMsgCountRef = useRef(0);
-
   // Fetch user preferences so we can personalise the empty-state greeting
   const { data: prefs } = useQuery({
     queryKey: ["preferences"],
@@ -158,80 +142,6 @@ export function MessageList({
     return pickRandom(GENERAL_PHRASES);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preferredName]);
-
-  // Track scroll position — shows "New messages below" button when user scrolls up.
-  // Also disables auto-follow when user manually scrolls up.
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-
-    const handleScroll = () => {
-      const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-      const scrolledUp = distFromBottom > 10;
-      setIsScrolledUp(scrolledUp);
-      if (scrolledUp && autoScrollRef.current) {
-        autoScrollRef.current = false;
-      }
-    };
-
-    el.addEventListener("scroll", handleScroll, { passive: true });
-    handleScroll();
-    return () => el.removeEventListener("scroll", handleScroll);
-  }, []);
-
-  // ── RELIABLE SCROLL LOGIC ──
-  // Two independent triggers keep scrolling reliable:
-  //   1. sendCount — incremented by parent on every user send
-  //   2. messages.length — catches any message addition (including initial mount)
-  // Uses scrollIntoView so the browser finds the actual scroll container,
-  // regardless of which ancestor handles the overflow.
-  useLayoutEffect(() => {
-    const msgCount = messages.length;
-    const shouldScroll =
-      sendCount > prevSendCountRef.current ||
-      msgCount > prevMsgCountRef.current;
-
-    if (shouldScroll) {
-      prevSendCountRef.current = sendCount;
-      prevMsgCountRef.current = msgCount;
-      autoScrollRef.current = true;
-      setIsScrolledUp(false);
-
-      const el = scrollRef.current;
-      // Use the last message element if available; scrollIntoView finds the
-      // nearest scrollable ancestor automatically.
-      const els = el?.querySelectorAll<HTMLElement>("[data-message-id]");
-      const lastMsg = els?.[els.length - 1] ?? null;
-      if (lastMsg) {
-        lastMsg.scrollIntoView({ block: "end" });
-      } else {
-        el?.scrollTo({ top: el.scrollHeight });
-      }
-      return;
-    }
-
-    // Streaming follow: keep at bottom if user hasn't scrolled up
-    if (status === "streaming" && autoScrollRef.current && !isScrolledUp) {
-      const el = scrollRef.current;
-      if (el) {
-        const els = el.querySelectorAll<HTMLElement>("[data-message-id]");
-        const lastMsg = els[els.length - 1];
-        if (lastMsg) {
-          lastMsg.scrollIntoView({ block: "end" });
-        } else {
-          el.scrollTo({ top: el.scrollHeight });
-        }
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sendCount, status, isScrolledUp, messages.length]);
-
-  const scrollToBottom = () => {
-    autoScrollRef.current = true;
-    setIsScrolledUp(false);
-    const el = scrollRef.current;
-    if (el) scrollTo(el, el.scrollHeight);
-  };
 
   const lastMessage = messages[messages.length - 1];
   const isWaiting =
@@ -330,14 +240,11 @@ export function MessageList({
   return (
     <ChatMessageProvider value={{ sendMessage: onSend ?? (() => {}) }}>
       <div className="relative flex flex-1 flex-col">
-        <div
-          ref={scrollRef}
-          className="flex flex-1 flex-col p-6"
-        >
+        <div className="flex flex-1 flex-col p-6">
           <div className="flex flex-col gap-4">
             {messages.map((message, idx) => {
               return (
-                <div key={message.id} data-message-id={message.id}>
+                <div key={message.id}>
                   <MessageBubble
                     message={message}
                     isStreaming={
@@ -363,26 +270,7 @@ export function MessageList({
             <div className="h-64 shrink-0" />
           </div>
         </div>
-
-      {/* Scroll-to-bottom floating button — bottom center */}
-      <div
-        className={cn(
-          "pointer-events-none absolute inset-x-0 bottom-0 flex justify-center transition-all duration-300 ease-out",
-          isScrolledUp ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4",
-        )}
-      >
-        <button
-          type="button"
-          onClick={scrollToBottom}
-          className={cn(
-            "pointer-events-auto mb-7 flex items-center gap-1.5 rounded-full border border-border/50 bg-background/90 px-3.5 py-1.5 text-xs font-medium text-muted-foreground shadow-md backdrop-blur-sm transition-all duration-150 hover:bg-muted hover:text-foreground hover:shadow-lg active:scale-95",
-          )}
-        >
-          <ChevronDown className="h-3 w-3" />
-          New messages below
-        </button>
       </div>
-    </div>
     </ChatMessageProvider>
   );
 }

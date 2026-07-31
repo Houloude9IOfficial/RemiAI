@@ -75,7 +75,7 @@ function SuggestionsForm({ data }: { data: SuggestionsData }) {
     >
       {/* Header */}
       <div className="flex items-center gap-2 border-b border-border/30 px-3.5 py-2.5">
-        <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-amber-500/10">
+        <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md">
           <Lightbulb className="h-3 w-3 text-amber-600 dark:text-amber-400" />
         </div>
         <span className="text-xs font-medium text-muted-foreground">

@@ -137,7 +137,7 @@ To keep your RemiAI installation secure:
 4. **Keep dependencies updated** — run `npm audit` periodically and update packages
 5. **Secure your API keys** — treat API keys stored in RemiAI with the same care as any other credential store
 6. **Review MCP servers** — only add MCP servers from trusted sources
-7. **Be cautious with code execution** — the exec tools (`python_exec`, `js_exec`, `bash_exec`) have full filesystem access
+7. **Be cautious with code execution** — the exec tools (`python_exec`, `js_exec`) have full filesystem access
 8. **Don't disable the file watcher security** — keep watched directories limited to what you need
 9. **Backup regularly** — use encrypted backups to protect your data and API keys
 10. **Monitor the data directory** — the SQLite database at `data/remiai.sqlite` contains all your data and API keys

@@ -79,8 +79,17 @@ export async function getRootById(id: number): Promise<PermittedRoot> {
   const roots = await getPermittedRoots();
   const root = roots.find((r) => r.id === numericId);
   if (!root) {
+    const available =
+      roots.length > 0
+        ? roots
+            .map(
+              (r) =>
+                `${r.id} (${r.label}, ${r.canWrite ? "writable" : "read-only"})`,
+            )
+            .join(", ")
+        : "none configured";
     throw new FilesystemError(
-      `Root directory ${id} not found. Make sure to pass the numeric id (e.g. rootId=1) — the AI must send the number, not a string like rootId="1". On macOS, temp/screenshot files under /var/folders/... are NOT inside any configured root — either add that directory in Settings > Directories, or copy/move the file into an existing root.`,
+      `Root directory ${id} not found. Available roots: ${available}. Make sure to pass one of the numeric ids above (e.g. rootId=1) — the AI must send the number, not a string like rootId="1". Only roots marked "writable" support write_file. On macOS, temp/screenshot files under /var/folders/... are NOT inside any configured root — either add that directory in Settings > Directories, or copy/move the file into an existing root.`,
       "NOT_FOUND",
     );
   }

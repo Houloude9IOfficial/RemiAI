@@ -215,13 +215,13 @@ export function ToolList() {
 
               return (
                 <Card key={tool.id} className="overflow-hidden mb-5">
-                  <CardHeader className="flex-row items-start gap-3 space-y-0 py-3">
+                  <CardHeader className="flex flex-row items-start gap-3 space-y-0 py-3">
                     {tool.icon ? (
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center bg-none rounded-lg">
                         <img src={tool.icon} alt={tool.name} className="h-9 w-9" />
                       </div>
                     ) : (
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
                         <CategoryIcon className="h-4 w-4 text-muted-foreground" />
                       </div>
                     )}

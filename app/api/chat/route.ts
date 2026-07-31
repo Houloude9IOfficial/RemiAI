@@ -149,7 +149,7 @@ export async function POST(req: Request) {
   // Gather integration tools (Brave Search, Notion, Context7) based on config
   const integrationToolSet = await buildIntegrationTools();
 
-  // Gather code execution tools (python_exec, js_exec, bash_exec)
+  // Gather code execution tools (python_exec, js_exec)
   const executionToolSet = await buildExecutionTools();
 
   // Gather document reader tools (read_document)
@@ -460,9 +460,32 @@ You are currently in **Plan mode**. This means:
 
   // Get the UIMessageChunk stream so we can tee it — one branch for the
   // HTTP response, one for periodic persistence to the database.
+  //
+  // Pass a real `onError` so tool errors (e.g. "Root directory 8 not found")
+  // reach the UI and the model instead of the SDK's generic
+  // "An error occurred." fallback. Without this, the model can never
+  // self-correct (e.g. re-call list_permitted_roots) because it only sees
+  // a generic message.
   const uiMessageStream = result.toUIMessageStream({
     originalMessages: uiMessages,
     generateMessageId: () => crypto.randomUUID(),
+    onError: (error) => {
+      if (error instanceof Error && error.message) return error.message;
+      if (typeof error === "string" && error) return error;
+      if (error && typeof error === "object") {
+        const msg = (error as { message?: unknown }).message;
+        if (typeof msg === "string" && msg) return msg;
+      }
+      try {
+        const serialized = JSON.stringify(error);
+        if (typeof serialized === "string" && serialized && serialized !== "{}") {
+          return serialized;
+        }
+      } catch {
+        // ignore — fall through to the generic fallback
+      }
+      return "An error occurred.";
+    },
   });
 
   // Tee the stream: [persistBranch, responseBranch]
