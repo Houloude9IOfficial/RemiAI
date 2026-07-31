@@ -291,6 +291,60 @@ docker run -d --name remiai \
 
 The container listens on `0.0.0.0:3000` internally. TLS termination, firewall rules, DNS, and authentication at the reverse proxy remain the operator's responsibility.
 
+#### Deploying a released image from GHCR
+
+Every GitHub Release with a `v`-prefixed tag (e.g. `v1.5.0`) automatically builds the Docker image and pushes it to the GitHub Container Registry (GHCR) — your server does **not** need to build the image itself. The workflow lives in `.github/workflows/docker-release.yml` and runs on the `release: published` event only; pushes to `main` never trigger it.
+
+Two image tags are produced per release:
+
+- `ghcr.io/houloude9iofficial/remiai:v1.5.0` — pinned to the release tag
+- `ghcr.io/houloude9iofficial/remiai:latest` — always points to the newest release
+
+**To release a new version:** merge your changes to `main` via pull request, then create a GitHub Release (Releases → Draft a new release) targeting `main` with a tag such as `v1.5.0`. Publishing the release triggers the build and push.
+
+**Pull the released image with Compose.** In the included `docker-compose.yml`, replace `build: .` with the image reference (keep the rest of the service definition unchanged):
+
+```yaml
+services:
+  remiai:
+    image: ghcr.io/houloude9iofficial/remiai:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - remiai-data:/app/data
+```
+
+Then start it (this pulls the image on first run):
+
+```bash
+docker compose up -d
+docker compose logs -f remiai
+```
+
+Everything else stays the same: the first-run signup code appears in the container logs, and all app data persists in the `remiai-data` volume. To upgrade to a newer release, re-pull and recreate:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+To pin a specific version instead of `latest`, set the tag to the release, e.g. `image: ghcr.io/houloude9iofficial/remiai:v1.5.0`.
+
+Or run the released image directly:
+
+```bash
+docker pull ghcr.io/houloude9iofficial/remiai:latest
+docker volume create remiai-data
+docker run -d --name remiai \
+  --restart unless-stopped \
+  --publish 127.0.0.1:3000:3000 \
+  --volume remiai-data:/app/data \
+  --security-opt no-new-privileges:true \
+  --cap-drop ALL \
+  ghcr.io/houloude9iofficial/remiai:latest
+```
+
 ### Manual Database Commands
 
 ```bash
