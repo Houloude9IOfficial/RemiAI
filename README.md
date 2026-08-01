@@ -203,6 +203,16 @@ RemiAI has a comprehensive settings system with dedicated pages for every aspect
 
 ---
 
+## Test Runs
+
+Beyond coding tasks, RemiAI's tool-use and file-agent behavior is benchmarked with independent, session-isolated test runs. A generator plants errors in a messy dataset, RemiAI organizes and analyzes it blind, and a separate verification pass audits the result against ground truth.
+
+| Test | Description | Result |
+|---|---|---|
+| [Northfield Supply Co. Dataset](./TestRuns/Northfield%20Supply%20Co%20Dataset.md) | Messy multi-format company files (invoices, client records, meeting notes, chat logs) with planted data inconsistencies, tests file organization, cross-document reasoning, and grounded reporting | 5/5 planted errors found, 8/8 questions correct, zero fabricated claims |
+
+Each test run file includes the exact prompts used, expected vs. actual results, and an independently verified score.
+
 ## Getting Started
 
 ### Prerequisites
