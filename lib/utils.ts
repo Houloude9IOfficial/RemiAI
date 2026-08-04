@@ -94,7 +94,7 @@ export function normalizeDate(dateStr: string): string {
  * ~50 000 chars ≈ ~12 500 tokens, leaving the model plenty of room for
  * reasoning and response generation.
  */
-const MAX_RESULT_CHARS = 50_000
+const MAX_RESULT_CHARS = 1_000_000
 
 /**
  * Walk an unknown value and truncate any strings or arrays that would cause

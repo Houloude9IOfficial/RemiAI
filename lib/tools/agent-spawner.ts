@@ -22,7 +22,7 @@ import { truncateToolResult, estimateTokenCount } from "@/lib/utils";
  * Maximum depth of the agent chain tree. 0 = main AI, 1 = child, 2 = grandchild.
  * An agent at depth MAX_CHAIN_DEPTH cannot spawn further sub-agents.
  */
-const MAX_CHAIN_DEPTH = 3;
+const MAX_CHAIN_DEPTH = 10;
 
 /**
  * Context passed down the agent chain so children can spawn their own
