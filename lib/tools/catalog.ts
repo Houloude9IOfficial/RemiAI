@@ -45,6 +45,23 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     togglable: false,
     requiresApiKey: false,
   },
+  // ── Session files (builtin, always on — per-conversation private sandbox) ──
+  {
+    id: "session_files",
+    name: "Session Files",
+    description:
+      "A private file sandbox scoped to the current conversation. The AI can create, read, list, and delete files (websites, scripts, documents) that the user can view in a side panel and download as a .zip archive.",
+    toolNames: [
+      "session_file_list",
+      "session_file_read",
+      "session_file_write",
+      "session_file_delete",
+      "session_present_files",
+    ],
+    category: "builtin",
+    togglable: false,
+    requiresApiKey: false,
+  },
   // ── Context tools (builtin, always on, not togglable) ──
   {
     id: "context",

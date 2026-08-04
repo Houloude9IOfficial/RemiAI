@@ -18,7 +18,7 @@ import {
   memories,
 } from "@/db/schema";
 import { getLanguageModel } from "@/lib/providers/factory";
-import { SYSTEM_PROMPT_BASE, CREATE_VISUAL_SECTION } from "@/lib/chat/system-prompt";
+import { SYSTEM_PROMPT_BASE, CREATE_VISUAL_SECTION, SESSION_FILES_SECTION } from "@/lib/chat/system-prompt";
 import { persistUIMessage } from "@/lib/chat/persist";
 import { createMcpToolsManager } from "@/lib/mcp/tools";
 import { buildFilesystemTools } from "@/lib/fs/tools";
@@ -38,6 +38,7 @@ import {
 } from "@/lib/tools/agent-spawner";
 import { buildTodoTools } from "@/lib/tools/todo";
 import { buildFileIndexTools } from "@/lib/tools/file-index";
+import { buildSessionFileTools } from "@/lib/session-files/tools";
 import { buildProfileTools } from "@/lib/tools/profile";
 import { buildRoutinesTools } from "@/lib/tools/routines";
 import { buildScheduleTool } from "@/lib/tools/schedule";
@@ -191,18 +192,32 @@ export async function POST(req: Request) {
   // Scheduled tasks tool (schedule future tasks)
   const scheduleToolSet = await buildScheduleTool(conversationId);
 
+  // Session files tools — per-conversation private file sandbox
+  const sessionFileToolSet = buildSessionFileTools(conversationId);
+
   // In plan mode, filter out write tools — AI can only read/plan, not modify files
+  const writeBlocklist = [
+    "write_file",
+    "create_directory",
+    "delete_directory",
+    "rename_item",
+    "session_file_write",
+    "session_file_delete",
+  ];
   const effectiveFsToolSet =
     mode === "plan"
       ? Object.fromEntries(
-          Object.entries(fsToolSet).filter(
-            ([key]) =>
-              !["write_file", "create_directory", "delete_directory", "rename_item"].includes(
-                key,
-              ),
-          ),
+          Object.entries(fsToolSet).filter(([key]) => !writeBlocklist.includes(key)),
         )
       : fsToolSet;
+  const effectiveSessionFileToolSet =
+    mode === "plan"
+      ? Object.fromEntries(
+          Object.entries(sessionFileToolSet).filter(
+            ([key]) => !writeBlocklist.includes(key),
+          ),
+        )
+      : sessionFileToolSet;
 
   // Build plan-mode specific system prompt instructions
   const planModePrompt =
@@ -238,6 +253,7 @@ You are currently in **Plan mode**. This means:
     ...profileToolSet,
     ...routineToolSet,
     ...scheduleToolSet,
+    ...effectiveSessionFileToolSet,
   };
 
   // Build combined system prompt with user preferences
@@ -315,9 +331,9 @@ You are currently in **Plan mode**. This means:
 
   const fullSystemPrompt =
     (isLowCapability
-      ? SYSTEM_PROMPT_BASE + visualSection +
+      ? SYSTEM_PROMPT_BASE + visualSection + SESSION_FILES_SECTION +
         `\n\n**CRITICAL: Keep responses very short and focused.** Use the simplest tool for each task. If unsure about a tool, call \`get_tool_help\`. Avoid multi-step planning unless the task truly requires it.`
-      : SYSTEM_PROMPT_BASE + visualSection) +
+      : SYSTEM_PROMPT_BASE + visualSection + SESSION_FILES_SECTION) +
     systemTip +
     profileTip +
     memoryTip +

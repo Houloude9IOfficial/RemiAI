@@ -603,6 +603,28 @@ create_visual({
 })
 \`\`\``,
 
+  "session-files": `## Session Files — a private file workspace for each conversation
+
+Every conversation has its own private **session files** sandbox. Files you create there are shown to the user in a side panel and can be downloaded together as a .zip archive (e.g. a complete generated website).
+
+### Tools
+| Tool | Parameters | Purpose |
+|---|---|---|
+| \`session_file_list\` | \`path\` (optional) | List files in the conversation's sandbox. |
+| \`session_file_read\` | \`path\`, \`offset\`, \`limit\` (optional) | Read a file's text content (max 1 MB per read). |
+| \`session_file_write\` | \`path\`, \`content\`, \`mode\` (overwrite/append) | Create or modify a file. Creates parent folders automatically. |
+| \`session_file_delete\` | \`path\` | Permanently delete a file or folder. |
+| \`session_present_files\` | \`paths\` (optional), \`message\` (optional) | Open the file panel so the user can view/download the files. |
+
+### Workflow — generating a website
+1. \`session_file_write({ path: "index.html", content: "..." })\` — repeat for each file (styles.css, app.js, ...).
+2. \`session_present_files({ message: "Your website is ready!" })\` — opens the panel with a Download .zip button.
+
+### Rules
+- Always use **forward slashes** (/) in paths.
+- The sandbox is **scoped to this conversation** — other chats can't see these files, and they don't touch the user's real directories.
+- Deleting a conversation removes its sandbox files.`,
+
   "elevenlabs": `## ElevenLabs Voice (when configured)
 
 ElevenLabs provides premium AI voice capabilities. When configured with an API key, it powers two features:
@@ -738,6 +760,15 @@ const KEYWORD_SYNONYMS: Record<string, string> = {
   "data viz": "create-visual",
   visualization: "create-visual",
   "metrics card": "create-visual",
+  "session file": "session-files",
+  "session files": "session-files",
+  "session sandbox": "session-files",
+  sandbox: "session-files",
+  "present files": "session-files",
+  "download zip": "session-files",
+  website: "session-files",
+  "generate website": "session-files",
+  artifact: "session-files",
 };
 
 // ---------------------------------------------------------------------------
@@ -753,7 +784,7 @@ function getAvailableTopicsText(): string {
 // Use a shorter inline list for the tool description (the full list is in the
 // system prompt and is returned when the user asks for an invalid topic)
 const SHORT_TOPIC_LIST =
-  "filesystem, memory, profile, todo, file-index, ask-questions, suggest-followups, agent-spawner, scheduled-tasks, routines, delay, create-visual, newsapi, firecrawl, brave-search, notion, context7, elevenlabs, code-execution, document-reader, @FILE-references, scaffolding, absolute-paths, web-fetch, mcp-tools, file-attachments, start-of-conversation";
+  "filesystem, memory, profile, todo, file-index, ask-questions, suggest-followups, agent-spawner, scheduled-tasks, routines, delay, create-visual, session-files, newsapi, firecrawl, brave-search, notion, context7, elevenlabs, code-execution, document-reader, @FILE-references, scaffolding, absolute-paths, web-fetch, mcp-tools, file-attachments, start-of-conversation";
 
 // ---------------------------------------------------------------------------
 // Cached listing for list_available_tools — built once from TOOL_CATALOG
@@ -793,6 +824,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   scheduling: "Scheduled tasks",
   elevenlabs: "ElevenLabs voice",
   create_visual: "Dynamic visuals (SVG / HTML)",
+  session_files: "Session files (per-chat sandbox)",
   firecrawl: "Web scraping (Firecrawl)",
 };
 
@@ -817,6 +849,7 @@ const HELP_TOPIC_MAP: Record<string, string | null> = {
   scheduling: "scheduled-tasks",
   elevenlabs: "elevenlabs",
   create_visual: "create-visual",
+  session_files: "session-files",
   firecrawl: "firecrawl",
 };
 

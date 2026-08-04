@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { motion, AnimatePresence } from "framer-motion";
+import { Files } from "lucide-react";
 import { MessageList } from "@/components/chat/MessageList";
 import { ChatInput, type ChatMode } from "@/components/chat/ChatInput";
 import { ChatSkeleton } from "@/components/chat/ChatSkeleton";
@@ -13,10 +14,13 @@ import { ModelPicker } from "@/components/chat/ModelPicker";
 import { TodoProgressBar } from "@/components/chat/TodoProgressBar";
 import { ExportDialog } from "@/components/chat/ExportDialog";
 import { MobileChatHeader, DesktopChatHeader } from "@/components/chat/MobileChatHeader";
+import { SessionFilesPanel } from "@/components/chat/SessionFilesPanel";
 import { ErrorCard } from "@/components/ui/error-card";
 import { useErrorHandler } from "@/lib/hooks/use-error-handler";
 import { conversationsApi } from "@/lib/api/conversations";
 import { useStreamingContext } from "@/lib/chat/streaming-context";
+import { SESSION_FILES_PRESENT_EVENT } from "@/lib/api/session-files";
+import { cn } from "@/lib/utils";
 
 // ── Reconnecting Banner ─────────────────────────────────────────────
 
@@ -137,7 +141,15 @@ function ConversationChat({
   const [mode, setMode] = useState<ChatMode>(
     (initialConversation as any).mode ?? "chat",
   );
+  const [panelOpen, setPanelOpen] = useState(false);
   const { activeStreams, startStream, endStream } = useStreamingContext();
+
+  // Auto-open the session files panel when the AI calls session_present_files
+  useEffect(() => {
+    const handler = () => setPanelOpen(true);
+    window.addEventListener(SESSION_FILES_PRESENT_EVENT, handler);
+    return () => window.removeEventListener(SESSION_FILES_PRESENT_EVENT, handler);
+  }, []);
 
   // Persist mode to DB whenever it changes
   useEffect(() => {
@@ -303,6 +315,22 @@ function ConversationChat({
     modelId: initialConversation.modelId,
   });
 
+  const filesToggle = (
+    <button
+      type="button"
+      onClick={() => setPanelOpen((o) => !o)}
+      aria-label="Toggle session files"
+      title="Session files"
+      className={cn(
+        "inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-muted-foreground transition-all hover:bg-muted hover:text-foreground active:scale-95",
+        panelOpen && "bg-primary/10 text-primary",
+      )}
+    >
+      <Files className="h-4 w-4" />
+      <span className="hidden text-xs font-medium lg:inline">Files</span>
+    </button>
+  );
+
   const handleModelChange = async (nextProviderId: number, nextModelId: string) => {
     await conversationsApi.update(conversationId, {
       providerId: nextProviderId,
@@ -328,6 +356,7 @@ function ConversationChat({
         providerId={providerId}
         modelId={modelId}
         onModelChange={handleModelChange}
+        actions={filesToggle}
       />
 
       {/* ── Desktop Header ── */}
@@ -336,21 +365,69 @@ function ConversationChat({
         providerId={providerId}
         modelId={modelId}
         onModelChange={handleModelChange}
+        actions={filesToggle}
         extra={messages.length > 0 && <ExportDialog messages={messages} title={initialConversation.title} />}
       />
 
       {/* ── Todo progress ── */}
       <TodoProgressBar conversationId={conversationId} />
 
-      {/* ── Messages ── */}
-      <div className="flex-1 overflow-y-auto">
-        <MessageList
-          messages={messages}
-          status={status}
-          onSend={(text) => sendMessage({ text })}
-          onAiStart={handleAiStart}
-          isAiStarting={isAiStarting}
-        />
+      {/* ── Messages + Session files panel ── */}
+      <div className="relative flex min-h-0 flex-1">
+        <div className="min-w-0 flex-1 overflow-y-auto">
+          <MessageList
+            messages={messages}
+            status={status}
+            onSend={(text) => sendMessage({ text })}
+            onAiStart={handleAiStart}
+            isAiStarting={isAiStarting}
+          />
+        </div>
+
+        {/* Desktop — inline right-side panel */}
+        <AnimatePresence>
+          {panelOpen && (
+            <motion.div
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 384, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.22, ease: "easeOut" }}
+              className="hidden h-full shrink-0 overflow-hidden md:block"
+            >
+              <SessionFilesPanel
+                conversationId={conversationId}
+                onClose={() => setPanelOpen(false)}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Mobile — full-height drawer over the chat */}
+        <AnimatePresence>
+          {panelOpen && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setPanelOpen(false)}
+                className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm md:hidden"
+              />
+              <motion.div
+                initial={{ x: "100%" }}
+                animate={{ x: 0 }}
+                exit={{ x: "100%" }}
+                transition={{ type: "spring", stiffness: 380, damping: 34 }}
+                className="fixed inset-y-0 right-0 z-50 w-[85vw] max-w-sm md:hidden"
+              >
+                <SessionFilesPanel
+                  conversationId={conversationId}
+                  onClose={() => setPanelOpen(false)}
+                />
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* ── Error ── */}

@@ -81,7 +81,7 @@ Descriptions: A tool (togglable) that allows the AI with javascript to create ro
 
 <!-- Centerize visualizations by default, and allow to be aligned left/right if needed. -->
 
-Add session file storage (mostly txt, md, py, js, etc...) and have tools to modify them (same as now the file management system tools, but for sandboxes only for each chat), and also have a present tool to show the user a file/files
+<!-- Add session file storage (mostly txt, md, py, js, etc...) and have tools to modify them (same as now the file management system tools, but for sandboxes only for each chat), and also have a present tool to show the user a file/files -->
 
 Add a file manager section to the dashboard, and allow the user to manage the files that are associated with each chat & the AI has access to, with options to create, edit, delete, download and organize files.
 

@@ -229,6 +229,31 @@ const TOOL_LABELS: Record<string, ToolLabel> = {
     past: "Scraped web",
     icon: Search,
   },
+  session_file_list: {
+    present: "Listing session files",
+    past: "Listed session files",
+    icon: List,
+  },
+  session_file_read: {
+    present: "Reading session file",
+    past: "Read session file",
+    icon: FileText,
+  },
+  session_file_write: {
+    present: "Writing session file",
+    past: "Wrote session file",
+    icon: Pencil,
+  },
+  session_file_delete: {
+    present: "Deleting session file",
+    past: "Deleted session file",
+    icon: FolderSearch,
+  },
+  session_present_files: {
+    present: "Preparing session files",
+    past: "Presented session files",
+    icon: Eye,
+  },
 };
 
 const FALLBACK_LABEL: ToolLabel = {

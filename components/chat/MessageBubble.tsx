@@ -7,6 +7,10 @@ import { ToolCallGroup } from "./ToolCallGroup";
 import { VisualCard } from "./VisualCard";
 import { FollowupSuggestions } from "./FollowupSuggestions";
 import { MarkdownRenderer } from "./MarkdownRenderer";
+import {
+  SessionFilesPresentCard,
+  SessionFilesPresentLoading,
+} from "./SessionFilesPresentCard";
 import { cn } from "@/lib/utils";
 import {
   AttachedFileCard,
@@ -127,6 +131,7 @@ type Segment =
   | { type: "text"; text: string }
   | { type: "tool"; parts: UIMessage["parts"] }
   | { type: "visual"; part: UIMessage["parts"][number] }
+  | { type: "sessionPresent"; part: UIMessage["parts"][number] }
   | { type: "suggestions"; data: unknown };
 
 /**
@@ -182,6 +187,11 @@ function buildSegments(parts: UIMessage["parts"]): Segment[] {
         toolName.toLowerCase().replace(/^.*__/, "") === "create_visual"
       ) {
         segments.push({ type: "visual", part });
+      } else if (
+        toolName !== null &&
+        toolName.toLowerCase().replace(/^.*__/, "") === "session_present_files"
+      ) {
+        segments.push({ type: "sessionPresent", part });
       } else {
         const last = segments[segments.length - 1];
         if (last?.type === "tool") {
@@ -299,6 +309,11 @@ if (!hasAnyContent) {
                 />
               ) : segment.type === "visual" ? (
                 <VisualCardSegment key={`visual-${idx}`} part={segment.part} />
+              ) : segment.type === "sessionPresent" ? (
+                <SessionFilesPresentSegment
+                  key={`present-${idx}`}
+                  part={segment.part}
+                />
               ) : (
                 <ToolCallGroup key={`tool-${idx}`} parts={segment.parts as any} />
               ),
@@ -386,4 +401,37 @@ function VisualCardSegment({ part }: { part: UIMessage["parts"][number] }) {
   }
 
   return <VisualCard data={output} />;
+}
+
+// ── Session files present segment — extracts output from a session_present_files part ──
+
+function SessionFilesPresentSegment({ part }: { part: UIMessage["parts"][number] }) {
+  const partObj = part as Record<string, unknown>;
+  const state = (partObj.state as string) ?? "call-result";
+  const output = partObj.output;
+
+  const isComplete = state === "output-available" || state === "approval-responded";
+  const isError = state === "output-error";
+
+  if (isError) {
+    return (
+      <div className="overflow-hidden rounded-xl border border-destructive/20 bg-destructive/[0.04] p-4 text-sm text-destructive">
+        Session files could not be presented — the tool call encountered an error.
+      </div>
+    );
+  }
+
+  if (!isComplete) {
+    return <SessionFilesPresentLoading />;
+  }
+
+  if (!output || typeof output !== "object") {
+    return (
+      <div className="overflow-hidden rounded-xl border border-destructive/20 bg-destructive/[0.04] p-4 text-sm text-destructive">
+        Session files could not be rendered — unexpected output format.
+      </div>
+    );
+  }
+
+  return <SessionFilesPresentCard data={output} />;
 }

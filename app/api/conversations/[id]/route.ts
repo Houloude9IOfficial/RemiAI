@@ -6,6 +6,7 @@ import { conversations, messages } from "@/db/schema";
 import { jsonError } from "@/lib/validation/api";
 import { toUIMessage } from "@/lib/chat/persist";
 import { deleteConversationUploads } from "@/lib/chat/cleanup";
+import { deleteConversationSessionFiles } from "@/lib/session-files/storage";
 
 const updateSchema = z.object({
   title: z.string().min(1).max(200).optional(),
@@ -70,7 +71,8 @@ export async function DELETE(
   const { id } = await params;
   const conversationId = Number(id);
   await db.delete(conversations).where(eq(conversations.id, conversationId));
-  // Clean up uploaded files for this conversation
+  // Clean up uploaded files + session sandbox files for this conversation
   await deleteConversationUploads(conversationId);
+  await deleteConversationSessionFiles(conversationId);
   return NextResponse.json({ ok: true });
 }
