@@ -218,7 +218,7 @@ export function MessageList({
             type="button"
             onClick={onAiStart}
             disabled={isAiStarting}
-            className="group relative inline-flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/[0.03] px-5 py-2.5 text-sm font-medium text-primary transition-all duration-200 hover:border-primary/40 hover:bg-primary/[0.06] active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
+            className="group relative inline-flex items-center gap-2 rounded-xl border border-border/40 bg-primary/[0.1] px-5 py-2.5 text-sm font-medium text-primary transition-all duration-200 hover:border-primary/40 hover:bg-primary/[0.06] active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
           >
             {isAiStarting ? (
               <>

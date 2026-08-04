@@ -101,8 +101,10 @@ export function ChatSkeleton({
   return (
     <div className={cn("flex flex-1 flex-col h-full animate-fade-in", className)}>
       {/* ── Header bar skeleton ── */}
+      {/* Hidden on mobile — the chat page renders its own mobile header
+          (with the sidebar hamburger) while loading. */}
       {showHeader && (
-        <div className="flex items-center gap-2 border-b px-4 py-2 bg-background/95 backdrop-blur sticky top-0 z-20">
+        <div className="hidden md:flex items-center gap-2 border-b px-4 py-2 bg-background/95 backdrop-blur sticky top-0 z-20">
           <ShimmerSkeleton className="h-6 w-6 rounded-md" />
           <ShimmerSkeleton className="h-4 w-48 rounded" />
           <div className="ml-auto">

@@ -13,8 +13,16 @@ export type Conversation = {
 };
 
 async function unwrap<T>(res: Response): Promise<T> {
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error ?? "Request failed");
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(
+      (data as { error?: string } | null)?.error ?? `Request failed (${res.status})`,
+    );
+    // Attach the HTTP status so callers can distinguish a 404 (deleted
+    // conversation) from network/server errors.
+    (err as Error & { statusCode?: number }).statusCode = res.status;
+    throw err;
+  }
   return data as T;
 }
 
@@ -29,10 +37,21 @@ export const conversationsApi = {
       body: JSON.stringify(input ?? {}),
     }).then((res) => unwrap<Conversation>(res)),
 
-  get: (id: number): Promise<{ conversation: Conversation; messages: UIMessage[] }> =>
-    fetch(`/api/conversations/${id}`).then((res) =>
-      unwrap<{ conversation: Conversation; messages: UIMessage[] }>(res),
-    ),
+  get: (
+    id: number,
+    opts?: { timeoutMs?: number },
+  ): Promise<{ conversation: Conversation; messages: UIMessage[] }> => {
+    const { timeoutMs } = opts ?? {};
+    // Guard against requests that hang forever (server starting up, cold
+    // instance, dead connection) so the UI can never be stuck on a skeleton.
+    const controller = new AbortController();
+    const timer = timeoutMs ? setTimeout(() => controller.abort(), timeoutMs) : undefined;
+    return fetch(`/api/conversations/${id}`, { signal: controller.signal })
+      .then((res) => unwrap<{ conversation: Conversation; messages: UIMessage[] }>(res))
+      .finally(() => {
+        if (timer) clearTimeout(timer);
+      });
+  },
 
   update: (
     id: number,

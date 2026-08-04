@@ -254,10 +254,10 @@ export function TodoBoard({ data }: { data: unknown }) {
   const total = items.length;
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border/50 bg-background shadow-sm">
+    <div className="overflow-hidden rounded-xl bg-background">
       {/* Header */}
-      <div className="flex items-center gap-2.5 border-b border-border/30 bg-muted/20 px-4 py-3">
-        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary/10">
+      <div className="flex items-center gap-2.5 bg-muted/20 px-4 py-3">
+        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md">
           <ClipboardList className="h-3.5 w-3.5 text-primary" />
         </div>
         <span className="text-sm font-semibold">Todo List</span>

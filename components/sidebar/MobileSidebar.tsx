@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import {
   Brain,
   BarChart3,
+  Files,
   FolderOpen,
   Pen,
   Plug,
@@ -36,6 +37,7 @@ import { PullToRefresh } from "@/components/PullToRefresh";
 
 const primaryLinks = [
   { href: "/talk", label: "Talk", icon: Radio },
+  { href: "/files", label: "Files", icon: Files },
   { href: "/settings/providers", label: "Models & Providers", icon: Settings2 },
   { href: "/settings/directories", label: "Directories", icon: FolderOpen },
   { href: "/games", label: "Games", icon: Gamepad2 },
