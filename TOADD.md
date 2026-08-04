@@ -85,4 +85,4 @@ Descriptions: A tool (togglable) that allows the AI with javascript to create ro
 
 <!-- Add a file manager section to the dashboard, and allow the user to manage the files that are associated with each chat & the AI has access to, with options to create, edit, delete, download and organize files. -->
 
-when opening on deployment the website, it sometimes loads /chat/1 and stays loading, on mobile it doesnt show the sidebar and it stays stuck on loading, and on desktop it shows the sidebar but the chat content is empty and it stays loading. Fix this.
+<!-- when opening on deployment the website, it sometimes loads /chat/1 and stays loading, on mobile it doesnt show the sidebar and it stays stuck on loading, and on desktop it shows the sidebar but the chat content is empty and it stays loading. Fix this. -->
