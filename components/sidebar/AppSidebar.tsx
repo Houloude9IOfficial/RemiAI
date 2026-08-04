@@ -14,14 +14,14 @@ import { AboutModal } from "./AboutModal";
 import { SidebarProfile } from "./SidebarProfile";
 
 const primaryLinks = [
-  { href: "/talk", label: "Talk", icon: Radio },
-  { href: "/files", label: "Files", icon: Files },
   { href: "/settings/providers", label: "Models & Providers", icon: Settings2 },
   { href: "/settings/directories", label: "Directories", icon: FolderOpen },
+  { href: "/files", label: "Files", icon: Files },
   { href: "/games", label: "Games", icon: Gamepad2 },
 ];
 
 const extraLinks = [
+  { href: "/talk", label: "Talk", icon: Radio },
   { href: "/settings/tools", label: "Tools", icon: Wrench },
   { href: "/settings/memories", label: "Memories", icon: Brain },
   { href: "/settings/routines", label: "Routines", icon: Terminal },
