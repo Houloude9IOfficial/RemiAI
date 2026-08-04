@@ -564,6 +564,7 @@ The \`create_visual\` tool lets you generate SVG or HTML visuals and display the
 
 ### Design guidelines:
 - **Use a TRANSPARENT background** by default — do NOT add background colors to the root SVG or HTML body. The visual should blend seamlessly into the chat theme.
+- Prefer theme tokens when needed: \`var(--chat-bg)\`, \`var(--chat-fg)\`, \`var(--chat-muted)\`, \`var(--chat-border)\`, \`var(--chat-primary)\` (injected by the chat UI).
 - Keep it **clean and minimal** — use whitespace, subtle colors, and clear typography.
 - Use responsive widths (\`100%\`) so visuals adapt to the chat container.
 - Visuals are **centered by default** — only set \`options.align\` to left or right when the layout calls for it (e.g. pairing with text on the opposite side).

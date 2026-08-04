@@ -189,6 +189,17 @@ function DesktopSidebar() {
 
       {isDesktopSidebarCollapsed ? (
         <div className="flex flex-1 flex-col items-center gap-1.5 px-1.5 pt-2 pb-2">
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8"
+              disabled={newChatMutation.isPending}
+              onClick={() => newChatMutation.mutate()}
+              title="New chat"
+              aria-label="New chat"
+            >
+              <Pen className="h-4 w-4" />
+            </Button>
           {primaryLinks.slice(0, 3).map(({ href, label, icon: Icon }) => (
             <Link
               key={href}

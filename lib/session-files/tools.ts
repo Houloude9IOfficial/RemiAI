@@ -188,9 +188,13 @@ session_present_files()
           mode ?? "overwrite",
         );
         return truncateToolResult({
-          path: relPath,
+          path: result.relativePath,
           wrote: result.wrote,
-          mode: mode ?? "overwrite",
+          mode: result.mode,
+          created: result.created,
+          linesWritten: result.linesWritten,
+          linesAdded: result.linesAdded,
+          linesRemoved: result.linesRemoved,
         });
       },
     },

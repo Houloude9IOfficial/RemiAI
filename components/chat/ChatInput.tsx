@@ -7,7 +7,6 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   ArrowUp,
   Square,
-  Target,
   Sparkles,
   ListChecks,
   Paperclip,
@@ -481,14 +480,19 @@ export function ChatInput({
   // Submit
   // -----------------------------------------------------------------------
 
+  const canSend =
+    !disabled &&
+    !isStreaming &&
+    (text.trim().length > 0 || attachedFiles.some((f) => f.status === "uploaded"));
+
   const submit = useCallback(() => {
-    if (disabled) return;
+    // Never send while a response is in flight — stop is the only action then.
+    if (disabled || isStreaming) return;
 
     const uploadedFiles = attachedFiles.filter((f) => f.status === "uploaded");
     const hasAttachments = uploadedFiles.length > 0;
 
     if (hasAttachments) {
-      // Build message text with file references
       let fileText = "";
       for (const file of uploadedFiles) {
         if (file.url) {
@@ -521,32 +525,48 @@ export function ChatInput({
         inputRef.current?.focus();
       });
     }
-  }, [disabled, attachedFiles, text, onSend, resize]);
+  }, [disabled, isStreaming, attachedFiles, text, onSend, resize]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        submit();
+        if (!isStreaming) submit();
       }
     },
-    [submit],
+    [submit, isStreaming],
   );
 
+  const modeLabel =
+    mode === "goal"
+      ? "Goal"
+      : mode === "plan"
+        ? "Plan"
+        : "Chat";
+
   // -----------------------------------------------------------------------
-  // Render
+  // Render — ChatGPT-style dock: same column width as messages, toolbar row
   // -----------------------------------------------------------------------
 
   return (
-    <div className="relative border-none max-md:p-3 p-5">
-      <div className="pointer-events-none absolute inset-x-0 -top-6 z-10 h-6 bg-linear-to-b from-transparent to-background/95 backdrop-blur-[1px]" />
+    <div className="relative mx-auto w-full max-w-3xl px-4 pb-3 pt-1 md:px-6">
+      <div className="pointer-events-none absolute inset-x-4 -top-5 z-10 h-5 bg-linear-to-b from-transparent to-background/90 md:inset-x-6" />
 
-      <div
-        className="relative"
-        onDragEnter={handleDragEnter}
-      >
+      {/* Compact context row */}
+      {attachedFiles.length > 0 && (
+        <div className="mb-1.5 hidden items-center gap-2 px-1 text-[11px] text-muted-foreground/70 md:flex">
+          <FolderOpen className="h-3 w-3 shrink-0" />
+          <span className="truncate">Workspace</span>
+          <span className="text-border">·</span>
+          <Laptop className="h-3 w-3 shrink-0" />
+          <span className="truncate">{modeLabel} mode</span>
+          <span className="text-border">·</span>
+          <CircleDot className="h-3 w-3 shrink-0" />
+          <span className="tabular-nums">{appVersion}</span>
+        </div>
+      )}
 
-        {/* Hidden native file input */}
+      <div className="relative" onDragEnter={handleDragEnter}>
         <input
           ref={fileInputRef}
           type="file"
@@ -557,7 +577,12 @@ export function ChatInput({
           aria-hidden="true"
         />
 
-        {/* File attachments preview chips */}
+        <FilePickerDialog
+          open={fileDialogOpen}
+          onOpenChange={setFileDialogOpen}
+          onSelect={handleFileSelect}
+        />
+
         <AnimatePresence>
           {attachedFiles.length > 0 && (
             <motion.div
@@ -565,6 +590,7 @@ export function ChatInput({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
               transition={{ duration: 0.2, ease: "easeOut" }}
+              className="mb-2"
             >
               <FileAttachmentPreview
                 files={attachedFiles}
@@ -574,189 +600,25 @@ export function ChatInput({
           )}
         </AnimatePresence>
 
-        {/* Mobile controls row — above the input, only when not streaming */}
-        {!isStreaming && (
-          <div className="flex items-center gap-1.5 pb-1 md:hidden">
-            {/* File attachment buttons */}
-            <button
-              type="button"
-              onClick={openFilePicker}
-              disabled={disabled}
-              className={cn(
-                "flex h-8 shrink-0 items-center gap-1 rounded-md border px-2 text-xs font-medium transition-all duration-200",
-                "border-border/60 bg-transparent text-muted-foreground hover:border-muted-foreground/30 hover:text-foreground",
-                disabled && "opacity-40 pointer-events-none",
-              )}
-              title="Upload a file"
-            >
-              <Upload className="h-3.5 w-3.5" />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setFileDialogOpen(true)}
-              disabled={disabled}
-              className={cn(
-                "flex h-8 shrink-0 items-center gap-1 rounded-md border px-2 text-xs font-medium transition-all duration-200",
-                "border-border/60 bg-transparent text-muted-foreground hover:border-muted-foreground/30 hover:text-foreground",
-                disabled && "opacity-40 pointer-events-none",
-              )}
-              title="Attach a file"
-            >
-              <Paperclip className="h-3.5 w-3.5" />
-            </button>
-
-            {/* Mode selector — mobile row */}
-            {onModeChange && (
-              <div className="flex shrink-0 rounded-md border border-border/60 p-0.5 bg-muted/20">
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <button
-                        type="button"
-                        onClick={() => onModeChange("chat")}
-                        disabled={disabled}
-                        className={cn(
-                          "flex h-7 items-center gap-1 rounded-md px-1.5 text-xs font-medium transition-all duration-200",
-                          mode === "chat"
-                            ? "bg-background text-foreground shadow-sm border border-border/40"
-                            : "text-muted-foreground hover:text-foreground border border-transparent",
-                          disabled && "opacity-40 pointer-events-none",
-                        )}
-                      />
-                    }
-                  >
-                    <MessageCircle className="h-3.5 w-3.5" />
-                  </TooltipTrigger>
-                  <TooltipContent side="top" align="center" className="text-center">
-                    <p className="font-semibold text-xs">Chat mode</p>
-                    <p className="text-[10px] opacity-80">Normal conversation with the AI</p>
-                  </TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <button
-                        type="button"
-                        onClick={() => onModeChange("goal")}
-                        disabled={disabled}
-                        className={cn(
-                          "flex h-7 items-center gap-1 rounded-md px-1.5 text-xs font-medium transition-all duration-200",
-                          mode === "goal"
-                            ? "bg-background text-primary shadow-sm border border-primary/40"
-                            : "text-muted-foreground hover:text-foreground border border-transparent",
-                          disabled && "opacity-40 pointer-events-none",
-                        )}
-                      />
-                    }
-                  >
-                    <Sparkles className="h-3.5 w-3.5 animate-pulse" />
-                  </TooltipTrigger>
-                  <TooltipContent side="top" align="center" className="text-center">
-                    <p className="font-semibold text-xs">Goal mode</p>
-                    <p className="text-[10px] opacity-80">AI works autonomously until task is complete</p>
-                  </TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <button
-                        type="button"
-                        onClick={() => onModeChange("plan")}
-                        disabled={disabled}
-                        className={cn(
-                          "flex h-7 items-center gap-1 rounded-md px-1.5 text-xs font-medium transition-all duration-200",
-                          mode === "plan"
-                            ? "bg-background text-primary shadow-sm border border-primary/40"
-                            : "text-muted-foreground hover:text-foreground border border-transparent",
-                          disabled && "opacity-40 pointer-events-none",
-                        )}
-                      />
-                    }
-                  >
-                    <ListChecks className="h-3.5 w-3.5" />
-                  </TooltipTrigger>
-                  <TooltipContent side="top" align="center" className="text-center">
-                    <p className="font-semibold text-xs">Plan mode</p>
-                    <p className="text-[10px] opacity-80">AI helps plan without modifying any files</p>
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-            )}
-
-            <div className="flex-1" />
+        {/* {(mode === "goal" || mode === "plan") && !isStreaming && (
+          <div className="mb-1.5 px-1 text-[11px] font-medium text-primary/80">
+            {mode === "goal"
+              ? "Goal mode — works until the task is complete"
+              : "Plan mode — plans without writing files"}
           </div>
-        )}
+        )} */}
 
-        {/* Main input row — textarea + send button */}
         <div
           className={cn(
-            "relative flex items-end gap-2 rounded-2xl border border-border/75 surface-1 p-2.5 shadow-floating transition-all duration-200",
-            isDragging && "border-primary/50 bg-primary/2",
+            "relative flex flex-col rounded-3xl border border-border/70 bg-surface-1 shadow-floating transition-colors duration-200",
+            isDragging && "border-primary/45 bg-primary/[0.03]",
+            isStreaming && "opacity-95",
           )}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
-          {/* File picker dialog (directory browsing) */}
-          <FilePickerDialog
-            open={fileDialogOpen}
-            onOpenChange={setFileDialogOpen}
-            onSelect={handleFileSelect}
-          />
-
-          {(mode === "goal" || mode === "plan") && !isStreaming && (
-            <AnimatePresence>
-              <motion.div
-                className="absolute bottom-full left-0 right-0 mb-1.5 flex items-center gap-1.5 px-1 z-20"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.5 }}
-              >
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: "flex-1" }}
-                  exit={{ width: 0 }}
-                  transition={{ duration: 0.5 }}
-                  className={cn(
-                    "h-0.5 rounded-full",
-                    mode === "goal"
-                      ? "bg-linear-to-r from-primary/15 via-primary/70 to-primary/15"
-                      : "bg-linear-to-r from-primary/15 via-primary/70 to-primary/15",
-                  )}
-                />
-                <motion.span
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.5 }}
-                  className={cn(
-                    "hidden md:inline text-[10px] font-medium tracking-wide",
-                    "text-primary/80",
-                  )}
-                >
-                  {mode === "goal"
-                    ? "Goal mode — AI will work autonomously until complete"
-                    : "Plan mode — AI will ask questions and plan without writing files"}
-                </motion.span>
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: "flex-1" }}
-                  exit={{ width: 0 }}
-                  transition={{ duration: 0.5 }}
-                  className={cn(
-                    "h-0.5 rounded-full",
-                    mode === "goal"
-                      ? "bg-linear-to-r from-primary/15 via-primary/70 to-primary/15"
-                      : "bg-linear-to-r from-primary/15 via-primary/70 to-primary/15",
-                  )}
-                />
-              </motion.div>
-            </AnimatePresence>
-          )}
-
-          <div className="flex min-h-10 flex-1 items-center">
+          <div className="px-3.5 pt-3">
             <Textarea
               ref={inputRef}
               value={text}
@@ -766,182 +628,140 @@ export function ChatInput({
               placeholder={
                 disabled
                   ? "Pick a model to start chatting"
-                  : "Message Remi..."
+                  : isStreaming
+                    ? "Remi is responding…"
+                    : "Message Remi..."
               }
               disabled={disabled}
-              className="bg-transparent! dark:bg-transparent! max-h-18 min-h-0 resize-none border-none py-0 leading-6 shadow-none focus-visible:ring-0"
+              className="max-h-18 min-h-[28px] resize-none border-none bg-transparent! py-0 leading-6 shadow-none focus-visible:ring-0 dark:bg-transparent!"
               rows={1}
             />
           </div>
 
-          {/* Desktop: file attachment buttons beside input */}
-          {!isStreaming && (
-            <div className="hidden md:flex items-center gap-2">
-              <button
-                type="button"
-                onClick={openFilePicker}
-                disabled={disabled}
-                className={cn(
-                    "flex h-10 shrink-0 items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-all duration-200",
-                  "border-border/60 bg-transparent text-muted-foreground hover:border-muted-foreground/30 hover:text-foreground",
-                  disabled && "opacity-40 pointer-events-none",
-                )}
-                title="Upload a file from your computer"
+          {/* Toolbar — ChatGPT-style bottom control row */}
+          <div className="flex items-center gap-1 px-2 pb-2 pt-1.5">
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    onClick={openFilePicker}
+                    disabled={disabled || isStreaming}
+                    className={cn(
+                      "flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                      (disabled || isStreaming) && "pointer-events-none opacity-40",
+                    )}
+                    aria-label="Upload a file"
+                  />
+                }
               >
-                <Upload className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Attach</span>
-              </button>
+                <Upload className="h-4 w-4" />
+              </TooltipTrigger>
+              <TooltipContent side="top">Upload from computer</TooltipContent>
+            </Tooltip>
 
-              <button
-                type="button"
-                onClick={() => setFileDialogOpen(true)}
-                disabled={disabled}
-                className={cn(
-                    "flex h-10 shrink-0 items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-all duration-200",
-                  "border-border/60 bg-transparent text-muted-foreground hover:border-muted-foreground/30 hover:text-foreground",
-                  disabled && "opacity-40 pointer-events-none",
-                )}
-                title="Attach a file from your directories"
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    onClick={() => setFileDialogOpen(true)}
+                    disabled={disabled || isStreaming}
+                    className={cn(
+                      "flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                      (disabled || isStreaming) && "pointer-events-none opacity-40",
+                    )}
+                    aria-label="Attach from directories"
+                  />
+                }
               >
-                <Paperclip className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">File</span>
-              </button>
-            </div>
-          )}
+                <Paperclip className="h-4 w-4" />
+              </TooltipTrigger>
+              <TooltipContent side="top">Attach from directories</TooltipContent>
+            </Tooltip>
 
-          {/* Desktop: mode selector beside input */}
-          {!isStreaming && onModeChange && (
-            <div className="hidden md:flex shrink-0 rounded-md border border-border/60 p-0.5 bg-muted/20">
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <button
-                      type="button"
-                      onClick={() => onModeChange("chat")}
-                      disabled={disabled}
-                      className={cn(
-                        "flex h-8 items-center gap-1 rounded-md px-2.5 text-xs font-medium transition-all duration-200",
-                        mode === "chat"
-                          ? "bg-background text-foreground shadow-sm border border-border/40"
-                          : "text-muted-foreground hover:text-foreground border border-transparent",
-                        disabled && "opacity-40 pointer-events-none",
-                      )}
-                    />
-                  }
-                >
-                  <MessageCircle className="h-3.5 w-3.5" />
-                  <span>Chat</span>
-                </TooltipTrigger>
-                <TooltipContent side="top" align="center" className="text-center">
-                  <p className="font-semibold text-xs">Chat mode</p>
-                  <p className="text-[10px] opacity-80">Normal conversation with the AI</p>
-                </TooltipContent>
-              </Tooltip>
+            {onModeChange && (
+              <div className="ml-0.5 flex items-center rounded-full border border-border/50 bg-muted/25 p-0.5">
+                {(
+                  [
+                    { id: "chat" as const, icon: MessageCircle, tip: "Chat" },
+                    { id: "goal" as const, icon: Sparkles, tip: "Goal" },
+                    { id: "plan" as const, icon: ListChecks, tip: "Plan" },
+                  ] as const
+                ).map(({ id, icon: Icon, tip }) => (
+                  <Tooltip key={id}>
+                    <TooltipTrigger
+                      render={
+                        <button
+                          type="button"
+                          onClick={() => onModeChange(id)}
+                          disabled={disabled || isStreaming}
+                          className={cn(
+                            "flex h-7 items-center gap-1 rounded-full px-2 text-[11px] font-medium transition-colors",
+                            mode === id
+                              ? "bg-background text-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground",
+                            (disabled || isStreaming) &&
+                              "pointer-events-none opacity-40",
+                          )}
+                        />
+                      }
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">{tip}</span>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">{tip} mode</TooltipContent>
+                  </Tooltip>
+                ))}
+              </div>
+            )}
 
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <button
-                      type="button"
-                      onClick={() => onModeChange("goal")}
-                      disabled={disabled}
-                      className={cn(
-                        "flex h-8 items-center gap-1 rounded-md px-2.5 text-xs font-medium transition-all duration-200",
-                        mode === "goal"
-                          ? "bg-background text-primary shadow-sm border border-primary/40"
-                          : "text-muted-foreground hover:text-foreground border border-transparent",
-                        disabled && "opacity-40 pointer-events-none",
-                      )}
-                    />
-                  }
-                >
-                  <Sparkles className="h-3.5 w-3.5 animate-pulse" />
-                  <span>Goal</span>
-                </TooltipTrigger>
-                <TooltipContent side="top" align="center" className="text-center">
-                  <p className="font-semibold text-xs">Goal mode</p>
-                  <p className="text-[10px] opacity-80">AI works autonomously until task is complete</p>
-                </TooltipContent>
-              </Tooltip>
+            <div className="flex-1" />
 
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <button
-                      type="button"
-                      onClick={() => onModeChange("plan")}
-                      disabled={disabled}
-                      className={cn(
-                        "flex h-8 items-center gap-1 rounded-md px-2.5 text-xs font-medium transition-all duration-200",
-                        mode === "plan"
-                          ? "bg-background text-primary shadow-sm border border-primary/40"
-                          : "text-muted-foreground hover:text-foreground border border-transparent",
-                        disabled && "opacity-40 pointer-events-none",
-                      )}
-                    />
-                  }
-                >
-                  <ListChecks className="h-3.5 w-3.5 animate-pulse" />
-                  <span>Plan</span>
-                </TooltipTrigger>
-                <TooltipContent side="top" align="center" className="text-center">
-                  <p className="font-semibold text-xs">Plan mode</p>
-                  <p className="text-[10px] opacity-80">AI helps plan without modifying any files</p>
-                </TooltipContent>
-              </Tooltip>
-            </div>
-          )}
-
-          {isStreaming ? (
-            <Button
-              type="button"
-              size="icon"
-              className="h-10 w-10 shrink-0 rounded-full"
-              onClick={onStop}
-            >
-              <Square className="h-3.5 w-3.5" />
-            </Button>
-          ) : (
-            <Button
-              type="button"
-              size="icon"
-              className="h-10 w-10 shrink-0 rounded-full"
-              disabled={disabled || (!text.trim() && attachedFiles.length === 0)}
-              onClick={submit}
-            >
-              <ArrowUp className="h-4 w-4" />
-            </Button>
-          )}
+            {isStreaming ? (
+              <Button
+                type="button"
+                size="icon"
+                className="h-8 w-8 shrink-0 rounded-full"
+                onClick={onStop}
+                aria-label="Stop generating"
+              >
+                <Square className="h-3 w-3 fill-current" />
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                size="icon"
+                className="h-8 w-8 shrink-0 rounded-full"
+                disabled={!canSend}
+                onClick={submit}
+                aria-label="Send message"
+              >
+                <ArrowUp className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </div>
 
-        {/* Drag & drop overlay */}
         <AnimatePresence>
           {isDragging && (
             <motion.div
-              initial={{ opacity: 0, scale: 0.97 }}
+              initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.97 }}
+              exit={{ opacity: 0, scale: 0.98 }}
               transition={{ duration: 0.15, ease: "easeOut" }}
               className={cn(
                 "absolute inset-0 z-50 flex items-center justify-center",
-                "rounded-2xl border-2 border-dashed border-primary/40",
+                "rounded-3xl border-2 border-dashed border-primary/40",
                 "bg-background/85 backdrop-blur-sm",
               )}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
             >
-              <div className="flex flex-col items-center gap-2">
-                {/* <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-                  <Upload className="h-6 w-6 text-primary/60" />
-                </div> */}
-                <p className="text-sm font-medium text-foreground/80">
-                  Drop files here
-                </p>
-                {/* <p className="text-xs text-muted-foreground/50">
-                  Images, documents, and more
-                </p> */}
-              </div>
+              <p className="text-sm font-medium text-foreground/80">
+                Drop files here
+              </p>
             </motion.div>
           )}
         </AnimatePresence>

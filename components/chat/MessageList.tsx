@@ -102,7 +102,7 @@ export function MessageList({
                 className="group rounded-xl border border-border/70 bg-background/40 p-3 text-left transition-all duration-150 hover:border-border hover:bg-accent/40"
               >
                 <div className="mb-2 inline-flex h-6 w-6 items-center justify-center rounded-md">
-                  <Icon className="h-3.5 w-3.5 text-muted-foreground group-hover:text-foreground" />
+                  <Icon className="h-4.5 w-4.5 text-muted-foreground group-hover:text-foreground" />
                 </div>
                 <div className="text-sm font-medium text-foreground/90">{action.label}</div>
               </button>
@@ -141,11 +141,11 @@ export function MessageList({
   return (
     <ChatMessageProvider value={{ sendMessage: onSend ?? (() => {}) }}>
       <div className="relative flex flex-1 flex-col">
-        <div className="flex flex-1 flex-col p-6">
-          <div className="flex flex-col gap-4">
+        <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 py-6 md:px-6">
+          <div className="flex flex-col gap-5 md:gap-6">
             {messages.map((message, idx) => {
               return (
-                <div key={message.id}>
+                <div key={message.id} className="animate-fade-in">
                   <MessageBubble
                     message={message}
                     isStreaming={
@@ -158,17 +158,17 @@ export function MessageList({
 
             {isWaiting && (
               <div className="flex justify-start animate-fade-in">
-                <div className="w-full max-w-[85%] px-4 py-3 text-sm text-foreground">
+                <div className="w-full text-sm leading-relaxed text-foreground">
                   <div className="flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                    <span className="text-muted-foreground">Thinking...</span>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Thinking...</span>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Spacer — massive breathing room for AI response to stream into */}
-            <div className="h-64 shrink-0" />
+            {/* Spacer — room for the next stream without oversized empty chrome */}
+            <div className="h-28 shrink-0 md:h-36" />
           </div>
         </div>
       </div>

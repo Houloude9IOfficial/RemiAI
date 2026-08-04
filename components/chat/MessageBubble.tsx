@@ -225,16 +225,17 @@ export function MessageBubble({ message, isStreaming }: { message: UIMessage; is
       <div className="flex justify-end">
         <div
           className={cn(
-            "max-w-[75%] flex flex-col gap-2",
+            "flex max-w-[min(85%,36rem)] flex-col gap-2",
             // When there's text, wrap it in a rounded bubble
             hasText &&
-              "rounded-2xl bg-primary px-4 py-2 text-sm text-primary-foreground",
+              "rounded-2xl bg-primary px-3.5 py-2.5 text-[15px] leading-relaxed text-primary-foreground",
           )}
         >
           {/* Text content (if any) */}
           {hasText && (
             <div
               className={cn(
+                "[&_.markdown-body]:text-[15px] [&_.markdown-body]:leading-relaxed",
                 "[&_.markdown-body]:[color:var(--primary-foreground)]",
                 "[&_.markdown-body_img]:my-1 [&_.markdown-body_img]:rounded-md [&_.markdown-body_img]:border [&_.markdown-body_img]:border-white/20",
                 "[&_.markdown-body_a]:text-primary-foreground/80 [&_.markdown-body_a]:underline [&_.markdown-body_a]:underline-offset-2",
@@ -267,7 +268,7 @@ export function MessageBubble({ message, isStreaming }: { message: UIMessage; is
 
           {/* No text, no attachments — shouldn't happen, but handle gracefully */}
           {!hasText && attachments.length === 0 && (
-            <span className="text-primary-foreground/60 text-sm">Sent a file</span>
+            <span className="text-sm text-primary-foreground/60">Sent a file</span>
           )}
         </div>
       </div>
@@ -279,34 +280,38 @@ export function MessageBubble({ message, isStreaming }: { message: UIMessage; is
   const hasAnyContent = segments.length > 0;
 
   // If nothing to render yet, show a streaming placeholder.
-if (!hasAnyContent) {
-  return (
-          <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground/60">
-            <div className="flex h-3 w-3 items-center justify-center">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground/40" />
-            </div>
-            Generating response...
-          </div>
-  );
-}
+  if (!hasAnyContent) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-muted-foreground/70">
+        <div className="flex h-3 w-3 items-center justify-center">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground/40" />
+        </div>
+        Generating response...
+      </div>
+    );
+  }
 
   const showThinking = isStreaming && hasAnyContent;
 
   return (
     <div className="flex justify-start">
-      <div className="w-full max-w-[85%] px-4 py-3 text-sm text-foreground">
+      <div className="w-full text-[15px] leading-relaxed text-foreground">
         {/* Render segments in their original interleaved order */}
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3.5">
           {/* Render non-suggestions segments in their original interleaved order */}
           {segments
             .filter((s) => s.type !== "suggestions")
             .map((segment, idx) =>
               segment.type === "text" ? (
-                <StreamingSafeMarkdown
+                <div
                   key={`text-${idx}`}
-                  content={segment.text}
-                  isStreaming={isStreaming && idx === segments.length - 1}
-                />
+                  className="[&_.markdown-body]:text-[15px] [&_.markdown-body]:leading-[1.7]"
+                >
+                  <StreamingSafeMarkdown
+                    content={segment.text}
+                    isStreaming={isStreaming && idx === segments.length - 1}
+                  />
+                </div>
               ) : segment.type === "visual" ? (
                 <VisualCardSegment key={`visual-${idx}`} part={segment.part} />
               ) : segment.type === "sessionPresent" ? (
@@ -323,7 +328,7 @@ if (!hasAnyContent) {
           {segments
             .filter((s): s is Segment & { type: "suggestions" } => s.type === "suggestions")
             .map((segment, idx) => (
-              <div key={`suggestions-${idx}`} className="mt-1">
+              <div key={`suggestions-${idx}`} className="mt-0.5">
                 <FollowupSuggestions data={segment.data} />
               </div>
             ))}
@@ -331,7 +336,7 @@ if (!hasAnyContent) {
 
         {/* Thinking indicator — shown under content while AI is still processing */}
         {showThinking && (
-          <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground/60">
+          <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground/70">
             <div className="flex h-3 w-3 items-center justify-center">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground/40" />
             </div>
@@ -367,14 +372,14 @@ function VisualCardSegment({ part }: { part: UIMessage["parts"][number] }) {
   // show a compact loading placeholder so the user knows a visual is coming.
   if (!isComplete) {
     return (
-      <div className="overflow-hidden rounded-xl border border-indigo-500/15 bg-indigo-500/[0.04]">
+      <div className="overflow-hidden rounded-xl border border-border/55 bg-surface-2/40">
         <div className="flex items-center gap-2.5 px-3.5 py-3">
-          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-indigo-500/10">
-            <svg className="h-3.5 w-3.5 animate-spin text-indigo-500" viewBox="0 0 24 24" fill="none">
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary/10">
+            <svg className="h-3.5 w-3.5 animate-spin text-primary" viewBox="0 0 24 24" fill="none">
               <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4 31.4" strokeLinecap="round" />
             </svg>
           </div>
-          <span className="text-sm font-medium text-indigo-600 dark:text-indigo-400">
+          <span className="text-sm font-medium text-foreground">
             Generating visual...
           </span>
         </div>

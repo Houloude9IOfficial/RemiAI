@@ -87,4 +87,4 @@ Descriptions: A tool (togglable) that allows the AI with javascript to create ro
 
 <!-- when opening on deployment the website, it sometimes loads /chat/1 and stays loading, on mobile it doesnt show the sidebar and it stays stuck on loading, and on desktop it shows the sidebar but the chat content is empty and it stays loading. Fix this. -->
 
-tool cards have 2 scroll bars on console output.
+<!-- tool cards have 2 scroll bars on console output. -->

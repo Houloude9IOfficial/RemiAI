@@ -27,7 +27,7 @@ function wrapHtml(htmlContent: string): string {
   if (/<!doctype\s+html|<html[\s>]/i.test(lower)) {
     return htmlContent;
   }
-  // Otherwise wrap in a minimal HTML document with transparent body
+  // Otherwise wrap in a minimal HTML document with transparent body + chat theme vars
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -35,9 +35,20 @@ function wrapHtml(htmlContent: string): string {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --chat-bg: transparent;
+    --chat-fg: inherit;
+    --chat-muted: inherit;
+    --chat-border: transparent;
+    --chat-primary: inherit;
+    --background: transparent;
+    --foreground: inherit;
+  }
   html, body {
     min-height: 100%;
     background: transparent !important;
+    background-color: transparent !important;
+    color: var(--chat-fg, inherit);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   }
 </style>
@@ -94,6 +105,7 @@ Before designing, think about what the data or concept is about. Let the subject
 
 ### 4. Use transparent backgrounds
 **Always use a TRANSPARENT background** by default so the visual blends into the chat theme. Do NOT add background rectangles, fills, or colors to the root SVG or HTML body unless the user explicitly asks for colored backgrounds.
+When you need theme-aware colors, use CSS variables injected by the chat UI: \`var(--chat-bg)\`, \`var(--chat-fg)\`, \`var(--chat-muted)\`, \`var(--chat-border)\`, \`var(--chat-primary)\`.
 
 ### 5. Keep it clean and intentional
 - Use whitespace generously — don't cram elements

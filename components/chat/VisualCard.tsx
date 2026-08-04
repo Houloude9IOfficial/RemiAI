@@ -1,20 +1,12 @@
 "use client";
 
-import { useRef, useEffect, useState, useCallback } from "react";
+import { useRef, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
-import {
-  AlignCenter,
-  AlignLeft,
-  AlignRight,
-  Eye,
-  Loader2,
-} from "lucide-react";
+import { Eye, Loader2 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────
 
 type VisualAlign = "left" | "center" | "right";
-
-const ALIGN_OPTIONS: VisualAlign[] = ["left", "center", "right"];
 
 interface VisualData {
   type: "visual";
@@ -28,28 +20,110 @@ interface VisualData {
   note?: string;
 }
 
-// ─── Sanitisation helpers ─────────────────────────────────────────────
+// ─── Theme injection ──────────────────────────────────────────────────
 
-/**
- * Strip potentially harmful script content from SVG.
- * SVG <script> tags are stripped — the AI should not need them.
- * We also strip event handlers (onclick, onload, etc.) for safety.
- * This makes the sandboxed iframe defence-in-depth rather than the only
- * layer of protection.
- */
+/** Read live chat theme tokens for injection into SVG/HTML visuals. */
+function readChatThemeVars(): Record<string, string> {
+  if (typeof window === "undefined") {
+    return {
+      chatBg: "transparent",
+      chatFg: "currentColor",
+      chatMuted: "#888",
+      chatBorder: "transparent",
+      chatPrimary: "#6366f1",
+    };
+  }
+  const s = getComputedStyle(document.documentElement);
+  const pick = (name: string, fallback: string) => {
+    const v = s.getPropertyValue(name).trim();
+    return v || fallback;
+  };
+  return {
+    chatBg: pick("--background", "transparent"),
+    chatFg: pick("--foreground", "currentColor"),
+    chatMuted: pick("--muted-foreground", "#888"),
+    chatBorder: pick("--border", "transparent"),
+    chatPrimary: pick("--primary", "#6366f1"),
+  };
+}
+
+function themeCssBlock(vars: Record<string, string>): string {
+  return `
+:root, html, body, svg {
+  --chat-bg: ${vars.chatBg};
+  --chat-fg: ${vars.chatFg};
+  --chat-muted: ${vars.chatMuted};
+  --chat-border: ${vars.chatBorder};
+  --chat-primary: ${vars.chatPrimary};
+  --background: ${vars.chatBg};
+  --foreground: ${vars.chatFg};
+}
+html, body {
+  margin: 0;
+  padding: 0;
+  background: transparent !important;
+  background-color: transparent !important;
+  color: var(--chat-fg);
+  font-family: inherit;
+}
+svg {
+  background: transparent !important;
+}
+`.trim();
+}
+
 function sanitizeSvg(svg: string): string {
-  // Remove <script>...</script> blocks
   let clean = svg.replace(/<script[\s\S]*?<\/script>/gi, "");
-  // Remove event handler attributes (onclick, onload, onerror, etc.)
   clean = clean.replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*)/gi, "");
-  // Remove javascript: URLs in SVG attributes
   clean = clean.replace(/javascript:\s*/gi, "");
   return clean;
 }
 
+function injectSvgTheme(svgEl: SVGElement, vars: Record<string, string>) {
+  svgEl.style.background = "transparent";
+  svgEl.style.setProperty("--chat-bg", vars.chatBg);
+  svgEl.style.setProperty("--chat-fg", vars.chatFg);
+  svgEl.style.setProperty("--chat-muted", vars.chatMuted);
+  svgEl.style.setProperty("--chat-border", vars.chatBorder);
+  svgEl.style.setProperty("--chat-primary", vars.chatPrimary);
+  svgEl.style.setProperty("--background", vars.chatBg);
+  svgEl.style.setProperty("--foreground", vars.chatFg);
+
+  // Soften obvious full-bleed opaque background rects
+  const vb = svgEl.getAttribute("viewBox")?.split(/[\s,]+/) ?? [];
+  const vbW = vb[2];
+  const vbH = vb[3];
+  svgEl.querySelectorAll("rect").forEach((rect) => {
+    const w = rect.getAttribute("width");
+    const h = rect.getAttribute("height");
+    const x = rect.getAttribute("x") ?? "0";
+    const y = rect.getAttribute("y") ?? "0";
+    const isFullBleed =
+      (x === "0" || x === "0%") &&
+      (y === "0" || y === "0%") &&
+      (w === "100%" || (vbW != null && w === vbW)) &&
+      (h === "100%" || (vbH != null && h === vbH));
+    const fill = (rect.getAttribute("fill") ?? "").toLowerCase();
+    if (
+      isFullBleed &&
+      fill &&
+      fill !== "none" &&
+      fill !== "transparent" &&
+      !fill.startsWith("url(")
+    ) {
+      rect.setAttribute("fill", "transparent");
+    }
+  });
+
+  const ns = "http://www.w3.org/2000/svg";
+  svgEl.querySelector("style[data-chat-theme]")?.remove();
+  const style = document.createElementNS(ns, "style");
+  style.setAttribute("data-chat-theme", "1");
+  style.textContent = themeCssBlock(vars);
+  svgEl.insertBefore(style, svgEl.firstChild);
+}
+
 // ─── SVG Inline Renderer ──────────────────────────────────────────────
-// SVG is safe to render inline (no executable content after sanitization).
-// This is more performant and accessible than an iframe.
 
 function SvgRenderer({ content, className }: { content: string; className?: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -59,51 +133,39 @@ function SvgRenderer({ content, className }: { content: string; className?: stri
   useEffect(() => {
     if (!containerRef.current) return;
 
-    // Parse and inject the SVG safely
     const container = containerRef.current;
-    container.innerHTML = ""; // clear
+    container.innerHTML = "";
 
     try {
       const sanitized = sanitizeSvg(content);
-      // Use DOMParser to safely parse the SVG string into a document fragment
       const parser = new DOMParser();
       const doc = parser.parseFromString(sanitized, "image/svg+xml");
 
-      // Check for parse errors
-      const parseError = doc.querySelector("parsererror");
-      if (parseError) {
+      if (doc.querySelector("parsererror")) {
         setError(true);
         setLoading(false);
         return;
       }
 
-      // Extract the <svg> element
-      const svgEl = doc.querySelector("svg");
+      const vars = readChatThemeVars();
+      let svgEl = doc.querySelector("svg");
       if (!svgEl) {
-        // If it's SVG content without <svg> wrapper, try wrapping
         const wrapped = `<svg xmlns="http://www.w3.org/2000/svg">${sanitized}</svg>`;
         const retryDoc = parser.parseFromString(wrapped, "image/svg+xml");
-        const retrySvg = retryDoc.querySelector("svg");
-        if (!retrySvg) {
+        svgEl = retryDoc.querySelector("svg");
+        if (!svgEl) {
           setError(true);
           setLoading(false);
           return;
         }
-        // Remove width/height from wrapper so it scales naturally
-        retrySvg.removeAttribute("width");
-        retrySvg.removeAttribute("height");
-        retrySvg.setAttribute("width", "100%");
-        retrySvg.setAttribute("height", "100%");
-        container.appendChild(retrySvg);
-      } else {
-        // Make responsive
-        svgEl.removeAttribute("width");
-        svgEl.removeAttribute("height");
-        svgEl.setAttribute("width", "100%");
-        svgEl.setAttribute("height", "100%");
-        container.appendChild(svgEl);
       }
 
+      svgEl.removeAttribute("width");
+      svgEl.removeAttribute("height");
+      svgEl.setAttribute("width", "100%");
+      svgEl.setAttribute("height", "100%");
+      injectSvgTheme(svgEl, vars);
+      container.appendChild(svgEl);
       setLoading(false);
     } catch {
       setError(true);
@@ -113,7 +175,7 @@ function SvgRenderer({ content, className }: { content: string; className?: stri
 
   if (error) {
     return (
-      <div className="flex items-center justify-center rounded-lg bg-destructive/5 border border-destructive/20 p-6 text-sm text-destructive">
+      <div className="flex items-center justify-center rounded-lg border border-destructive/20 bg-destructive/5 p-6 text-sm text-destructive">
         Could not render this SVG visual. There may be a syntax error in the generated code.
       </div>
     );
@@ -121,30 +183,35 @@ function SvgRenderer({ content, className }: { content: string; className?: stri
 
   return (
     <div className="relative">
-      {/* Loading placeholder */}
       {loading && (
-        <div className="flex items-center justify-center rounded-lg bg-muted/20 p-8">
+        <div className="flex items-center justify-center bg-transparent p-8">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
       )}
-      {/* SVG container — the SVG inherits transparent background from the parent */}
       <div
         ref={containerRef}
         className={cn(
-          "w-full [&_svg]:block [&_svg]:max-w-full",
+          "w-full bg-transparent [&_svg]:block [&_svg]:max-w-full",
           loading && "hidden",
           className,
         )}
-        style={{ minHeight: loading ? 0 : 100 }}
+        style={{ minHeight: loading ? 0 : 100, background: "transparent" }}
       />
     </div>
   );
 }
 
 // ─── HTML Iframe Renderer ────────────────────────────────────────────
-// HTML is rendered in a sandboxed iframe to isolate styles/scripts.
 
-function HtmlRenderer({ content, width, height: heightProp }: { content: string; width: string; height: string }) {
+function HtmlRenderer({
+  content,
+  width,
+  height: heightProp,
+}: {
+  content: string;
+  width: string;
+  height: string;
+}) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [iframeHeight, setIframeHeight] = useState<number | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -159,7 +226,6 @@ function HtmlRenderer({ content, width, height: heightProp }: { content: string;
     setIframeHeight(null);
 
     try {
-      // Write the HTML content to the iframe's document
       const doc = iframe.contentDocument || iframe.contentWindow?.document;
       if (!doc) {
         setLoadError(true);
@@ -167,37 +233,57 @@ function HtmlRenderer({ content, width, height: heightProp }: { content: string;
         return;
       }
 
+      const vars = readChatThemeVars();
+      const themeStyle = `<style data-chat-theme="1">${themeCssBlock(vars)}</style>`;
+
+      let htmlToWrite = content;
+      const lower = content.toLowerCase();
+      if (/<!doctype\s+html|<html[\s>]/i.test(lower)) {
+        if (/<\/head>/i.test(content)) {
+          htmlToWrite = content.replace(/<\/head>/i, `${themeStyle}</head>`);
+        } else if (/<body[\s>]/i.test(content)) {
+          htmlToWrite = content.replace(
+            /<body([\s>])/i,
+            `<head>${themeStyle}</head><body$1`,
+          );
+        } else {
+          htmlToWrite = `${themeStyle}${content}`;
+        }
+      } else {
+        htmlToWrite = `<!DOCTYPE html><html><head><meta charset="utf-8">${themeStyle}</head><body>${content}</body></html>`;
+      }
+
       doc.open();
-      doc.write(content);
+      doc.write(htmlToWrite);
       doc.close();
 
-      // Measure the iframe content height after it renders
+      try {
+        doc.documentElement.style.background = "transparent";
+        doc.documentElement.style.backgroundColor = "transparent";
+        if (doc.body) {
+          doc.body.style.background = "transparent";
+          doc.body.style.backgroundColor = "transparent";
+        }
+      } catch {
+        // ignore
+      }
+
       const measure = () => {
         if (!iframe.contentWindow?.document.body) return;
-
         const body = iframe.contentWindow.document.body;
         const html = iframe.contentWindow.document.documentElement;
-
-        // Use scrollHeight for accurate content height
         const contentHeight = Math.max(
           body.scrollHeight,
           html?.scrollHeight ?? 0,
           body.offsetHeight,
           html?.offsetHeight ?? 0,
         );
-
-        if (contentHeight > 0) {
-          setIframeHeight(contentHeight);
-        }
+        if (contentHeight > 0) setIframeHeight(contentHeight);
         setLoading(false);
       };
 
-      // Wait for fonts/images to load
       setTimeout(measure, 100);
-      // Retry measurement after fonts load
-      if (doc.fonts?.ready) {
-        doc.fonts.ready.then(measure);
-      }
+      if (doc.fonts?.ready) doc.fonts.ready.then(measure);
     } catch {
       setLoadError(true);
       setLoading(false);
@@ -206,7 +292,7 @@ function HtmlRenderer({ content, width, height: heightProp }: { content: string;
 
   if (loadError) {
     return (
-      <div className="flex items-center justify-center rounded-lg bg-destructive/5 border border-destructive/20 p-6 text-sm text-destructive">
+      <div className="flex items-center justify-center rounded-lg border border-destructive/20 bg-destructive/5 p-6 text-sm text-destructive">
         Could not render this visual. There was an error loading the content.
       </div>
     );
@@ -215,30 +301,29 @@ function HtmlRenderer({ content, width, height: heightProp }: { content: string;
   const displayHeight = iframeHeight ? `${iframeHeight + 8}px` : heightProp;
 
   return (
-    <div className="relative">
-      {/* Loading overlay */}
+    <div className="relative bg-transparent">
       {loading && (
-        <div className="flex items-center justify-center rounded-lg bg-muted/20 p-8">
+        <div className="flex items-center justify-center bg-transparent p-8">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
-      )}        <iframe
+      )}
+      <iframe
         ref={iframeRef}
         title="Visual content"
         className={cn(
-          "w-full border-0 overflow-hidden transition-opacity duration-300",
-          loading ? "absolute opacity-0 pointer-events-none" : "opacity-100",
+          "w-full overflow-hidden border-0 bg-transparent transition-opacity duration-300",
+          loading ? "pointer-events-none absolute opacity-0" : "opacity-100",
         )}
         style={{
           width,
           height: displayHeight !== "auto" ? displayHeight : undefined,
           minHeight: displayHeight === "auto" ? 100 : undefined,
           background: "transparent",
+          colorScheme: "normal",
         }}
-        // Sandbox: no scripts, no popups, no top navigation, no same-origin
-        // Allow-same-origin needed for JS to read content height.
         sandbox="allow-same-origin"
         referrerPolicy="no-referrer"
-      />
+        allowTransparency={true}      />
     </div>
   );
 }
@@ -246,81 +331,44 @@ function HtmlRenderer({ content, width, height: heightProp }: { content: string;
 // ─── Main VisualCard Component ────────────────────────────────────────
 
 export function VisualCard({ data }: { data: unknown }) {
-  const [userAlign, setUserAlign] = useState<VisualAlign | null>(null);
+  const [userAlign] = useState<VisualAlign | null>(null);
 
   if (!data || typeof data !== "object") return null;
 
   const visual = data as Record<string, unknown>;
   if (visual.type !== "visual") return null;
 
-  const { visualType, title, content, width, height, caption, align: alignFromData } =
-    visual as unknown as VisualData;
+  const {
+    visualType,
+    content,
+    width,
+    height,
+    caption,
+    align: alignFromData,
+  } = visual as unknown as VisualData;
 
-  // Alignment: user override takes precedence, else the AI-specified value,
-  // else centered by default.
   const align = userAlign ?? alignFromData ?? "center";
   const alignClass =
-    align === "left"
-      ? "mr-auto"
-      : align === "right"
-        ? "ml-auto"
-        : "mx-auto";
+    align === "left" ? "mr-auto" : align === "right" ? "ml-auto" : "mx-auto";
 
   if (!content) {
     return (
-      <div className="rounded-xl border border-border/40 bg-muted/10 p-6 text-center">
-        <Eye className="mx-auto h-8 w-8 text-muted-foreground/40 mb-2" />
+      <div className="rounded-xl border border-border/40 bg-transparent p-6 text-center">
+        <Eye className="mx-auto mb-2 h-8 w-8 text-muted-foreground/40" />
         <p className="text-sm text-muted-foreground">Visual content is empty.</p>
       </div>
     );
   }
 
   return (
-    // Bounded width so alignment is meaningful; centered by default.
     <div
       className={cn(
-        "group w-full max-w-3xl transition-all duration-200",
+        "group w-full max-w-3xl bg-transparent transition-all duration-200",
         alignClass,
       )}
     >
-      <div className="overflow-hidden rounded-xl">
-        {/* Header */}
-        <div className="flex items-center gap-2.5 py-2.5">
-          <span className="text-sm font-semibold text-foreground truncate">
-            {title}
-          </span>
-
-          {/* Alignment controls — always visible on touch, revealed on hover/focus on desktop */}
-          <div className="ml-auto flex items-center gap-0.5 opacity-100 transition-opacity duration-150 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
-            {ALIGN_OPTIONS.map((a) => (
-              <button
-                key={a}
-                type="button"
-                onClick={() => setUserAlign(a)}
-                aria-label={`Align visual ${a}`}
-                title={`Align ${a}`}
-                className={cn(
-                  "flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/50 transition-colors duration-150 hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-                  align === a && "bg-muted text-foreground",
-                )}
-              >
-                {a === "left" ? (
-                  <AlignLeft className="h-3.5 w-3.5" />
-                ) : a === "right" ? (
-                  <AlignRight className="h-3.5 w-3.5" />
-                ) : (
-                  <AlignCenter className="h-3.5 w-3.5" />
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Content area — transparent background so it blends into the chat */}
-        <div
-          className="w-full overflow-x-auto"
-          style={{ background: "transparent" }}
-        >
+      <div className="overflow-hidden rounded-xl bg-transparent">
+        <div className="w-full overflow-x-auto bg-transparent">
           {visualType === "svg" ? (
             <SvgRenderer content={content} />
           ) : (
@@ -328,10 +376,9 @@ export function VisualCard({ data }: { data: unknown }) {
           )}
         </div>
 
-        {/* Optional caption */}
         {caption && (
-          <div className="border-t text-center border-border/20 px-4 py-2">
-            <p className="text-[11px] text-muted-foreground/70 italic leading-relaxed">
+          <div className="border-t border-border/20 px-4 py-2 text-center">
+            <p className="text-[11px] italic leading-relaxed text-muted-foreground/70">
               {caption}
             </p>
           </div>

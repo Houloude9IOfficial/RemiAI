@@ -472,7 +472,17 @@ export const writeFileTool = {
     indexFile(rootId, relativePath, result.path).catch((err) =>
       console.error("[fs-tools] Failed to index written file:", err),
     );
-    return result;
+    // Prefer relativePath for UI digests; keep absolute path for debugging.
+    return {
+      wrote: result.wrote,
+      path: result.relativePath,
+      absolutePath: result.path,
+      mode: result.mode,
+      created: result.created,
+      linesWritten: result.linesWritten,
+      linesAdded: result.linesAdded,
+      linesRemoved: result.linesRemoved,
+    };
   },
 };
 

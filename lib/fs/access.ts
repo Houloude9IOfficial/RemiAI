@@ -960,6 +960,18 @@ export async function deleteDirectory(
   return { path: targetPath, deleted: true };
 }
 
+export type WriteFileResult = {
+  wrote: number;
+  path: string;
+  relativePath: string;
+  mode: "overwrite" | "append";
+  created: boolean;
+  linesWritten: number;
+  /** Line-count delta (mixed precision — not a true hunk diff). */
+  linesAdded: number;
+  linesRemoved: number;
+};
+
 /**
  * Write content to a file. Creates parent directories if they don't exist.
  * When `mode` is "append", appends to the existing file (or creates if absent).
@@ -969,17 +981,51 @@ export async function writeFile(
   relativePath: string,
   content: string,
   mode?: "overwrite" | "append" | null,
-): Promise<{ wrote: number; path: string }> {
+): Promise<WriteFileResult> {
   assertCanWrite(root);
   const targetPath = await resolvePath(root, relativePath);
+  const writeMode = mode === "append" ? "append" : "overwrite";
+  const normalizedRel = normalizePath(relativePath);
+
+  // Snapshot prior line count for mixed-precision +/- summary
+  let previousLines: number | null = null;
+  let created = true;
+  try {
+    const existing = await fs.readFile(targetPath, "utf-8");
+    previousLines = existing.split("\n").length;
+    created = false;
+  } catch {
+    // File does not exist yet — treat as create
+  }
 
   // Ensure parent directory exists
   await fs.mkdir(path.dirname(targetPath), { recursive: true });
 
-  const flag = mode === "append" ? "a" : "w";
+  const flag = writeMode === "append" ? "a" : "w";
   await fs.writeFile(targetPath, content, { encoding: "utf-8", flag });
 
-  return { wrote: Buffer.byteLength(content, "utf-8"), path: targetPath };
+  const linesWritten = content.length === 0 ? 0 : content.split("\n").length;
+  let linesAdded = 0;
+  let linesRemoved = 0;
+  if (writeMode === "append") {
+    linesAdded = linesWritten;
+  } else if (created || previousLines === null) {
+    linesAdded = linesWritten;
+  } else {
+    linesAdded = Math.max(0, linesWritten - previousLines);
+    linesRemoved = Math.max(0, previousLines - linesWritten);
+  }
+
+  return {
+    wrote: Buffer.byteLength(content, "utf-8"),
+    path: targetPath,
+    relativePath: normalizedRel,
+    mode: writeMode,
+    created,
+    linesWritten,
+    linesAdded,
+    linesRemoved,
+  };
 }
 
 // ---------------------------------------------------------------------------

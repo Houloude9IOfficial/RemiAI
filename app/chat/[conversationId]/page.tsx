@@ -58,16 +58,16 @@ function ReconnectingBanner() {
 
 function ChatMobileHeader({ onToggleSidebar }: { onToggleSidebar: () => void }) {
   return (
-    <div className="flex items-center gap-2 border-b px-3 py-2.5 bg-background/95 backdrop-blur supports-[padding-top:env(safe-area-inset-top)]:pt-[calc(0.625rem+env(safe-area-inset-top))] md:hidden">
+    <div className="flex items-center gap-2 border-b border-border/60 bg-background/95 px-3 py-2 backdrop-blur supports-[padding-top:env(safe-area-inset-top)]:pt-[calc(0.5rem+env(safe-area-inset-top))] md:hidden">
       <button
         type="button"
         onClick={onToggleSidebar}
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted active:scale-95 transition-all duration-150"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-95"
         aria-label="Open menu"
       >
         <Menu className="h-5 w-5" />
       </button>
-      <span className="flex-1 truncate text-sm font-medium text-foreground">
+      <span className="min-w-0 flex-1 truncate text-sm font-medium tracking-tight text-foreground">
         RemiAI
       </span>
     </div>
@@ -511,12 +511,11 @@ function ConversationChat({
       aria-label="Toggle session files"
       title="Session files"
       className={cn(
-        "inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-muted-foreground transition-all hover:bg-muted hover:text-foreground active:scale-95",
+        "inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-95",
         panelOpen && "bg-primary/10 text-primary",
       )}
     >
       <Files className="h-4 w-4" />
-      <span className="hidden text-xs font-medium lg:inline">Files</span>
     </button>
   );
 
@@ -554,8 +553,14 @@ function ConversationChat({
         providerId={providerId}
         modelId={modelId}
         onModelChange={handleModelChange}
-        actions={filesToggle}
-        extra={messages.length > 0 && <ExportDialog messages={messages} title={initialConversation.title} />}
+        actions={
+          <>
+            {messages.length > 0 && (
+              <ExportDialog messages={messages} title={initialConversation.title} />
+            )}
+            {filesToggle}
+          </>
+        }
       />
 
       {/* ── Todo progress ── */}
@@ -633,7 +638,7 @@ function ConversationChat({
       )}
 
       {/* ── Input ── */}
-      <div className="sticky bottom-0 z-20 bg-linear-to-t from-background via-background/95 to-transparent backdrop-blur supports-[padding-bottom:env(safe-area-inset-bottom)]:pb-[env(safe-area-inset-bottom)]">
+      <div className="sticky bottom-0 z-20 supports-[padding-bottom:env(safe-area-inset-bottom)]:pb-[env(safe-area-inset-bottom)]">
         <ChatInput
           conversationId={conversationId}
           status={status}

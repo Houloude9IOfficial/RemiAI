@@ -280,17 +280,64 @@ export async function readSessionFile(
   }
 }
 
+export type WriteSessionFileResult = {
+  wrote: number;
+  path: string;
+  relativePath: string;
+  mode: "overwrite" | "append";
+  created: boolean;
+  linesWritten: number;
+  /** Line-count delta (mixed precision — not a true hunk diff). */
+  linesAdded: number;
+  linesRemoved: number;
+};
+
 export async function writeSessionFile(
   conversationId: number,
   relativePath: string,
   content: string,
   mode?: "overwrite" | "append" | null,
-): Promise<{ wrote: number; path: string }> {
+): Promise<WriteSessionFileResult> {
   const targetPath = await resolveSessionPath(conversationId, relativePath);
+  const writeMode = mode === "append" ? "append" : "overwrite";
+  const normalizedRel = relativePath.replace(/\\/g, "/").replace(/^\/+/, "");
+
+  let previousLines: number | null = null;
+  let created = true;
+  try {
+    const existing = await fs.readFile(targetPath, "utf-8");
+    previousLines = existing.split("\n").length;
+    created = false;
+  } catch {
+    // File does not exist yet
+  }
+
   await fs.mkdir(path.dirname(targetPath), { recursive: true });
-  const flag = mode === "append" ? "a" : "w";
+  const flag = writeMode === "append" ? "a" : "w";
   await fs.writeFile(targetPath, content, { encoding: "utf-8", flag });
-  return { wrote: Buffer.byteLength(content, "utf-8"), path: targetPath };
+
+  const linesWritten = content.length === 0 ? 0 : content.split("\n").length;
+  let linesAdded = 0;
+  let linesRemoved = 0;
+  if (writeMode === "append") {
+    linesAdded = linesWritten;
+  } else if (created || previousLines === null) {
+    linesAdded = linesWritten;
+  } else {
+    linesAdded = Math.max(0, linesWritten - previousLines);
+    linesRemoved = Math.max(0, previousLines - linesWritten);
+  }
+
+  return {
+    wrote: Buffer.byteLength(content, "utf-8"),
+    path: targetPath,
+    relativePath: normalizedRel,
+    mode: writeMode,
+    created,
+    linesWritten,
+    linesAdded,
+    linesRemoved,
+  };
 }
 
 /**
