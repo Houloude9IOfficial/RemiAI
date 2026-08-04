@@ -3,12 +3,18 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import {
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
   Eye,
   Loader2,
-  Palette,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────
+
+type VisualAlign = "left" | "center" | "right";
+
+const ALIGN_OPTIONS: VisualAlign[] = ["left", "center", "right"];
 
 interface VisualData {
   type: "visual";
@@ -18,6 +24,7 @@ interface VisualData {
   width: string;
   height: string;
   caption: string | null;
+  align?: VisualAlign;
   note?: string;
 }
 
@@ -239,13 +246,25 @@ function HtmlRenderer({ content, width, height: heightProp }: { content: string;
 // ─── Main VisualCard Component ────────────────────────────────────────
 
 export function VisualCard({ data }: { data: unknown }) {
+  const [userAlign, setUserAlign] = useState<VisualAlign | null>(null);
+
   if (!data || typeof data !== "object") return null;
 
   const visual = data as Record<string, unknown>;
   if (visual.type !== "visual") return null;
 
-  const { visualType, title, content, width, height, caption } =
+  const { visualType, title, content, width, height, caption, align: alignFromData } =
     visual as unknown as VisualData;
+
+  // Alignment: user override takes precedence, else the AI-specified value,
+  // else centered by default.
+  const align = userAlign ?? alignFromData ?? "center";
+  const alignClass =
+    align === "left"
+      ? "mr-auto"
+      : align === "right"
+        ? "ml-auto"
+        : "mx-auto";
 
   if (!content) {
     return (
@@ -257,42 +276,67 @@ export function VisualCard({ data }: { data: unknown }) {
   }
 
   return (
-    <div className="overflow-hidden rounded-xl transition-all duration-200">
-      {/* Header */}
-      <div className="flex items-center gap-2.5 py-2.5">
-        {/* <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-indigo-500/10">
-          <Palette className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
-        </div> */}
-        <span className="text-sm font-semibold text-foreground truncate">
-          {title}
-        </span>
-        {/* {visualType && (
-          <span className="shrink-0 rounded bg-indigo-500/10 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
-            {visualType}
+    // Bounded width so alignment is meaningful; centered by default.
+    <div
+      className={cn(
+        "group w-full max-w-3xl transition-all duration-200",
+        alignClass,
+      )}
+    >
+      <div className="overflow-hidden rounded-xl">
+        {/* Header */}
+        <div className="flex items-center gap-2.5 py-2.5">
+          <span className="text-sm font-semibold text-foreground truncate">
+            {title}
           </span>
-        )} */}
-      </div>
 
-      {/* Content area — transparent background so it blends into the chat */}
-      <div
-        className="w-full overflow-x-auto"
-        style={{ background: "transparent" }}
-      >
-        {visualType === "svg" ? (
-          <SvgRenderer content={content} />
-        ) : (
-          <HtmlRenderer content={content} width={width} height={height} />
+          {/* Alignment controls — always visible on touch, revealed on hover/focus on desktop */}
+          <div className="ml-auto flex items-center gap-0.5 opacity-100 transition-opacity duration-150 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
+            {ALIGN_OPTIONS.map((a) => (
+              <button
+                key={a}
+                type="button"
+                onClick={() => setUserAlign(a)}
+                aria-label={`Align visual ${a}`}
+                title={`Align ${a}`}
+                className={cn(
+                  "flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/50 transition-colors duration-150 hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                  align === a && "bg-muted text-foreground",
+                )}
+              >
+                {a === "left" ? (
+                  <AlignLeft className="h-3.5 w-3.5" />
+                ) : a === "right" ? (
+                  <AlignRight className="h-3.5 w-3.5" />
+                ) : (
+                  <AlignCenter className="h-3.5 w-3.5" />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Content area — transparent background so it blends into the chat */}
+        <div
+          className="w-full overflow-x-auto"
+          style={{ background: "transparent" }}
+        >
+          {visualType === "svg" ? (
+            <SvgRenderer content={content} />
+          ) : (
+            <HtmlRenderer content={content} width={width} height={height} />
+          )}
+        </div>
+
+        {/* Optional caption */}
+        {caption && (
+          <div className="border-t text-center border-border/20 px-4 py-2">
+            <p className="text-[11px] text-muted-foreground/70 italic leading-relaxed">
+              {caption}
+            </p>
+          </div>
         )}
       </div>
-
-      {/* Optional caption */}
-      {caption && (
-        <div className="border-t text-center border-border/20 px-4 py-2">
-          <p className="text-[11px] text-muted-foreground/70 italic leading-relaxed">
-            {caption}
-          </p>
-        </div>
-      )}
     </div>
   );
 }

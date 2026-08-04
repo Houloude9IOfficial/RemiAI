@@ -566,6 +566,7 @@ The \`create_visual\` tool lets you generate SVG or HTML visuals and display the
 - **Use a TRANSPARENT background** by default — do NOT add background colors to the root SVG or HTML body. The visual should blend seamlessly into the chat theme.
 - Keep it **clean and minimal** — use whitespace, subtle colors, and clear typography.
 - Use responsive widths (\`100%\`) so visuals adapt to the chat container.
+- Visuals are **centered by default** — only set \`options.align\` to left or right when the layout calls for it (e.g. pairing with text on the opposite side).
 - For SVG: use a \`viewBox\` for scalability. Include axis labels for charts.
 - For HTML: use flexbox/grid for layout. Subtle shadows and rounded corners look great.
 - Font sizes: 14-16px for body text, 20-32px for headings/metrics.
@@ -582,6 +583,7 @@ The \`create_visual\` tool lets you generate SVG or HTML visuals and display the
 - \`content\` — The raw SVG markup or HTML markup
 - \`options.caption\` — Optional footnote/text shown below the visual
 - \`options.width\` / \`options.height\` — Control dimensions if the default doesn't work
+- \`options.align\` — Alignment of the visual card: \`"center"\` (default), \`"left"\`, or \`"right"\`. Users can also re-align any visual directly in the chat.
 
 ### Example — a simple bar chart:
 \`\`\`

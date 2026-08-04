@@ -150,6 +150,12 @@ Before designing, think about what the data or concept is about. Let the subject
           .describe(
             "Optional caption or footnote displayed below the visual.",
           ),
+        align: z
+          .enum(["center", "left", "right"])
+          .optional()
+          .describe(
+            "Optional alignment of the visual card within the chat: 'center' (default), 'left', or 'right'. Defaults to 'center'.",
+          ),
       })
       .optional()
       .describe("Optional display options for the visual."),
@@ -168,6 +174,7 @@ Before designing, think about what the data or concept is about. Let the subject
       width?: string;
       height?: string;
       caption?: string;
+      align?: "center" | "left" | "right";
     };
   }) => {
     // Wrap content in appropriate document shell
@@ -181,6 +188,7 @@ Before designing, think about what the data or concept is about. Let the subject
       width: options?.width ?? "100%",
       height: options?.height ?? "auto",
       caption: options?.caption ?? null,
+      align: options?.align ?? "center",
       note: "Visual rendered with transparent background. Use get_tool_help({ topic: 'create-visual' }) for design guidelines.",
     };
 

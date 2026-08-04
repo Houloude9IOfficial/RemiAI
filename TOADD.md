@@ -78,3 +78,11 @@ Descriptions: A tool (togglable) that allows the AI with javascript to create ro
 <!-- remove shadows, border and additional text from visualizations, and make them more clean and simple. -->
 
 <!-- remove icon background from tool calling visual text -->
+
+<!-- Centerize visualizations by default, and allow to be aligned left/right if needed. -->
+
+Add session file storage (mostly txt, md, py, js, etc...) and have tools to modify them (same as now the file management system tools, but for sandboxes only for each chat), and also have a present tool to show the user a file/files
+
+Add a file manager section to the dashboard, and allow the user to manage the files that are associated with each chat & the AI has access to, with options to create, edit, delete, download and organize files.
+
+when opening on deployment the website, it sometimes loads /chat/1 and stays loading, on mobile it doesnt show the sidebar and it stays stuck on loading, and on desktop it shows the sidebar but the chat content is empty and it stays loading. Fix this.
