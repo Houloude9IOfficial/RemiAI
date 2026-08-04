@@ -519,7 +519,7 @@ export function ToolList() {
             </Button>
             <Button
               variant="default"
-              className="bg-amber-600 hover:bg-amber-700 text-white"
+              className="bg-amber-600 hover:bg-amber-700 text-white ml-2"
               onClick={handleConfirmEnable}
             >
               I Understand, Enable
