@@ -321,6 +321,124 @@ export async function deleteSessionFile(
   return { path: targetPath, deleted: true };
 }
 
+/**
+ * Create a folder (recursively) inside the sandbox. Returns the entry for
+ * the created folder.
+ */
+export async function createSessionFolder(
+  conversationId: number,
+  relativePath: string,
+): Promise<SessionFileEntry> {
+  const normalized = normalizeSessionPath(relativePath);
+  const targetPath = await resolveSessionPath(conversationId, normalized);
+  await fs.mkdir(targetPath, { recursive: true });
+  const st = await fs.stat(targetPath);
+  return {
+    path: normalized,
+    name: path.basename(targetPath),
+    isDirectory: true,
+    isFile: false,
+    size: 0,
+    mtime: st.mtime.toISOString(),
+  };
+}
+
+/**
+ * Rename or move a file/folder within the sandbox. The destination's parent
+ * directories are created automatically. Fails if the destination already
+ * exists or if a folder is moved into its own subtree.
+ */
+export async function moveSessionFile(
+  conversationId: number,
+  from: string,
+  to: string,
+): Promise<SessionFileEntry> {
+  const fromNormalized = normalizeSessionPath(from);
+  const toNormalized = normalizeSessionPath(to);
+
+  // Moving a folder into its own subtree (lexical check, cheap & clear error)
+  if (toNormalized.startsWith(`${fromNormalized}/`)) {
+    throw new SessionFilesError(
+      `Cannot move "${fromNormalized}" into its own subfolder "${toNormalized}"`,
+      "INVALID_MOVE",
+    );
+  }
+
+  const fromPath = await resolveSessionPath(conversationId, fromNormalized);
+  const toPath = await resolveSessionPath(conversationId, toNormalized);
+
+  if (fromPath === toPath) {
+    // No-op rename onto itself — return the current entry
+    const st = await fs.stat(fromPath);
+    return {
+      path: toNormalized,
+      name: path.basename(fromPath),
+      isDirectory: st.isDirectory(),
+      isFile: !st.isDirectory(),
+      size: st.isDirectory() ? 0 : st.size,
+      mtime: st.mtime.toISOString(),
+    };
+  }
+
+  // Source must exist
+  try {
+    await fs.lstat(fromPath);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new SessionFilesError(
+        `File not found in session sandbox: "${fromNormalized}"`,
+        "NOT_FOUND",
+      );
+    }
+    throw err;
+  }
+
+  // Destination must not already exist
+  try {
+    await fs.lstat(toPath);
+    throw new SessionFilesError(
+      `A file or folder already exists at "${toNormalized}"`,
+      "ALREADY_EXISTS",
+    );
+  } catch (err) {
+    if (err instanceof SessionFilesError) throw err;
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  }
+
+  try {
+    await fs.mkdir(path.dirname(toPath), { recursive: true });
+  } catch (err) {
+    if (["EEXIST", "ENOTDIR"].includes((err as NodeJS.ErrnoException).code ?? "")) {
+      throw new SessionFilesError(
+        `Cannot move "${fromNormalized}" to "${toNormalized}" — a component of the destination path is a file`,
+        "INVALID_MOVE",
+      );
+    }
+    throw err;
+  }
+  try {
+    await fs.rename(fromPath, toPath);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "EINVAL") {
+      throw new SessionFilesError(
+        `Cannot move "${fromNormalized}" into "${toNormalized}"`,
+        "INVALID_MOVE",
+      );
+    }
+    throw err;
+  }
+
+  const st = await fs.stat(toPath);
+  return {
+    path: toNormalized,
+    name: path.basename(toPath),
+    isDirectory: st.isDirectory(),
+    isFile: !st.isDirectory(),
+    size: st.isDirectory() ? 0 : st.size,
+    mtime: st.mtime.toISOString(),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Uploads (user-provided files, e.g. images/assets)
 // ---------------------------------------------------------------------------
@@ -335,13 +453,14 @@ export function sanitizeUploadName(filename: string): string {
 }
 
 /**
- * Store a user-uploaded file into the sandbox root.
- * Rejects files that exceed {@link MAX_UPLOAD_SIZE}.
+ * Store a user-uploaded file into the sandbox (root or a subfolder via
+ * {@link dir}). Rejects files that exceed {@link MAX_UPLOAD_SIZE}.
  */
 export async function uploadSessionFile(
   conversationId: number,
   filename: string,
   data: Buffer,
+  dir?: string | null,
 ): Promise<SessionFileEntry> {
   if (data.byteLength > MAX_UPLOAD_SIZE) {
     throw new SessionFilesError(
@@ -350,12 +469,14 @@ export async function uploadSessionFile(
     );
   }
   const safeName = sanitizeUploadName(filename);
-  const targetPath = await resolveSessionPath(conversationId, safeName);
+  const safeDir = dir ? normalizeSessionPath(dir) : "";
+  const relTarget = safeDir ? `${safeDir}/${safeName}` : safeName;
+  const targetPath = await resolveSessionPath(conversationId, relTarget);
   await fs.mkdir(path.dirname(targetPath), { recursive: true });
   await fs.writeFile(targetPath, data);
   const st = await fs.stat(targetPath);
   return {
-    path: safeName,
+    path: relTarget,
     name: safeName,
     isDirectory: false,
     isFile: true,

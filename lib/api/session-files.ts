@@ -18,6 +18,14 @@ export type SessionFilesList = {
   files: SessionFileEntry[];
 };
 
+export type SessionFilesOverviewEntry = {
+  id: number;
+  title: string;
+  updatedAt: string;
+  fileCount: number;
+  totalSize: number;
+};
+
 // ---------------------------------------------------------------------------
 // Panel present event
 // ---------------------------------------------------------------------------
@@ -60,14 +68,59 @@ export const sessionFilesApi = {
   list: (conversationId: number): Promise<SessionFilesList> =>
     fetch(base(conversationId)).then((res) => unwrap<SessionFilesList>(res)),
 
-  upload: (conversationId: number, file: File): Promise<{ ok: true; file: SessionFileEntry }> => {
+  overview: (): Promise<{ conversations: SessionFilesOverviewEntry[] }> =>
+    fetch("/api/session-files").then((res) =>
+      unwrap<{ conversations: SessionFilesOverviewEntry[] }>(res),
+    ),
+
+  upload: (
+    conversationId: number,
+    file: File,
+    dir?: string | null,
+  ): Promise<{ ok: true; file: SessionFileEntry }> => {
     const form = new FormData();
     form.append("file", file);
+    if (dir) form.append("dir", dir);
     return fetch(base(conversationId), {
       method: "POST",
       body: form,
     }).then((res) => unwrap<{ ok: true; file: SessionFileEntry }>(res));
   },
+
+  /** Create or overwrite a text file ("write"). */
+  write: (
+    conversationId: number,
+    path: string,
+    content: string,
+  ): Promise<{ ok: true; path: string; wrote: number }> =>
+    fetch(base(conversationId), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "write", path, content }),
+    }).then((res) => unwrap<{ ok: true; path: string; wrote: number }>(res)),
+
+  /** Create a folder ("mkdir"). */
+  mkdir: (
+    conversationId: number,
+    path: string,
+  ): Promise<{ ok: true; entry: SessionFileEntry }> =>
+    fetch(base(conversationId), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "mkdir", path }),
+    }).then((res) => unwrap<{ ok: true; entry: SessionFileEntry }>(res)),
+
+  /** Rename or move a file/folder ("move"). */
+  move: (
+    conversationId: number,
+    from: string,
+    to: string,
+  ): Promise<{ ok: true; entry: SessionFileEntry }> =>
+    fetch(base(conversationId), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "move", from, to }),
+    }).then((res) => unwrap<{ ok: true; entry: SessionFileEntry }>(res)),
 
   remove: (conversationId: number, path: string): Promise<{ ok: true }> =>
     fetch(base(conversationId), {

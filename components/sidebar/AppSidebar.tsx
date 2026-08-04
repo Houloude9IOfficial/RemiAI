@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Brain, BarChart3, FolderOpen, Pen, Plug, Settings2, User, Wrench, Bot, Eye, Terminal, Gamepad2, Clock, ChevronDown, ChevronUp, Shield, Radio } from "lucide-react";
+import { Brain, BarChart3, Files, FolderOpen, Pen, Plug, Settings2, User, Wrench, Bot, Eye, Terminal, Gamepad2, Clock, ChevronDown, ChevronUp, Shield, Radio } from "lucide-react";
 import { conversationsApi } from "@/lib/api/conversations";
 import { ConversationList } from "./ConversationList";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -15,6 +15,7 @@ import { SidebarProfile } from "./SidebarProfile";
 
 const primaryLinks = [
   { href: "/talk", label: "Talk", icon: Radio },
+  { href: "/files", label: "Files", icon: Files },
   { href: "/settings/providers", label: "Models & Providers", icon: Settings2 },
   { href: "/settings/directories", label: "Directories", icon: FolderOpen },
   { href: "/games", label: "Games", icon: Gamepad2 },
