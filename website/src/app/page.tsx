@@ -247,6 +247,13 @@ const CREATIONS = [
     tags: ["Vite.JS", "Dashboard", "Minimal"],
     githubPath: "Aura",
   },
+  {
+    title: "Particlefield",
+    description:
+      "Generative particle art playground.",
+    tags: ["HTML5", "Canvas", "Playground"],
+    githubPath: "Particlefield",
+  },
 ];
 
 /* ------------------------------------------------------------------ */

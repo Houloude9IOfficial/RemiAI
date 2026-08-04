@@ -410,6 +410,7 @@ After building RemiAI, I put its coding capabilities to the test by having it bu
 | [Text to Morse Code](./creations/TextToMorseCode/) | Convert text to Morse code and back | Node.js |
 | [CLI Text Analyzer](./creations/CLI%20Text%20Analyzer/) | Command-line text analysis tool | Node.js |
 | [Aura](./creations/Aura/) | Minimalist personal dashboard | Vite.JS |
+| [Particlefield](./creations/Particlefield/) | Generative particle art playground | HTML5, Canvas |
 
 Each creation includes the exact AI conversation that produced it — check the `PROJECT.md` files for the full story.
 
