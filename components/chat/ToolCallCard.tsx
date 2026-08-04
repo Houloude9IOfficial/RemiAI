@@ -701,7 +701,7 @@ function JsonBlock({ data }: { data: unknown }) {
     <div className="relative">
       <pre
         className={cn(
-          "custom-scrollbar overflow-x-auto rounded-md bg-muted/50 p-2 text-xs leading-relaxed",
+          "custom-scrollbar overflow-x-auto bg-muted/50 p-5 text-xs leading-relaxed",
           collapsed && "max-h-24 overflow-y-hidden",
         )}
       >

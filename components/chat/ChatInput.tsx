@@ -13,6 +13,9 @@ import {
   Paperclip,
   Upload,
   MessageCircle,
+  FolderOpen,
+  Laptop,
+  CircleDot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -83,8 +86,31 @@ export function ChatInput({
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const dragCounterRef = useRef(0);
+  const [appVersion, setAppVersion] = useState("v1.5.0");
 
   const isStreaming = status === "streaming" || status === "submitted";
+
+  useEffect(() => {
+    try {
+      const electronApi = (window as Window & {
+        electronAPI?: { getAppInfo?: () => Promise<{ version: string }> };
+      }).electronAPI;
+      if (electronApi?.getAppInfo) {
+        electronApi
+          .getAppInfo()
+          .then((info) => {
+            if (info?.version) {
+              setAppVersion(`v${info.version}`);
+            }
+          })
+          .catch(() => {
+            // ignore and keep default
+          });
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   // Focus input when not disabled
   useEffect(() => {
@@ -512,13 +538,14 @@ export function ChatInput({
   // -----------------------------------------------------------------------
 
   return (
-    <div className="relative border-none max-md:p-4 p-8">
-      <div className="pointer-events-none absolute inset-x-0 -top-6 z-10 h-6 bg-gradient-to-b from-transparent to-background backdrop-blur-[1px]" />
+    <div className="relative border-none max-md:p-3 p-5">
+      <div className="pointer-events-none absolute inset-x-0 -top-6 z-10 h-6 bg-linear-to-b from-transparent to-background/95 backdrop-blur-[1px]" />
 
       <div
         className="relative"
         onDragEnter={handleDragEnter}
       >
+
         {/* Hidden native file input */}
         <input
           ref={fileInputRef}
@@ -549,14 +576,14 @@ export function ChatInput({
 
         {/* Mobile controls row — above the input, only when not streaming */}
         {!isStreaming && (
-          <div className="flex items-center gap-2 pb-1.5 md:hidden">
+          <div className="flex items-center gap-1.5 pb-1 md:hidden">
             {/* File attachment buttons */}
             <button
               type="button"
               onClick={openFilePicker}
               disabled={disabled}
               className={cn(
-                "flex h-8 shrink-0 items-center gap-1 rounded-lg border px-2 text-xs font-medium transition-all duration-200",
+                "flex h-8 shrink-0 items-center gap-1 rounded-md border px-2 text-xs font-medium transition-all duration-200",
                 "border-border/60 bg-transparent text-muted-foreground hover:border-muted-foreground/30 hover:text-foreground",
                 disabled && "opacity-40 pointer-events-none",
               )}
@@ -570,7 +597,7 @@ export function ChatInput({
               onClick={() => setFileDialogOpen(true)}
               disabled={disabled}
               className={cn(
-                "flex h-8 shrink-0 items-center gap-1 rounded-lg border px-2 text-xs font-medium transition-all duration-200",
+                "flex h-8 shrink-0 items-center gap-1 rounded-md border px-2 text-xs font-medium transition-all duration-200",
                 "border-border/60 bg-transparent text-muted-foreground hover:border-muted-foreground/30 hover:text-foreground",
                 disabled && "opacity-40 pointer-events-none",
               )}
@@ -581,7 +608,7 @@ export function ChatInput({
 
             {/* Mode selector — mobile row */}
             {onModeChange && (
-              <div className="flex shrink-0 rounded-lg border border-border/60 p-0.5 bg-muted/20">
+              <div className="flex shrink-0 rounded-md border border-border/60 p-0.5 bg-muted/20">
                 <Tooltip>
                   <TooltipTrigger
                     render={
@@ -616,18 +643,14 @@ export function ChatInput({
                         className={cn(
                           "flex h-7 items-center gap-1 rounded-md px-1.5 text-xs font-medium transition-all duration-200",
                           mode === "goal"
-                            ? "bg-background text-cyan-600 dark:text-cyan-400 shadow-sm border border-cyan-400/40"
+                            ? "bg-background text-primary shadow-sm border border-primary/40"
                             : "text-muted-foreground hover:text-foreground border border-transparent",
                           disabled && "opacity-40 pointer-events-none",
                         )}
                       />
                     }
                   >
-                    {mode === "goal" ? (
-                      <Sparkles className="h-3.5 w-3.5 animate-pulse" />
-                    ) : (
-                      <Target className="h-3.5 w-3.5" />
-                    )}
+                    <Sparkles className="h-3.5 w-3.5 animate-pulse" />
                   </TooltipTrigger>
                   <TooltipContent side="top" align="center" className="text-center">
                     <p className="font-semibold text-xs">Goal mode</p>
@@ -644,7 +667,7 @@ export function ChatInput({
                         className={cn(
                           "flex h-7 items-center gap-1 rounded-md px-1.5 text-xs font-medium transition-all duration-200",
                           mode === "plan"
-                            ? "bg-background text-emerald-600 dark:text-emerald-400 shadow-sm border border-emerald-400/40"
+                            ? "bg-background text-primary shadow-sm border border-primary/40"
                             : "text-muted-foreground hover:text-foreground border border-transparent",
                           disabled && "opacity-40 pointer-events-none",
                         )}
@@ -668,8 +691,8 @@ export function ChatInput({
         {/* Main input row — textarea + send button */}
         <div
           className={cn(
-            "relative flex items-end bg-background gap-2 rounded-2xl border p-2 transition-all duration-200",
-            isDragging && "border-primary/50 bg-primary/[0.02]",
+            "relative flex items-end gap-2 rounded-2xl border border-border/75 surface-1 p-2.5 shadow-floating transition-all duration-200",
+            isDragging && "border-primary/50 bg-primary/2",
           )}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
@@ -699,8 +722,8 @@ export function ChatInput({
                   className={cn(
                     "h-0.5 rounded-full",
                     mode === "goal"
-                      ? "bg-gradient-to-r from-cyan-400/30 via-cyan-400/60 to-cyan-400/30"
-                      : "bg-gradient-to-r from-emerald-400/30 via-emerald-400/60 to-emerald-400/30",
+                      ? "bg-linear-to-r from-primary/15 via-primary/70 to-primary/15"
+                      : "bg-linear-to-r from-primary/15 via-primary/70 to-primary/15",
                   )}
                 />
                 <motion.span
@@ -710,7 +733,7 @@ export function ChatInput({
                   transition={{ duration: 0.5 }}
                   className={cn(
                     "hidden md:inline text-[10px] font-medium tracking-wide",
-                    mode === "goal" ? "text-cyan-400/80" : "text-emerald-400/80",
+                    "text-primary/80",
                   )}
                 >
                   {mode === "goal"
@@ -725,8 +748,8 @@ export function ChatInput({
                   className={cn(
                     "h-0.5 rounded-full",
                     mode === "goal"
-                      ? "bg-gradient-to-r from-cyan-400/30 via-cyan-400/60 to-cyan-400/30"
-                      : "bg-gradient-to-r from-emerald-400/30 via-emerald-400/60 to-emerald-400/30",
+                      ? "bg-linear-to-r from-primary/15 via-primary/70 to-primary/15"
+                      : "bg-linear-to-r from-primary/15 via-primary/70 to-primary/15",
                   )}
                 />
               </motion.div>
@@ -746,7 +769,7 @@ export function ChatInput({
                   : "Message Remi..."
               }
               disabled={disabled}
-              className="!bg-transparent dark:!bg-transparent max-h-[72px] min-h-0 resize-none border-none py-0 leading-6 shadow-none focus-visible:ring-0"
+              className="bg-transparent! dark:bg-transparent! max-h-18 min-h-0 resize-none border-none py-0 leading-6 shadow-none focus-visible:ring-0"
               rows={1}
             />
           </div>
@@ -759,7 +782,7 @@ export function ChatInput({
                 onClick={openFilePicker}
                 disabled={disabled}
                 className={cn(
-                  "flex h-10 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-all duration-200",
+                    "flex h-10 shrink-0 items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-all duration-200",
                   "border-border/60 bg-transparent text-muted-foreground hover:border-muted-foreground/30 hover:text-foreground",
                   disabled && "opacity-40 pointer-events-none",
                 )}
@@ -774,7 +797,7 @@ export function ChatInput({
                 onClick={() => setFileDialogOpen(true)}
                 disabled={disabled}
                 className={cn(
-                  "flex h-10 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-all duration-200",
+                    "flex h-10 shrink-0 items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-all duration-200",
                   "border-border/60 bg-transparent text-muted-foreground hover:border-muted-foreground/30 hover:text-foreground",
                   disabled && "opacity-40 pointer-events-none",
                 )}
@@ -788,7 +811,7 @@ export function ChatInput({
 
           {/* Desktop: mode selector beside input */}
           {!isStreaming && onModeChange && (
-            <div className="hidden md:flex shrink-0 rounded-lg border border-border/60 p-0.5 bg-muted/20">
+            <div className="hidden md:flex shrink-0 rounded-md border border-border/60 p-0.5 bg-muted/20">
               <Tooltip>
                 <TooltipTrigger
                   render={
@@ -825,18 +848,14 @@ export function ChatInput({
                       className={cn(
                         "flex h-8 items-center gap-1 rounded-md px-2.5 text-xs font-medium transition-all duration-200",
                         mode === "goal"
-                          ? "bg-background text-cyan-600 dark:text-cyan-400 shadow-sm border border-cyan-400/40"
+                          ? "bg-background text-primary shadow-sm border border-primary/40"
                           : "text-muted-foreground hover:text-foreground border border-transparent",
                         disabled && "opacity-40 pointer-events-none",
                       )}
                     />
                   }
                 >
-                  {mode === "goal" ? (
-                    <Sparkles className="h-3.5 w-3.5 animate-pulse" />
-                  ) : (
-                    <Target className="h-3.5 w-3.5" />
-                  )}
+                  <Sparkles className="h-3.5 w-3.5 animate-pulse" />
                   <span>Goal</span>
                 </TooltipTrigger>
                 <TooltipContent side="top" align="center" className="text-center">
@@ -855,14 +874,14 @@ export function ChatInput({
                       className={cn(
                         "flex h-8 items-center gap-1 rounded-md px-2.5 text-xs font-medium transition-all duration-200",
                         mode === "plan"
-                          ? "bg-background text-emerald-600 dark:text-emerald-400 shadow-sm border border-emerald-400/40"
+                          ? "bg-background text-primary shadow-sm border border-primary/40"
                           : "text-muted-foreground hover:text-foreground border border-transparent",
                         disabled && "opacity-40 pointer-events-none",
                       )}
                     />
                   }
                 >
-                  <ListChecks className="h-3.5 w-3.5" />
+                  <ListChecks className="h-3.5 w-3.5 animate-pulse" />
                   <span>Plan</span>
                 </TooltipTrigger>
                 <TooltipContent side="top" align="center" className="text-center">
@@ -877,7 +896,7 @@ export function ChatInput({
             <Button
               type="button"
               size="icon"
-              className="h-10 w-10 shrink-0"
+              className="h-10 w-10 shrink-0 rounded-full"
               onClick={onStop}
             >
               <Square className="h-3.5 w-3.5" />
@@ -886,7 +905,7 @@ export function ChatInput({
             <Button
               type="button"
               size="icon"
-              className="h-10 w-10 shrink-0"
+              className="h-10 w-10 shrink-0 rounded-full"
               disabled={disabled || (!text.trim() && attachedFiles.length === 0)}
               onClick={submit}
             >

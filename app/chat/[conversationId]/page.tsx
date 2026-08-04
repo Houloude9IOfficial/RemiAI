@@ -633,7 +633,7 @@ function ConversationChat({
       )}
 
       {/* ── Input ── */}
-      <div className="sticky bottom-0 z-20 bg-background/95 backdrop-blur supports-[padding-bottom:env(safe-area-inset-bottom)]:pb-[env(safe-area-inset-bottom)]">
+      <div className="sticky bottom-0 z-20 bg-linear-to-t from-background via-background/95 to-transparent backdrop-blur supports-[padding-bottom:env(safe-area-inset-bottom)]:pb-[env(safe-area-inset-bottom)]">
         <ChatInput
           conversationId={conversationId}
           status={status}

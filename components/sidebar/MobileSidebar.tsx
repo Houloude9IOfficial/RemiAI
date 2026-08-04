@@ -152,12 +152,12 @@ export function MobileSidebar() {
       {/* Drawer */}
       <div
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-72 flex flex-col bg-background border-r overflow-hidden transition-transform duration-300 ease-out md:hidden",
+          "fixed inset-y-0 left-0 z-50 w-72 flex flex-col border-r border-sidebar-border surface-1 overflow-hidden transition-transform duration-300 ease-out md:hidden",
           isOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-3 py-3 border-b">
+        <div className="flex items-center justify-between border-b border-sidebar-border px-3 py-3">
           <button
             type="button"
             onClick={() => newChatMutation.mutate()}
@@ -201,20 +201,20 @@ export function MobileSidebar() {
         {/* Scrollable content: conversations + navigation */}
         <PullToRefresh
           onRefresh={() => queryClient.invalidateQueries({ queryKey: ["conversations"] })}
-          className="flex-1 px-2 py-2 text-sm text-muted-foreground"
+          className="flex-1 px-2 py-2 text-sm text-sidebar-foreground/80"
         >
           <ConversationList />
 
           {/* Navigation links */}
-          <nav className="flex flex-col gap-0.5 border-t mt-4 pt-3">
+          <nav className="mt-4 flex flex-col gap-0.5 border-t border-sidebar-border pt-3">
             {/* Primary links */}
-            {primaryLinks.map(({ href, label, icon: Icon }) => (
+            {primaryLinks.slice(0, 3).map(({ href, label, icon: Icon }) => (
               <Link
                 key={href}
                 href={href}
                 className={cn(
-                  "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors duration-150",
-                  pathname.startsWith(href) && "bg-muted text-foreground",
+                  "flex items-center gap-2 rounded-md px-2 py-1.25 text-sm text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors duration-150",
+                  pathname.startsWith(href) && "bg-sidebar-accent text-sidebar-foreground ring-1 ring-sidebar-border",
                 )}
                 onClick={onClose}
               >
@@ -229,8 +229,8 @@ export function MobileSidebar() {
               onClick={() => setExtraExpanded((v) => !v)}
               aria-expanded={extraExpanded}
               className={cn(
-                "flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground/60 hover:text-foreground hover:bg-muted transition-colors duration-150",
-                extraExpanded && "text-muted-foreground",
+                "flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors duration-150",
+                extraExpanded && "text-sidebar-foreground/80",
               )}
             >
               <ChevronUp
@@ -246,7 +246,7 @@ export function MobileSidebar() {
             <div
               className={cn(
                 "overflow-hidden transition-all duration-150 ease-in-out",
-                extraExpanded ? "max-h-600 opacity-100" : "max-h-0 opacity-100",
+                extraExpanded ? "max-h-150 opacity-100" : "max-h-0 opacity-100",
               )}
             >
               <div className="flex flex-col gap-0.5 pt-0.5">
@@ -255,8 +255,8 @@ export function MobileSidebar() {
                     key={href}
                     href={href}
                     className={cn(
-                      "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors duration-150",
-                      pathname.startsWith(href) && "bg-muted text-foreground",
+                      "flex items-center gap-2 rounded-md px-2 py-1.25 text-sm text-sidebar-foreground/72 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors duration-150",
+                      pathname.startsWith(href) && "bg-sidebar-accent text-sidebar-foreground ring-1 ring-sidebar-border",
                     )}
                     onClick={onClose}
                   >
@@ -268,11 +268,11 @@ export function MobileSidebar() {
             </div>
 
             {/* Profile */}
-            <div className="mt-1 border-t pt-1.5">
+            <div className="mt-2 border-t border-sidebar-border pt-2">
               <SidebarProfile />
             </div>
 
-            <div className="flex items-center justify-between px-1 py-1">
+            <div className="mt-1 flex items-center justify-between px-2 py-1.5">
               <AboutModal />
               <ThemeToggle />
             </div>
