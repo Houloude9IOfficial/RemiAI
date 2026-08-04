@@ -3,6 +3,16 @@ import { desc } from "drizzle-orm";
 import { db } from "@/db";
 import { conversations } from "@/db/schema";
 
+// Never prerender this page at build time. It picks the most recent
+// conversation from the LIVE database and redirects there. If Next.js
+// statically renders it during `next build`, the redirect is baked into
+// the shipped HTML using the build-time database — whose conversation IDs
+// almost certainly don't exist on the deployed instance (fresh or
+// read-only volumes, multi-instance deployments). The user then lands on
+// /chat/<stale-id> which 404s and, without client-side error handling,
+// shows an eternal loading skeleton.
+export const dynamic = "force-dynamic";
+
 export default async function ChatHomePage() {
   // Fetch the most recently updated conversation
   const rows = await db

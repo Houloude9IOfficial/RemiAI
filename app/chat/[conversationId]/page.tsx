@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { motion, AnimatePresence } from "framer-motion";
-import { Files } from "lucide-react";
+import { Files, Menu, Plus } from "lucide-react";
 import { MessageList } from "@/components/chat/MessageList";
 import { ChatInput, type ChatMode } from "@/components/chat/ChatInput";
 import { ChatSkeleton } from "@/components/chat/ChatSkeleton";
@@ -16,11 +16,18 @@ import { ExportDialog } from "@/components/chat/ExportDialog";
 import { MobileChatHeader, DesktopChatHeader } from "@/components/chat/MobileChatHeader";
 import { SessionFilesPanel } from "@/components/chat/SessionFilesPanel";
 import { ErrorCard } from "@/components/ui/error-card";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import { useErrorHandler } from "@/lib/hooks/use-error-handler";
 import { conversationsApi } from "@/lib/api/conversations";
 import { useStreamingContext } from "@/lib/chat/streaming-context";
+import { useSidebar } from "@/components/sidebar/SidebarContext";
 import { SESSION_FILES_PRESENT_EVENT } from "@/lib/api/session-files";
 import { cn } from "@/lib/utils";
+
+// If the conversation fetch takes longer than this, abort it and surface an
+// error instead of leaving the user staring at an endless loading skeleton.
+const FETCH_TIMEOUT_MS = 12_000;
 
 // ── Reconnecting Banner ─────────────────────────────────────────────
 
@@ -42,6 +49,88 @@ function ReconnectingBanner() {
   );
 }
 
+// ── Mobile header shown while loading / on error ────────────────────
+// The regular MobileChatHeader only renders once conversation data is
+// loaded, and GlobalMobileHeader hides itself on /chat/* routes — so
+// without this, mobile users stuck on a skeleton or an error would have
+// no way to open the sidebar or navigate anywhere.
+
+function ChatMobileHeader({ onToggleSidebar }: { onToggleSidebar: () => void }) {
+  return (
+    <div className="flex items-center gap-2 border-b px-3 py-2.5 bg-background/95 backdrop-blur supports-[padding-top:env(safe-area-inset-top)]:pt-[calc(0.625rem+env(safe-area-inset-top))] md:hidden">
+      <button
+        type="button"
+        onClick={onToggleSidebar}
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted active:scale-95 transition-all duration-150"
+        aria-label="Open menu"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
+      <span className="flex-1 truncate text-sm font-medium text-foreground">
+        RemiAI
+      </span>
+    </div>
+  );
+}
+
+// ── Error state (the fetch failed) ──────────────────────────────────
+// Previously, any fetch failure (404 on a stale /chat/:id redirect,
+// 500, network drop, or a request that hung) left the page showing
+// ChatSkeleton forever because the render logic only checked
+// `isLoading || !data`. This gives the user a way out.
+
+function ChatLoadError({
+  error,
+  isBusy,
+  onRetry,
+  onCreateNew,
+  onToggleSidebar,
+}: {
+  error: Error;
+  isBusy: boolean;
+  onRetry: () => void;
+  onCreateNew: () => void;
+  onToggleSidebar: () => void;
+}) {
+  const statusCode = (error as Error & { statusCode?: number }).statusCode;
+  const isNotFound = statusCode === 404;
+  const isTimeout = error.name === "AbortError" || error.name === "TimeoutError";
+
+  const title = isNotFound
+    ? "Conversation not found"
+    : isTimeout
+      ? "Timed out loading this conversation"
+      : "Couldn't load this conversation";
+
+  return (
+    <div className="flex flex-1 flex-col h-full">
+      <ChatMobileHeader onToggleSidebar={onToggleSidebar} />
+      <div className="flex flex-1 items-start justify-center overflow-y-auto p-6">
+        <div className="w-full max-w-md pt-8">
+          <ErrorCard
+            error={error}
+            title={title}
+            onRetry={onRetry}
+            isRetrying={isBusy}
+            retryLabel="Try again"
+          />
+          <p className="mb-3 px-2 text-center text-xs text-muted-foreground">
+            {isNotFound
+              ? "This conversation may have been deleted. Start a new one instead."
+              : "The server may still be starting up, or your connection dropped. You can retry, or start a fresh conversation."}
+          </p>
+          <div className="flex justify-center">
+            <Button onClick={onCreateNew} disabled={isBusy} className="gap-1.5">
+              <Plus className="h-4 w-4" />
+              Start a new chat
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Page Component ──────────────────────────────────────────────────
 
 export default function ConversationPage({
@@ -51,35 +140,41 @@ export default function ConversationPage({
 }) {
   const { conversationId: conversationIdParam } = use(params);
   const conversationId = Number(conversationIdParam);
+  const isValidId = Number.isInteger(conversationId) && conversationId > 0;
   const router = useRouter();
   const queryClient = useQueryClient();
   const { activeStreams } = useStreamingContext();
+  const { toggleMobileSidebar } = useSidebar();
 
   // Redirect invalid /chat/:id paths (e.g. /chat/conversations) to the home
   // page, which will auto-create a new conversation if none exist.
   useEffect(() => {
-    if (isNaN(conversationId)) {
+    if (!isValidId) {
       router.replace("/chat");
     }
-  }, [conversationId, router]);
+  }, [isValidId, router]);
 
-  // Show nothing while redirecting
-  if (isNaN(conversationId)) {
-    return null;
-  }
-
-  // Check if there's an active stream BEFORE the data fetch
+  // Check if there's an active stream BEFORE the data fetch. All hooks are
+  // called unconditionally (before any early return) to satisfy the Rules
+  // of Hooks — the old code returned early for invalid IDs, which could
+  // change the hook count between renders and crash React.
   const hasActiveStream = activeStreams.has(conversationId);
   const [showReconnecting, setShowReconnecting] = useState(hasActiveStream);
+  const [isCreating, setIsCreating] = useState(false);
 
-  // Fetch conversation data with keepPreviousData-like behavior
-  // using staleTime to avoid unnecessary refetches
-  const { data, isLoading, isFetching } = useQuery({
+  // Fetch conversation data. On any failure (404, 500, network error,
+  // timeout) we render ChatLoadError below instead of an endless skeleton.
+  const { data, isLoading, isError, error, isFetching, refetch } = useQuery({
     queryKey: ["conversation", conversationId],
-    queryFn: () => conversationsApi.get(conversationId),
+    queryFn: () => conversationsApi.get(conversationId, { timeoutMs: FETCH_TIMEOUT_MS }),
+    enabled: isValidId,
     staleTime: hasActiveStream ? 60_000 : 30_000,
     // Don't refetch during stream to avoid message flicker
     refetchOnMount: hasActiveStream ? false : undefined,
+    // Surface failures quickly instead of retrying for many seconds behind
+    // a skeleton that never resolves.
+    retry: 1,
+    retryDelay: 800,
   });
 
   // Hide reconnecting banner once data is available
@@ -90,6 +185,47 @@ export default function ConversationPage({
       return () => clearTimeout(timer);
     }
   }, [data, showReconnecting]);
+
+  // Escape hatch when the conversation can't be loaded: create a brand new
+  // conversation (reusing the last-selected model, mirroring the sidebar)
+  // and navigate to it.
+  const startNewChat = useCallback(async () => {
+    if (isCreating) return;
+    setIsCreating(true);
+    try {
+      const lastModel = globalThis.localStorage?.getItem("lastModel");
+      let providerId: number | undefined;
+      let modelId: string | undefined;
+      if (lastModel) {
+        try {
+          const parsed = JSON.parse(lastModel);
+          if (typeof parsed.providerId === "number") providerId = parsed.providerId;
+          if (typeof parsed.modelId === "string") modelId = parsed.modelId;
+        } catch {
+          // Ignore corrupt localStorage value
+        }
+      }
+      const conversation = await conversationsApi.create(
+        providerId && modelId ? { providerId, modelId } : undefined,
+      );
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      router.replace(`/chat/${conversation.id}`);
+    } catch (err) {
+      // Creation failed too (e.g. DB is down) — stay on the error card, but
+      // tell the user why the button appeared to do nothing.
+      toast.error("Couldn't start a new chat", {
+        description: err instanceof Error ? err.message : "The server may be unavailable.",
+        duration: 5000,
+      });
+    } finally {
+      setIsCreating(false);
+    }
+  }, [isCreating, queryClient, router]);
+
+  // Show nothing while redirecting invalid IDs
+  if (!isValidId) {
+    return null;
+  }
 
   // Page enter animation wrapper
   return (
@@ -105,8 +241,19 @@ export default function ConversationPage({
         {showReconnecting && <ReconnectingBanner />}
       </AnimatePresence>
 
-      {isLoading || !data ? (
-        <ChatSkeleton messageCount={3} />
+      {isError ? (
+        <ChatLoadError
+          error={error ?? new Error("Failed to load conversation")}
+          isBusy={isFetching || isCreating}
+          onRetry={() => refetch()}
+          onCreateNew={startNewChat}
+          onToggleSidebar={toggleMobileSidebar}
+        />
+      ) : isLoading || !data ? (
+        <>
+          <ChatMobileHeader onToggleSidebar={toggleMobileSidebar} />
+          <ChatSkeleton messageCount={3} />
+        </>
       ) : (
         <ConversationChat
           key={conversationId}
