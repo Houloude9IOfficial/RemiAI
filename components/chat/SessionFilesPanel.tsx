@@ -258,9 +258,6 @@ export function SessionFilesPanel({
     <div className="flex h-full w-full flex-col border-l border-border/60 bg-muted/[0.25]">
       {/* ── Header ── */}
       <div className="flex items-center gap-2 border-b border-border/60 px-3.5 py-2.5">
-        <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 text-primary">
-          <Files className="h-3.5 w-3.5" />
-        </div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold leading-tight">Session Files</p>
           <p className="truncate text-[10px] text-muted-foreground">
