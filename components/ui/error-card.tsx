@@ -5,6 +5,7 @@ import { TriangleAlertIcon, RotateCcwIcon, XIcon, CopyIcon, CheckIcon } from "lu
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { errorToDisplayMessage, decodeStreamError } from "@/lib/chat/error-payload";
 
 interface ErrorCardProps {
   error: any
@@ -136,13 +137,18 @@ export function ErrorCard({
 }: ErrorCardProps) {
   const [copied, setCopied] = useState(false)
 
-  const errorMessage =
+  const normalized = errorToDisplayMessage(error)
+  const rawErrorMessage =
     typeof error === "string"
       ? error
       : error?.message ?? error?.error ?? String(error)
+  const decoded = decodeStreamError(rawErrorMessage)
 
-  const displayTitle = title ?? (typeof error === "object" && error !== null ? error.message : null) ?? "Error"
-  const hasBody = errorMessage && errorMessage !== displayTitle
+  const displayTitle = title ?? normalized.title ?? "Request failed"
+  const displayMessage = normalized.message
+  const technical = normalized.technical
+  const hasBody = Boolean(displayMessage)
+  const isContinue = decoded?.shouldResume === true
 
   const handleCopy = useCallback(async () => {
     await navigator.clipboard.writeText(serializeError(error))
@@ -164,7 +170,12 @@ export function ErrorCard({
           <p className="text-xs font-medium text-destructive">{displayTitle}</p>
           {hasBody && (
             <p className="mt-0.5 text-xs text-muted-foreground overflow-wrap-break-word line-clamp-2">
-              {errorMessage}
+              {displayMessage}
+            </p>
+          )}
+          {technical && (
+            <p className="mt-0.5 text-[11px] text-muted-foreground/70 overflow-wrap-break-word line-clamp-1">
+              Details: {technical}
             </p>
           )}
         </div>
@@ -188,7 +199,7 @@ export function ErrorCard({
             <RotateCcwIcon
               className={cn("size-3.5", isRetrying && "animate-spin")}
             />
-            {isRetrying ? "Retrying..." : retryLabel}
+            {isRetrying ? "Retrying..." : (retryLabel || (isContinue ? "Continue" : "Retry"))}
           </Button>
         )}
         {onDismiss && (

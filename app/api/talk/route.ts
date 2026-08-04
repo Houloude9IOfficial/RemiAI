@@ -10,6 +10,7 @@ import { db } from "@/db";
 import { providers, providerModels } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { getLanguageModel } from "@/lib/providers/factory";
+import { normalizeStreamError, encodeStreamError } from "@/lib/chat/error-payload";
 
 // ── Talk Mode System Prompt ─────────────────────────────────────────
 // The AI is told to speak naturally, concisely, without markdown/emojis.
@@ -147,9 +148,10 @@ export async function POST(req: Request) {
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         } catch (err) {
           console.error("[Talk] Stream error:", err);
+          const payload = normalizeStreamError(err);
           controller.enqueue(
             encoder.encode(
-              `data: ${JSON.stringify({ type: "error", error: "Stream error" })}\n\n`,
+              `data: ${JSON.stringify({ type: "error", errorText: encodeStreamError(payload) })}\n\n`,
             ),
           );
         } finally {

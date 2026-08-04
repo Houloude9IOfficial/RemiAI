@@ -24,6 +24,7 @@ import { useStreamingContext } from "@/lib/chat/streaming-context";
 import { useSidebar } from "@/components/sidebar/SidebarContext";
 import { SESSION_FILES_PRESENT_EVENT } from "@/lib/api/session-files";
 import { cn } from "@/lib/utils";
+import { errorToDisplayMessage } from "@/lib/chat/error-payload";
 
 // If the conversation fetch takes longer than this, abort it and surface an
 // error instead of leaving the user staring at an endless loading skeleton.
@@ -38,7 +39,7 @@ function ReconnectingBanner() {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.25, ease: "easeOut" }}
-      className="flex items-center justify-center gap-2.5 border-b border-primary/20 bg-primary/[0.04] px-4 py-2 text-sm text-primary backdrop-blur-sm"
+      className="flex items-center justify-center gap-2.5 border-b border-primary/20 bg-primary/4 px-4 py-2 text-sm text-primary backdrop-blur-sm"
     >
       <span className="relative flex h-2.5 w-2.5">
         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-60" />
@@ -316,7 +317,16 @@ function ConversationChat({
   const resumeRef = useRef(isReconnecting);
   const resume = resumeRef.current;
 
-  const { messages, setMessages, sendMessage, status, stop, error } = useChat({
+  const {
+    messages,
+    setMessages,
+    sendMessage,
+    status,
+    stop,
+    error,
+    resumeStream,
+    clearError: clearChatError,
+  } = useChat({
     id: String(conversationId),
     messages: initialMessages,
     resume,
@@ -335,12 +345,19 @@ function ConversationChat({
   useEffect(() => {
     if (status === "submitted" || status === "streaming") {
       startStream(conversationId);
-    } else if (!resume) {
+      return;
+    }
+
+    // Keep stream state intact on transport errors so Resume/Continue can
+    // reconnect instead of immediately downgrading to a blind resend flow.
+    if (status === "error") {
+      return;
+    }
+
+    if (!resume) {
       endStream(conversationId);
     }
   }, [status, conversationId, resume, startStream, endStream]);
-
-  const lastSentText = useRef<string>("");
 
   const {
     error: handlerError,
@@ -358,24 +375,49 @@ function ConversationChat({
     }
   }, [error, handleError]);
 
-  // Register the retryable action — resend the last failed message
+  // Register the retryable action — continue the interrupted run first.
   useEffect(() => {
     onRetryable(async () => {
-      if (lastSentText.current) {
-        sendMessage({ text: lastSentText.current });
+      const mapped = errorToDisplayMessage(error ?? handlerError ?? "");
+
+      // Resume-first policy: never resend the user prompt automatically.
+      // If resume is not possible, bubble a clear error so the user can
+      // explicitly decide to send a new message.
+      if (mapped.shouldResume !== false) {
+        startStream(conversationId);
+        try {
+          await resumeStream();
+        } catch (err) {
+          endStream(conversationId);
+          throw err;
+        }
+        return;
       }
+
+      throw new Error(
+        mapped.message ??
+          "This run cannot be continued automatically. Send a new message to try again.",
+      );
     });
-  }, [onRetryable, sendMessage]);
+  }, [
+    onRetryable,
+    error,
+    handlerError,
+    startStream,
+    endStream,
+    conversationId,
+    resumeStream,
+  ]);
 
   const [isAiStarting, setIsAiStarting] = useState(false);
 
   const handleSend = useCallback(
     (text: string) => {
-      lastSentText.current = text;
       clearError();
+      clearChatError();
       sendMessage({ text });
     },
-    [clearError, sendMessage],
+    [clearError, clearChatError, sendMessage],
   );
 
   const handleAiStart = useCallback(async () => {
@@ -584,6 +626,7 @@ function ConversationChat({
             error={handlerError}
             onRetry={retry}
             isRetrying={isRetrying}
+            retryLabel="Continue"
             onDismiss={clearError}
           />
         </div>

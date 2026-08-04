@@ -49,6 +49,11 @@ import {
   extractImageAttachments,
   stripImageMarkdown,
 } from "@/lib/chat/process-images";
+import {
+  normalizeStreamError,
+  encodeStreamError,
+  type StreamErrorPayload,
+} from "@/lib/chat/error-payload";
 
 function titleFromMessage(message: UIMessage): string {
   const text = message.parts
@@ -411,10 +416,10 @@ You are currently in **Plan mode**. This means:
   // doesn't double-count by applying the same usage again.
   let tokensApplied = false;
 
-  // Capture the full error object from streamText's onError callback so we
-  // can enrich the error chunk sent to the client (the SDK's default error
-  // chunk only contains a generic "An error occurred." message).
-  let capturedError: unknown = null;
+  // Capture a normalized error payload from streamText's onError callback so
+  // the frontend can render a friendly, structured error (instead of a raw
+  // provider stack or a generic "An error occurred").
+  let capturedErrorPayload: StreamErrorPayload | null = null;
 
   const result = streamText({
     model,
@@ -425,10 +430,25 @@ You are currently in **Plan mode**. This means:
     // so the model can work autonomously until task completion
     stopWhen: stepCountIs(mode === "goal" ? 500 : 100),
     onError: (err) => {
-      capturedError = err;
+      capturedErrorPayload = normalizeStreamError(err);
       console.error("[stream] Provider error:", err);
     },
-    onFinish: async ({ text: outputText, usage }) => {
+    onFinish: async ({ text: outputText, usage, finishReason }) => {
+      // Treat provider/SDK hard stops as a structured step-limit style error
+      // so users understand why long autonomous runs appeared to "just stop".
+      if (finishReason === "length") {
+        capturedErrorPayload = {
+          version: 1,
+          category: "step_limit",
+          title: "Step limit reached",
+          message:
+            "This run reached the configured step/token limit before completion. Continue to resume from where it stopped.",
+          technical: "finishReason=length",
+          retryable: true,
+          shouldResume: true,
+        };
+      }
+
       try {
         // Use provider's usage if available, otherwise estimate
         const inputTokens = usage?.inputTokens ?? 0;
@@ -486,68 +506,26 @@ You are currently in **Plan mode**. This means:
     originalMessages: uiMessages,
     generateMessageId: () => crypto.randomUUID(),
     onError: (error) => {
-      if (error instanceof Error && error.message) return error.message;
-      if (typeof error === "string" && error) return error;
-      if (error && typeof error === "object") {
-        const msg = (error as { message?: unknown }).message;
-        if (typeof msg === "string" && msg) return msg;
+      if (capturedErrorPayload) {
+        return encodeStreamError(capturedErrorPayload);
       }
-      try {
-        const serialized = JSON.stringify(error);
-        if (typeof serialized === "string" && serialized && serialized !== "{}") {
-          return serialized;
-        }
-      } catch {
-        // ignore — fall through to the generic fallback
-      }
-      return "An error occurred.";
+      return encodeStreamError(normalizeStreamError(error));
     },
   });
 
   // Tee the stream: [persistBranch, responseBranch]
   const [persistBranch, responseBranch] = uiMessageStream.tee();
 
-  // Pipe the response branch through a transform that enriches error chunks
-  // with the full error details captured from onError.  Without this, the
-  // client only sees "Error: An error occurred." instead of the actual
-  // status code, response body, and other debugging information.
+  // Pipe the response branch through a transform that injects a structured
+  // error payload for user-friendly frontend messaging.
   const enrichedBranch = responseBranch.pipeThrough(
     new TransformStream({
       transform(chunk, controller) {
-        if (chunk.type === "error" && capturedError) {
-          const err = capturedError as Record<string, unknown>;
-
-          // For AI_RetryError the responseBody lives on nested errors
-          const errs = (Array.isArray(err.errors) ? err.errors : []) as Array<Record<string, unknown>>;
-          const responseBody = err.responseBody ?? (errs[0]?.responseBody ?? null);
-          const statusCode = err.statusCode ?? (errs[0]?.statusCode ?? null);
-          const url = err.url ?? (errs[0]?.url ?? null);
-
+        if (chunk.type === "error") {
+          const payload = capturedErrorPayload ?? normalizeStreamError(chunk.errorText);
           controller.enqueue({
             type: "error",
-            errorText: [
-              `${err.name || "Error"}: ${err.message ?? ""}`,
-              statusCode != null ? `\nStatus: ${statusCode}` : "",
-              url ? `URL: ${url}` : "",
-              responseBody
-                ? `\nResponse:\n${typeof responseBody === "string" ? responseBody : JSON.stringify(responseBody, null, 2)}`
-                : "",
-              err.reason ? `\nReason: ${err.reason}` : "",
-              errs.length > 0
-                ? `\nRetries (${errs.length}): ` +
-                  errs
-                    .slice(0, 3)
-                    .map(
-                      (e, i) =>
-                        `[${i + 1}] ${e.name || "Error"}: ${e.message ?? ""}` +
-                        (e.statusCode != null ? ` (${e.statusCode})` : ""),
-                    )
-                    .join(" → ") +
-                  (errs.length > 3 ? ` +${errs.length - 3} more` : "")
-                : "",
-            ]
-              .filter(Boolean)
-              .join("\n"),
+            errorText: encodeStreamError(payload),
           } as any);
         } else {
           controller.enqueue(chunk);

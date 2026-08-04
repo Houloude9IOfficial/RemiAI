@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { truncateToolResult } from "@/lib/utils";
 
+const BRAVE_TIMEOUT_MS = 20_000;
+
 export function buildBraveSearchTool(apiKey: string) {
   return {
     brave_web_search: {
@@ -31,13 +33,33 @@ export function buildBraveSearchTool(apiKey: string) {
         url.searchParams.set("q", query);
         url.searchParams.set("count", String(count));
 
-        const res = await fetch(url.toString(), {
-          headers: {
-            Accept: "application/json",
-            "Accept-Encoding": "gzip",
-            "X-Subscription-Token": apiKey,
-          },
-        });
+        let res: Response;
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), BRAVE_TIMEOUT_MS);
+          try {
+            res = await fetch(url.toString(), {
+              headers: {
+                Accept: "application/json",
+                "Accept-Encoding": "gzip",
+                "X-Subscription-Token": apiKey,
+              },
+              signal: controller.signal,
+            });
+          } finally {
+            clearTimeout(timer);
+          }
+        } catch (err) {
+          const isTimeout = err instanceof Error && err.name === "AbortError";
+          return truncateToolResult({
+            error: isTimeout
+              ? `Brave Search request timed out after ${BRAVE_TIMEOUT_MS}ms`
+              : `Brave Search request failed: ${(err as Error).message}`,
+            hint: isTimeout
+              ? "Retry with a narrower query or try again shortly."
+              : "Check connectivity and Brave API configuration.",
+          });
+        }
 
         if (!res.ok) {
           return truncateToolResult({

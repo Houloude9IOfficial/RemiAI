@@ -3,6 +3,8 @@ import fs from "node:fs/promises";
 import { truncateToolResult } from "@/lib/utils";
 import { resolveUploadUrl, UPLOAD_URL_RE } from "@/lib/fs/access";
 
+const WEB_FETCH_TIMEOUT_MS = 20_000;
+
 /**
  * Check if a URL is a chat upload path (either /api/chat/uploads/... or
  * http://.../api/chat/uploads/...).
@@ -85,13 +87,22 @@ export const webFetchTool = {
     }
 
     try {
-      const res = await fetch(url, {
-        headers: {
-          Accept: "text/html,application/xhtml+xml,application/xml,text/plain,*/*",
-          "User-Agent":
-            "Mozilla/5.0 (compatible; RemiAI/1.0; +https://remiai.app)",
-        },
-      });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), WEB_FETCH_TIMEOUT_MS);
+
+      let res: Response;
+      try {
+        res = await fetch(url, {
+          headers: {
+            Accept: "text/html,application/xhtml+xml,application/xml,text/plain,*/*",
+            "User-Agent":
+              "Mozilla/5.0 (compatible; RemiAI/1.0; +https://remiai.app)",
+          },
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
 
       const status = res.status;
       const statusText = res.statusText;
@@ -117,10 +128,19 @@ export const webFetchTool = {
         source: status === 200 ? "http" : "http_error",
       });
     } catch (err) {
+      const timeoutHint =
+        err instanceof Error && err.name === "AbortError"
+          ? `Request timed out after ${WEB_FETCH_TIMEOUT_MS}ms`
+          : null;
+
       return truncateToolResult({
         url,
-        error: `Failed to fetch URL: ${(err as Error).message}`,
-        hint: "Make sure the URL is accessible and the server is reachable.",
+        error:
+          timeoutHint ?? `Failed to fetch URL: ${(err as Error).message}`,
+        hint:
+          timeoutHint != null
+            ? "The remote site is slow or unreachable. Retry later or fetch a smaller/specific endpoint."
+            : "Make sure the URL is accessible and the server is reachable.",
       });
     }
   },
