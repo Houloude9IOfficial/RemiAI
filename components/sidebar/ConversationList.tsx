@@ -504,7 +504,7 @@ export function ConversationList() {
                 className={cn(
                   "group/conversation flex w-full items-center justify-start rounded-md px-2 py-1.5 text-sm text-left",
                   isActive && !selectMode
-                    ? "bg-sidebar-accent text-sidebar-foreground ring-1 ring-sidebar-border"
+                    ? "bg-sidebar-accent text-sidebar-foreground"
                     : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground",
                   selectMode && isSelected && "bg-primary/10",
                   selectMode && "cursor-pointer",

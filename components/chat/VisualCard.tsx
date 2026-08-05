@@ -301,30 +301,23 @@ function HtmlRenderer({
   const displayHeight = iframeHeight ? `${iframeHeight + 8}px` : heightProp;
 
   return (
-    <div className="relative bg-transparent">
-      {loading && (
-        <div className="flex items-center justify-center bg-transparent p-8">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
-      )}
-      <iframe
-        ref={iframeRef}
-        title="Visual content"
-        className={cn(
-          "w-full overflow-hidden border-0 bg-transparent transition-opacity duration-300",
-          loading ? "pointer-events-none absolute opacity-0" : "opacity-100",
-        )}
-        style={{
-          width,
-          height: displayHeight !== "auto" ? displayHeight : undefined,
-          minHeight: displayHeight === "auto" ? 100 : undefined,
-          background: "transparent",
-          colorScheme: "normal",
-        }}
-        sandbox="allow-same-origin"
-        referrerPolicy="no-referrer"
-        allowTransparency={true}      />
-    </div>
+<iframe
+  ref={iframeRef}
+  title="Visual content"
+  className={cn(
+    "w-full overflow-hidden border-0 bg-transparent transition-opacity duration-300",
+    loading ? "pointer-events-none absolute opacity-0" : "opacity-100",
+  )}
+  style={{
+    width,
+    height: displayHeight !== "auto" ? displayHeight : undefined,
+    minHeight: displayHeight === "auto" ? 100 : undefined,
+    background: "transparent",
+    colorScheme: "normal",
+  }}
+  sandbox="allow-same-origin"
+  referrerPolicy="no-referrer"
+/>
   );
 }
 
