@@ -248,14 +248,13 @@ export function SessionFilesPanel({
           </div>
         ) : tree.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 px-6 py-10 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-border/60 bg-background">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl">
               <Files className="h-5 w-5 text-muted-foreground/70" />
             </div>
             <div>
               <p className="text-sm font-medium">No session files yet</p>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Ask the AI to build something — files it creates will appear here,
-                ready to view or download as a .zip.
+                Ask the AI to build something
               </p>
             </div>
           </div>
