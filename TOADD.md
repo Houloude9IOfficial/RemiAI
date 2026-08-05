@@ -106,3 +106,5 @@ on new chat, make after ai's first response, to do a quick request to an ai with
 <!-- allow resizing the session files panel. -->
 
 when there're too many tool calls in a row make them all into a group instead, not multiple calls/group of calls. But only for calls in a row without text in between.
+
+file attaching from allowed dirs shows only top folders, but on open, it doesnt show any content inside, whether files or folders. Fix this.
