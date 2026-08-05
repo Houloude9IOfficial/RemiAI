@@ -108,7 +108,7 @@ function DesktopSidebar() {
   return (
     <motion.aside
       initial={false}
-      animate={{ width: isDesktopSidebarCollapsed ? 72 : 272 }}
+      animate={{ width: isDesktopSidebarCollapsed ? 60 : 272 }}
       transition={{ duration: 0.2, ease: "easeOut" }}
       className="hidden md:flex h-full shrink-0 flex-col border-r border-sidebar-border surface-1"
     >
