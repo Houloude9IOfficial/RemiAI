@@ -121,7 +121,7 @@ export function ShortcutsDialog() {
               className="flex items-center justify-between gap-4 rounded-lg px-2 py-2 transition-colors hover:bg-muted/60"
             >
               <div className="flex min-w-0 items-center gap-2.5 text-sm">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted/70 text-muted-foreground">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground">
                   <Icon className="h-3.5 w-3.5" />
                 </span>
                 <span className="truncate text-foreground">{label}</span>
