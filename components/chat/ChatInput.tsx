@@ -70,6 +70,7 @@ export function ChatInput({
   onModeChange,
   onSend,
   onStop,
+  large,
 }: {
   conversationId: number;
   status: ChatStatus;
@@ -78,6 +79,8 @@ export function ChatInput({
   onModeChange?: (value: ChatMode) => void;
   onSend: (text: string) => void;
   onStop: () => void;
+  /** Larger, centered "new chat" composer (code-editor style). */
+  large?: boolean;
 }) {
   const [text, setText] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -549,9 +552,20 @@ export function ChatInput({
   // Render — ChatGPT-style dock: same column width as messages, toolbar row
   // -----------------------------------------------------------------------
 
+  const iconBtn = large ? "h-9 w-9" : "h-8 w-8";
+  const sendBtn = large ? "h-10 w-10" : "h-8 w-8";
+
   return (
-    <div className="relative mx-auto w-full max-w-3xl px-4 pb-3 pt-1 md:px-6">
-      <div className="pointer-events-none absolute inset-x-4 -top-5 z-10 h-5 bg-linear-to-b from-transparent to-background/90 md:inset-x-6" />
+    <div
+      className={cn(
+        "relative mx-auto w-full px-4 pb-3 pt-1 md:px-6",
+        large ? "max-w-2xl" : "max-w-3xl",
+      )}
+    >
+      {/* Fade blend above the box — only needed when docked over messages */}
+      {!large && (
+        <div className="pointer-events-none absolute inset-x-4 -top-5 z-10 h-5 bg-linear-to-b from-transparent to-background/90 md:inset-x-6" />
+      )}
 
       {/* Compact context row */}
       {attachedFiles.length == 0 && (
@@ -611,7 +625,8 @@ export function ChatInput({
 
         <div
           className={cn(
-            "relative flex flex-col rounded-3xl border border-border/70 bg-surface-1 shadow-floating transition-colors duration-200",
+            "relative flex flex-col rounded-3xl border border-border/70 bg-surface-1 transition-colors duration-200",
+            large && "focus-within:border-primary/40",
             isDragging && "border-primary/45 bg-primary/[0.03]",
             isStreaming && "opacity-95",
           )}
@@ -619,7 +634,7 @@ export function ChatInput({
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
-          <div className="px-3.5 pt-3">
+          <div className={large ? "px-5 pt-4" : "px-3.5 pt-3"}>
             <Textarea
               ref={inputRef}
               value={text}
@@ -634,13 +649,21 @@ export function ChatInput({
                     : "Message Remi..."
               }
               disabled={disabled}
-              className="max-h-18 min-h-[28px] resize-none border-none bg-transparent! py-0 leading-6 shadow-none focus-visible:ring-0 dark:bg-transparent!"
+              className={cn(
+                "max-h-18 resize-none border-none bg-transparent! py-0 leading-6 shadow-none focus-visible:ring-0 dark:bg-transparent!",
+                large ? "min-h-11 text-[17px]" : "min-h-[28px]",
+              )}
               rows={1}
             />
           </div>
 
           {/* Toolbar — ChatGPT-style bottom control row */}
-          <div className="flex items-center gap-1 px-2 pb-2 pt-1.5">
+          <div
+            className={cn(
+              "flex items-center gap-1",
+              large ? "px-3 pb-3 pt-2" : "px-2 pb-2 pt-1.5",
+            )}
+          >
             <Tooltip>
               <TooltipTrigger
                 render={
@@ -649,7 +672,8 @@ export function ChatInput({
                     onClick={openFilePicker}
                     disabled={disabled || isStreaming}
                     className={cn(
-                      "flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                      "flex items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                      iconBtn,
                       (disabled || isStreaming) && "pointer-events-none opacity-40",
                     )}
                     aria-label="Upload a file"
@@ -669,7 +693,8 @@ export function ChatInput({
                     onClick={() => setFileDialogOpen(true)}
                     disabled={disabled || isStreaming}
                     className={cn(
-                      "flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                      "flex items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                      iconBtn,
                       (disabled || isStreaming) && "pointer-events-none opacity-40",
                     )}
                     aria-label="Attach from directories"
@@ -698,7 +723,10 @@ export function ChatInput({
                           onClick={() => onModeChange(id)}
                           disabled={disabled || isStreaming}
                           className={cn(
-                            "flex h-7 items-center gap-1 rounded-full px-2 text-[11px] font-medium transition-colors",
+                            "flex items-center gap-1 rounded-full font-medium transition-colors",
+                            large
+                              ? "h-8 px-2.5 text-xs"
+                              : "h-7 px-2 text-[11px]",
                             mode === id
                               ? "bg-background text-foreground shadow-sm"
                               : "text-muted-foreground hover:text-foreground",
@@ -723,7 +751,7 @@ export function ChatInput({
               <Button
                 type="button"
                 size="icon"
-                className="h-8 w-8 shrink-0 rounded-full"
+                className={cn("shrink-0 rounded-full", sendBtn)}
                 onClick={onStop}
                 aria-label="Stop generating"
               >
@@ -733,12 +761,14 @@ export function ChatInput({
               <Button
                 type="button"
                 size="icon"
-                className="h-8 w-8 shrink-0 rounded-full"
+                className={cn("shrink-0 rounded-full", sendBtn)}
                 disabled={!canSend}
                 onClick={submit}
                 aria-label="Send message"
               >
-                <ArrowUp className="h-4 w-4" />
+                <ArrowUp
+                  className={large ? "h-5 w-5" : "h-4 w-4"}
+                />
               </Button>
             )}
           </div>

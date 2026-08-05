@@ -8,6 +8,7 @@ import { DefaultChatTransport } from "ai";
 import { motion, AnimatePresence } from "framer-motion";
 import { Files, Menu, Plus } from "lucide-react";
 import { MessageList } from "@/components/chat/MessageList";
+import { EmptyChatState } from "@/components/chat/EmptyChatState";
 import { ChatInput, type ChatMode } from "@/components/chat/ChatInput";
 import { ChatSkeleton } from "@/components/chat/ChatSkeleton";
 import { ModelPicker } from "@/components/chat/ModelPicker";
@@ -617,6 +618,14 @@ function ConversationChat({
     </button>
   );
 
+  // True while the conversation has no content yet — renders the centered,
+  // code-editor-style composer instead of the docked messages + input.
+  const lastMessage = messages[messages.length - 1];
+  const isWaiting =
+    (status === "submitted" || status === "streaming") &&
+    (!lastMessage || lastMessage.role === "user");
+  const isEmpty = messages.length === 0 && !isWaiting;
+
   const handleModelChange = async (nextProviderId: number, nextModelId: string) => {
     await conversationsApi.update(conversationId, {
       providerId: nextProviderId,
@@ -672,41 +681,78 @@ function ConversationChat({
             input aligned with the message column. */}
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="min-w-0 flex-1 overflow-y-auto">
-            <MessageList
-              messages={messages}
-              status={status}
-              onSend={(text) => sendMessage({ text })}
-              onAiStart={handleAiStart}
-              isAiStarting={isAiStarting}
-              onRegenerate={handleRegenerate}
-            />
-          </div>
-
-          {/* ── Error ── */}
-          {handlerError && (
-            <div className="mx-auto w-full max-w-3xl px-4 pb-2 md:px-6">
-              <ErrorCard
-                error={handlerError}
-                onRetry={retry}
-                isRetrying={isRetrying}
-                retryLabel="Continue"
-                onDismiss={clearError}
+            {isEmpty ? (
+              <EmptyChatState
+                conversationId={conversationId}
+                status={status}
+                disabled={!providerId || !modelId}
+                mode={mode}
+                onModeChange={setMode}
+                onSend={handleSend}
+                onStop={stop}
+                onAiStart={handleAiStart}
+                isAiStarting={isAiStarting}
+              >
+                {handlerError && (
+                  <div className="w-full max-w-2xl">
+                    <ErrorCard
+                      error={handlerError}
+                      onRetry={retry}
+                      isRetrying={isRetrying}
+                      retryLabel="Continue"
+                      onDismiss={clearError}
+                    />
+                  </div>
+                )}
+              </EmptyChatState>
+            ) : (
+              <MessageList
+                messages={messages}
+                status={status}
+                onSend={(text) => sendMessage({ text })}
+                onRegenerate={handleRegenerate}
               />
-            </div>
-          )}
-
-          {/* ── Input ── */}
-          <div className="sticky bottom-0 z-20 supports-[padding-bottom:env(safe-area-inset-bottom)]:pb-[env(safe-area-inset-bottom)]">
-            <ChatInput
-              conversationId={conversationId}
-              status={status}
-              disabled={!providerId || !modelId}
-              mode={mode}
-              onModeChange={setMode}
-              onSend={handleSend}
-              onStop={stop}
-            />
+            )}
           </div>
+
+          {/* Docked composer + error — only once the conversation has content. */}
+          {!isEmpty && (
+            <>
+              {/* ── Error ── */}
+              {handlerError && (
+                <div className="mx-auto w-full max-w-3xl px-4 pb-2 md:px-6">
+                  <ErrorCard
+                    error={handlerError}
+                    onRetry={retry}
+                    isRetrying={isRetrying}
+                    retryLabel="Continue"
+                    onDismiss={clearError}
+                  />
+                </div>
+              )}
+
+              {/* ── Input ── */}
+              <div className="sticky bottom-0 z-20 supports-[padding-bottom:env(safe-area-inset-bottom)]:pb-[env(safe-area-inset-bottom)]">
+                {/* Shared layoutId with the centered EmptyChatState composer —
+                    makes the input glide down to the dock when chat starts. */}
+                <motion.div
+                  layoutId="chat-input"
+                  transition={{ type: "spring", stiffness: 340, damping: 32 }}
+                  className="relative"
+                >
+                  <ChatInput
+                    conversationId={conversationId}
+                    status={status}
+                    disabled={!providerId || !modelId}
+                    mode={mode}
+                    onModeChange={setMode}
+                    onSend={handleSend}
+                    onStop={stop}
+                  />
+                </motion.div>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Desktop — inline right-side panel (user-resizable width) */}
