@@ -97,7 +97,7 @@ Make files uploaded in a chat, to automatically be added /shown to the file mana
 
 on new chat, make after ai's first response, to do a quick request to an ai with the 2 messages in the chat & generate a quick title for the chat, e.g 'Particle Engine Error Fix'. All in bg, not in user's side, so he can leave.
 
-make accent color configurable in profile settings. <!-- Later>
+<!-- make accent color configurable in profile settings. -->
 
 Make on start of new chat, to remove suggestions, move chat input as a bigger in the center & middle, keep the headline, kind of how code editors are. And on start, to smoothly move it as it is now.
 

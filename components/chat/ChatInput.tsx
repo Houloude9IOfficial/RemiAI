@@ -556,10 +556,10 @@ export function ChatInput({
       {/* Compact context row */}
       {attachedFiles.length == 0 && (
         <div className="mb-1.5 hidden items-center gap-2 px-1 text-[11px] text-muted-foreground/70 md:flex">
-          <FolderOpen className="h-3 w-3 shrink-0" />
+          {/* <FolderOpen className="h-3 w-3 shrink-0" />
           <span className="truncate">Workspace</span>
-          <span className="text-border">·</span>
-          <Laptop className="h-3 w-3 shrink-0" />
+          <span className="text-border">·</span> */}
+          <Laptop className="ml-5 h-3 w-3 shrink-0" />
           <span className="truncate">{modeLabel} mode</span>
           <span className="text-border">·</span>
           <GitCommitHorizontal className="h-3 w-3 shrink-0" />

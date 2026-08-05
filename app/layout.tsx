@@ -85,6 +85,13 @@ export default function RootLayout({
                 else{r=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}
                 document.documentElement.classList.add(r);
                 document.documentElement.style.colorScheme=r;
+                // Re-apply a previously chosen accent color (cached by
+                // AccentColorProvider) so it shows before first paint.
+                var accent=localStorage.getItem("remi-accent-"+r);
+                if(accent){
+                  var vars=JSON.parse(accent);
+                  for(var k in vars){document.documentElement.style.setProperty(k, vars[k]);}
+                }
               } catch(e){}
             `,
           }}

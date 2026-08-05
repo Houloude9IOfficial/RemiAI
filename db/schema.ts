@@ -75,6 +75,7 @@ export const userPreferences = sqliteTable("user_preferences", {
   pronouns: text("pronouns").notNull().default(""),
   birthday: text("birthday").notNull().default(""),
   links: text("links", { mode: "json" }).$type<Record<string, string>>().notNull().default({}),
+  accentColor: text("accent_color").notNull().default(""),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
