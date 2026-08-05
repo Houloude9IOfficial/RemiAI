@@ -632,14 +632,45 @@ function ConversationChat({
 
       {/* ── Messages + Session files panel ── */}
       <div className="relative flex min-h-0 flex-1">
-        <div className="min-w-0 flex-1 overflow-y-auto">
-          <MessageList
-            messages={messages}
-            status={status}
-            onSend={(text) => sendMessage({ text })}
-            onAiStart={handleAiStart}
-            isAiStarting={isAiStarting}
-          />
+        {/* Chat column: messages, error card, and input live together so they
+            shrink as one when the session files panel opens — keeping the
+            input aligned with the message column. */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="min-w-0 flex-1 overflow-y-auto">
+            <MessageList
+              messages={messages}
+              status={status}
+              onSend={(text) => sendMessage({ text })}
+              onAiStart={handleAiStart}
+              isAiStarting={isAiStarting}
+            />
+          </div>
+
+          {/* ── Error ── */}
+          {handlerError && (
+            <div className="mx-auto w-full max-w-3xl px-4 pb-2 md:px-6">
+              <ErrorCard
+                error={handlerError}
+                onRetry={retry}
+                isRetrying={isRetrying}
+                retryLabel="Continue"
+                onDismiss={clearError}
+              />
+            </div>
+          )}
+
+          {/* ── Input ── */}
+          <div className="sticky bottom-0 z-20 supports-[padding-bottom:env(safe-area-inset-bottom)]:pb-[env(safe-area-inset-bottom)]">
+            <ChatInput
+              conversationId={conversationId}
+              status={status}
+              disabled={!providerId || !modelId}
+              mode={mode}
+              onModeChange={setMode}
+              onSend={handleSend}
+              onStop={stop}
+            />
+          </div>
         </div>
 
         {/* Desktop — inline right-side panel */}
@@ -688,32 +719,6 @@ function ConversationChat({
             </>
           )}
         </AnimatePresence>
-      </div>
-
-      {/* ── Error ── */}
-      {handlerError && (
-        <div className="mx-auto w-full max-w-3xl px-4 pb-2 md:px-6">
-          <ErrorCard
-            error={handlerError}
-            onRetry={retry}
-            isRetrying={isRetrying}
-            retryLabel="Continue"
-            onDismiss={clearError}
-          />
-        </div>
-      )}
-
-      {/* ── Input ── */}
-      <div className="sticky bottom-0 z-20 supports-[padding-bottom:env(safe-area-inset-bottom)]:pb-[env(safe-area-inset-bottom)]">
-        <ChatInput
-          conversationId={conversationId}
-          status={status}
-          disabled={!providerId || !modelId}
-          mode={mode}
-          onModeChange={setMode}
-          onSend={handleSend}
-          onStop={stop}
-        />
       </div>
     </div>
   );
