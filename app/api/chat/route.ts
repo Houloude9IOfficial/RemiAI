@@ -439,6 +439,9 @@ You are currently in **Plan mode**. This means:
     system: fullSystemPrompt,
     messages: modelMessages,
     tools: Object.keys(tools).length > 0 ? tools : undefined,
+    // Retry retryable provider failures (network, 5xx, rate limits) up to
+    // 3 times with exponential backoff before surfacing the error.
+    maxRetries: 3,
     // Ask providers for a generous output budget so low default caps don't
     // cut the model off mid-response — the #1 cause of runs that appear to
     // "just stop" after a partial reply. 4096 covers typical chat replies;

@@ -101,7 +101,7 @@ make accent color configurable in profile settings. <!-- Later>
 
 Make on start of new chat, to remove suggestions, move chat input as a bigger in the center & middle, keep the headline, kind of how code editors are. And on start, to smoothly move it as it is now.
 
-if an AI request fails, retry up to 3 times before erroring out.
+<!-- if an AI request fails, retry up to 3 times before erroring out. -->
 
 <!-- allow resizing the session files panel. -->
 

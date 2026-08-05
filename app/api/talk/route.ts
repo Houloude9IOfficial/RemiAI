@@ -131,7 +131,9 @@ export async function POST(req: Request) {
       model,
       system: TALK_SYSTEM_PROMPT,
       messages: coreMessages,
-      // No tools in talk mode — keep it pure conversation
+      // No tools in talk mode — keep it pure conversation.
+      // Retry retryable provider failures up to 3 times before erroring out.
+      maxRetries: 3,
     });
 
     // Convert to text stream for SSE

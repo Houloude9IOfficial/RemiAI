@@ -310,6 +310,8 @@ async function runAgent(
     system: systemPrompt,
     messages: [{ role: "user", content: task }],
     tools: agentTools,
+    // Retry retryable provider failures up to 3 times before erroring out.
+    maxRetries: 3,
   });
 
   let accumulatedText = "";

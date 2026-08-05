@@ -205,6 +205,8 @@ ${timeContext}${userPrefsContext}${userProfileContext}${memoryContext}${fileChan
     messages: [{ role: "user", content: "Go ahead and start the conversation." }],
     tools,
     stopWhen: stepCountIs(100),
+    // Retry retryable provider failures up to 3 times before erroring out.
+    maxRetries: 3,
     onFinish: async ({ text: outputText, usage }) => {
       // Derive a meaningful title from the AI's greeting
       const title = outputText
