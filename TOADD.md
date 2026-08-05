@@ -90,3 +90,5 @@ Descriptions: A tool (togglable) that allows the AI with javascript to create ro
 <!-- tool cards have 2 scroll bars on console output. -->
 
 add controls to messages, copy for yours and copy + regenerate for AI messages (say that it'll delete all messages after it.)
+
+Make file manager render media too, audio, video, images, etc...

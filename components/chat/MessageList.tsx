@@ -21,6 +21,8 @@ interface QuickAction {
   icon: ComponentType<{ className?: string }>;
   label: string;
   prompt: string;
+  iconClass: string; // icon color, e.g. "text-sky-600"
+  chipClass: string; // tinted chip behind the icon, e.g. "bg-sky-500/10"
 }
 
 const QUICK_ACTIONS: QuickAction[] = [
@@ -29,23 +31,31 @@ const QUICK_ACTIONS: QuickAction[] = [
     label: "Summarize a document",
     prompt:
       "Summarize the most relevant file in my current workspace and list key takeaways.",
+    iconClass: "text-sky-600",
+    chipClass: "bg-sky-500/10",
   },
   {
     icon: Search,
     label: "Search codebase for TODOs",
     prompt: "Search my codebase for TODOs and group them by file with short action suggestions.",
+    iconClass: "text-amber-600",
+    chipClass: "bg-amber-500/10",
   },
   {
     icon: Code,
     label: "Generate a React component",
     prompt:
       "Write a reusable React component with TypeScript and Tailwind CSS.",
+    iconClass: "text-emerald-600",
+    chipClass: "bg-emerald-500/10",
   },
   {
     icon: WandSparkles,
     label: "Propose an implementation plan",
     prompt:
       "Review this project and propose a concise implementation plan with clear steps and risks.",
+    iconClass: "text-violet-600",
+    chipClass: "bg-violet-500/10",
   },
 ];
 
@@ -72,8 +82,8 @@ export function MessageList({
 
   const preferredName = (prefs?.preferredName ?? "").trim();
   const headline = preferredName
-    ? `What are you working on, ${preferredName}?`
-    : "What should we do?";
+  ? `What are you working on, <a className="font-semibold underline" href="/settings/profile">${preferredName}</a>?`
+  : "What should we do?";
 
   const lastMessage = messages[messages.length - 1];
   const isWaiting =
@@ -88,7 +98,7 @@ export function MessageList({
         </div>
 
         <p className="relative max-w-2xl text-center text-3xl font-semibold tracking-tight text-foreground/90 md:text-[2rem]">
-          {headline}
+          <p dangerouslySetInnerHTML={{ __html: headline }} />
         </p>
 
         <div className="relative grid w-full max-w-2xl grid-cols-1 gap-2.5 sm:grid-cols-2">
@@ -101,8 +111,10 @@ export function MessageList({
                 onClick={() => onSend?.(action.prompt)}
                 className="group rounded-xl border border-border/70 bg-background/40 p-3 text-left transition-all duration-150 hover:border-border hover:bg-accent/40"
               >
-                <div className="mb-2 inline-flex h-6 w-6 items-center justify-center rounded-md">
-                  <Icon className="h-4.5 w-4.5 text-muted-foreground group-hover:text-foreground" />
+                <div
+                  className={`mb-2 inline-flex h-6 w-6 items-center justify-center rounded-md`}
+                >
+                  <Icon className={`h-4.5 w-4.5 ${action.iconClass}`} />
                 </div>
                 <div className="text-sm font-medium text-foreground/90">{action.label}</div>
               </button>
