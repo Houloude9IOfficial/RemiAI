@@ -30,7 +30,7 @@ export function GeneratingIndicator({
     <div
       role="status"
       className={cn(
-        "inline-flex items-center gap-2.5",
+        "inline-flex items-center gap-2.5 mt-5",
         variant === "pill" &&
           // "rounded-full border border-border/60 bg-surface-2/60 py-1.5 pl-2 pr-3.5",
         className,

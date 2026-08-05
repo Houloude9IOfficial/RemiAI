@@ -363,7 +363,7 @@ export function MessageBubble({ message, isStreaming }: { message: UIMessage; is
 
         {/* Thinking indicator — shown under content while AI is still processing */}
         {showThinking && (
-          <GeneratingIndicator label="Thinking" className="mt-3" />
+          <GeneratingIndicator label="Thinking" className="mt-10" />
         )}
       </div>
     </div>
