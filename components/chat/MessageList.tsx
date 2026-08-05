@@ -97,9 +97,12 @@ export function MessageList({
           <Sparkles className="h-4 w-4 text-muted-foreground/80" />
         </div>
 
-        <p className="relative max-w-2xl text-center text-3xl font-semibold tracking-tight text-foreground/90 md:text-[2rem]">
+        {/* Outer element is a <div>, not a <p>, because the headline
+            renders a nested <p dangerouslySetInnerHTML> (it may contain an
+            <a> link). <p> inside <p> is invalid HTML and breaks hydration. */}
+        <div className="relative max-w-2xl text-center text-3xl font-semibold tracking-tight text-foreground/90 md:text-[2rem]">
           <p dangerouslySetInnerHTML={{ __html: headline }} />
-        </p>
+        </div>
 
         <div className="relative grid w-full max-w-2xl grid-cols-1 gap-2.5 sm:grid-cols-2">
           {QUICK_ACTIONS.map((action) => {
