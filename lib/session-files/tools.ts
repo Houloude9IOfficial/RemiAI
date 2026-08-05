@@ -148,6 +148,21 @@ const sessionPresentFilesSchema = z.object({
     ),
 });
 
+const sessionPresentFileSchema = z.object({
+  path: z
+    .string()
+    .describe(
+      "Relative path of the file to open in the side panel viewer (forward slashes), e.g. 'output/report.md'.",
+    ),
+  message: z
+    .string()
+    .max(500)
+    .optional()
+    .describe(
+      "Optional short note shown with the file panel, e.g. 'Here is the updated index.html'.",
+    ),
+});
+
 // ---------------------------------------------------------------------------
 // Builder — binds every tool to a conversation's sandbox
 // ---------------------------------------------------------------------------
@@ -344,12 +359,42 @@ Only delete when the user asks to remove a file, or when you are certain a file 
         });
       },
     },
+    session_present_file: {
+      description: `Open the session files side panel directly on a specific file, with that file's content shown in the built-in viewer (text/code/markdown content or the image itself).
+
+**When to use:** When you want to draw the user's attention to one particular file you created or modified (e.g. 'Here's the updated index.html'). The panel opens straight to that file — no clicking through the tree. Use 'session_present_files' instead when you want to present the whole set of files.`,
+      parameters: sessionPresentFileSchema,
+      execute: async ({
+        path: relPath,
+        message,
+      }: {
+        path: string;
+        message?: string | null;
+      }) => {
+        const all = await sandbox.listAll();
+        const target = all.find((e) => e.path === relPath && e.isFile);
+        if (!target) {
+          return truncateToolResult({
+            error: `File not found in session sandbox: "${relPath}"`,
+            availableFiles: all.map((e) => e.path),
+          });
+        }
+        return truncateToolResult({
+          type: "session_file" as const,
+          path: target.path,
+          name: target.name,
+          size: target.size,
+          url: sandbox.url(target.path),
+          message: message ?? null,
+        });
+      },
+    },
     session_present_files: {
       description: `Present this conversation's session files to the user — opens a side panel in the chat showing the file list, with a viewer and a "Download .zip" button.
 
 **When to use:** After you've written files the user should see or download (a generated website, scripts, documents, etc.). Call it once you've finished writing all the files.
 
-Optionally pass 'paths' to highlight specific files (e.g. the main entry point). If omitted, all session files are shown.`,
+Optionally pass 'paths' to highlight specific files (e.g. the main entry point). If omitted, all session files are shown. To open the panel straight to one file, use 'session_present_file' instead.`,
       parameters: sessionPresentFilesSchema,
       execute: async ({
         paths,

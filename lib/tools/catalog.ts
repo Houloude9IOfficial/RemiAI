@@ -60,6 +60,7 @@ export const TOOL_CATALOG: ToolDefinition[] = [
       "session_file_move",
       "session_file_download",
       "session_file_delete",
+      "session_present_file",
       "session_present_files",
     ],
     category: "builtin",

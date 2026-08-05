@@ -33,7 +33,10 @@ export type SessionFilesOverviewEntry = {
 export const SESSION_FILES_PRESENT_EVENT = "remi:session-files:present";
 
 export type SessionFilesPresentDetail = {
+  /** File paths to highlight in the panel tree (used by session_present_files). */
   paths?: string[];
+  /** When set, the panel opens straight to this file in the viewer (used by session_present_file). */
+  focusPath?: string;
   message?: string | null;
 };
 

@@ -182,14 +182,14 @@ function buildSegments(parts: UIMessage["parts"]): Segment[] {
         }
       })();
 
-      if (
-        toolName !== null &&
-        toolName.toLowerCase().replace(/^.*__/, "") === "create_visual"
-      ) {
+      const shortToolName =
+        toolName === null ? null : toolName.toLowerCase().replace(/^.*__/, "");
+
+      if (shortToolName === "create_visual") {
         segments.push({ type: "visual", part });
       } else if (
-        toolName !== null &&
-        toolName.toLowerCase().replace(/^.*__/, "") === "session_present_files"
+        shortToolName === "session_present_files" ||
+        shortToolName === "session_present_file"
       ) {
         segments.push({ type: "sessionPresent", part });
       } else {

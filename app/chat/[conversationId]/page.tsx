@@ -23,7 +23,10 @@ import { conversationsApi } from "@/lib/api/conversations";
 import { useStreamingContext } from "@/lib/chat/streaming-context";
 import { useSidebar } from "@/components/sidebar/SidebarContext";
 import { ShortcutsTrigger } from "@/components/sidebar/ShortcutsModal";
-import { SESSION_FILES_PRESENT_EVENT } from "@/lib/api/session-files";
+import {
+  SESSION_FILES_PRESENT_EVENT,
+  type SessionFilesPresentDetail,
+} from "@/lib/api/session-files";
 import { cn } from "@/lib/utils";
 import { errorToDisplayMessage } from "@/lib/chat/error-payload";
 
@@ -291,11 +294,19 @@ function ConversationChat({
     (initialConversation as any).mode ?? "chat",
   );
   const [panelOpen, setPanelOpen] = useState(false);
+  // When the AI presents a single file (session_present_file), the panel
+  // opens straight to that file in the viewer.
+  const [panelFocusPath, setPanelFocusPath] = useState<string | null>(null);
   const { activeStreams, startStream, endStream } = useStreamingContext();
 
   // Auto-open the session files panel when the AI calls session_present_files
+  // or session_present_file; for the single-file variant, focus that file.
   useEffect(() => {
-    const handler = () => setPanelOpen(true);
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<SessionFilesPresentDetail>).detail;
+      if (detail?.focusPath) setPanelFocusPath(detail.focusPath);
+      setPanelOpen(true);
+    };
     window.addEventListener(SESSION_FILES_PRESENT_EVENT, handler);
     return () => window.removeEventListener(SESSION_FILES_PRESENT_EVENT, handler);
   }, []);
@@ -548,10 +559,18 @@ function ConversationChat({
     modelId: initialConversation.modelId,
   });
 
+  const closePanel = useCallback(() => {
+    setPanelOpen(false);
+    setPanelFocusPath(null);
+  }, []);
+
   const filesToggle = (
     <button
       type="button"
-      onClick={() => setPanelOpen((o) => !o)}
+      onClick={() => {
+        if (panelOpen) setPanelFocusPath(null);
+        setPanelOpen((o) => !o);
+      }}
       aria-label="Toggle session files"
       title="Session files"
       className={cn(
@@ -635,7 +654,8 @@ function ConversationChat({
             >
               <SessionFilesPanel
                 conversationId={conversationId}
-                onClose={() => setPanelOpen(false)}
+                onClose={closePanel}
+                focusPath={panelFocusPath}
               />
             </motion.div>
           )}
@@ -661,7 +681,8 @@ function ConversationChat({
               >
                 <SessionFilesPanel
                   conversationId={conversationId}
-                  onClose={() => setPanelOpen(false)}
+                  onClose={closePanel}
+                  focusPath={panelFocusPath}
                 />
               </motion.div>
             </>

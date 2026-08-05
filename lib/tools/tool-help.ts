@@ -619,6 +619,7 @@ Every conversation has its own private **session files** sandbox. Files you crea
 | \`session_file_move\` | \`from\`, \`to\` | Rename or move a file/folder within the sandbox. |
 | \`session_file_download\` | \`path\` | Get a download link for a single file; present it as a markdown link. |
 | \`session_file_delete\` | \`path\` | Permanently delete a file or folder. |
+| \`session_present_file\` | \`path\`, \`message\` (optional) | Open the file panel straight to one file in the built-in viewer. |
 | \`session_present_files\` | \`paths\` (optional), \`message\` (optional) | Open the file panel so the user can view/download the files. |
 
 ### File URLs — referencing sandbox files in the chat

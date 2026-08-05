@@ -19,6 +19,8 @@ import {
   Files,
   Archive,
   FileArchive,
+  CopyIcon,
+  Check,
 } from "lucide-react";
 import { sessionFilesApi, type SessionFileEntry } from "@/lib/api/session-files";
 import {
@@ -38,9 +40,12 @@ import { MarkdownRenderer } from "./MarkdownRenderer";
 export function SessionFilesPanel({
   conversationId,
   onClose,
+  focusPath,
 }: {
   conversationId: number;
   onClose: () => void;
+  /** When set, the panel opens straight to this file in the viewer (from session_present_file). */
+  focusPath?: string | null;
 }) {
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<SessionFileEntry | null>(null);
@@ -55,6 +60,22 @@ export function SessionFilesPanel({
     queryFn: () => sessionFilesApi.list(conversationId),
     staleTime: 10_000,
   });
+
+  // Auto-open a presented file in the viewer. Uses the React-recommended
+  // "adjust state when a prop changes" pattern (setState during render,
+  // guarded by a previous-value comparison) instead of an effect, so a
+  // refetch of `data` (upload, delete, refresh, AI writing another file)
+  // doesn't re-select the presented file and override a file the user
+  // manually clicked in the tree — each focusPath fires exactly once.
+  const [handledFocus, setHandledFocus] = useState<string | null>(null);
+  if (focusPath && focusPath !== handledFocus && data) {
+    const target = data.files.find((f) => f.path === focusPath && f.isFile);
+    if (target) {
+      setHandledFocus(focusPath);
+      setSelected(target);
+      setConfirmDelete(null);
+    }
+  }
 
   const tree = useMemo(
     () => buildTree(data?.files ?? []),
@@ -372,6 +393,37 @@ function FileViewer({
     [data, isText, isMarkdown, ext],
   );
 
+  const [copied, setCopied] = useState(false);
+
+  /**
+   * Copy the file's actual content to the clipboard (text/markdown files),
+   * falling back to the file URL for binary files where copying raw bytes
+   * as text would be useless.
+   */
+  const handleCopy = async () => {
+    try {
+      let text: string;
+      if (isText || isMarkdown) {
+        const res = await sessionFilesApi.content(conversationId, entry.path);
+        text = res.content;
+        toast.success(
+          res.isTruncated
+            ? `Copied first 1 MB — file is ${formatBytes(res.totalBytes)}`
+            : `Copied ${entry.name} content to clipboard`,
+        );
+      } else {
+        // Binary / no-preview file — copy the URL instead of garbage bytes.
+        text = sessionFilesApi.rawUrl(conversationId, entry.path);
+        toast.success("Copied file URL to clipboard");
+      }
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error("Could not copy to clipboard");
+    }
+  };
+
   return (
     <div className="flex h-full flex-col">
       {/* Viewer header */}
@@ -390,6 +442,19 @@ function FileViewer({
             {entry.path} · {formatBytes(entry.size)}
           </p>
         </div>
+        <button
+          type="button"
+          onClick={handleCopy}
+          aria-label="Copy file content"
+          title="Copy file content"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-95"
+        >
+          {copied ? (
+            <Check className="h-4 w-4 text-emerald-500" />
+          ) : (
+            <CopyIcon className="h-4 w-4" />
+          )}
+        </button>
         <a
           href={sessionFilesApi.rawUrl(conversationId, entry.path, true)}
           aria-label="Download file"
