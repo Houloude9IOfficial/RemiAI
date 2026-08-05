@@ -282,7 +282,7 @@ export function ToolCallCard({
             )}
           </button>
           {minorOpen && (
-            <div className="mb-1 ml-5 mr-1 rounded-md border border-border/40 bg-surface-2/50 px-2.5 py-2">
+            <div className="mt-2 mb-1 ml-5 mr-1 rounded-md border border-border/40 bg-surface-2/50 px-2.5 py-2">
               {errorText ? (
                 <p className="text-[11px] text-status-danger">{errorText}</p>
               ) : (
@@ -699,7 +699,7 @@ function JsonBlock({ data }: { data: unknown }) {
     <div>
       <pre
         className={cn(
-          "overflow-x-auto rounded-md bg-muted/40 p-2.5 text-[11px] leading-relaxed text-foreground/85",
+          "overflow-x-auto rounded-md bg-none p-2.5 text-[11px] leading-relaxed text-foreground/85",
           collapsed && "max-h-28 overflow-hidden",
         )}
       >
@@ -760,7 +760,7 @@ function ExecOutput({ data }: { data: Record<string, unknown> }) {
   const ok = !timedOut && exitCode === 0;
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border/45 bg-muted/25">
+    <div className="overflow-hidden rounded-lg border border-border/45">
       <div className="flex items-center gap-2 border-b border-border/35 px-2.5 py-1.5">
         <span
           className={cn(

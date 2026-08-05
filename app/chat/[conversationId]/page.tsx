@@ -22,6 +22,7 @@ import { useErrorHandler } from "@/lib/hooks/use-error-handler";
 import { conversationsApi } from "@/lib/api/conversations";
 import { useStreamingContext } from "@/lib/chat/streaming-context";
 import { useSidebar } from "@/components/sidebar/SidebarContext";
+import { ShortcutsTrigger } from "@/components/sidebar/ShortcutsModal";
 import { SESSION_FILES_PRESENT_EVENT } from "@/lib/api/session-files";
 import { cn } from "@/lib/utils";
 import { errorToDisplayMessage } from "@/lib/chat/error-payload";
@@ -602,6 +603,7 @@ function ConversationChat({
               <ExportDialog messages={messages} title={initialConversation.title} />
             )}
             {filesToggle}
+            <ShortcutsTrigger />
           </>
         }
       />

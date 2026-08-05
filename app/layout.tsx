@@ -7,6 +7,7 @@ import { ThemeFavicon } from "@/components/ThemeFavicon";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
 import { MobileSidebar } from "@/components/sidebar/MobileSidebar";
 import { SidebarProvider } from "@/components/sidebar/SidebarContext";
+import { ShortcutsProvider } from "@/components/sidebar/ShortcutsProvider";
 import { GlobalMobileHeader } from "@/components/GlobalMobileHeader";
 
 const inter = Inter({
@@ -94,14 +95,16 @@ export default function RootLayout({
           <ThemeFavicon />
           <ServiceWorkerRegistration />
           <SidebarProvider>
-            <div className="flex h-screen w-full">
-              <AppSidebar />
-              <MobileSidebar />
-              <main className="flex flex-1 flex-col overflow-auto">
-                <GlobalMobileHeader />
-                {children}
-              </main>
-            </div>
+            <ShortcutsProvider>
+              <div className="flex h-screen w-full">
+                <AppSidebar />
+                <MobileSidebar />
+                <main className="flex flex-1 flex-col overflow-auto">
+                  <GlobalMobileHeader />
+                  {children}
+                </main>
+              </div>
+            </ShortcutsProvider>
           </SidebarProvider>
         </Providers>
       </body>

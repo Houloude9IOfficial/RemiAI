@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { usePathname } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,10 +27,11 @@ import {
   Radio,
   X,
 } from "lucide-react";
-import { conversationsApi } from "@/lib/api/conversations";
+import { useNewChat } from "@/lib/hooks/use-new-chat";
 import { ConversationList } from "./ConversationList";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { AboutModal } from "./AboutModal";
+import { ShortcutsTrigger } from "./ShortcutsModal";
 import { SidebarProfile } from "./SidebarProfile";
 import { useSidebar } from "./SidebarContext";
 import { PullToRefresh } from "@/components/PullToRefresh";
@@ -59,41 +60,10 @@ const extraLinks = [
 export function MobileSidebar() {
   const { isMobileSidebarOpen: isOpen, closeMobileSidebar: onClose } = useSidebar();
   const pathname = usePathname();
-  const router = useRouter();
   const queryClient = useQueryClient();
   const overlayRef = useRef<HTMLDivElement>(null);
 
-  const newChatMutation = useMutation({
-    mutationFn: () => {
-      const lastModel = globalThis.localStorage?.getItem("lastModel");
-      let providerId: number | undefined;
-      let modelId: string | undefined;
-      if (lastModel) {
-        try {
-          const parsed = JSON.parse(lastModel);
-          if (typeof parsed.providerId === "number") providerId = parsed.providerId;
-          if (typeof parsed.modelId === "string") modelId = parsed.modelId;
-        } catch {
-          // Ignore
-        }
-      }
-      return conversationsApi.create(
-        providerId && modelId ? { providerId, modelId } : undefined,
-      );
-    },
-    onSuccess: (conversation) => {
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
-      router.push(`/chat/${conversation.id}`);
-      onClose();
-    },
-    onError: () => {
-      conversationsApi.create().then((conversation) => {
-        queryClient.invalidateQueries({ queryKey: ["conversations"] });
-        router.push(`/chat/${conversation.id}`);
-        onClose();
-      });
-    },
-  });
+  const newChatMutation = useNewChat(onClose);
 
   const [extraExpanded, setExtraExpanded] = useState(false);
 
@@ -273,7 +243,10 @@ export function MobileSidebar() {
             </div>
 
             <div className="mt-1 flex items-center justify-between px-2 py-1.5">
-              <AboutModal />
+              <div className="flex items-center gap-0.5">
+                <ShortcutsTrigger className="h-7 w-7" />
+                <AboutModal />
+              </div>
               <ThemeToggle />
             </div>
           </nav>

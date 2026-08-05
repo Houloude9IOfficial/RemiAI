@@ -1,14 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Brain, BarChart3, Files, FolderOpen, Pen, Plug, Settings2, User, Wrench, Bot, Eye, Terminal, Gamepad2, Clock, ChevronDown, ChevronUp, Shield, Radio, PanelLeftClose, PanelLeftOpen } from "lucide-react";
-import { conversationsApi } from "@/lib/api/conversations";
+import { useNewChat } from "@/lib/hooks/use-new-chat";
 import { ConversationList } from "./ConversationList";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { SidebarProfile } from "./SidebarProfile";
@@ -42,45 +41,9 @@ export function AppSidebar() {
 
 function DesktopSidebar() {
   const pathname = usePathname();
-  const router = useRouter();
-  const queryClient = useQueryClient();
   const { isDesktopSidebarCollapsed, toggleDesktopSidebar } = useSidebar();
 
-  const newChatMutation = useMutation({
-    mutationFn: () => {
-      // Use the last-selected model from localStorage, if any
-      const lastModel = globalThis.localStorage?.getItem("lastModel");
-      let providerId: number | undefined;
-      let modelId: string | undefined;
-      if (lastModel) {
-        try {
-          const parsed = JSON.parse(lastModel);
-          if (typeof parsed.providerId === "number") providerId = parsed.providerId;
-          if (typeof parsed.modelId === "string") modelId = parsed.modelId;
-        } catch {
-          // Ignore corrupt localStorage value
-        }
-      }
-      return conversationsApi.create(
-        providerId && modelId ? { providerId, modelId } : undefined,
-      );
-    },
-    onSuccess: (conversation) => {
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
-      // Navigate to the new chat — the ConversationPage will show a
-      // skeleton while the data is being fetched (but it's usually instant
-      // since the server just created it and it's fresh in cache).
-      router.push(`/chat/${conversation.id}`);
-    },
-    onError: () => {
-      // Fallback: create a new chat without provider/model and navigate there
-      // The page will gracefully handle the empty state
-      conversationsApi.create().then((conversation) => {
-        queryClient.invalidateQueries({ queryKey: ["conversations"] });
-        router.push(`/chat/${conversation.id}`);
-      });
-    },
-  });
+  const newChatMutation = useNewChat();
 
   const [extraExpanded, setExtraExpanded] = useState(false);
 
@@ -209,7 +172,7 @@ function DesktopSidebar() {
               className={cn(
                 "inline-flex h-8 w-8 items-center justify-center rounded-md text-sidebar-foreground/70 transition-colors",
                 "hover:bg-sidebar-accent hover:text-sidebar-foreground",
-                pathname.startsWith(href) && "bg-sidebar-accent text-sidebar-foreground ring-1 ring-sidebar-border",
+                pathname.startsWith(href) && "bg-sidebar-accent text-sidebar-foreground",
               )}
             >
               <Icon className="h-4 w-4" />
@@ -254,7 +217,7 @@ function DesktopSidebar() {
                 href={href}
                 className={cn(
                   "flex items-center gap-2 rounded-md px-2 py-1.25 text-sm text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors duration-150",
-                  pathname.startsWith(href) && "bg-sidebar-accent text-sidebar-foreground ring-1 ring-sidebar-border",
+                  pathname.startsWith(href) && "bg-sidebar-accent text-sidebar-foreground",
                 )}
               >
                 <Icon className="h-4 w-4" />
@@ -278,7 +241,7 @@ function DesktopSidebar() {
                     href={href}
                     className={cn(
                       "flex items-center gap-2 rounded-md px-2 py-1.25 text-sm text-sidebar-foreground/72 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors duration-150",
-                      pathname.startsWith(href) && "bg-sidebar-accent text-sidebar-foreground ring-1 ring-sidebar-border",
+                      pathname.startsWith(href) && "bg-sidebar-accent text-sidebar-foreground",
                     )}
                   >
                     <Icon className="h-4 w-4" />
