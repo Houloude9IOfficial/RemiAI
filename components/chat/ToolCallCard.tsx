@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import { getToolName, isDynamicToolUIPart, isToolUIPart } from "ai";
 import { cn } from "@/lib/utils";
+import { decodeStreamError, STREAM_ERROR_PREFIX } from "@/lib/chat/error-payload";
 import {
   ChevronDown,
   ChevronUp,
@@ -58,6 +59,29 @@ function getOutput(part: AnyToolPart): unknown {
 
 function getError(part: AnyToolPart): string | undefined {
   return (part as any).errorText;
+}
+
+/**
+ * Tool errors can arrive either as plain text (current server behavior) or as
+ * an encoded RMERR_JSON payload (older persisted messages). Decode the payload
+ * so cards show the real, readable error instead of a raw "RMERR_JSON:%7B..."
+ * blob.
+ */
+function formatToolError(errorText: string | undefined): string {
+  if (!errorText || !errorText.includes(STREAM_ERROR_PREFIX)) {
+    return errorText ?? "";
+  }
+  const decoded = decodeStreamError(errorText);
+  if (!decoded) return errorText;
+  // Prefer the real underlying message (the last "message=..." segment of the
+  // technical field, mirroring ErrorCard's digging) over the generic title.
+  const tech = decoded.technical ?? "";
+  const idx = tech.lastIndexOf("message=");
+  if (idx >= 0) {
+    const rest = tech.slice(idx + "message=".length).trim();
+    if (rest) return rest;
+  }
+  return decoded.title ?? errorText;
 }
 
 function getApproved(part: AnyToolPart): boolean | undefined {
@@ -155,7 +179,7 @@ export function ToolCallCard({
   const state = getState(toolPart);
   const input = getInput(toolPart);
   const output = getOutput(toolPart);
-  const errorText = getError(toolPart);
+  const errorText = formatToolError(getError(toolPart));
   const approved = getApproved(toolPart);
 
   const [inputOpen, setInputOpen] = useState(false);

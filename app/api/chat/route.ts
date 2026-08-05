@@ -556,11 +556,16 @@ You are currently in **Plan mode**. This means:
   const uiMessageStream = result.toUIMessageStream({
     originalMessages: uiMessages,
     generateMessageId: () => crypto.randomUUID(),
+    // Return the PLAIN error message here. The SDK uses this callback's return
+    // value as the `errorText` for inline tool errors (tool-input-error,
+    // tool-output-error parts) that render directly on the tool card — encoding
+    // those as RMERR_JSON blobs made cards show raw "RMERR_JSON:%7B..." garbage
+    // instead of the real message. Terminal stream failures are still converted
+    // into structured RMERR_JSON payloads by the transform below.
     onError: (error) => {
-      if (capturedErrorPayload) {
-        return encodeStreamError(capturedErrorPayload);
-      }
-      return encodeStreamError(normalizeStreamError(error));
+      const message =
+        error instanceof Error ? error.message : String(error ?? "");
+      return message.trim() || "An error occurred.";
     },
   });
 

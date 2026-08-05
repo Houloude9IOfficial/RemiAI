@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import type { Dirent } from "node:fs";
 import { spawnSync } from "node:child_process";
 import Fuse from "fuse.js";
 import { db } from "@/db";
@@ -79,15 +80,19 @@ export async function getRootById(id: number): Promise<PermittedRoot> {
   const roots = await getPermittedRoots();
   const root = roots.find((r) => r.id === numericId);
   if (!root) {
+    // Only list roots the model can actually use — the same filter applied by
+    // `list_permitted_roots`. Presenting locked roots as "available" here would
+    // contradict that tool and invite the model to attempt denied accesses.
+    const accessible = roots.filter((r) => r.canRead || r.canWrite);
     const available =
-      roots.length > 0
-        ? roots
+      accessible.length > 0
+        ? accessible
             .map(
               (r) =>
                 `${r.id} (${r.label}, ${r.canWrite ? "writable" : "read-only"})`,
             )
             .join(", ")
-        : "none configured";
+        : "none that you can access";
     throw new FilesystemError(
       `Root directory ${id} not found. Available roots: ${available}. Make sure to pass one of the numeric ids above (e.g. rootId=1) — the AI must send the number, not a string like rootId="1". Only roots marked "writable" support write_file. On macOS, temp/screenshot files under /var/folders/... are NOT inside any configured root — either add that directory in Settings > Directories, or copy/move the file into an existing root.`,
       "NOT_FOUND",
@@ -225,7 +230,25 @@ export async function listDirectory(
   assertCanRead(root);
   const targetPath = await resolvePath(root, relativePath);
 
-  const entries = await fs.readdir(targetPath, { withFileTypes: true });
+  let entries: Dirent[];
+  try {
+    entries = await fs.readdir(targetPath, { withFileTypes: true });
+  } catch (err) {
+    const code =
+      err && typeof err === "object" && "code" in err
+        ? (err as { code?: unknown }).code
+        : undefined;
+    if (code === "ENOENT") {
+      // The root path is configured but doesn't exist on this machine (e.g. a
+      // Docker-container path like /app/data/... while running locally). Give
+      // the model a clear, actionable explanation instead of a raw ENOENT.
+      throw new FilesystemError(
+        `Directory not found: "${targetPath}" (configured root "${root.label}"). The path may have been moved, renamed, or never created — check Settings > Directories and make sure the path exists on this machine.`,
+        "NOT_FOUND",
+      );
+    }
+    throw err;
+  }
   const results: FileEntry[] = [];
 
   for (const entry of entries) {

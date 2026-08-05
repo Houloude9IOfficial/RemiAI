@@ -38,21 +38,29 @@ async function ensureRoots(): Promise<PermittedRoot[]> {
 // ---------------------------------------------------------------------------
 
 /**
- * List all configured directory roots the AI can access, with permissions.
+ * List all configured directory roots the AI can actually access, with permissions.
+ *
+ * Roots where BOTH `canRead` and `canWrite` are false are fully locked and are
+ * deliberately OMITTED — the AI must not attempt to access directories it has
+ * no permission for. Only roots the AI has at least some access to are listed.
  */
 export const listPermittedRootsTool = {
   description:
-    "List all directory roots the user has granted access to, along with read/write permissions for each. Use this first to discover available roots before accessing files.",
+    "List all directory roots you can access, with read/write permissions for each. Only roots you have at least read or write access to are returned — roots you have NO access to are intentionally omitted, so never guess or attempt to use a rootId that is not listed here. Use this first to discover available roots before accessing files.",
   parameters: z.object({}),
   execute: async () => {
     const roots = await getPermittedRoots();
-    return roots.map((r) => ({
-      id: r.id,
-      label: r.label,
-      path: r.path,
-      canRead: r.canRead,
-      canWrite: r.canWrite,
-    }));
+    // Filter out fully-locked roots (no read AND no write access): listing them
+    // only invites the model to attempt calls that are guaranteed to be denied.
+    return roots
+      .filter((r) => r.canRead || r.canWrite)
+      .map((r) => ({
+        id: r.id,
+        label: r.label,
+        path: r.path,
+        canRead: r.canRead,
+        canWrite: r.canWrite,
+      }));
   },
 };
 
@@ -61,7 +69,7 @@ export const listPermittedRootsTool = {
  */
 export const listDirectoryTool = {
   description:
-    "List files and directories inside a permitted root directory (or subdirectory). Returns entries sorted with directories first, then alphabetically, with file sizes and types.\n\n**Workflow:** Call `list_permitted_roots` first to discover available rootIds, then pass the numeric rootId here to browse its contents. Leave relativePath empty to list the root itself. Pass a relativePath to browse a subdirectory.",
+    "List files and directories inside a permitted root directory (or subdirectory). Returns entries sorted with directories first, then alphabetically, with file sizes and types.\n\n**Workflow:** Call `list_permitted_roots` first to discover available rootIds, then pass the numeric rootId here to browse its contents. Leave relativePath empty to list the root itself. Pass a relativePath to browse a subdirectory.\n\n**Only use rootIds returned by `list_permitted_roots`** — roots you have no access to are not listed there, and attempting them will fail with an access-denied error.",
   parameters: z.object({
     rootId: z
       .coerce.number()
