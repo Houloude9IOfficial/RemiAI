@@ -606,7 +606,7 @@ export function ToolCallGroup({
       setFinalElapsedMs(null);
       const id = window.setInterval(() => {
         setElapsedMs(Date.now() - (startRef.current ?? Date.now()));
-      }, 200);
+      }, 10);
       return () => window.clearInterval(id);
     }
     if (completed && startRef.current !== null && finalElapsedMs === null) {

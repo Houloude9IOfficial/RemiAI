@@ -5,6 +5,7 @@ import { isTextUIPart, isToolUIPart, getToolName } from "ai";
 import { Component, useRef } from "react";
 import { ToolCallGroup } from "./ToolCallGroup";
 import { VisualCard } from "./VisualCard";
+import { GeneratingIndicator } from "./GeneratingIndicator";
 import { FollowupSuggestions } from "./FollowupSuggestions";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import {
@@ -306,15 +307,14 @@ export function MessageBubble({ message, isStreaming }: { message: UIMessage; is
   const segments = buildSegments(message.parts);
   const hasAnyContent = segments.length > 0;
 
-  // If nothing to render yet, show a streaming placeholder.
+  // If nothing to render yet, show a polished streaming placeholder.
   if (!hasAnyContent && isStreaming) {
     return (
-      <div className="flex items-center gap-2 text-xs text-muted-foreground/70">
-        <div className="flex h-3 w-3 items-center justify-center">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground/40" />
-        </div>
-        Generating response...
-      </div>
+      <GeneratingIndicator
+        label="Generating response"
+        variant="pill"
+        className="animate-fade-in"
+      />
     );
   }
 
@@ -363,12 +363,7 @@ export function MessageBubble({ message, isStreaming }: { message: UIMessage; is
 
         {/* Thinking indicator — shown under content while AI is still processing */}
         {showThinking && (
-          <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground/70">
-            <div className="flex h-3 w-3 items-center justify-center">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground/40" />
-            </div>
-            Thinking...
-          </div>
+          <GeneratingIndicator label="Thinking" className="mt-3" />
         )}
       </div>
     </div>

@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { preferencesApi } from "@/lib/api/preferences";
 import { MessageBubble } from "./MessageBubble";
 import { ChatMessageProvider } from "./ChatMessageContext";
+import { GeneratingIndicator } from "./GeneratingIndicator";
 import {
   Loader2,
   Sparkles,
@@ -173,12 +174,7 @@ export function MessageList({
 
             {isWaiting && (
               <div className="flex justify-start animate-fade-in">
-                <div className="w-full text-sm leading-relaxed text-foreground">
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">Thinking...</span>
-                  </div>
-                </div>
+                <GeneratingIndicator label="Thinking" />
               </div>
             )}
 
