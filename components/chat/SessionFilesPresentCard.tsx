@@ -61,6 +61,7 @@ export function SessionFilesPresentCard({ data }: { data: unknown }) {
 // ── Single file (session_present_file) ─────────────────────────────────────
 
 function SingleFileCard({ data }: { data: PresentSingleOutput }) {
+  const showCard = false // Do not show for now...
   const name = data.name || data.path.split("/").pop() || data.path;
 
   // Auto-open the side panel straight to this file once the card appears.
@@ -82,7 +83,7 @@ function SingleFileCard({ data }: { data: PresentSingleOutput }) {
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2, ease: "easeOut" }}
-      className="overflow-hidden rounded-xl bg-primary/[0.04]"
+      className={`overflow-hidden rounded-xl bg-primary/[0.04] ${!showCard ? "hidden" : ""}`}
     >
       <div className="flex items-center gap-2.5 px-3.5 py-3">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-primary">

@@ -499,7 +499,7 @@ function FileChangeDigest({ changes }: { changes: FileChangeSummary[] }) {
 
   return (
     <div className="px-3.5 pb-2.5">
-      <div className="rounded-lg border border-border/50 bg-surface-2/60 px-2.5 py-2">
+      <div className="mt-2 rounded-lg border border-border/20 bg-surface-2/60 px-2.5 py-2">
         <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">
           {changes.length === 1
             ? "1 file changed"
@@ -651,7 +651,6 @@ export function ToolCallGroup({
         onClick={toggle}
         className={cn(
           "flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left transition-colors hover:bg-muted/35",
-          isOpen && "border-b border-border/45",
         )}
       >
         <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md">
@@ -718,12 +717,13 @@ export function ToolCallGroup({
         />
       </button>
 
-      {/* Collapsed file digest — visible without expanding individual calls */}
-      {!isOpen && fileChanges.length > 0 && !running && (
+      {/* File digest — rendered once in a stable spot below the header so it
+          never pops or remounts when the tool calls expand/collapse beneath it */}
+      {fileChanges.length > 0 && !running && (
         <FileChangeDigest changes={fileChanges} />
       )}
 
-      {/* Collapsible body */}
+      {/* Collapsible body — only the individual tool calls animate */}
       <div
         className={cn(
           "grid transition-[grid-template-rows] duration-300 ease-out",
@@ -731,11 +731,6 @@ export function ToolCallGroup({
         )}
       >
         <div className="overflow-hidden">
-          {fileChanges.length > 0 && (
-            <div className="pt-2">
-              <FileChangeDigest changes={fileChanges} />
-            </div>
-          )}
           <div className="flex flex-col gap-1 p-1.5 pt-0">
             {parts.map((part, idx) => (
               <div key={(part as any).toolCallId ?? idx}>
