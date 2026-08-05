@@ -35,12 +35,55 @@ export async function GET(
 
   try {
     const target = await resolveSessionPath(conversationId, filePath);
-    const data = await fs.readFile(target);
     const download = new URL(req.url).searchParams.get("download") === "1";
     const filename = filePath.split("/").pop() ?? "file";
+    const stats = await fs.stat(target);
+    const totalSize = stats.size;
+    const mimeType = getMimeType(filename);
+
+    // HTTP Range support — lets <video>/<audio> seek without buffering the
+    // whole file (the browser sends `Range: bytes=start-end` when scrubbing).
+    const range = req.headers.get("range");
+    if (range && /^bytes=\d*-\d*$/.test(range.trim())) {
+      const [startStr, endStr] = range.trim().slice(6).split("-");
+      const start = startStr ? Number(startStr) : 0;
+      let end = endStr ? Number(endStr) : totalSize - 1;
+      if (Number.isNaN(start) || Number.isNaN(end) || start < 0 || start >= totalSize) {
+        return new Response(null, {
+          status: 416,
+          headers: { "Content-Range": `bytes */${totalSize}` },
+        });
+      }
+      end = Math.min(end, totalSize - 1);
+      const length = end - start + 1;
+      const fd = await fs.open(target, "r");
+      const buffer = Buffer.alloc(length);
+      try {
+        const { bytesRead } = await fd.read(buffer, 0, length, start);
+        return new Response(new Uint8Array(buffer.subarray(0, bytesRead)), {
+          status: 206,
+          headers: {
+            "Content-Type": mimeType,
+            "Content-Length": String(bytesRead),
+            "Content-Range": `bytes ${start}-${start + bytesRead - 1}/${totalSize}`,
+            "Accept-Ranges": "bytes",
+            ...(download
+              ? { "Content-Disposition": `attachment; filename="${encodeURIComponent(filename)}"` }
+              : {}),
+            "Cache-Control": "no-store",
+          },
+        });
+      } finally {
+        await fd.close();
+      }
+    }
+
+    const data = await fs.readFile(target);
     return new Response(new Uint8Array(data), {
       headers: {
-        "Content-Type": getMimeType(filename),
+        "Content-Type": mimeType,
+        "Content-Length": String(totalSize),
+        "Accept-Ranges": "bytes",
         ...(download
           ? { "Content-Disposition": `attachment; filename="${encodeURIComponent(filename)}"` }
           : {}),

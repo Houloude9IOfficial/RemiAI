@@ -666,6 +666,24 @@ const MIME_BY_EXT: Record<string, string> = {
   ".ico": "image/x-icon",
   ".pdf": "application/pdf",
   ".zip": "application/zip",
+  // Videos
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
+  ".mov": "video/quicktime",
+  ".m4v": "video/x-m4v",
+  ".avi": "video/x-msvideo",
+  ".mkv": "video/x-matroska",
+  ".ogv": "video/ogg",
+  // Audio
+  ".mp3": "audio/mpeg",
+  ".wav": "audio/wav",
+  ".ogg": "audio/ogg",
+  ".oga": "audio/ogg",
+  ".m4a": "audio/mp4",
+  ".flac": "audio/flac",
+  ".aac": "audio/aac",
+  ".opus": "audio/opus",
+  ".wma": "audio/x-ms-wma",
 };
 
 /** Look up a MIME type for a filename. Defaults to octet-stream. */

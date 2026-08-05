@@ -337,6 +337,7 @@ function ConversationChat({
     stop,
     error,
     resumeStream,
+    regenerate,
     clearError: clearChatError,
   } = useChat({
     id: String(conversationId),
@@ -473,6 +474,37 @@ function ConversationChat({
       sendMessage({ text });
     },
     [clearError, clearChatError, sendMessage],
+  );
+
+  /**
+   * Regenerate an assistant message: truncate the persisted messages at that
+   * point (deleting it and everything after), then re-run the generation.
+   */
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const handleRegenerate = useCallback(
+    async (messageId: string) => {
+      if (isRegenerating || status === "submitted" || status === "streaming") return;
+      setIsRegenerating(true);
+      clearError();
+      clearChatError();
+      try {
+        const res = await fetch(`/api/chat/${conversationId}/messages`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ uiId: messageId }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error ?? "Failed to prepare regeneration");
+        }
+        await regenerate({ messageId });
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to regenerate");
+      } finally {
+        setIsRegenerating(false);
+      }
+    },
+    [conversationId, isRegenerating, status, clearError, clearChatError, regenerate],
   );
 
   const handleAiStart = useCallback(async () => {
@@ -643,6 +675,7 @@ function ConversationChat({
               onSend={(text) => sendMessage({ text })}
               onAiStart={handleAiStart}
               isAiStarting={isAiStarting}
+              onRegenerate={handleRegenerate}
             />
           </div>
 

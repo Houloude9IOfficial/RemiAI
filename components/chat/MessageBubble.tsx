@@ -2,7 +2,9 @@
 
 import type { UIMessage } from "ai";
 import { isTextUIPart, isToolUIPart, getToolName } from "ai";
-import { Component, useRef } from "react";
+import { Component, useRef, useState } from "react";
+import { toast } from "sonner";
+import { Copy, Check, RefreshCw } from "lucide-react";
 import { ToolCallGroup } from "./ToolCallGroup";
 import { VisualCard } from "./VisualCard";
 import { GeneratingIndicator } from "./GeneratingIndicator";
@@ -18,6 +20,15 @@ import {
   parseAttachments,
   stripAttachmentMarkdown,
 } from "./AttachedFileCard";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -91,6 +102,130 @@ class SafeMarkdown extends Component<
       />
     );
   }
+}
+
+// ── Message actions (copy / regenerate) ────────────────────────────────
+
+/**
+ * Small circular copy button that reveals on hover. Copies `text` to the
+ * clipboard and briefly flips to a checkmark.
+ */
+function CopyButton({ text, ariaLabel = "Copy message" }: { text: string; ariaLabel?: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      toast.success("Copied to clipboard");
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error("Could not copy to clipboard");
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      aria-label={ariaLabel}
+      title={ariaLabel}
+      className="flex h-6.5 w-6.5 items-center justify-center rounded-md text-muted-foreground/55 transition-colors hover:bg-muted hover:text-foreground active:scale-90"
+    >
+      {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+    </button>
+  );
+}
+
+/**
+ * Regenerate button. If there are messages after this one, asks for
+ * confirmation first (regenerating deletes them). Otherwise regenerates
+ * immediately.
+ */
+function RegenerateButton({
+  messageId,
+  messagesAfter,
+  onRegenerate,
+}: {
+  messageId: string;
+  /** Number of messages that come after this one in the conversation. */
+  messagesAfter: number;
+  onRegenerate: (messageId: string) => void;
+}) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const requestRegenerate = () => {
+    if (messagesAfter > 0) {
+      setConfirmOpen(true);
+    } else {
+      onRegenerate(messageId);
+    }
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={requestRegenerate}
+        aria-label="Regenerate response"
+        title="Regenerate response"
+        className="flex h-6.5 w-6.5 items-center justify-center rounded-md text-muted-foreground/55 transition-colors hover:bg-muted hover:text-foreground active:scale-90"
+      >
+        <RefreshCw className="h-3.5 w-3.5" />
+      </button>
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Regenerate response?</DialogTitle>
+            <DialogDescription>
+              {messagesAfter > 0
+                ? `This will delete the ${messagesAfter} message${messagesAfter === 1 ? "" : "s"} after it and generate a new response.`
+                : "Generate a new response to replace this one."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setConfirmOpen(false);
+                onRegenerate(messageId);
+              }}
+            >
+              <RefreshCw className="h-4 w-4" />
+              Regenerate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+/**
+ * Action bar shown under a message. Always visible with quiet styling so it
+ * never reserves invisible space under tool-call-heavy messages.
+ */
+function MessageActionsRow({
+  children,
+  align = "left",
+}: {
+  children: React.ReactNode;
+  align?: "left" | "right";
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-0.5",
+        align === "right" ? "justify-end" : "justify-start",
+      )}
+    >
+      {children}
+    </div>
+  );
 }
 
 // ── User message text — plain text, images only ────────────────────────
@@ -247,7 +382,19 @@ function buildSegments(parts: UIMessage["parts"]): Segment[] {
   return segments;
 }
 
-export function MessageBubble({ message, isStreaming }: { message: UIMessage; isStreaming?: boolean }) {
+export function MessageBubble({
+  message,
+  isStreaming,
+  onRegenerate,
+  messagesAfter,
+}: {
+  message: UIMessage;
+  isStreaming?: boolean;
+  /** Called with the message id to regenerate (AI messages only). */
+  onRegenerate?: (messageId: string) => void;
+  /** Number of messages that come after this one (used by the regenerate confirm). */
+  messagesAfter?: number;
+}) {
   // ---- User messages ----
   if (message.role === "user") {
     const inlineText = message.parts
@@ -262,41 +409,48 @@ export function MessageBubble({ message, isStreaming }: { message: UIMessage; is
     const hasText = cleanText.length > 0;
 
     return (
-      <div className="flex justify-end">
-        <div
-          className={cn(
-            "flex max-w-[min(85%,36rem)] flex-col gap-2",
-            // When there's text, wrap it in a rounded bubble
-            hasText &&
-              "rounded-2xl bg-primary px-3.5 py-2.5 text-[15px] leading-relaxed text-primary-foreground",
-          )}
-        >
-          {/* Text content (if any) — plain text, only images render */}
-          {hasText && <UserMessageText text={cleanText} />}
+      <div className="group flex justify-end">
+        <div className="flex max-w-[min(85%,36rem)] flex-col items-end gap-1">
+          <div
+            className={cn(
+              "flex flex-col gap-2",
+              // When there's text, wrap it in a rounded bubble
+              hasText &&
+                "rounded-2xl bg-primary px-3.5 py-2.5 text-[15px] leading-relaxed text-primary-foreground",
+            )}
+          >
+            {/* Text content (if any) — plain text, only images render */}
+            {hasText && <UserMessageText text={cleanText} />}
 
-          {/* File attachments as polished cards */}
-          {attachments.length > 0 && (
-            <div
-              className={cn(
-                "flex flex-col gap-2",
-                !hasText && "pt-0",
-              )}
-            >
-              {attachments.map((att, idx) => (
-                <AttachedFileCard
-                  key={`${att.url}-${idx}`}
-                  url={att.url}
-                  name={att.name}
-                  mimeType={att.mimeType}
-                  inUserMessage={hasText}
-                />
-              ))}
-            </div>
-          )}
+            {/* File attachments as polished cards */}
+            {attachments.length > 0 && (
+              <div
+                className={cn(
+                  "flex flex-col gap-2",
+                  !hasText && "pt-0",
+                )}
+              >
+                {attachments.map((att, idx) => (
+                  <AttachedFileCard
+                    key={`${att.url}-${idx}`}
+                    url={att.url}
+                    name={att.name}
+                    mimeType={att.mimeType}
+                    inUserMessage={hasText}
+                  />
+                ))}
+              </div>
+            )}
 
-          {/* No text, no attachments — shouldn't happen, but handle gracefully */}
-          {!hasText && attachments.length === 0 && (
-            <span className="text-sm text-primary-foreground/60">Sent a file</span>
+            {/* No text, no attachments — shouldn't happen, but handle gracefully */}
+            {!hasText && attachments.length === 0 && (
+              <span className="text-sm text-primary-foreground/60">Sent a file</span>
+            )}
+          </div>
+          {hasText && (
+            <MessageActionsRow align="right">
+              <CopyButton text={cleanText} ariaLabel="Copy message" />
+            </MessageActionsRow>
           )}
         </div>
       </div>
@@ -320,8 +474,15 @@ export function MessageBubble({ message, isStreaming }: { message: UIMessage; is
 
   const showThinking = isStreaming && hasAnyContent;
 
+  // Plain-text representation of the response (for the copy button): all
+  // text parts joined, mirroring what the markdown renderer displays.
+  const copyableText = message.parts
+    .filter(isTextUIPart)
+    .map((p) => p.text)
+    .join("\n\n");
+
   return (
-    <div className="flex justify-start">
+    <div className="group flex justify-start">
       <div className="w-full text-[15px] leading-relaxed text-foreground">
         {/* Render segments in their original interleaved order */}
         <div className="flex flex-col gap-3.5">
@@ -364,6 +525,22 @@ export function MessageBubble({ message, isStreaming }: { message: UIMessage; is
         {/* Thinking indicator — shown under content while AI is still processing */}
         {showThinking && (
           <GeneratingIndicator label="Thinking" className="mt-10" />
+        )}
+
+        {/* Actions — hidden while the response is still streaming */}
+        {!isStreaming && (hasAnyContent || copyableText.length > 0) && (
+          <MessageActionsRow>
+            {copyableText.length > 0 && (
+              <CopyButton text={copyableText} ariaLabel="Copy response" />
+            )}
+            {onRegenerate && (
+              <RegenerateButton
+                messageId={message.id}
+                messagesAfter={messagesAfter ?? 0}
+                onRegenerate={onRegenerate}
+              />
+            )}
+          </MessageActionsRow>
         )}
       </div>
     </div>

@@ -68,12 +68,15 @@ export function MessageList({
   onSend,
   onAiStart,
   isAiStarting,
+  onRegenerate,
 }: {
   messages: UIMessage[];
   status?: "submitted" | "streaming" | "ready" | "error";
   onSend?: (text: string) => void;
   onAiStart?: () => void;
   isAiStarting?: boolean;
+  /** Called with a message id to regenerate it (deleting messages after it). */
+  onRegenerate?: (messageId: string) => void;
 }) {
   const { data: prefs } = useQuery({
     queryKey: ["preferences"],
@@ -167,6 +170,8 @@ export function MessageList({
                     isStreaming={
                       idx === messages.length - 1 && status === "streaming"
                     }
+                    onRegenerate={onRegenerate}
+                    messagesAfter={messages.length - idx - 1}
                   />
                 </div>
               );

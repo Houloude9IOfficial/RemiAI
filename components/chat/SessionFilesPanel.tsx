@@ -21,6 +21,7 @@ import {
   FileArchive,
   CopyIcon,
   Check,
+  AudioLines,
 } from "lucide-react";
 import { sessionFilesApi, type SessionFileEntry } from "@/lib/api/session-files";
 import {
@@ -31,6 +32,10 @@ import {
   buildTree,
   TEXT_EXTENSIONS,
   IMAGE_EXTENSIONS,
+  VIDEO_EXTENSIONS,
+  AUDIO_EXTENSIONS,
+  PDF_EXTENSIONS,
+  isImageFile,
   type TreeNode,
 } from "@/lib/session-files/ui-utils";
 import { MarkdownRenderer } from "./MarkdownRenderer";
@@ -265,6 +270,7 @@ export function SessionFilesPanel({
                 key={node.path}
                 node={node}
                 depth={0}
+                conversationId={conversationId}
                 collapsed={collapsed}
                 onToggleDir={toggleDir}
                 onSelect={(entry) => setSelected(entry)}
@@ -282,12 +288,14 @@ export function SessionFilesPanel({
 function TreeNodeRow({
   node,
   depth,
+  conversationId,
   collapsed,
   onToggleDir,
   onSelect,
 }: {
   node: TreeNode;
   depth: number;
+  conversationId: number;
   collapsed: Set<string>;
   onToggleDir: (path: string) => void;
   onSelect: (entry: SessionFileEntry) => void;
@@ -325,11 +333,23 @@ function TreeNodeRow({
           <span className="w-3.5 shrink-0" />
         )}
         {!node.isDirectory &&
-          fileIconElement(
-            node.name,
-            false,
-            "h-4 w-4 shrink-0 text-muted-foreground/70",
-          )}
+          (isImageFile(node.name) ? (
+            /* Image thumbnails in the tree — lazy-loaded so big folders stay snappy */
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={sessionFilesApi.rawUrl(conversationId, node.path)}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              className="h-6 w-6 shrink-0 rounded-md border border-border/60 bg-background object-cover"
+            />
+          ) : (
+            fileIconElement(
+              node.name,
+              false,
+              "h-4 w-4 shrink-0 text-muted-foreground/70",
+            )
+          ))}
         <span className={cn("truncate", !node.isDirectory && "text-foreground/90")}>
           {node.name}
         </span>
@@ -346,6 +366,7 @@ function TreeNodeRow({
               key={child.path}
               node={child}
               depth={depth + 1}
+              conversationId={conversationId}
               collapsed={collapsed}
               onToggleDir={onToggleDir}
               onSelect={onSelect}
@@ -376,14 +397,17 @@ function FileViewer({
 }) {
   const ext = extOf(entry.name);
   const isImage = IMAGE_EXTENSIONS.has(ext);
+  const isVideo = VIDEO_EXTENSIONS.has(ext);
+  const isAudio = AUDIO_EXTENSIONS.has(ext);
+  const isPdf = PDF_EXTENSIONS.has(ext);
   const isMarkdown = ext === "md" || ext === "markdown";
   const isText = TEXT_EXTENSIONS.has(ext);
-  const canPreview = isImage || isText || isMarkdown;
+  const canPreview = isImage || isVideo || isAudio || isPdf || isText || isMarkdown;
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["session-file-content", conversationId, entry.path],
     queryFn: () => sessionFilesApi.content(conversationId, entry.path),
-    enabled: canPreview && !isImage,
+    enabled: isText || isMarkdown,
     staleTime: 30_000,
   });
 
@@ -492,6 +516,37 @@ function FileViewer({
               className="max-h-[50vh] rounded-lg border border-border/60 bg-background object-contain"
             />
           </div>
+        ) : isVideo ? (
+          <div className="flex items-center justify-center p-4">
+            <video
+              src={sessionFilesApi.rawUrl(conversationId, entry.path)}
+              controls
+              preload="metadata"
+              className="max-h-[55vh] w-full max-w-2xl rounded-lg border border-border/60 bg-black object-contain"
+            >
+              Your browser does not support the video element.
+            </video>
+          </div>
+        ) : isAudio ? (
+          <div className="flex h-full flex-col items-center justify-center gap-4 p-6">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
+              <AudioLines className="h-7 w-7 text-primary" />
+            </div>
+            <p className="max-w-full truncate text-sm font-medium">{entry.name}</p>
+            <audio
+              src={sessionFilesApi.rawUrl(conversationId, entry.path)}
+              controls
+              className="w-full max-w-md"
+            >
+              Your browser does not support the audio element.
+            </audio>
+          </div>
+        ) : isPdf ? (
+          <iframe
+            src={sessionFilesApi.rawUrl(conversationId, entry.path)}
+            title={entry.name}
+            className="h-[75vh] w-full border-0 bg-background"
+          />
         ) : !canPreview ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-6 py-10 text-center">
             <FileArchive className="h-8 w-8 text-muted-foreground/40" />

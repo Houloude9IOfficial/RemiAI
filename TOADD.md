@@ -89,9 +89,11 @@ Descriptions: A tool (togglable) that allows the AI with javascript to create ro
 
 <!-- tool cards have 2 scroll bars on console output. -->
 
-add controls to messages, copy for yours and copy + regenerate for AI messages (say that it'll delete all messages after it.)
+<!-- add controls to messages, copy for yours and copy + regenerate for AI messages (say that it'll delete all messages after it if any exist.)
 
-Make file manager render media too, audio, video, images, etc...
+Make file manager render media too, audio, video, images, etc... -->
+
+Make files uploaded in a chat, to automatically be added /shown to the file manager for that chat, and allow the AI to access them. Save in a folder in session files called 'uploads' and allow the AI to access them. Also allow the user to manage them in the file manager (already done).
 
 on new chat, make after ai's first response, to do a quick request to an ai with the 2 messages in the chat & generate a quick title for the chat, e.g 'Particle Engine Error Fix'. All in bg, not in user's side, so he can leave.
 
@@ -102,3 +104,5 @@ Make on start of new chat, to remove suggestions, move chat input as a bigger in
 if an AI request fails, retry up to 3 times before erroring out.
 
 allow resizing the session files panel.
+
+when there're too many tool calls in a row make them all into a group instead, not multiple calls/group of calls. But only for calls in a row without text in between.
