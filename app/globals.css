@@ -421,20 +421,9 @@
   opacity: 0.4;
 }
 
-.markdown-body .custom-scrollbar:has(table) {
-  animation: table-fade-in 0.3s ease-out;
-}
-
-@keyframes table-fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
+/* NOTE: no entrance animation on tables — during streaming, markdown-to-jsx
+   re-renders the table on every chunk and the animation would restart,
+   making the table flash from opacity 0 on each update. */
 
 /* Bold / italic */
 .markdown-body strong {
