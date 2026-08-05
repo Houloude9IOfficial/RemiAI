@@ -447,9 +447,7 @@ You are currently in **Plan mode**. This means:
     maxOutputTokens: mode === "goal" ? 16_384 : 4_096,
     // Allow up to 100 steps normally (chat/plan), or 500 in goal mode
     // so the model can work autonomously until task completion
-    // stopWhen: stepCountIs(mode === "goal" ? 500 : 100), ALLOW UNLIMITED STEPS FOR NOW — let the model decide when to stop
-    stopWhen: undefined,
-    // Allow the model to call tools until it decides to stop — no hard limit
+    stopWhen: stepCountIs(mode === "goal" ? 10000 : 7500),
     onError: (err) => {
       capturedErrorPayload = normalizeStreamError(err);
       console.error("[stream] Provider error:", err);
