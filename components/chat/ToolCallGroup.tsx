@@ -30,6 +30,8 @@ import {
   FilePlus2,
   FileMinus2,
   FileDiff,
+  Wrench,
+  Download,
 } from "lucide-react";
 
 type AnyToolPart = ToolUIPart<any> | DynamicToolUIPart;
@@ -240,6 +242,16 @@ const TOOL_LABELS: Record<string, ToolLabel> = {
     past: "Searched web",
     icon: Search,
   },
+  web_search: {
+    present: "Searching web",
+    past: "Searched web",
+    icon: Search,
+  },
+  web_fetch: {
+    present: "Fetching content",
+    past: "Fetched content",
+    icon: Search,
+  },
   fc_scrape: {
     present: "Scraping web",
     past: "Scraped web",
@@ -260,6 +272,11 @@ const TOOL_LABELS: Record<string, ToolLabel> = {
     past: "Wrote session file",
     icon: Pencil,
   },
+  session_file_download: {
+    present: "Downloading session files",
+    past: "Downloaded session files",
+    icon: Download,
+  },
   session_file_delete: {
     present: "Deleting session file",
     past: "Deleted session file",
@@ -268,6 +285,11 @@ const TOOL_LABELS: Record<string, ToolLabel> = {
   session_present_files: {
     present: "Preparing session files",
     past: "Presented session files",
+    icon: Eye,
+  },
+  session_open_file: {
+    present: "Opening session file",
+    past: "Opened session file",
     icon: Eye,
   },
   rename_item: {
@@ -285,7 +307,7 @@ const TOOL_LABELS: Record<string, ToolLabel> = {
 const FALLBACK_LABEL: ToolLabel = {
   present: "Working",
   past: "Worked",
-  icon: Sparkles,
+  icon: Wrench,
 };
 
 function getToolLabel(toolName: string): ToolLabel {
@@ -638,7 +660,7 @@ export function ToolCallGroup({
           ) : ActionIcon ? (
             <ActionIcon
               className={cn(
-                "h-3.5 w-3.5",
+                "h-4.5 w-4.5",
                 hasError ? "text-status-danger" : "text-muted-foreground",
               )}
             />
