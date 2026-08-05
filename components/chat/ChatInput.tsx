@@ -20,6 +20,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { FilePickerDialog } from "./FilePickerDialog";
+import { dispatchSessionFilesChanged } from "@/lib/api/session-files";
 import { toast } from "sonner";
 import { FileAttachmentPreview, type AttachedFile } from "./FileAttachmentPreview";
 import { formatFileSize } from "@/lib/file-types";
@@ -241,6 +242,10 @@ export function ChatInput({
                 };
               }),
             );
+
+            // Uploads are saved into the session sandbox — let an open session
+            // files panel know so it refreshes and shows them automatically.
+            dispatchSessionFilesChanged();
           } catch {
             setAttachedFiles((prev) =>
               prev.map((f) =>

@@ -13,7 +13,7 @@ import { getFileTypeInfo, formatFileSize, mimeTypeFromExtension } from "@/lib/fi
 // ---------------------------------------------------------------------------
 
 interface AttachedFileCardProps {
-  /** The file URL (from /api/chat/uploads/) */
+  /** The file URL (from /api/chat/uploads/ or /api/chat/{id}/session-files/) */
   url: string;
   /** Original filename */
   name: string;
@@ -152,7 +152,11 @@ export interface ParsedAttachment {
 export function parseAttachments(text: string): ParsedAttachment[] {
   const attachments: ParsedAttachment[] = [];
   const seen = new Set<string>();
-  const isUploadUrl = (u: string) => u.startsWith("/api/chat/uploads/");
+  // Recognise both legacy chat uploads and session sandbox files (where chat
+  // uploads now live under `uploads/`).
+  const isUploadUrl = (u: string) =>
+    u.startsWith("/api/chat/uploads/") ||
+    /^\/api\/chat\/\d+\/session-files\//.test(u);
 
   // Match markdown image syntax: ![name](url)
   const imgRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
@@ -191,9 +195,11 @@ export function parseAttachments(text: string): ParsedAttachment[] {
  * leaving only the user's actual words.
  */
 export function stripAttachmentMarkdown(text: string): string {
+  const urlPattern =
+    "\\/api\\/chat\\/uploads\\/[^)]+|\\/api\\/chat\\/\\d+\\/session-files\\/[^)]+";
   return text
-    .replace(/!\[([^\]]*)\]\(\/api\/chat\/uploads\/[^)]+\)/g, "")
-    .replace(/\[([^\]]*)\]\(\/api\/chat\/uploads\/[^)]+\)/g, "")
+    .replace(new RegExp(`!\\[([^\\]]*)\\]\\(${urlPattern}\\)`, "g"), "")
+    .replace(new RegExp(`\\[([^\\]]*)\\]\\(${urlPattern}\\)`, "g"), "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }

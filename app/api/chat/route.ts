@@ -360,8 +360,10 @@ You are currently in **Plan mode**. This means:
   const modelMessages = await convertToModelMessages(uiMessages);
 
   // ── Native image processing ───────────────────────────────────
-  // Scan user messages for image upload markdown references (`![...](/api/chat/uploads/...)`)
-  // and inject the raw image data as native multimodal content parts.
+  // Scan user messages for image markdown references of attached files
+  // (legacy `/api/chat/uploads/...` or session sandbox
+  // `/api/chat/{id}/session-files/...` URLs) and inject the raw image data
+  // as native multimodal content parts.
   // Modern LLMs (Claude 3.5, GPT-4o, Gemini) process these natively via their vision
   // encoder — far more efficient and reliable than the old read_media tool approach.
   for (const msg of modelMessages) {

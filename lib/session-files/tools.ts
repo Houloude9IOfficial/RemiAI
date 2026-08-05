@@ -195,6 +195,8 @@ export function buildSessionFileTools(
     session_file_list: {
       description: `List files in this conversation's private session sandbox — files that you or the user have created for this chat (e.g. a generated website). Returns paths, sizes, and whether each entry is a file or directory.
 
+Files the user uploads in chat are stored here under an "uploads/" folder — use session_file_list({ path: "uploads" }) to see them.
+
 Call this whenever you need to know what files exist in the session before reading, writing, or presenting them. Pass an optional 'path' to list only a subdirectory.
 
 Each file entry includes a 'url' like '/api/chat/${conversationId}/session-files/{path}' — use that to embed the file in your reply (e.g. '![earth.jpg](/api/chat/${conversationId}/session-files/earth.jpg)') or to hand to URL-based tools.`,

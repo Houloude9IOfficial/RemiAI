@@ -491,9 +491,11 @@ Then use what you learned to craft a personalized, context-aware response.
 
   "file-attachments": `## File attachments — how to handle uploaded files
 
-When the user attaches a file, the app includes it as a markdown reference:
-- **Images**: \`![filename](/api/chat/uploads/{id}/{filename})\`
-- **Other files**: \`[filename](/api/chat/uploads/{id}/{filename})\`
+When the user attaches a file, it is saved into this conversation's session files under an \`uploads/\` folder and included as a markdown reference:
+- **Images**: \`![filename](/api/chat/{id}/session-files/uploads/{filename})\`
+- **Other files**: \`[filename](/api/chat/{id}/session-files/uploads/{filename})\`
+
+These files live in the session sandbox, so you can also discover/read them with \`session_file_list\`, \`session_file_read\`, and \`session_file_read_media\`, and the user can manage them in the session files panel.
 
 **Images — YOU CAN SEE THEM NATIVELY.** The system automatically reads uploaded images and passes them directly to your vision encoder. You do NOT need to call any tool.
 
@@ -636,6 +638,7 @@ Every sandbox file has a canonical URL: **\`/api/chat/{conversationId}/session-f
 
 ### Rules
 - Always use **forward slashes** (/) in paths.
+- **User uploads**: Files the user attaches to chat messages are stored here under an \`uploads/\` folder \u2014 list/read them like any other session file.
 - The sandbox is **scoped to this conversation** — other chats can't see these files, and they don't touch the user's real directories.
 - Deleting a conversation removes its sandbox files.`,
 

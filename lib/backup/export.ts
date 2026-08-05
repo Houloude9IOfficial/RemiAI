@@ -30,6 +30,7 @@ const APP_VERSION = (() => {
 const DATA_DIR = path.join(process.cwd(), "data");
 const UPLOAD_DIR = path.join(DATA_DIR, "uploads");
 const AVATAR_DIR = path.join(DATA_DIR, "avatars");
+const SESSION_FILES_DIR = path.join(DATA_DIR, "session-files");
 
 // ---------------------------------------------------------------------------
 // Read all files from a directory as base64
@@ -77,6 +78,7 @@ export interface ExportResult {
     tables: Record<string, number>;
     uploads: number;
     avatars: number;
+    sessionFiles: number;
   };
 }
 
@@ -103,13 +105,14 @@ export async function exportBackup(
   }
 
   // ── Collect files ──────────────────────────────────────────────────────
-  let files: BackupFiles = { uploads: {}, avatars: {} };
+  let files: BackupFiles = { uploads: {}, avatars: {}, sessionFiles: {} };
   if (includeFiles) {
-    const [uploads, avatars] = await Promise.all([
+    const [uploads, avatars, sessionFiles] = await Promise.all([
       collectFiles(UPLOAD_DIR, ""),
       collectFiles(AVATAR_DIR, ""),
+      collectFiles(SESSION_FILES_DIR, ""),
     ]);
-    files = { uploads, avatars };
+    files = { uploads, avatars, sessionFiles };
   }
 
   // ── Build payload ──────────────────────────────────────────────────────
@@ -149,6 +152,7 @@ export async function exportBackup(
       tables: tableStats,
       uploads: Object.keys(files.uploads).length,
       avatars: Object.keys(files.avatars).length,
+      sessionFiles: Object.keys(files.sessionFiles).length,
     },
   };
 }

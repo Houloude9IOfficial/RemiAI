@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -24,7 +24,11 @@ import {
   Check,
   AudioLines,
 } from "lucide-react";
-import { sessionFilesApi, type SessionFileEntry } from "@/lib/api/session-files";
+import {
+  sessionFilesApi,
+  SESSION_FILES_CHANGED_EVENT,
+  type SessionFileEntry,
+} from "@/lib/api/session-files";
 import {
   extOf,
   fileIconElement,
@@ -91,8 +95,21 @@ export function SessionFilesPanel({
   const fileCount = data?.files.filter((f) => f.isFile).length ?? 0;
   const totalSize = data?.files.reduce((sum, f) => sum + f.size, 0) ?? 0;
 
-  const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ["session-files", conversationId] });
+  const invalidate = useCallback(
+    () =>
+      queryClient.invalidateQueries({
+        queryKey: ["session-files", conversationId],
+      }),
+    [queryClient, conversationId],
+  );
+
+  // Refresh the listing when files change elsewhere in the app (e.g. the user
+  // uploads files through the chat composer, which saves them into the sandbox).
+  useEffect(() => {
+    const handler = () => invalidate();
+    window.addEventListener(SESSION_FILES_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(SESSION_FILES_CHANGED_EVENT, handler);
+  }, [invalidate]);
 
   const handleUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
