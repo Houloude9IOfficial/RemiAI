@@ -633,12 +633,14 @@ export async function resolveUploadUrl(
 ): Promise<UploadUrlResult> {
   // Normalize: strip protocol + hostname if present (e.g. http://localhost:3000)
   const normalized = uploadUrl.replace(/^https?:\/\/[^\/]+/i, "");
+  // Strip any query string (?download=1 etc.) — it's not part of the file path
+  const pathOnly = normalized.split("?")[0];
 
   // Session-file URLs first — resolved through the sandbox's own path
   // resolution (traversal + symlink containment checks). Lazy dynamic import
   // keeps this module cycle-free (storage.ts imports readMediaFromResolvedPath
   // from this file).
-  const sessionMatch = normalized.match(SESSION_FILE_URL_RE);
+  const sessionMatch = pathOnly.match(SESSION_FILE_URL_RE);
   if (sessionMatch) {
     const conversationId = sessionMatch[1];
     const filePath = decodeURIComponent(sessionMatch[2]);
@@ -655,7 +657,7 @@ export async function resolveUploadUrl(
     };
   }
 
-  const match = normalized.match(UPLOAD_URL_RE);
+  const match = pathOnly.match(UPLOAD_URL_RE);
   if (!match) {
     throw new FilesystemError(
       `Invalid file URL: "${uploadUrl}". Expected /api/chat/uploads/{conversationId}/{filename} (user uploads) or /api/chat/{conversationId}/session-files/{path} (session files).`,
@@ -701,44 +703,11 @@ export async function resolveUploadUrl(
 export async function readMediaFromUrl(uploadUrl: string): Promise<MediaResult> {
   const { filename, resolvedPath } = await resolveUploadUrl(uploadUrl);
 
-  // Read media from the resolved file path, using the original upload URL
-  // (not the virtual root's buildMediaUrl which would produce a broken /api/media/0/... URL)
-  const stats = await fs.stat(resolvedPath);
-  if (!stats.isFile()) {
-    throw new FilesystemError(
-      `Uploaded file not found: "${filename}"`,
-      "NOT_FOUND",
-    );
-  }
-
-  const ext = path.extname(resolvedPath).toLowerCase();
-  const mimeType = MEDIA_EXTENSIONS.get(ext) ?? "application/octet-stream";
-
-  const isImage = mimeType.startsWith("image/");
-  const isVideo = mimeType.startsWith("video/");
-
-  if (!isImage && !isVideo) {
-    throw new FilesystemError(
-      `"${filename}" is not a recognised media file (unsupported extension "${ext}")`,
-      "UNSUPPORTED_MEDIA",
-    );
-  }
-
-  if (stats.size > MAX_MEDIA_SIZE) {
-    throw new FilesystemError(
-      `Media file "${filename}" is ${(stats.size / 1024 / 1024).toFixed(1)} MB — exceeds the 20 MB limit`,
-      "FILE_TOO_LARGE",
-    );
-  }
-
-  const type: "image" | "video" = isImage ? "image" : "video";
-
-  if (isImage) {
-    const dataUrl = await createImageDataUrl(resolvedPath, mimeType, stats.size);
-    return { type, filename, mimeType, size: stats.size, url: uploadUrl, dataUrl };
-  }
-
-  return { type, filename, mimeType, size: stats.size, url: uploadUrl };
+  // Read media from the resolved file path, using the original URL as the
+  // server URL (not the virtual root's buildMediaUrl which would produce a
+  // broken /api/media/0/... URL). Shares all validation (formats, 20 MB limit)
+  // with the directory-root media reader.
+  return readMediaFromResolvedPathInternal(resolvedPath, filename, uploadUrl);
 }
 
 /**

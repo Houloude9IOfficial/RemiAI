@@ -222,7 +222,9 @@ Supported: images (.jpg, .png, .gif, .webp, .svg, .avif) and videos (.mp4, .webm
       parameters: sessionFileReadMediaSchema,
       execute: async ({ path: relPath }: { path: string }) => {
         const result = await sandbox.readMedia(relPath);
-        return truncateToolResult({
+        // Intentionally NOT truncated: clipping a base64 dataUrl mid-string
+        // would produce an invalid image (same rule as the read_media tool).
+        return {
           path: relPath,
           type: result.type,
           filename: result.filename,
@@ -230,7 +232,7 @@ Supported: images (.jpg, .png, .gif, .webp, .svg, .avif) and videos (.mp4, .webm
           size: result.size,
           url: result.url,
           ...(result.dataUrl ? { dataUrl: result.dataUrl } : {}),
-        });
+        };
       },
     },
     session_file_download: {

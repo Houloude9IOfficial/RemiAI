@@ -44,11 +44,11 @@ export async function GET(
     return NextResponse.json({ error: "Missing file path" }, { status: 400 });
   }
 
-  const filePath = segments.map((s) => decodeURIComponent(s)).join("/");
   const download = new URL(req.url).searchParams.get("download") === "1";
-  const filename = filePath.split("/").pop() ?? "file";
 
   try {
+    const filePath = segments.map((s) => decodeURIComponent(s)).join("/");
+    const filename = filePath.split("/").pop() ?? "file";
     const target = await resolveSessionPath(conversationId, filePath);
 
     let stats;
