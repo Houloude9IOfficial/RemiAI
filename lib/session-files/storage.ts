@@ -1,6 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { zipSync } from "fflate";
+import {
+  readMediaFromResolvedPath,
+  type MediaResult,
+} from "@/lib/fs/access";
 
 // ---------------------------------------------------------------------------
 // Session file sandbox storage
@@ -530,6 +534,42 @@ export async function uploadSessionFile(
     size: st.size,
     mtime: st.mtime.toISOString(),
   };
+}
+
+// ---------------------------------------------------------------------------
+// URLs & media
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the canonical URL for a file inside the conversation's sandbox.
+ * These URLs are served by the /api/chat/:id/session-files/[...path] route
+ * and can be embedded in chat messages (e.g. `![diagram](/api/chat/5/session-files/assets/diagram.png)`)
+ * or passed to URL-based tools (read_file, read_media, web_fetch).
+ */
+export function buildSessionFileUrl(
+  conversationId: number,
+  relativePath: string,
+): string {
+  const normalized = normalizeSessionPath(relativePath);
+  const encoded = normalized
+    .split("/")
+    .map((s) => encodeURIComponent(s))
+    .join("/");
+  return `/api/chat/${conversationId}/session-files/${encoded}`;
+}
+
+/**
+ * Read an image/video from the session sandbox so the AI can examine it.
+ * Returns metadata + the canonical server URL, plus a base64 dataUrl for
+ * images so the model can "see" the actual content.
+ */
+export async function readSessionFileMedia(
+  conversationId: number,
+  relativePath: string,
+): Promise<MediaResult> {
+  const targetPath = await resolveSessionPath(conversationId, relativePath);
+  const url = buildSessionFileUrl(conversationId, relativePath);
+  return readMediaFromResolvedPath(targetPath, relativePath, url);
 }
 
 // ---------------------------------------------------------------------------

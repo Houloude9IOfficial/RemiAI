@@ -207,6 +207,8 @@ export async function POST(req: Request) {
     "delete_directory",
     "rename_item",
     "session_file_write",
+    "session_file_mkdir",
+    "session_file_move",
     "session_file_delete",
   ];
   const effectiveFsToolSet =

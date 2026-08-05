@@ -1,18 +1,23 @@
 import { z } from "zod";
 import fs from "node:fs/promises";
 import { truncateToolResult } from "@/lib/utils";
-import { resolveUploadUrl, UPLOAD_URL_RE } from "@/lib/fs/access";
+import {
+  resolveUploadUrl,
+  UPLOAD_URL_RE,
+  SESSION_FILE_URL_RE,
+} from "@/lib/fs/access";
 
 const WEB_FETCH_TIMEOUT_MS = 20_000;
 
 /**
- * Check if a URL is a chat upload path (either /api/chat/uploads/... or
- * http://.../api/chat/uploads/...).
+ * Check if a URL is a local chat file path (either /api/chat/uploads/... or
+ * /api/chat/{id}/session-files/... — with or without a localhost origin).
+ * These are read directly from disk instead of making an HTTP request.
  */
-function isUploadUrl(url: string): boolean {
+function isLocalChatFileUrl(url: string): boolean {
   // Strip protocol + hostname if present
   const normalized = url.replace(/^https?:\/\/[^\/]+/i, "");
-  return UPLOAD_URL_RE.test(normalized);
+  return UPLOAD_URL_RE.test(normalized) || SESSION_FILE_URL_RE.test(normalized);
 }
 
 /**
@@ -52,13 +57,13 @@ async function readUpload(url: string, maxChars: number) {
  */
 export const webFetchTool = {
   description:
-    "Fetch a specific URL and return its content as text. Use this to read web pages, REST APIs, raw text files, or any publicly accessible URL directly. Also supports chat upload URLs (e.g. `/api/chat/uploads/123/filename.txt`) — these are read directly from disk. Returns the status code, content type, and body content.",
+    "Fetch a specific URL and return its content as text. Use this to read web pages, REST APIs, raw text files, or any publicly accessible URL directly. Also supports local chat file URLs — `/api/chat/uploads/123/filename.txt` (user uploads) and `/api/chat/{conversationId}/session-files/{path}` (session sandbox files) — these are read directly from disk. Returns the status code, content type, and body content.",
   inputSchema: z.object({
     url: z
       .string()
       .min(1)
       .describe(
-        "The URL to fetch. Can be a full URL (https://...) or a path-only URL (/api/chat/uploads/...).",
+        "The URL to fetch. Can be a full URL (https://...), a chat upload URL (/api/chat/uploads/...), or a session-file URL (/api/chat/{conversationId}/session-files/{path}).",
       ),
     maxChars: z
       .number()
@@ -77,8 +82,8 @@ export const webFetchTool = {
     url: string;
     maxChars?: number;
   }) => {
-    // For upload URLs, read directly from disk instead of making an HTTP request
-    if (isUploadUrl(url)) {
+    // For local chat file URLs, read directly from disk instead of making an HTTP request
+    if (isLocalChatFileUrl(url)) {
       try {
         return await readUpload(url, maxChars);
       } catch {

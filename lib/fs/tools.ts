@@ -100,7 +100,7 @@ export const listDirectoryTool = {
  */
 export const readFileTool = {
   description:
-    "Read the text content of a file. Supports either a chat upload URL or a root file path. Max 100KB per read.\n\n**Two calling conventions:**\n1. Pass `url` for chat-uploaded files (e.g. /api/chat/uploads/123/notes.txt) — no directory root needed.\n2. Pass `rootId` + `relativePath` for files in configured directories.",
+    "Read the text content of a file. Supports a chat file URL or a root file path. Max 100KB per read.\n\n**Calling conventions:**\n1. Pass `url` for chat file URLs — user uploads (e.g. /api/chat/uploads/123/notes.txt) or session sandbox files (e.g. /api/chat/5/session-files/src/app.js) — no directory root needed.\n2. Pass `rootId` + `relativePath` for files in configured directories.",
   parameters: z
     .object({
       rootId: z
@@ -119,7 +119,7 @@ export const readFileTool = {
         .string()
         .optional()
         .describe(
-          "Upload URL for a file the user attached via the chat input (e.g. `/api/chat/uploads/123/notes.txt`). Use this instead of rootId + relativePath for uploaded files.",
+          "Chat file URL — a user upload (e.g. `/api/chat/uploads/123/notes.txt`) or a session sandbox file (e.g. `/api/chat/5/session-files/notes.txt`). Use this instead of rootId + relativePath for files tied to the chat.",
         ),
       offset: z
         .number()
@@ -144,7 +144,7 @@ export const readFileTool = {
       },
       {
         message:
-          "Either `url` (for uploaded files) or both `rootId` and `relativePath` (for directory files) are required.",
+          "Either `url` (for chat file URLs) or both `rootId` and `relativePath` (for directory files) are required.",
       },
     ),
   execute: async ({
@@ -161,7 +161,7 @@ export const readFileTool = {
     limit?: number | null;
   }) => {
     if (url) {
-      // Read from chat upload URL
+      // Read from chat file URL
       const { filename, resolvedPath } = await resolveUploadUrl(url);
       const stats = await fs.stat(resolvedPath);
       if (!stats.isFile()) {
@@ -270,7 +270,7 @@ export const globFilesTool = {
  */
 export const readMediaTool = {
   description:
-    "Read a media file from a configured directory root. For images, returns a `dataUrl` (base64 thumbnail) you can examine. For videos, returns metadata (filename, type, size) — you can also check the `url` to reference the video. **NOTE: Chat-uploaded images are ALREADY visible to you natively via your vision encoder — do NOT use this tool for those.** This tool is for reading media files from your configured directory roots (using `rootId` + `relativePath`) or for examining video metadata from chat uploads. Supported formats: images (.jpg, .png, .gif, .webp, .svg, .avif) and videos (.mp4, .webm, .mov, .avi, .mkv). Max file size: 20 MB.",
+    "Read a media file and return a `dataUrl` (base64 pixels) you can examine. **NOTE: Chat-uploaded images are ALREADY visible to you natively via your vision encoder — do NOT use this tool for those.** Use this tool for: media in configured directory roots (`rootId` + `relativePath`), session sandbox files via URL (e.g. `/api/chat/5/session-files/assets/earth.jpg`), or video metadata from chat uploads. For sandbox images, `session_file_read_media` is the more direct option. Supported formats: images (.jpg, .png, .gif, .webp, .svg, .avif) and videos (.mp4, .webm, .mov, .avi, .mkv). Max file size: 20 MB.",
   parameters: z
     .object({
       rootId: z
@@ -289,7 +289,7 @@ export const readMediaTool = {
         .string()
         .optional()
         .describe(
-          "Upload URL for a file the user attached via the chat input (e.g. `/api/chat/uploads/123/filename.png`). Use this instead of rootId + relativePath when the user sends you an image/file via markdown in their message.",
+          "Chat file URL — a user upload (e.g. `/api/chat/uploads/123/filename.png`) or a session sandbox file (e.g. `/api/chat/5/session-files/assets/earth.jpg`). Use this instead of rootId + relativePath for files tied to the chat. For sandbox images you can also use `session_file_read_media`.",
         ),
     })
     .refine(
@@ -300,7 +300,7 @@ export const readMediaTool = {
       },
       {
         message:
-          "Either `url` (for uploaded files) or both `rootId` and `relativePath` (for directory files) are required.",
+          "Either `url` (for chat file URLs) or both `rootId` and `relativePath` (for directory files) are required.",
       },
     ),
   execute: async ({
@@ -313,7 +313,7 @@ export const readMediaTool = {
     url?: string;
   }) => {
     if (url) {
-      // Read from chat upload URL
+      // Read from chat file URL
       return await readMediaFromUrl(url);
     }
     if (!rootId || !relativePath) {

@@ -15,6 +15,7 @@ import {
   FolderOpen,
   Laptop,
   CircleDot,
+  GitCommitHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -561,7 +562,7 @@ export function ChatInput({
           <Laptop className="h-3 w-3 shrink-0" />
           <span className="truncate">{modeLabel} mode</span>
           <span className="text-border">·</span>
-          <CircleDot className="h-3 w-3 shrink-0" />
+          <GitCommitHorizontal className="h-3 w-3 shrink-0" />
           <span className="tabular-nums">{appVersion}</span>
         </div>
       )}

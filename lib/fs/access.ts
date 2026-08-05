@@ -590,31 +590,75 @@ export const UPLOAD_BASE = path.join(process.cwd(), "data", "uploads");
 export const UPLOAD_URL_RE = /^\/api\/chat\/uploads\/(\d+)\/(.+)$/;
 
 /**
- * Result of parsing a chat upload URL.
+ * Regex to match session-file URLs: /api/chat/{conversationId}/session-files/{path}
+ *
+ * These point into a conversation's private session sandbox
+ * (data/session-files/{conversationId}/{path}) and are served by the
+ * /api/chat/:id/session-files/[...path] route. The {path} part may include
+ * subdirectories, e.g. /api/chat/5/session-files/assets/img/logo.png.
+ */
+export const SESSION_FILE_URL_RE = /^\/api\/chat\/(\d+)\/session-files\/(.+)$/;
+
+/**
+ * Result of parsing a chat file URL (either a user upload or a session file).
  */
 export type UploadUrlResult = {
   conversationId: string;
+  /**
+   * For uploads: the uploaded filename. For session files: the relative
+   * path inside the conversation's session sandbox (forward slashes).
+   */
   filename: string;
   resolvedPath: string;
+  /** Which URL scheme this URL matched. */
+  kind: "upload" | "session-file";
 };
 
 /**
- * Parse and validate a chat upload URL.
+ * Parse and validate a chat file URL.
  *
- * Accepts URLs like `/api/chat/uploads/123/uuid_filename.pdf` or
- * `http://localhost:3000/api/chat/uploads/123/uuid_filename.pdf` and
- * resolves the file path on disk with path-traversal protection.
+ * Accepts two URL schemes and resolves the file path on disk with
+ * path-traversal protection:
+ *
+ * 1. Uploads — `/api/chat/uploads/{conversationId}/{filename}` (or with a
+ *    localhost origin prefix) → `data/uploads/{conversationId}/{filename}`
+ * 2. Session files — `/api/chat/{conversationId}/session-files/{path}` →
+ *    `data/session-files/{conversationId}/{path}` (resolved through the
+ *    session sandbox's own containment checks)
  *
  * Does NOT check that the file exists — only validates and resolves the path.
  */
-export async function resolveUploadUrl(uploadUrl: string): Promise<UploadUrlResult> {
+export async function resolveUploadUrl(
+  uploadUrl: string,
+): Promise<UploadUrlResult> {
   // Normalize: strip protocol + hostname if present (e.g. http://localhost:3000)
   const normalized = uploadUrl.replace(/^https?:\/\/[^\/]+/i, "");
+
+  // Session-file URLs first — resolved through the sandbox's own path
+  // resolution (traversal + symlink containment checks). Lazy dynamic import
+  // keeps this module cycle-free (storage.ts imports readMediaFromResolvedPath
+  // from this file).
+  const sessionMatch = normalized.match(SESSION_FILE_URL_RE);
+  if (sessionMatch) {
+    const conversationId = sessionMatch[1];
+    const filePath = decodeURIComponent(sessionMatch[2]);
+    const { resolveSessionPath } = await import("@/lib/session-files/storage");
+    const resolvedPath = await resolveSessionPath(
+      Number(conversationId),
+      filePath,
+    );
+    return {
+      conversationId,
+      filename: filePath,
+      resolvedPath,
+      kind: "session-file",
+    };
+  }
 
   const match = normalized.match(UPLOAD_URL_RE);
   if (!match) {
     throw new FilesystemError(
-      `Invalid upload URL: "${uploadUrl}". Expected format: /api/chat/uploads/{conversationId}/{filename}`,
+      `Invalid file URL: "${uploadUrl}". Expected /api/chat/uploads/{conversationId}/{filename} (user uploads) or /api/chat/{conversationId}/session-files/{path} (session files).`,
       "INVALID_URL",
     );
   }
@@ -642,7 +686,7 @@ export async function resolveUploadUrl(uploadUrl: string): Promise<UploadUrlResu
     );
   }
 
-  return { conversationId, filename, resolvedPath };
+  return { conversationId, filename, resolvedPath, kind: "upload" };
 }
 
 /**
@@ -698,13 +742,14 @@ export async function readMediaFromUrl(uploadUrl: string): Promise<MediaResult> 
 }
 
 /**
- * Internal: read media from a resolved file path.
- * Used by both readMedia (root + relativePath) and readMediaFromUrl (URL).
+ * Core media-reading logic for an already-resolved absolute file path.
+ * Returns metadata + a server URL plus a base64 dataUrl for images so the
+ * model can "see" the content.
  */
-async function readMediaFromPath(
+async function readMediaFromResolvedPathInternal(
   targetPath: string,
-  root: PermittedRoot,
   displayPath: string,
+  url: string,
 ): Promise<MediaResult> {
   const stats = await fs.stat(targetPath);
   if (!stats.isFile()) {
@@ -739,15 +784,40 @@ async function readMediaFromPath(
   const filename = path.basename(targetPath);
   const type: "image" | "video" = isImage ? "image" : "video";
 
-  // Build a server URL that the UI can fetch for the full-resolution file
-  const url = await buildMediaUrl(root, displayPath, filename);
-
   if (isImage) {
     const dataUrl = await createImageDataUrl(targetPath, mimeType, stats.size);
     return { type, filename, mimeType, size: stats.size, url, dataUrl };
   }
 
   return { type, filename, mimeType, size: stats.size, url };
+}
+
+/**
+ * Read media from an already-resolved absolute path with an explicit server
+ * URL. Used by the session-file sandbox (files live outside the permitted
+ * directory roots), so callers pass the canonical /api/chat/{id}/session-files/... URL.
+ */
+export async function readMediaFromResolvedPath(
+  targetPath: string,
+  displayPath: string,
+  url: string,
+): Promise<MediaResult> {
+  return readMediaFromResolvedPathInternal(targetPath, displayPath, url);
+}
+
+/**
+ * Internal: read media from a resolved file path.
+ * Used by both readMedia (root + relativePath) and readMediaFromUrl (URL).
+ */
+async function readMediaFromPath(
+  targetPath: string,
+  root: PermittedRoot,
+  displayPath: string,
+): Promise<MediaResult> {
+  const filename = path.basename(targetPath);
+  // Build a server URL that the UI can fetch for the full-resolution file
+  const url = await buildMediaUrl(root, displayPath, filename);
+  return readMediaFromResolvedPathInternal(targetPath, displayPath, url);
 }
 
 /**

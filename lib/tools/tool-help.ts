@@ -611,11 +611,21 @@ Every conversation has its own private **session files** sandbox. Files you crea
 ### Tools
 | Tool | Parameters | Purpose |
 |---|---|---|
-| \`session_file_list\` | \`path\` (optional) | List files in the conversation's sandbox. |
+| \`session_file_list\` | \`path\` (optional) | List files in the conversation's sandbox (each entry includes its \`url\`). |
 | \`session_file_read\` | \`path\`, \`offset\`, \`limit\` (optional) | Read a file's text content (max 1 MB per read). |
+| \`session_file_read_media\` | \`path\` | Inspect an image/video in the sandbox — returns the actual pixels as a data URL. |
 | \`session_file_write\` | \`path\`, \`content\`, \`mode\` (overwrite/append) | Create or modify a file. Creates parent folders automatically. |
+| \`session_file_mkdir\` | \`path\` | Create an empty folder (rarely needed — writes create folders automatically). |
+| \`session_file_move\` | \`from\`, \`to\` | Rename or move a file/folder within the sandbox. |
+| \`session_file_download\` | \`path\` | Get a download link for a single file; present it as a markdown link. |
 | \`session_file_delete\` | \`path\` | Permanently delete a file or folder. |
 | \`session_present_files\` | \`paths\` (optional), \`message\` (optional) | Open the file panel so the user can view/download the files. |
+
+### File URLs — referencing sandbox files in the chat
+Every sandbox file has a canonical URL: **\`/api/chat/{conversationId}/session-files/{path}\`** (e.g. \`/api/chat/5/session-files/assets/earth.jpg\`). The list/present results include these URLs. Use them to:
+- **Show images** in your reply: \`![earth.jpg](/api/chat/5/session-files/assets/earth.jpg)\`
+- **Link files** for the user to open/download: \`[report.pdf](/api/chat/5/session-files/output/report.pdf?download=1)\`
+- **Read files with URL-based tools**: \`read_file({ url })\`, \`read_media({ url })\`, \`read_document({ url })\`, \`web_fetch({ url })\` all accept these URLs (read directly from disk).
 
 ### Workflow — generating a website
 1. \`session_file_write({ path: "index.html", content: "..." })\` — repeat for each file (styles.css, app.js, ...).

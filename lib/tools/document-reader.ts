@@ -147,8 +147,8 @@ Max file size: 50 MB.
 
 For images within documents (scanned PDFs), this tool extracts any embedded text but cannot perform OCR. If the document is scanned images, the user will need OCR software.
 
-**Two calling conventions:**
-1. Pass \`url\` for chat-uploaded files (e.g. /api/chat/uploads/123/report.pdf) — no directory root needed.
+**Calling conventions:**
+1. Pass \`url\` for chat file URLs — user uploads (e.g. /api/chat/uploads/123/report.pdf) or session sandbox files (e.g. /api/chat/5/session-files/output/report.pdf) — no directory root needed.
 2. Pass \`rootId\` + \`relativePath\` for files in configured directories.`,
   parameters: z
     .object({
@@ -170,7 +170,7 @@ For images within documents (scanned PDFs), this tool extracts any embedded text
         .string()
         .optional()
         .describe(
-          "Upload URL for a file the user attached via the chat input (e.g. `/api/chat/uploads/123/report.pdf`). Use this instead of rootId + relativePath for uploaded files.",
+          "Chat file URL — a user upload (e.g. `/api/chat/uploads/123/report.pdf`) or a session sandbox file (e.g. `/api/chat/5/session-files/report.pdf`). Use this instead of rootId + relativePath for files tied to the chat.",
         ),
     })
     .refine(
