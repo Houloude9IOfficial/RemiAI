@@ -93,7 +93,7 @@ Descriptions: A tool (togglable) that allows the AI with javascript to create ro
 
 Make file manager render media too, audio, video, images, etc... -->
 
-Make files uploaded in a chat, to automatically be added /shown to the file manager for that chat, and allow the AI to access them. Save in a folder in session files called 'uploads' and allow the AI to access them. Also allow the user to manage them in the file manager (already done).
+<!-- Make files uploaded in a chat, to automatically be added /shown to the file manager for that chat, and allow the AI to access them. Save in a folder in session files called 'uploads' and allow the AI to access them. Also allow the user to manage them in the file manager (already done). -->
 
 on new chat, make after ai's first response, to do a quick request to an ai with the 2 messages in the chat & generate a quick title for the chat, e.g 'Particle Engine Error Fix'. All in bg, not in user's side, so he can leave.
 
