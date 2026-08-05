@@ -446,15 +446,15 @@
 
 /* Links */
 .markdown-body a {
-  color: oklch(0.49 0.16 265.76);
+  color: oklch(0.41 0.15 265.76);
   text-decoration: underline;
   text-underline-offset: 2px;
   text-decoration-thickness: 1px;
-  text-decoration-color: oklch(0.49 0.16 265.76 / 0.3);
+  text-decoration-color: oklch(0.41 0.15 265.76 / 0.3);
   transition: text-decoration-color 0.15s ease;
 }
 .markdown-body a:hover {
-  text-decoration-color: oklch(0.49 0.16 265.76);
+  text-decoration-color: oklch(0.41 0.15 265.76);
 }
 
 /* Images inside markdown */
