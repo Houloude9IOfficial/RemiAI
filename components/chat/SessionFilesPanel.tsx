@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { motion } from "framer-motion";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -280,6 +281,140 @@ export function SessionFilesPanel({
         )}
       </div>
     </div>
+  );
+}
+
+// ── Resizable wrapper (desktop) ────────────────────────────────────────────
+// Adds a draggable handle to the panel's left edge so the user can resize it.
+// The width is clamped to sane bounds, persisted to localStorage, and resets
+// to the default width on double-click (or Home/End via keyboard).
+
+const PANEL_MIN_WIDTH = 280;
+const PANEL_MAX_WIDTH = 640;
+const PANEL_DEFAULT_WIDTH = 384;
+const PANEL_WIDTH_KEY = "session-files-panel-width";
+const PANEL_RESIZE_STEP = 16;
+
+function clampPanelWidth(value: number) {
+  // Never let the panel swallow more than ~60% of the viewport, so the chat
+  // column keeps a usable minimum on smaller screens.
+  const viewportMax =
+    (typeof window !== "undefined" ? window.innerWidth : PANEL_MAX_WIDTH) * 0.6;
+  const max = Math.min(PANEL_MAX_WIDTH, Math.max(PANEL_MIN_WIDTH, viewportMax));
+  return Math.min(max, Math.max(PANEL_MIN_WIDTH, value));
+}
+
+export function ResizableSessionFilesPanel({
+  conversationId,
+  onClose,
+  focusPath,
+}: {
+  conversationId: number;
+  onClose: () => void;
+  focusPath?: string | null;
+}) {
+  // This wrapper only mounts client-side (the panel renders when `panelOpen`
+  // is true), so it's safe to read localStorage directly in the initializer —
+  // no SSR/hydration mismatch possible.
+  const [width, setWidth] = useState(() => {
+    try {
+      const stored = Number(window.localStorage.getItem(PANEL_WIDTH_KEY));
+      return Number.isFinite(stored) ? clampPanelWidth(stored) : PANEL_DEFAULT_WIDTH;
+    } catch {
+      // localStorage unavailable — keep default
+      return PANEL_DEFAULT_WIDTH;
+    }
+  });
+  const [isResizing, setIsResizing] = useState(false);
+  const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
+
+  // Persist width changes across sessions (same pattern as sidebar/theme prefs).
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(PANEL_WIDTH_KEY, String(Math.round(width)));
+    } catch {
+      // localStorage unavailable — ignore
+    }
+  }, [width]);
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragRef.current = { startX: e.clientX, startWidth: width };
+    setIsResizing(true);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragRef.current) return;
+    const delta = e.clientX - dragRef.current.startX;
+    setWidth(clampPanelWidth(dragRef.current.startWidth - delta));
+  };
+
+  const handlePointerUp = () => {
+    if (!dragRef.current) return;
+    dragRef.current = null;
+    setIsResizing(false);
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+  };
+
+  return (
+    <motion.div
+      initial={{ width: 0, opacity: 0 }}
+      animate={{ width, opacity: 1 }}
+      exit={{ width: 0, opacity: 0 }}
+      transition={
+        isResizing ? { duration: 0 } : { duration: 0.22, ease: "easeOut" }
+      }
+      className="relative hidden h-full shrink-0 overflow-hidden md:block"
+    >
+      {/* Drag handle — sits on the panel's left edge */}
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize session files panel"
+        title="Drag to resize · double-click to reset"
+        tabIndex={0}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        onDoubleClick={() => setWidth(PANEL_DEFAULT_WIDTH)}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowLeft") {
+            e.preventDefault();
+            setWidth((w) => clampPanelWidth(w - PANEL_RESIZE_STEP));
+          } else if (e.key === "ArrowRight") {
+            e.preventDefault();
+            setWidth((w) => clampPanelWidth(w + PANEL_RESIZE_STEP));
+          } else if (e.key === "Home") {
+            e.preventDefault();
+            setWidth(PANEL_MIN_WIDTH);
+          } else if (e.key === "End") {
+            e.preventDefault();
+            setWidth(clampPanelWidth(PANEL_MAX_WIDTH));
+          }
+        }}
+        className="group absolute inset-y-0 left-0 z-10 flex w-2 cursor-col-resize touch-none items-stretch justify-center select-none focus:outline-none"
+      >
+        <div
+          className={cn(
+            "my-1.5 w-0.5 rounded-full transition-colors duration-150",
+            isResizing
+              ? "bg-primary/60"
+              : "bg-transparent group-hover:bg-border group-focus-visible:bg-border",
+          )}
+        />
+      </div>
+
+      <SessionFilesPanel
+        conversationId={conversationId}
+        onClose={onClose}
+        focusPath={focusPath}
+      />
+    </motion.div>
   );
 }
 

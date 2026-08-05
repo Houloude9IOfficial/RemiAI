@@ -103,6 +103,6 @@ Make on start of new chat, to remove suggestions, move chat input as a bigger in
 
 if an AI request fails, retry up to 3 times before erroring out.
 
-allow resizing the session files panel.
+<!-- allow resizing the session files panel. -->
 
 when there're too many tool calls in a row make them all into a group instead, not multiple calls/group of calls. But only for calls in a row without text in between.

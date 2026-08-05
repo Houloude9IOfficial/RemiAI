@@ -14,7 +14,10 @@ import { ModelPicker } from "@/components/chat/ModelPicker";
 import { TodoProgressBar } from "@/components/chat/TodoProgressBar";
 import { ExportDialog } from "@/components/chat/ExportDialog";
 import { MobileChatHeader, DesktopChatHeader } from "@/components/chat/MobileChatHeader";
-import { SessionFilesPanel } from "@/components/chat/SessionFilesPanel";
+import {
+  SessionFilesPanel,
+  ResizableSessionFilesPanel,
+} from "@/components/chat/SessionFilesPanel";
 import { ErrorCard } from "@/components/ui/error-card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -706,22 +709,14 @@ function ConversationChat({
           </div>
         </div>
 
-        {/* Desktop — inline right-side panel */}
+        {/* Desktop — inline right-side panel (user-resizable width) */}
         <AnimatePresence>
           {panelOpen && (
-            <motion.div
-              initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 384, opacity: 1 }}
-              exit={{ width: 0, opacity: 0 }}
-              transition={{ duration: 0.22, ease: "easeOut" }}
-              className="hidden h-full shrink-0 overflow-hidden md:block"
-            >
-              <SessionFilesPanel
-                conversationId={conversationId}
-                onClose={closePanel}
-                focusPath={panelFocusPath}
-              />
-            </motion.div>
+            <ResizableSessionFilesPanel
+              conversationId={conversationId}
+              onClose={closePanel}
+              focusPath={panelFocusPath}
+            />
           )}
         </AnimatePresence>
 
