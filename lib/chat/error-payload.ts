@@ -23,7 +23,7 @@ export interface StreamErrorPayload {
   shouldResume: boolean;
 }
 
-const STREAM_ERROR_PREFIX = "RMERR_JSON:";
+export const STREAM_ERROR_PREFIX = "RMERR_JSON:";
 
 const TIMEOUT_RE =
   /\b(timeout|timed out|etimedout|request timeout|deadline exceeded|read timeout|connect timeout)\b/i;

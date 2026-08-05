@@ -280,7 +280,7 @@ export function MessageBubble({ message, isStreaming }: { message: UIMessage; is
   const hasAnyContent = segments.length > 0;
 
   // If nothing to render yet, show a streaming placeholder.
-  if (!hasAnyContent) {
+  if (!hasAnyContent && isStreaming) {
     return (
       <div className="flex items-center gap-2 text-xs text-muted-foreground/70">
         <div className="flex h-3 w-3 items-center justify-center">

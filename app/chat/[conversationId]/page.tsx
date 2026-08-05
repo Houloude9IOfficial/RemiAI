@@ -342,6 +342,14 @@ function ConversationChat({
     },
   });
 
+  // Keep the latest message list available to the retryable closure without
+  // putting the (constantly changing) `messages` array in the effect deps:
+  // editing the deps array LENGTH under Fast Refresh makes React throw
+  // ("changed size between renders"), and a live messages dep would also
+  // re-register the handler on every streamed chunk.
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+
   useEffect(() => {
     if (status === "submitted" || status === "streaming") {
       startStream(conversationId);
@@ -384,13 +392,44 @@ function ConversationChat({
       // If resume is not possible, bubble a clear error so the user can
       // explicitly decide to send a new message.
       if (mapped.shouldResume !== false) {
-        startStream(conversationId);
-        try {
-          await resumeStream();
-        } catch (err) {
-          endStream(conversationId);
-          throw err;
+        // Only reconnect to the live stream if the server still has one.
+        // Otherwise the AI SDK's resumeStream() silently no-ops (204 → null
+        // → early return), which makes the run appear to "just end" when the
+        // error card is cleared.
+        const streamActive = await fetch(
+          `/api/chat/${conversationId}/stream/status`,
+        )
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d) => d?.active === true)
+          .catch(() => false);
+
+        if (streamActive) {
+          startStream(conversationId);
+          try {
+            await resumeStream();
+          } catch (err) {
+            endStream(conversationId);
+            throw err;
+          }
+          return;
         }
+
+        // Nothing to continue from — tell the user instead of POSTing an
+        // empty request to /api/chat (which would 400 confusingly).
+        if (messagesRef.current.length === 0) {
+          throw new Error(
+            mapped.message ??
+              "This run cannot be continued automatically. Send a new message to try again.",
+          );
+        }
+
+        // The run already ended server-side — continue it by re-running the
+        // generation with the accumulated messages (including any partial
+        // assistant output), so the AI keeps working from where it stopped.
+        // The continuation is appended as a new assistant message.
+        clearError();
+        clearChatError();
+        sendMessage();
         return;
       }
 
@@ -407,6 +446,10 @@ function ConversationChat({
     endStream,
     conversationId,
     resumeStream,
+    clearError,
+    clearChatError,
+    sendMessage,
+    messagesRef,
   ]);
 
   const [isAiStarting, setIsAiStarting] = useState(false);
@@ -626,7 +669,7 @@ function ConversationChat({
 
       {/* ── Error ── */}
       {handlerError && (
-        <div className="px-4 pb-2">
+        <div className="mx-auto w-full max-w-3xl px-4 pb-2 md:px-6">
           <ErrorCard
             error={handlerError}
             onRetry={retry}

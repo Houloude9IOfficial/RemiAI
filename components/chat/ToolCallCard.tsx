@@ -26,6 +26,7 @@ const MINOR_TOOLS = new Set([
   "get_time_details",
   "get_device_details",
   "get_recent_memories",
+  "query_recent_changes",
   "search_memories",
   "remember",
   "get_profile",
@@ -78,6 +79,7 @@ function minorSummary(name: string, output: unknown, running: boolean): string {
       get_time_details: "Checking time…",
       get_device_details: "Checking device…",
       get_recent_memories: "Recalling memory…",
+      query_recent_changes: "Checking changes…",
       search_memories: "Searching memory…",
       remember: "Saving memory…",
       get_profile: "Checking profile…",
@@ -108,6 +110,15 @@ function minorSummary(name: string, output: unknown, running: boolean): string {
           : null;
     if (count !== null) return `Memory · ${count} result${count === 1 ? "" : "s"}`;
     return "Checked memory";
+  }
+  if (name === "query_recent_changes") {
+    const count = Array.isArray(out?.changes)
+      ? out.changes.length
+      : typeof out?.count === "number"
+        ? out.count
+        : null;
+    if (count !== null) return `Changes · ${count} result${count === 1 ? "" : "s"}`;
+    return "Checked changes";
   }
   if (name === "get_profile") return "Checked profile";
   if (name === "update_profile") return "Updated profile";
