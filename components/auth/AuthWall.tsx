@@ -78,7 +78,7 @@ export function AuthWall({ children }: { children: React.ReactNode }) {
       <div className="mb-6 text-center">
         <img src="/RemiAI.png" alt="RemiAI" className="mx-auto mb-5 h-9 w-auto dark:hidden" />
         <img src="/RemiAI-Light.png" alt="RemiAI" className="mx-auto mb-5 hidden h-9 w-auto dark:block" />
-        <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary"><LockKeyhole className="h-5 w-5" /></div>
+        {/* <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary"><LockKeyhole className="h-5 w-5" /></div> */}
         <h1 className="text-lg font-semibold">{mode === "login" ? "Sign in" : "Create your account"}</h1>
         <p className="mt-1 text-sm text-muted-foreground">{mode === "login" ? "Continue to your private RemiAI workspace." : "One account keeps your RemiAI workspace private."}</p>
       </div>
