@@ -92,6 +92,45 @@ class SafeMarkdown extends Component<
   }
 }
 
+// ── User message text — plain text, images only ────────────────────────
+
+/**
+ * Renders a user's message as plain text — no markdown formatting, so
+ * typing `**bold**` or `# heading` shows the literal characters. The
+ * only markdown honored is image syntax `![alt](url)`, which renders as
+ * an actual inline image. Uploaded-file attachments are already extracted
+ * into `AttachedFileCard`s, so any image markdown remaining here is an
+ * external (non-upload) image.
+ */
+function UserMessageText({ text }: { text: string }) {
+  // Split on image markdown so we can interleave plain text and <img>.
+  const segments = text.split(/(!\[[^\]]*\]\([^)]+\))/g);
+
+  return (
+    <div className="whitespace-pre-wrap break-words">
+      {segments.map((segment, idx) => {
+        if (!segment) return null;
+        const img = /^!\[([^\]]*)\]\(([^)]+)\)$/.exec(segment);
+        if (img) {
+          const url = img[2].trim();
+          const alt = img[1].trim();
+          return (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={idx}
+              src={url}
+              alt={alt || url}
+              loading="lazy"
+              className="my-1 block max-w-full rounded-md border border-white/20"
+            />
+          );
+        }
+        return <span key={idx}>{segment}</span>;
+      })}
+    </div>
+  );
+}
+
 // ── Streaming-aware markdown wrapper ──────────────────────────────────
 
 /**
@@ -231,20 +270,8 @@ export function MessageBubble({ message, isStreaming }: { message: UIMessage; is
               "rounded-2xl bg-primary px-3.5 py-2.5 text-[15px] leading-relaxed text-primary-foreground",
           )}
         >
-          {/* Text content (if any) */}
-          {hasText && (
-            <div
-              className={cn(
-                "[&_.markdown-body]:text-[15px] [&_.markdown-body]:leading-relaxed",
-                "[&_.markdown-body]:[color:var(--primary-foreground)]",
-                "[&_.markdown-body_img]:my-1 [&_.markdown-body_img]:rounded-md [&_.markdown-body_img]:border [&_.markdown-body_img]:border-white/20",
-                "[&_.markdown-body_a]:text-primary-foreground/80 [&_.markdown-body_a]:underline [&_.markdown-body_a]:underline-offset-2",
-                "[&_.markdown-body_p]:mb-0",
-              )}
-            >
-              <MarkdownRenderer content={cleanText} />
-            </div>
-          )}
+          {/* Text content (if any) — plain text, only images render */}
+          {hasText && <UserMessageText text={cleanText} />}
 
           {/* File attachments as polished cards */}
           {attachments.length > 0 && (

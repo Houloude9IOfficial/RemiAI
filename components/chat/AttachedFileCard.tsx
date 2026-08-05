@@ -98,7 +98,7 @@ export function AttachedFileCard({
       rel="noopener noreferrer"
       className={cn(
         "group flex items-center gap-3 rounded-xl border px-4 py-3 text-sm transition-all duration-200",
-        "hover:shadow-md hover:border-muted-foreground/20",
+        // "hover:shadow-md hover:border-muted-foreground/20",
         inUserMessage
           ? "border-white/20 bg-primary-foreground/5 text-primary-foreground"
           : "border-border/60 bg-card text-foreground shadow-sm",
