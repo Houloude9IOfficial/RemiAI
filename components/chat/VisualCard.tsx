@@ -131,10 +131,8 @@ function SvgRenderer({ content, className }: { content: string; className?: stri
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!containerRef.current) return;
-
     const container = containerRef.current;
-    container.innerHTML = "";
+    if (!container) return;
 
     try {
       const sanitized = sanitizeSvg(content);
@@ -164,8 +162,26 @@ function SvgRenderer({ content, className }: { content: string; className?: stri
       svgEl.removeAttribute("height");
       svgEl.setAttribute("width", "100%");
       svgEl.setAttribute("height", "100%");
+      // Tailwind's [&_svg] rules can't pierce a shadow root, so replicate
+      // the sizing they provided (block display + capped width) inline.
+      svgEl.style.display = "block";
+      svgEl.style.maxWidth = "100%";
+      svgEl.style.height = "auto";
       injectSvgTheme(svgEl, vars);
-      container.appendChild(svgEl);
+
+      // Render inside a shadow root so any <style> in the SVG — including the
+      // theme block injected above — is fully encapsulated. Without this, a
+      // <style> inside an inline <svg> leaks document-wide (e.g. `html, body`
+      // or `:root` rules change the whole app's font/colors). CSS custom
+      // properties still inherit across the shadow boundary, so the visual
+      // keeps its theme-awareness.
+      //
+      // NOTE: inside the shadow root the theme block's `:root`/`html`/`body`
+      // selectors match nothing (only `svg` does), which is exactly why they
+      // are harmless here. Do NOT "simplify" this back to light-DOM rendering.
+      const shadow =
+        container.shadowRoot ?? container.attachShadow({ mode: "open" });
+      shadow.replaceChildren(svgEl);
       setLoading(false);
     } catch {
       setError(true);
@@ -191,7 +207,7 @@ function SvgRenderer({ content, className }: { content: string; className?: stri
       <div
         ref={containerRef}
         className={cn(
-          "w-full bg-transparent [&_svg]:block [&_svg]:max-w-full",
+          "w-full bg-transparent",
           loading && "hidden",
           className,
         )}
