@@ -493,7 +493,7 @@ function TreeNodeRow({
               alt=""
               loading="lazy"
               decoding="async"
-              className="h-6 w-6 shrink-0 rounded-md border border-border/60 bg-background object-cover"
+              className="h-6 w-6 shrink-0 rounded-sm border border-border/60 bg-background object-cover"
             />
           ) : (
             fileIconElement(
