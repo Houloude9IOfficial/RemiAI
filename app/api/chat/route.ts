@@ -5,6 +5,7 @@ import {
   stepCountIs,
   createUIMessageStreamResponse,
   type UIMessage,
+  type UIMessageChunk,
 } from "ai";
 import { streamRegistry } from "@/lib/chat/stream-registry";
 import { periodicallyPersistMessages } from "@/lib/chat/persist-interval";
@@ -54,6 +55,16 @@ import {
   encodeStreamError,
   type StreamErrorPayload,
 } from "@/lib/chat/error-payload";
+
+// A response that ends with a commitment to take an action (e.g. "let me dig
+// deeper into the pages") while the run made ZERO tool calls is almost always
+// an interrupted run — the model intended to keep working but the generation
+// was cut short (provider truncation, dropped tool calls, or an early stop).
+// Used to detect silent stops that would otherwise look like a normal (but
+// empty) completion. Only the TAIL of the response is matched: a completed
+// reply ends with its conclusion, not with a promise to act.
+const DANGLING_ACTION_TAIL_RE =
+  /\b(let me|i'?ll|i'?m (going|about) to|gonna)\s+(also|just|first|now|then|quickly)?\s*(dig|check|look|search|fetch|find|crawl|scrape|read|pull|grab|dive|verify|confirm|explore|review|investigate|take a look|look into|see if|see what|find out|get|open|run|try|test|examine|inspect|gather|compile)\b/i;
 
 function titleFromMessage(message: UIMessage): string {
   const text = message.parts
@@ -428,24 +439,64 @@ You are currently in **Plan mode**. This means:
     system: fullSystemPrompt,
     messages: modelMessages,
     tools: Object.keys(tools).length > 0 ? tools : undefined,
+    // Ask providers for a generous output budget so low default caps don't
+    // cut the model off mid-response — the #1 cause of runs that appear to
+    // "just stop" after a partial reply. 4096 covers typical chat replies;
+    // goal mode gets a much larger budget for long autonomous runs. Kept
+    // conservative so small-context models don't reject the request.
+    maxOutputTokens: mode === "goal" ? 16_384 : 4_096,
     // Allow up to 100 steps normally (chat/plan), or 500 in goal mode
     // so the model can work autonomously until task completion
-    stopWhen: stepCountIs(mode === "goal" ? 500 : 100),
+    // stopWhen: stepCountIs(mode === "goal" ? 500 : 100), ALLOW UNLIMITED STEPS FOR NOW — let the model decide when to stop
+    stopWhen: undefined,
+    // Allow the model to call tools until it decides to stop — no hard limit
     onError: (err) => {
       capturedErrorPayload = normalizeStreamError(err);
       console.error("[stream] Provider error:", err);
     },
-    onFinish: async ({ text: outputText, usage, finishReason }) => {
-      // Treat provider/SDK hard stops as a structured step-limit style error
-      // so users understand why long autonomous runs appeared to "just stop".
-      if (finishReason === "length") {
+    onFinish: async ({ text: outputText, usage, finishReason, steps, toolCalls }) => {
+      // Treat provider/SDK hard stops as a structured "interrupted" error so
+      // users understand why a run appeared to "just stop" — and so the UI
+      // can offer a one-click Continue. Without this, these runs end with a
+      // clean finish chunk and the partial response silently sits there.
+      const runText =
+        (steps ?? [])
+          .map((step) => step.text ?? "")
+          .filter(Boolean)
+          .join("\n") || outputText || "";
+      const hasToolCalls = Array.isArray(toolCalls) && toolCalls.length > 0;
+      // Dangling-promise detection: only fire for short text-only responses.
+      // A dangling stop is a brief fragment (the reported case was ~250
+      // chars); a long completed reply that happens to close with a promise
+      // phrase would be a false positive, so keep the length gate tight.
+      const isShortTextOnly =
+        runText.length < 600 && (steps ?? []).at(-1)?.toolCalls?.length === 0;
+      const stoppedEarly =
+        // Output token limit / max steps reached, or the loop ended while
+        // tool calls were still pending.
+        finishReason === "length" ||
+        finishReason === "tool-calls" ||
+        // The model's FINAL sentence commits to an action ("let me dig
+        // deeper...") but the run ended without calling any more tools — the
+        // generation was cut short. Only the last sentence counts: a
+        // completed reply ends with its conclusion, not with a promise to act.
+        (finishReason === "stop" &&
+          isShortTextOnly &&
+          DANGLING_ACTION_TAIL_RE.test(
+            runText.slice(-240).split(/[.!?]\s+/).filter(Boolean).pop() ?? "",
+          ));
+
+      if (stoppedEarly) {
         capturedErrorPayload = {
           version: 1,
           category: "step_limit",
-          title: "Step limit reached",
+          title:
+            finishReason === "stop" ? "Remi stopped mid-task" : "Step limit reached",
           message:
-            "This run reached the configured step/token limit before completion. Continue to resume from where it stopped.",
-          technical: "finishReason=length",
+            finishReason === "stop"
+              ? "The response ended before the task was completed. Continue to resume from where it stopped."
+              : "This run reached the configured step/token limit before completion. Continue to resume from where it stopped.",
+          technical: `finishReason=${finishReason} steps=${(steps ?? []).length} toolCalls=${hasToolCalls ? toolCalls.length : 0}`,
           retryable: true,
           shouldResume: true,
         };
@@ -520,17 +571,39 @@ You are currently in **Plan mode**. This means:
 
   // Pipe the response branch through a transform that injects a structured
   // error payload for user-friendly frontend messaging.
+  //
+  // Interrupted runs (step/output limit, dangling promise, provider
+  // truncation) end with a CLEAN finish chunk — the SDK never emits an error
+  // chunk for them, so the UI would silently stop with no Continue option.
+  // We hold the terminal finish chunk and, when the run was interrupted
+  // (capturedErrorPayload was set by onFinish), emit an error chunk instead.
+  // This is race-safe: streamText's onFinish fires in the SDK's upstream
+  // consumer flush, which always completes before this transform's flush.
+  let pendingFinishChunk: UIMessageChunk | null = null;
   const enrichedBranch = responseBranch.pipeThrough(
-    new TransformStream({
+    new TransformStream<UIMessageChunk, UIMessageChunk>({
       transform(chunk, controller) {
         if (chunk.type === "error") {
           const payload = capturedErrorPayload ?? normalizeStreamError(chunk.errorText);
           controller.enqueue({
             type: "error",
             errorText: encodeStreamError(payload),
-          } as any);
+          } as UIMessageChunk);
+        } else if (chunk.type === "finish") {
+          pendingFinishChunk = chunk;
         } else {
           controller.enqueue(chunk);
+        }
+      },
+      flush(controller) {
+        if (!pendingFinishChunk) return;
+        if (capturedErrorPayload) {
+          controller.enqueue({
+            type: "error",
+            errorText: encodeStreamError(capturedErrorPayload),
+          } as UIMessageChunk);
+        } else {
+          controller.enqueue(pendingFinishChunk);
         }
       },
     }),
