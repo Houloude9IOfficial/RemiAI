@@ -553,7 +553,7 @@ export function ChatInput({
       <div className="pointer-events-none absolute inset-x-4 -top-5 z-10 h-5 bg-linear-to-b from-transparent to-background/90 md:inset-x-6" />
 
       {/* Compact context row */}
-      {attachedFiles.length > 0 && (
+      {attachedFiles.length == 0 && (
         <div className="mb-1.5 hidden items-center gap-2 px-1 text-[11px] text-muted-foreground/70 md:flex">
           <FolderOpen className="h-3 w-3 shrink-0" />
           <span className="truncate">Workspace</span>

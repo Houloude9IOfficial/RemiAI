@@ -500,58 +500,59 @@ export function ConversationList() {
                 }
               }}
             >
-              <div
-                className={cn(
-                  "group/conversation flex w-full items-center justify-start rounded-md px-2 py-1.5 text-sm text-left",
-                  isActive && !selectMode
-                    ? "bg-sidebar-accent text-sidebar-foreground"
-                    : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground",
-                  selectMode && isSelected && "bg-primary/10",
-                  selectMode && "cursor-pointer",
-                  (!selectMode) && "cursor-default",
-                )}
-                onClick={
-                  selectMode ? () => toggleSelect(conversation.id) : undefined
-                }
-              >
                   {renamingId === conversation.id ? (
                     /* ---- Inline rename input ---- */
-                    <form
-                      className="flex flex-1 items-center gap-1"
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        commitRename();
-                      }}
+                    <div
+                      className={cn(
+                        "group/conversation flex w-full items-center justify-start rounded-md px-2 py-1.5 text-sm text-left",
+                        isActive
+                          ? "bg-sidebar-accent text-sidebar-foreground"
+                          : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                      )}
                     >
-                      <Input
-                        value={renameValue}
-                        onChange={(e) => setRenameValue(e.target.value)}
-                        onBlur={commitRename}
-                        onKeyDown={(e) => {
-                          if (e.key === "Escape") cancelRename();
+                      <form
+                        className="flex flex-1 items-center gap-1"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          commitRename();
                         }}
-                        className="h-7 min-w-0 flex-1 px-1.5 text-sm"
-                        autoFocus
-                      />
-                      <button
-                        type="submit"
-                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground"
-                        tabIndex={-1}
                       >
-                        <Check className="h-3 w-3" />
-                      </button>
-                      <button
-                        type="button"
-                        className="flex h-5 w-5 shrink-0 rounded text-muted-foreground hover:text-foreground"
-                        onClick={cancelRename}
-                        tabIndex={-1}
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </form>
+                        <Input
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onBlur={commitRename}
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") cancelRename();
+                          }}
+                          className="h-7 min-w-0 flex-1 px-1.5 text-sm"
+                          autoFocus
+                        />
+                        <button
+                          type="submit"
+                          className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+                          tabIndex={-1}
+                        >
+                          <Check className="h-3 w-3" />
+                        </button>
+                        <button
+                          type="button"
+                          className="flex h-5 w-5 shrink-0 rounded text-muted-foreground hover:text-foreground"
+                          onClick={cancelRename}
+                          tabIndex={-1}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </form>
+                    </div>
                   ) : selectMode ? (
-                    /* ---- Select mode: checkbox + title ---- */
-                    <>
+                    /* ---- Select mode: whole row toggles selection ---- */
+                    <div
+                      className={cn(
+                        "group/conversation flex w-full items-center justify-start rounded-md px-2 py-1.5 text-sm text-left cursor-pointer",
+                        isSelected && "bg-primary/10",
+                      )}
+                      onClick={() => toggleSelect(conversation.id)}
+                    >
                       <div className="flex h-5 w-5 shrink-0 rounded text-muted-foreground">
                         {isSelected ? (
                           <CheckSquare className="h-4 w-4 text-primary" />
@@ -567,26 +568,29 @@ export function ConversationList() {
                       >
                         {conversation.title}
                       </span>
-                    </>
+                    </div>
                   ) : (
-                    /* ---- Normal link view with prefetch on hover ---- */
-                    <>
-                      <Link
-                        href={`/chat/${conversation.id}`}
-                        className="flex-1 truncate"
-                        onMouseEnter={() => prefetchConversation(conversation.id)}
-                        onFocus={() => prefetchConversation(conversation.id)}
-                      >
-                        {isStreaming && (
-                          <span className="inline-flex items-center mr-1.5">
-                            <span className="relative flex h-2 w-2">
-                              <span className="absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
-                              <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
-                            </span>
+                    /* ---- Normal view: the whole row is the link ---- */
+                    <Link
+                      href={`/chat/${conversation.id}`}
+                      className={cn(
+                        "group/conversation flex w-full items-center justify-start rounded-md px-2 py-1.5 text-sm text-left",
+                        isActive
+                          ? "bg-sidebar-accent text-sidebar-foreground"
+                          : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                      )}
+                      onMouseEnter={() => prefetchConversation(conversation.id)}
+                      onFocus={() => prefetchConversation(conversation.id)}
+                    >
+                      {isStreaming && (
+                        <span className="inline-flex items-center mr-1.5">
+                          <span className="relative flex h-2 w-2">
+                            <span className="absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
                           </span>
-                        )}
-                        {conversation.title}
-                      </Link>
+                        </span>
+                      )}
+                      <span className="flex-1 truncate">{conversation.title}</span>
 
                       {/* Keep only critical state icon */}
                       {isStreaming && (
@@ -594,9 +598,8 @@ export function ConversationList() {
                           <span className="h-3 w-3 rounded-full border-2 border-primary border-t-transparent animate-spin" />
                         </span>
                       )}
-                    </>
+                    </Link>
                   )}
-                </div>
             </div>
           );
               })}
