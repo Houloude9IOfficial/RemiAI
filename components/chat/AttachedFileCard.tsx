@@ -195,8 +195,11 @@ export function parseAttachments(text: string): ParsedAttachment[] {
  * leaving only the user's actual words.
  */
 export function stripAttachmentMarkdown(text: string): string {
+  // NOTE: the alternation MUST be wrapped in a group — without it, the `|`
+  // splits the whole regex and only the bare URL gets stripped, leaving
+  // `![name](` behind as visible text in the bubble.
   const urlPattern =
-    "\\/api\\/chat\\/uploads\\/[^)]+|\\/api\\/chat\\/\\d+\\/session-files\\/[^)]+";
+    "(?:\\/api\\/chat\\/uploads\\/[^)]+|\\/api\\/chat\\/\\d+\\/session-files\\/[^)]+)";
   return text
     .replace(new RegExp(`!\\[([^\\]]*)\\]\\(${urlPattern}\\)`, "g"), "")
     .replace(new RegExp(`\\[([^\\]]*)\\]\\(${urlPattern}\\)`, "g"), "")
