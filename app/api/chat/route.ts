@@ -9,7 +9,7 @@ import {
 } from "ai";
 import { streamRegistry } from "@/lib/chat/stream-registry";
 import { periodicallyPersistMessages } from "@/lib/chat/persist-interval";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, count } from "drizzle-orm";
 import { db } from "@/db";
 import {
   conversations,
@@ -17,10 +17,12 @@ import {
   mcpServers,
   userPreferences,
   memories,
+  messages,
 } from "@/db/schema";
 import { getLanguageModel } from "@/lib/providers/factory";
 import { SYSTEM_PROMPT_BASE, CREATE_VISUAL_SECTION, SESSION_FILES_SECTION } from "@/lib/chat/system-prompt";
 import { persistUIMessage } from "@/lib/chat/persist";
+import { autoTitleConversation } from "@/lib/chat/title-generator";
 import { createMcpToolsManager } from "@/lib/mcp/tools";
 import { buildFilesystemTools } from "@/lib/fs/tools";
 import { buildContextTools } from "@/lib/tools/context";
@@ -97,6 +99,9 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
+  // Captured here (after the guard) so the narrowed `string` type survives
+  // into closures like streamText's onFinish below.
+  const conversationModelId = conversation.modelId;
 
   // Read mode from the conversation in the database
   const mode = (conversation as any).mode ?? "chat";
@@ -116,6 +121,22 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
+
+  // ── First-exchange detection (for background auto-titling) ───────────
+  // A brand-new chat starts with zero persisted messages and the default
+  // "New chat" title. If that still holds at request time, the response we
+  // are about to generate is the FIRST AI response — when it completes we'll
+  // kick off a cheap background completion that turns the first two messages
+  // into a proper title (e.g. "Particle Engine Error Fix"), so the sidebar
+  // shows something meaningful even if the user already navigated away.
+  const [countRow] = await db
+    .select({ count: count() })
+    .from(messages)
+    .where(eq(messages.conversationId, conversationId))
+    .all();
+  const existingMessageCount = countRow?.count ?? 0;
+  const isFirstExchange =
+    existingMessageCount === 0 && conversation.title === "New chat";
 
   const lastMessage = uiMessages[uiMessages.length - 1];
   if (lastMessage?.role === "user") {
@@ -546,6 +567,31 @@ You are currently in **Plan mode**. This means:
         tokensApplied = true;
       } catch (err) {
         console.error("Failed to update token usage in onFinish:", err);
+      }
+
+      // ── Background auto-title ─────────────────────────────────────
+      // First AI response in a brand-new chat: fire a tiny, cheap request
+      // that reads the first user message + this reply and writes a short
+      // title to the DB. Fire-and-forget — never blocks the stream, and it
+      // keeps running server-side even after the user navigates away.
+      if (isFirstExchange && !capturedErrorPayload && runText.trim()) {
+        const firstUser = uiMessages.find((m) => m.role === "user");
+        if (firstUser) {
+          const userText = firstUser.parts
+            .filter(
+              (p): p is { type: "text"; text: string } => p.type === "text",
+            )
+            .map((p) => p.text)
+            .join(" ");
+          void autoTitleConversation({
+            conversationId,
+            provider,
+            modelId: conversationModelId,
+            userText,
+            assistantText: runText,
+            expectedTitle: titleFromMessage(firstUser),
+          });
+        }
       }
     },
   });

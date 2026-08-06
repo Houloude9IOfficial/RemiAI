@@ -297,6 +297,7 @@ function ConversationChat({
   const [mode, setMode] = useState<ChatMode>(
     (initialConversation as any).mode ?? "chat",
   );
+  const queryClient = useQueryClient();
   const [panelOpen, setPanelOpen] = useState(false);
   // When the AI presents a single file (session_present_file), the panel
   // opens straight to that file in the viewer.
@@ -355,6 +356,15 @@ function ConversationChat({
       // Small delay to ensure server-side token update completes
       // before the sidebar refetches the conversation list.
       setTimeout(() => onConversationChanged(), 500);
+      // First exchange in a brand-new chat (user + assistant only): the
+      // server generates a real AI title in the background, so refetch again
+      // shortly after to pick it up in the sidebar AND the header.
+      if (messagesRef.current.length <= 2) {
+        setTimeout(() => {
+          onConversationChanged();
+          queryClient.invalidateQueries({ queryKey: ["conversation"] });
+        }, 6_000);
+      }
       endStream(conversationId);
     },
   });

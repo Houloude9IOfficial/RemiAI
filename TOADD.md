@@ -95,8 +95,6 @@ Make file manager render media too, audio, video, images, etc... -->
 
 <!-- Make files uploaded in a chat, to automatically be added /shown to the file manager for that chat, and allow the AI to access them. Save in a folder in session files called 'uploads' and allow the AI to access them. Also allow the user to manage them in the file manager (already done). -->
 
-on new chat, make after ai's first response, to do a quick request to an ai with the 2 messages in the chat & generate a quick title for the chat, e.g 'Particle Engine Error Fix'. All in bg, not in user's side, so he can leave.
-
 <!-- make accent color configurable in profile settings. -->
 
 <!-- Make on start of new chat, to remove suggestions, move chat input as a bigger in the center & middle, keep the headline, kind of how code editors are. And on start, to smoothly move it as it is now. -->
@@ -110,3 +108,7 @@ when there're too many tool calls in a row make them all into a group instead, n
 file attaching from allowed dirs shows only top folders, but on open, it doesnt show any content inside, whether files or folders. Fix this.
 
 File manager editor is bad, not theme friendly, and on paste of text, it pastes all as one line getting outside the container, no formatting & more. Fix this.
+
+get time for ai gets the timezone from the server, not the user, and it should get the timezone from the user instead. Fix this.
+
+searching should use if possible user's location/region to get more relevant results.
