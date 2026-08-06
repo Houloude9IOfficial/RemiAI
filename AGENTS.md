@@ -98,7 +98,7 @@ This is already used in the project (e.g. `DialogClose` in
 </TooltipTrigger>
 ```
 
-## 2. Drizzle ORM — database migrations on fresh clones
+## 4. Drizzle ORM — database migrations on fresh clones
 
 SQLite databases tracked in Drizzle ORM (`better-sqlite3`) require running
 migrations to create tables. Running `npm run dev` without a prior `npm run db:migrate`
@@ -121,7 +121,7 @@ Also add a `postinstall` script in `package.json`:
 "postinstall": "drizzle-kit migrate || echo '(Migration skipped - it will run on app startup)'"
 ```
 
-## 3. Turbopack root warning (multiple lockfiles)
+## 5. Turbopack root warning (multiple lockfiles)
 
 Next.js may warn "Next.js inferred your workspace root, but it may not be
 correct" when it detects multiple lockfiles. Add `turbopack.root` to
@@ -135,7 +135,7 @@ const nextConfig: NextConfig = {
 };
 ```
 
-## 4. Windows path & command compatibility
+## 6. Windows path & command compatibility
 
 When running terminal commands on Windows:
 - Use `dir` instead of `ls`
@@ -146,7 +146,7 @@ When running terminal commands on Windows:
 - `npx` commands might fail silently; try `node node_modules/.bin/<tool>` or
   the direct `node_modules/<tool>/bin.cjs` path as a fallback
 
-## 5. Windows cross-platform compatibility
+## 7. Windows cross-platform compatibility
 
 ### Zod schema — coerce numeric IDs from strings
 
