@@ -16,5 +16,16 @@ Get-ChildItem $src -Filter "favicon*" | ForEach-Object {
     Write-Host "  ✓ $($_.Name)"
 }
 
+Get-ChildItem $src -Filter "icon-*" | ForEach-Object {
+    Copy-Item $_.FullName (Join-Path $dst $_.Name) -Force
+    Write-Host "  ✓ $($_.Name)"
+}
+
+if (Test-Path (Join-Path $src "apple-touch-icon.png")) {
+    Copy-Item (Join-Path $src "apple-touch-icon.png") (Join-Path $dst "apple-touch-icon.png") -Force
+    Write-Host "  ✓ apple-touch-icon.png"
+}
+
 Write-Host ""
+# manifest.json intentionally NOT copied: website keeps its own light-themed manifest
 Write-Host "Done! All assets copied."

@@ -20,7 +20,10 @@ const files = readdirSync(srcDir).filter(
   (f) =>
     f.startsWith("RemiAI") ||
     f.startsWith("favicon") ||
-    f === "manifest.json"
+    f.startsWith("icon-") ||
+    f.startsWith("apple-touch-icon")
+  // manifest.json intentionally NOT copied: the website keeps its own
+  // light-themed manifest (the app's is dark-themed).
 );
 
 for (const f of files) {

@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import { motion, useReducedMotion } from "framer-motion";
 import {
-  IconArrowUpRight,
   IconBrandGithub,
   IconBrain,
   IconCheck,
@@ -17,7 +16,6 @@ import {
   IconTerminal2,
 } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { GITHUB_URL, SITE_NAME } from "@/lib/constants";
 
 /* ------------------------------------------------------------------ */
@@ -261,9 +259,7 @@ function Hero() {
 
           <Reveal delay={0.08}>
             <h1 className="mt-7 text-balance text-4xl font-bold leading-[1.08] tracking-tight sm:text-6xl">
-              Your local AI assistant,
-              <br className="hidden sm:block" />{" "}
-              <span>for your own files.</span>
+              Your local AI assistant, for your own data.
             </h1>
           </Reveal>
 
@@ -386,7 +382,7 @@ function Features() {
             <Reveal key={feature.title} delay={i * 0.06}>
               <div className="group relative h-full overflow-hidden rounded-2xl border border-border bg-card p-6">
                 <div
-                  className="absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-primary/40 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+                  className="absolute inset-x-0 top-0 h-px transition-opacity duration-300 group-hover:opacity-100"
                   aria-hidden
                 />
                 {/* <div className="mb-5 inline-flex h-11 w-11 items-center justify-center rounded-xl text-accent-foreground transition-transform duration-300">
@@ -487,7 +483,7 @@ function Quickstart() {
                   "Ollama, Anthropic, OpenAI or bring your own provider",
                 ].map((item) => (
                   <li key={item} className="flex items-start gap-3">
-                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full ">
                       <IconCheck className="h-3 w-3" strokeWidth={3} />
                     </span>
                     <span className="text-sm leading-relaxed text-muted-foreground">{item}</span>
@@ -612,7 +608,7 @@ function Footer() {
         </div>
 
         <p className="text-xs text-muted-foreground/70">
-          © {year} {SITE_NAME}. Built in the open.
+          © {year} {SITE_NAME}. Built in the open by <a href="https://crickdevs.com" target="_blank" rel="noopener noreferrer" className="text-foreground hover:underline">CrickDevs&trade;</a>.
         </p>
       </div>
     </footer>

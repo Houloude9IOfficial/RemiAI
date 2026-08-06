@@ -25,9 +25,10 @@ copy "%SRC%\favicon-48x48-Light.png" "%DST%\favicon-48x48-Light.png" /Y
 copy "%SRC%\favicon-48x48-Lighter.png" "%DST%\favicon-48x48-Lighter.png" /Y
 
 echo.
-echo === Manifest ===
-copy "%SRC%\manifest.json" "%DST%\manifest.json" /Y
-
-echo.
+echo === PWA / Apple Icons ===
+copy "%SRC%\icon-192x192.png" "%DST%\icon-192x192.png" /Y
+copy "%SRC%\icon-512x512.png" "%DST%\icon-512x512.png" /Y
+copy "%SRC%\apple-touch-icon.png" "%DST%\apple-touch-icon.png" /Yecho.
 echo Done! All assets copied.
-dir "%DST%\RemiAI*" "%DST%\favicon*" "%DST%\manifest.json" 2>nul
+dir "%DST%\RemiAI*" "%DST%\favicon*" "%DST%\icon-*" "%DST%\apple-touch-icon.png" 2>nul
+rem manifest.json intentionally NOT copied: website keeps its own light-themed manifest
