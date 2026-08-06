@@ -50,12 +50,17 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     id: "session_files",
     name: "Session Files",
     description:
-      "A private file sandbox scoped to the current conversation. The AI can create, read, list, and delete files (websites, scripts, documents) that the user can view in a side panel and download as a .zip archive.",
+      "A private file sandbox scoped to the current conversation. The AI can create, read, list, inspect media, move, download-link, and delete files (websites, scripts, documents) that the user can view in a side panel and download as a .zip archive. Every file has a canonical /api/chat/{conversationId}/session-files/{path} URL.",
     toolNames: [
       "session_file_list",
       "session_file_read",
+      "session_file_read_media",
       "session_file_write",
+      "session_file_mkdir",
+      "session_file_move",
+      "session_file_download",
       "session_file_delete",
+      "session_present_file",
       "session_present_files",
     ],
     category: "builtin",

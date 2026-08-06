@@ -1,8 +1,11 @@
 {
   "name": "remiai",
-  "description": "Local AI assistant designed to help you interact with your files, run searches, and connect to external tools (MCP servers).",
-  "version": "1.5.0",
-  "author": "CrickDevs",
+  "description": "RemiAI is a self-hosted, privacy-first AI assistant that brings chat, file management, web search, and automation together in one extensible workspacemo fully under your control.",
+  "version": "2.0.0",
+  "author": {
+    "name": "CrickDevs",
+    "email": "support@crickdevs.com"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",

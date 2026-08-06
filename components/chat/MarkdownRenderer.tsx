@@ -19,6 +19,13 @@ interface MarkdownRendererProps {
  * When `isStreaming` is true, copy buttons on code blocks are hidden.
  */
 export function MarkdownRenderer({ content, className, isStreaming }: MarkdownRendererProps) {
+  // While streaming, the caller injects raw HTML (animated <span>s) that must
+  // be parsed. Once streaming is done, escape raw HTML outside of code fences
+  // so stray JSX/HTML in message content renders as literal text instead of
+  // being parsed into DOM nodes — which produced invalid-nesting warnings and
+  // React 19 string-ref crashes in the past.
+  const safeContent = isStreaming ? content : escapeRawHtml(content);
+
   return (
     <div className={cn("markdown-body relative text-sm", className)}>
       <Markdown
@@ -188,11 +195,72 @@ export function MarkdownRenderer({ content, className, isStreaming }: MarkdownRe
           },
         }}
       >
-        {content}
+        {safeContent}
       </Markdown>
 
     </div>
   );
+}
+
+/**
+ * Escapes `<` characters outside of fenced code blocks and inline code spans
+ * so raw HTML/JSX in message content is displayed as literal text instead of
+ * being parsed as DOM elements by markdown-to-jsx.
+ *
+ * markdown-to-jsx parses raw HTML by design (including custom tags like
+ * `<MessageBubble>`). When an assistant message contains unfenced
+ * JSX/component source code, that parsing produces:
+ *  - "X is using incorrect casing" / "unrecognized in this browser" warnings
+ *  - invalid nesting warnings (`<div>` inside `<p>`, nested `<p>`)
+ *  - "React does not recognize the `prop` prop on a DOM element" warnings
+ *  - "Expected ref to be a function..." crashes (React 19 string refs)
+ *
+ * Fenced code blocks and inline code are preserved verbatim — the markdown
+ * renderer already escapes those, so re-escaping them here would corrupt them.
+ */
+function escapeRawHtml(text: string): string {
+  const lines = text.split("\n");
+  let inFence = false;
+  const out = lines.map((line) => {
+    // Also matches blockquote-prefixed fences (e.g. `> ```js`)
+    const fence = /^\s*(>\s?)*(```|~~~)/.exec(line)?.[2];
+    if (fence) {
+      inFence = !inFence;
+      return line; // Keep the fence marker as-is
+    }
+    if (inFence) return line; // Code — already escaped by the renderer
+    return escapeInlineCode(line);
+  });
+  return out.join("\n");
+}
+
+/** Escapes `<` outside of inline code spans (backtick runs) on a single line. */
+function escapeInlineCode(line: string): string {
+  let out = "";
+  let i = 0;
+  while (i < line.length) {
+    if (line[i] === "`") {
+      // Copy the code span verbatim (find the closing run of the same length)
+      let j = i + 1;
+      while (j < line.length && line[j] === "`") j++;
+      const run = line.slice(i, j);
+      const close = line.indexOf(run, j);
+      if (close === -1) {
+        // Unterminated backtick — treat the rest as literal text
+        out += line.slice(i);
+        return out;
+      }
+      out += line.slice(i, close + run.length);
+      i = close + run.length;
+    } else if (line[i] === "<") {
+      out += "&lt;";
+      i++;
+    } else {
+      out += line[i];
+      i++;
+    }
+  }
+  return out;
 }
 
 /**

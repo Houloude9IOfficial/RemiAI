@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import path from "node:path";
 import fs from "node:fs/promises";
 import crypto from "node:crypto";
+import { AVATAR_DIR } from "@/lib/paths";
 
 // Store avatars in a dedicated directory
-const AVATAR_DIR = path.join(process.cwd(), "data", "avatars");
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];

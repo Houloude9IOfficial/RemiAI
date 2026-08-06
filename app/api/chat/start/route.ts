@@ -15,41 +15,7 @@ import { queryRecentChanges } from "@/lib/fs/file-index";
 import { periodicallyPersistMessages } from "@/lib/chat/persist-interval";
 import { streamRegistry } from "@/lib/chat/stream-registry";
 import { estimateTokenCount } from "@/lib/utils";
-
-/**
- * Returns structured time/date details (same as the get_time_details tool).
- */
-function getTimeDetails(): Record<string, unknown> {
-  const now = new Date();
-  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const offsetMinutes = -now.getTimezoneOffset();
-  const offsetHours = Math.floor(Math.abs(offsetMinutes) / 60);
-  const offsetMins = Math.abs(offsetMinutes) % 60;
-  const offsetSign = offsetMinutes >= 0 ? "+" : "-";
-  const offsetStr = `UTC${offsetSign}${String(offsetHours).padStart(2, "0")}:${String(offsetMins).padStart(2, "0")}`;
-
-  const days = [
-    "Sunday", "Monday", "Tuesday", "Wednesday",
-    "Thursday", "Friday", "Saturday",
-  ];
-  const months = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December",
-  ];
-
-  return {
-    iso: now.toISOString(),
-    date: `${days[now.getDay()]}, ${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`,
-    time: now.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true }),
-    time24h: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`,
-    timezone: tz,
-    utcOffset: offsetStr,
-    weekday: days[now.getDay()],
-    dayOfMonth: now.getDate(),
-    month: months[now.getMonth()],
-    year: now.getFullYear(),
-  };
-}
+import { getTimeDetails } from "@/lib/time";
 
 export async function POST(req: Request) {
   const { conversationId } = (await req.json()) as {
@@ -92,8 +58,11 @@ export async function POST(req: Request) {
 
   // ── Pre-gather ALL context server-side ──────────────────────────
 
-  // 1. Time details
-  const timeDetails = getTimeDetails();
+  // 1. Time details — computed in the USER'S timezone (sent by the browser)
+  // so the greeting (e.g. "Good evening") reflects the user's local time.
+  const timeDetails = getTimeDetails(
+    req.headers.get("x-user-timezone") ?? undefined,
+  );
   const timeContext =
     `## Current date & time\n` +
     `Date: ${timeDetails.date}\n` +
@@ -205,6 +174,8 @@ ${timeContext}${userPrefsContext}${userProfileContext}${memoryContext}${fileChan
     messages: [{ role: "user", content: "Go ahead and start the conversation." }],
     tools,
     stopWhen: stepCountIs(100),
+    // Retry retryable provider failures up to 3 times before erroring out.
+    maxRetries: 3,
     onFinish: async ({ text: outputText, usage }) => {
       // Derive a meaningful title from the AI's greeting
       const title = outputText

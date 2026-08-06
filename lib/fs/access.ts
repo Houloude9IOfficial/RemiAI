@@ -1,9 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import type { Dirent } from "node:fs";
 import { spawnSync } from "node:child_process";
 import Fuse from "fuse.js";
 import { db } from "@/db";
 import { directories } from "@/db/schema";
+import { UPLOAD_DIR } from "@/lib/paths";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -79,15 +81,19 @@ export async function getRootById(id: number): Promise<PermittedRoot> {
   const roots = await getPermittedRoots();
   const root = roots.find((r) => r.id === numericId);
   if (!root) {
+    // Only list roots the model can actually use — the same filter applied by
+    // `list_permitted_roots`. Presenting locked roots as "available" here would
+    // contradict that tool and invite the model to attempt denied accesses.
+    const accessible = roots.filter((r) => r.canRead || r.canWrite);
     const available =
-      roots.length > 0
-        ? roots
+      accessible.length > 0
+        ? accessible
             .map(
               (r) =>
                 `${r.id} (${r.label}, ${r.canWrite ? "writable" : "read-only"})`,
             )
             .join(", ")
-        : "none configured";
+        : "none that you can access";
     throw new FilesystemError(
       `Root directory ${id} not found. Available roots: ${available}. Make sure to pass one of the numeric ids above (e.g. rootId=1) — the AI must send the number, not a string like rootId="1". Only roots marked "writable" support write_file. On macOS, temp/screenshot files under /var/folders/... are NOT inside any configured root — either add that directory in Settings > Directories, or copy/move the file into an existing root.`,
       "NOT_FOUND",
@@ -225,7 +231,25 @@ export async function listDirectory(
   assertCanRead(root);
   const targetPath = await resolvePath(root, relativePath);
 
-  const entries = await fs.readdir(targetPath, { withFileTypes: true });
+  let entries: Dirent[];
+  try {
+    entries = await fs.readdir(targetPath, { withFileTypes: true });
+  } catch (err) {
+    const code =
+      err && typeof err === "object" && "code" in err
+        ? (err as { code?: unknown }).code
+        : undefined;
+    if (code === "ENOENT") {
+      // The root path is configured but doesn't exist on this machine (e.g. a
+      // Docker-container path like /app/data/... while running locally). Give
+      // the model a clear, actionable explanation instead of a raw ENOENT.
+      throw new FilesystemError(
+        `Directory not found: "${targetPath}" (configured root "${root.label}"). The path may have been moved, renamed, or never created — check Settings > Directories and make sure the path exists on this machine.`,
+        "NOT_FOUND",
+      );
+    }
+    throw err;
+  }
   const results: FileEntry[] = [];
 
   for (const entry of entries) {
@@ -582,7 +606,7 @@ export async function readMedia(
 /**
  * Upload base directory — matches app/api/chat/upload/route.ts
  */
-export const UPLOAD_BASE = path.join(process.cwd(), "data", "uploads");
+export const UPLOAD_BASE = UPLOAD_DIR;
 
 /**
  * Regex to match uploaded file URLs: /api/chat/uploads/{conversationId}/{filename}
@@ -590,31 +614,77 @@ export const UPLOAD_BASE = path.join(process.cwd(), "data", "uploads");
 export const UPLOAD_URL_RE = /^\/api\/chat\/uploads\/(\d+)\/(.+)$/;
 
 /**
- * Result of parsing a chat upload URL.
+ * Regex to match session-file URLs: /api/chat/{conversationId}/session-files/{path}
+ *
+ * These point into a conversation's private session sandbox
+ * (data/session-files/{conversationId}/{path}) and are served by the
+ * /api/chat/:id/session-files/[...path] route. The {path} part may include
+ * subdirectories, e.g. /api/chat/5/session-files/assets/img/logo.png.
+ */
+export const SESSION_FILE_URL_RE = /^\/api\/chat\/(\d+)\/session-files\/(.+)$/;
+
+/**
+ * Result of parsing a chat file URL (either a user upload or a session file).
  */
 export type UploadUrlResult = {
   conversationId: string;
+  /**
+   * For uploads: the uploaded filename. For session files: the relative
+   * path inside the conversation's session sandbox (forward slashes).
+   */
   filename: string;
   resolvedPath: string;
+  /** Which URL scheme this URL matched. */
+  kind: "upload" | "session-file";
 };
 
 /**
- * Parse and validate a chat upload URL.
+ * Parse and validate a chat file URL.
  *
- * Accepts URLs like `/api/chat/uploads/123/uuid_filename.pdf` or
- * `http://localhost:3000/api/chat/uploads/123/uuid_filename.pdf` and
- * resolves the file path on disk with path-traversal protection.
+ * Accepts two URL schemes and resolves the file path on disk with
+ * path-traversal protection:
+ *
+ * 1. Uploads — `/api/chat/uploads/{conversationId}/{filename}` (or with a
+ *    localhost origin prefix) → `data/uploads/{conversationId}/{filename}`
+ * 2. Session files — `/api/chat/{conversationId}/session-files/{path}` →
+ *    `data/session-files/{conversationId}/{path}` (resolved through the
+ *    session sandbox's own containment checks)
  *
  * Does NOT check that the file exists — only validates and resolves the path.
  */
-export async function resolveUploadUrl(uploadUrl: string): Promise<UploadUrlResult> {
+export async function resolveUploadUrl(
+  uploadUrl: string,
+): Promise<UploadUrlResult> {
   // Normalize: strip protocol + hostname if present (e.g. http://localhost:3000)
   const normalized = uploadUrl.replace(/^https?:\/\/[^\/]+/i, "");
+  // Strip any query string (?download=1 etc.) — it's not part of the file path
+  const pathOnly = normalized.split("?")[0];
 
-  const match = normalized.match(UPLOAD_URL_RE);
+  // Session-file URLs first — resolved through the sandbox's own path
+  // resolution (traversal + symlink containment checks). Lazy dynamic import
+  // keeps this module cycle-free (storage.ts imports readMediaFromResolvedPath
+  // from this file).
+  const sessionMatch = pathOnly.match(SESSION_FILE_URL_RE);
+  if (sessionMatch) {
+    const conversationId = sessionMatch[1];
+    const filePath = decodeURIComponent(sessionMatch[2]);
+    const { resolveSessionPath } = await import("@/lib/session-files/storage");
+    const resolvedPath = await resolveSessionPath(
+      Number(conversationId),
+      filePath,
+    );
+    return {
+      conversationId,
+      filename: filePath,
+      resolvedPath,
+      kind: "session-file",
+    };
+  }
+
+  const match = pathOnly.match(UPLOAD_URL_RE);
   if (!match) {
     throw new FilesystemError(
-      `Invalid upload URL: "${uploadUrl}". Expected format: /api/chat/uploads/{conversationId}/{filename}`,
+      `Invalid file URL: "${uploadUrl}". Expected /api/chat/uploads/{conversationId}/{filename} (user uploads) or /api/chat/{conversationId}/session-files/{path} (session files).`,
       "INVALID_URL",
     );
   }
@@ -642,7 +712,7 @@ export async function resolveUploadUrl(uploadUrl: string): Promise<UploadUrlResu
     );
   }
 
-  return { conversationId, filename, resolvedPath };
+  return { conversationId, filename, resolvedPath, kind: "upload" };
 }
 
 /**
@@ -657,54 +727,22 @@ export async function resolveUploadUrl(uploadUrl: string): Promise<UploadUrlResu
 export async function readMediaFromUrl(uploadUrl: string): Promise<MediaResult> {
   const { filename, resolvedPath } = await resolveUploadUrl(uploadUrl);
 
-  // Read media from the resolved file path, using the original upload URL
-  // (not the virtual root's buildMediaUrl which would produce a broken /api/media/0/... URL)
-  const stats = await fs.stat(resolvedPath);
-  if (!stats.isFile()) {
-    throw new FilesystemError(
-      `Uploaded file not found: "${filename}"`,
-      "NOT_FOUND",
-    );
-  }
-
-  const ext = path.extname(resolvedPath).toLowerCase();
-  const mimeType = MEDIA_EXTENSIONS.get(ext) ?? "application/octet-stream";
-
-  const isImage = mimeType.startsWith("image/");
-  const isVideo = mimeType.startsWith("video/");
-
-  if (!isImage && !isVideo) {
-    throw new FilesystemError(
-      `"${filename}" is not a recognised media file (unsupported extension "${ext}")`,
-      "UNSUPPORTED_MEDIA",
-    );
-  }
-
-  if (stats.size > MAX_MEDIA_SIZE) {
-    throw new FilesystemError(
-      `Media file "${filename}" is ${(stats.size / 1024 / 1024).toFixed(1)} MB — exceeds the 20 MB limit`,
-      "FILE_TOO_LARGE",
-    );
-  }
-
-  const type: "image" | "video" = isImage ? "image" : "video";
-
-  if (isImage) {
-    const dataUrl = await createImageDataUrl(resolvedPath, mimeType, stats.size);
-    return { type, filename, mimeType, size: stats.size, url: uploadUrl, dataUrl };
-  }
-
-  return { type, filename, mimeType, size: stats.size, url: uploadUrl };
+  // Read media from the resolved file path, using the original URL as the
+  // server URL (not the virtual root's buildMediaUrl which would produce a
+  // broken /api/media/0/... URL). Shares all validation (formats, 20 MB limit)
+  // with the directory-root media reader.
+  return readMediaFromResolvedPathInternal(resolvedPath, filename, uploadUrl);
 }
 
 /**
- * Internal: read media from a resolved file path.
- * Used by both readMedia (root + relativePath) and readMediaFromUrl (URL).
+ * Core media-reading logic for an already-resolved absolute file path.
+ * Returns metadata + a server URL plus a base64 dataUrl for images so the
+ * model can "see" the content.
  */
-async function readMediaFromPath(
+async function readMediaFromResolvedPathInternal(
   targetPath: string,
-  root: PermittedRoot,
   displayPath: string,
+  url: string,
 ): Promise<MediaResult> {
   const stats = await fs.stat(targetPath);
   if (!stats.isFile()) {
@@ -739,15 +777,40 @@ async function readMediaFromPath(
   const filename = path.basename(targetPath);
   const type: "image" | "video" = isImage ? "image" : "video";
 
-  // Build a server URL that the UI can fetch for the full-resolution file
-  const url = await buildMediaUrl(root, displayPath, filename);
-
   if (isImage) {
     const dataUrl = await createImageDataUrl(targetPath, mimeType, stats.size);
     return { type, filename, mimeType, size: stats.size, url, dataUrl };
   }
 
   return { type, filename, mimeType, size: stats.size, url };
+}
+
+/**
+ * Read media from an already-resolved absolute path with an explicit server
+ * URL. Used by the session-file sandbox (files live outside the permitted
+ * directory roots), so callers pass the canonical /api/chat/{id}/session-files/... URL.
+ */
+export async function readMediaFromResolvedPath(
+  targetPath: string,
+  displayPath: string,
+  url: string,
+): Promise<MediaResult> {
+  return readMediaFromResolvedPathInternal(targetPath, displayPath, url);
+}
+
+/**
+ * Internal: read media from a resolved file path.
+ * Used by both readMedia (root + relativePath) and readMediaFromUrl (URL).
+ */
+async function readMediaFromPath(
+  targetPath: string,
+  root: PermittedRoot,
+  displayPath: string,
+): Promise<MediaResult> {
+  const filename = path.basename(targetPath);
+  // Build a server URL that the UI can fetch for the full-resolution file
+  const url = await buildMediaUrl(root, displayPath, filename);
+  return readMediaFromResolvedPathInternal(targetPath, displayPath, url);
 }
 
 /**
@@ -960,6 +1023,18 @@ export async function deleteDirectory(
   return { path: targetPath, deleted: true };
 }
 
+export type WriteFileResult = {
+  wrote: number;
+  path: string;
+  relativePath: string;
+  mode: "overwrite" | "append";
+  created: boolean;
+  linesWritten: number;
+  /** Line-count delta (mixed precision — not a true hunk diff). */
+  linesAdded: number;
+  linesRemoved: number;
+};
+
 /**
  * Write content to a file. Creates parent directories if they don't exist.
  * When `mode` is "append", appends to the existing file (or creates if absent).
@@ -969,17 +1044,51 @@ export async function writeFile(
   relativePath: string,
   content: string,
   mode?: "overwrite" | "append" | null,
-): Promise<{ wrote: number; path: string }> {
+): Promise<WriteFileResult> {
   assertCanWrite(root);
   const targetPath = await resolvePath(root, relativePath);
+  const writeMode = mode === "append" ? "append" : "overwrite";
+  const normalizedRel = normalizePath(relativePath);
+
+  // Snapshot prior line count for mixed-precision +/- summary
+  let previousLines: number | null = null;
+  let created = true;
+  try {
+    const existing = await fs.readFile(targetPath, "utf-8");
+    previousLines = existing.split("\n").length;
+    created = false;
+  } catch {
+    // File does not exist yet — treat as create
+  }
 
   // Ensure parent directory exists
   await fs.mkdir(path.dirname(targetPath), { recursive: true });
 
-  const flag = mode === "append" ? "a" : "w";
+  const flag = writeMode === "append" ? "a" : "w";
   await fs.writeFile(targetPath, content, { encoding: "utf-8", flag });
 
-  return { wrote: Buffer.byteLength(content, "utf-8"), path: targetPath };
+  const linesWritten = content.length === 0 ? 0 : content.split("\n").length;
+  let linesAdded = 0;
+  let linesRemoved = 0;
+  if (writeMode === "append") {
+    linesAdded = linesWritten;
+  } else if (created || previousLines === null) {
+    linesAdded = linesWritten;
+  } else {
+    linesAdded = Math.max(0, linesWritten - previousLines);
+    linesRemoved = Math.max(0, previousLines - linesWritten);
+  }
+
+  return {
+    wrote: Buffer.byteLength(content, "utf-8"),
+    path: targetPath,
+    relativePath: normalizedRel,
+    mode: writeMode,
+    created,
+    linesWritten,
+    linesAdded,
+    linesRemoved,
+  };
 }
 
 // ---------------------------------------------------------------------------

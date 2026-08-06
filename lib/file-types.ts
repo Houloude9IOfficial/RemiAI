@@ -91,6 +91,19 @@ const EXT_TO_MIME: Record<string, string> = {
   avif: "image/avif",
   bmp: "image/bmp",
   svg: "image/svg+xml",
+  mp4: "video/mp4",
+  webm: "video/webm",
+  mov: "video/quicktime",
+  m4v: "video/x-m4v",
+  avi: "video/x-msvideo",
+  mkv: "video/x-matroska",
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  ogg: "audio/ogg",
+  oga: "audio/ogg",
+  m4a: "audio/mp4",
+  flac: "audio/flac",
+  aac: "audio/aac",
 };
 
 export function mimeTypeFromExtension(filename: string): string {

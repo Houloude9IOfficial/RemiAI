@@ -2,9 +2,12 @@
 
 import type { UIMessage } from "ai";
 import { isTextUIPart, isToolUIPart, getToolName } from "ai";
-import { Component, useRef } from "react";
+import { Component, useRef, useState } from "react";
+import { toast } from "sonner";
+import { Copy, Check, RefreshCw } from "lucide-react";
 import { ToolCallGroup } from "./ToolCallGroup";
 import { VisualCard } from "./VisualCard";
+import { GeneratingIndicator } from "./GeneratingIndicator";
 import { FollowupSuggestions } from "./FollowupSuggestions";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import {
@@ -17,6 +20,15 @@ import {
   parseAttachments,
   stripAttachmentMarkdown,
 } from "./AttachedFileCard";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -90,6 +102,169 @@ class SafeMarkdown extends Component<
       />
     );
   }
+}
+
+// ── Message actions (copy / regenerate) ────────────────────────────────
+
+/**
+ * Small circular copy button that reveals on hover. Copies `text` to the
+ * clipboard and briefly flips to a checkmark.
+ */
+function CopyButton({ text, ariaLabel = "Copy message" }: { text: string; ariaLabel?: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      toast.success("Copied to clipboard");
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error("Could not copy to clipboard");
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      aria-label={ariaLabel}
+      title={ariaLabel}
+      className="flex h-6.5 w-6.5 items-center justify-center rounded-md text-muted-foreground/55 transition-colors hover:bg-muted hover:text-foreground active:scale-90"
+    >
+      {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+    </button>
+  );
+}
+
+/**
+ * Regenerate button. If there are messages after this one, asks for
+ * confirmation first (regenerating deletes them). Otherwise regenerates
+ * immediately.
+ */
+function RegenerateButton({
+  messageId,
+  messagesAfter,
+  onRegenerate,
+}: {
+  messageId: string;
+  /** Number of messages that come after this one in the conversation. */
+  messagesAfter: number;
+  onRegenerate: (messageId: string) => void;
+}) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const requestRegenerate = () => {
+    if (messagesAfter > 0) {
+      setConfirmOpen(true);
+    } else {
+      onRegenerate(messageId);
+    }
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={requestRegenerate}
+        aria-label="Regenerate response"
+        title="Regenerate response"
+        className="flex h-6.5 w-6.5 items-center justify-center rounded-md text-muted-foreground/55 transition-colors hover:bg-muted hover:text-foreground active:scale-90"
+      >
+        <RefreshCw className="h-3.5 w-3.5" />
+      </button>
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Regenerate response?</DialogTitle>
+            <DialogDescription>
+              {messagesAfter > 0
+                ? `This will delete the ${messagesAfter} message${messagesAfter === 1 ? "" : "s"} after it and generate a new response.`
+                : "Generate a new response to replace this one."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setConfirmOpen(false);
+                onRegenerate(messageId);
+              }}
+            >
+              <RefreshCw className="h-4 w-4" />
+              Regenerate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+/**
+ * Action bar shown under a message. Always visible with quiet styling so it
+ * never reserves invisible space under tool-call-heavy messages.
+ */
+function MessageActionsRow({
+  children,
+  align = "left",
+}: {
+  children: React.ReactNode;
+  align?: "left" | "right";
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-0.5",
+        align === "right" ? "justify-end" : "justify-start",
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+// ── User message text — plain text, images only ────────────────────────
+
+/**
+ * Renders a user's message as plain text — no markdown formatting, so
+ * typing `**bold**` or `# heading` shows the literal characters. The
+ * only markdown honored is image syntax `![alt](url)`, which renders as
+ * an actual inline image. Uploaded-file attachments are already extracted
+ * into `AttachedFileCard`s, so any image markdown remaining here is an
+ * external (non-upload) image.
+ */
+function UserMessageText({ text }: { text: string }) {
+  // Split on image markdown so we can interleave plain text and <img>.
+  const segments = text.split(/(!\[[^\]]*\]\([^)]+\))/g);
+
+  return (
+    <div className="whitespace-pre-wrap break-words">
+      {segments.map((segment, idx) => {
+        if (!segment) return null;
+        const img = /^!\[([^\]]*)\]\(([^)]+)\)$/.exec(segment);
+        if (img) {
+          const url = img[2].trim();
+          const alt = img[1].trim();
+          return (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={idx}
+              src={url}
+              alt={alt || url}
+              loading="lazy"
+              className="my-1 block max-w-full rounded-md border border-white/20"
+            />
+          );
+        }
+        return <span key={idx}>{segment}</span>;
+      })}
+    </div>
+  );
 }
 
 // ── Streaming-aware markdown wrapper ──────────────────────────────────
@@ -182,14 +357,14 @@ function buildSegments(parts: UIMessage["parts"]): Segment[] {
         }
       })();
 
-      if (
-        toolName !== null &&
-        toolName.toLowerCase().replace(/^.*__/, "") === "create_visual"
-      ) {
+      const shortToolName =
+        toolName === null ? null : toolName.toLowerCase().replace(/^.*__/, "");
+
+      if (shortToolName === "create_visual") {
         segments.push({ type: "visual", part });
       } else if (
-        toolName !== null &&
-        toolName.toLowerCase().replace(/^.*__/, "") === "session_present_files"
+        shortToolName === "session_present_files" ||
+        shortToolName === "session_present_file"
       ) {
         segments.push({ type: "sessionPresent", part });
       } else {
@@ -207,7 +382,19 @@ function buildSegments(parts: UIMessage["parts"]): Segment[] {
   return segments;
 }
 
-export function MessageBubble({ message, isStreaming }: { message: UIMessage; isStreaming?: boolean }) {
+export function MessageBubble({
+  message,
+  isStreaming,
+  onRegenerate,
+  messagesAfter,
+}: {
+  message: UIMessage;
+  isStreaming?: boolean;
+  /** Called with the message id to regenerate (AI messages only). */
+  onRegenerate?: (messageId: string) => void;
+  /** Number of messages that come after this one (used by the regenerate confirm). */
+  messagesAfter?: number;
+}) {
   // ---- User messages ----
   if (message.role === "user") {
     const inlineText = message.parts
@@ -222,52 +409,48 @@ export function MessageBubble({ message, isStreaming }: { message: UIMessage; is
     const hasText = cleanText.length > 0;
 
     return (
-      <div className="flex justify-end">
-        <div
-          className={cn(
-            "max-w-[75%] flex flex-col gap-2",
-            // When there's text, wrap it in a rounded bubble
-            hasText &&
-              "rounded-2xl bg-primary px-4 py-2 text-sm text-primary-foreground",
-          )}
-        >
-          {/* Text content (if any) */}
+      <div className="group flex justify-end">
+        <div className="flex max-w-[min(85%,36rem)] flex-col items-end gap-1">
+          <div
+            className={cn(
+              "flex flex-col gap-2",
+              // When there's text, wrap it in a rounded bubble
+              hasText &&
+                "rounded-2xl bg-primary px-3.5 py-2.5 text-[15px] leading-relaxed text-primary-foreground",
+            )}
+          >
+            {/* Text content (if any) — plain text, only images render */}
+            {hasText && <UserMessageText text={cleanText} />}
+
+            {/* File attachments as polished cards */}
+            {attachments.length > 0 && (
+              <div
+                className={cn(
+                  "flex flex-col gap-2",
+                  !hasText && "pt-0",
+                )}
+              >
+                {attachments.map((att, idx) => (
+                  <AttachedFileCard
+                    key={`${att.url}-${idx}`}
+                    url={att.url}
+                    name={att.name}
+                    mimeType={att.mimeType}
+                    inUserMessage={hasText}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* No text, no attachments — shouldn't happen, but handle gracefully */}
+            {!hasText && attachments.length === 0 && (
+              <span className="text-sm text-primary-foreground/60">Sent a file</span>
+            )}
+          </div>
           {hasText && (
-            <div
-              className={cn(
-                "[&_.markdown-body]:[color:var(--primary-foreground)]",
-                "[&_.markdown-body_img]:my-1 [&_.markdown-body_img]:rounded-md [&_.markdown-body_img]:border [&_.markdown-body_img]:border-white/20",
-                "[&_.markdown-body_a]:text-primary-foreground/80 [&_.markdown-body_a]:underline [&_.markdown-body_a]:underline-offset-2",
-                "[&_.markdown-body_p]:mb-0",
-              )}
-            >
-              <MarkdownRenderer content={cleanText} />
-            </div>
-          )}
-
-          {/* File attachments as polished cards */}
-          {attachments.length > 0 && (
-            <div
-              className={cn(
-                "flex flex-col gap-2",
-                !hasText && "pt-0",
-              )}
-            >
-              {attachments.map((att, idx) => (
-                <AttachedFileCard
-                  key={`${att.url}-${idx}`}
-                  url={att.url}
-                  name={att.name}
-                  mimeType={att.mimeType}
-                  inUserMessage={hasText}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* No text, no attachments — shouldn't happen, but handle gracefully */}
-          {!hasText && attachments.length === 0 && (
-            <span className="text-primary-foreground/60 text-sm">Sent a file</span>
+            <MessageActionsRow align="right">
+              <CopyButton text={cleanText} ariaLabel="Copy message" />
+            </MessageActionsRow>
           )}
         </div>
       </div>
@@ -278,35 +461,45 @@ export function MessageBubble({ message, isStreaming }: { message: UIMessage; is
   const segments = buildSegments(message.parts);
   const hasAnyContent = segments.length > 0;
 
-  // If nothing to render yet, show a streaming placeholder.
-if (!hasAnyContent) {
-  return (
-          <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground/60">
-            <div className="flex h-3 w-3 items-center justify-center">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground/40" />
-            </div>
-            Generating response...
-          </div>
-  );
-}
+  // If nothing to render yet, show a polished streaming placeholder.
+  if (!hasAnyContent && isStreaming) {
+    return (
+      <GeneratingIndicator
+        label="Generating response"
+        variant="pill"
+        className="animate-fade-in"
+      />
+    );
+  }
 
   const showThinking = isStreaming && hasAnyContent;
 
+  // Plain-text representation of the response (for the copy button): all
+  // text parts joined, mirroring what the markdown renderer displays.
+  const copyableText = message.parts
+    .filter(isTextUIPart)
+    .map((p) => p.text)
+    .join("\n\n");
+
   return (
-    <div className="flex justify-start">
-      <div className="w-full max-w-[85%] px-4 py-3 text-sm text-foreground">
+    <div className="group flex justify-start">
+      <div className="w-full text-[15px] leading-relaxed text-foreground">
         {/* Render segments in their original interleaved order */}
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3.5">
           {/* Render non-suggestions segments in their original interleaved order */}
           {segments
             .filter((s) => s.type !== "suggestions")
             .map((segment, idx) =>
               segment.type === "text" ? (
-                <StreamingSafeMarkdown
+                <div
                   key={`text-${idx}`}
-                  content={segment.text}
-                  isStreaming={isStreaming && idx === segments.length - 1}
-                />
+                  className="[&_.markdown-body]:text-[15px] [&_.markdown-body]:leading-[1.7]"
+                >
+                  <StreamingSafeMarkdown
+                    content={segment.text}
+                    isStreaming={isStreaming && idx === segments.length - 1}
+                  />
+                </div>
               ) : segment.type === "visual" ? (
                 <VisualCardSegment key={`visual-${idx}`} part={segment.part} />
               ) : segment.type === "sessionPresent" ? (
@@ -323,7 +516,7 @@ if (!hasAnyContent) {
           {segments
             .filter((s): s is Segment & { type: "suggestions" } => s.type === "suggestions")
             .map((segment, idx) => (
-              <div key={`suggestions-${idx}`} className="mt-1">
+              <div key={`suggestions-${idx}`} className="mt-0.5">
                 <FollowupSuggestions data={segment.data} />
               </div>
             ))}
@@ -331,12 +524,23 @@ if (!hasAnyContent) {
 
         {/* Thinking indicator — shown under content while AI is still processing */}
         {showThinking && (
-          <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground/60">
-            <div className="flex h-3 w-3 items-center justify-center">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground/40" />
-            </div>
-            Thinking...
-          </div>
+          <GeneratingIndicator label="Thinking" className="mt-10" />
+        )}
+
+        {/* Actions — hidden while the response is still streaming */}
+        {!isStreaming && (hasAnyContent || copyableText.length > 0) && (
+          <MessageActionsRow>
+            {copyableText.length > 0 && (
+              <CopyButton text={copyableText} ariaLabel="Copy response" />
+            )}
+            {onRegenerate && (
+              <RegenerateButton
+                messageId={message.id}
+                messagesAfter={messagesAfter ?? 0}
+                onRegenerate={onRegenerate}
+              />
+            )}
+          </MessageActionsRow>
         )}
       </div>
     </div>
@@ -367,14 +571,14 @@ function VisualCardSegment({ part }: { part: UIMessage["parts"][number] }) {
   // show a compact loading placeholder so the user knows a visual is coming.
   if (!isComplete) {
     return (
-      <div className="overflow-hidden rounded-xl border border-indigo-500/15 bg-indigo-500/[0.04]">
+      <div className="overflow-hidden rounded-xl border border-border/55 bg-surface-2/40">
         <div className="flex items-center gap-2.5 px-3.5 py-3">
-          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-indigo-500/10">
-            <svg className="h-3.5 w-3.5 animate-spin text-indigo-500" viewBox="0 0 24 24" fill="none">
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary/10">
+            <svg className="h-3.5 w-3.5 animate-spin text-primary" viewBox="0 0 24 24" fill="none">
               <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4 31.4" strokeLinecap="round" />
             </svg>
           </div>
-          <span className="text-sm font-medium text-indigo-600 dark:text-indigo-400">
+          <span className="text-sm font-medium text-foreground">
             Generating visual...
           </span>
         </div>

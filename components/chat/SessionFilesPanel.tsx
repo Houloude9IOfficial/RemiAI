@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { motion } from "framer-motion";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -19,8 +20,15 @@ import {
   Files,
   Archive,
   FileArchive,
+  CopyIcon,
+  Check,
+  AudioLines,
 } from "lucide-react";
-import { sessionFilesApi, type SessionFileEntry } from "@/lib/api/session-files";
+import {
+  sessionFilesApi,
+  SESSION_FILES_CHANGED_EVENT,
+  type SessionFileEntry,
+} from "@/lib/api/session-files";
 import {
   extOf,
   fileIconElement,
@@ -29,6 +37,10 @@ import {
   buildTree,
   TEXT_EXTENSIONS,
   IMAGE_EXTENSIONS,
+  VIDEO_EXTENSIONS,
+  AUDIO_EXTENSIONS,
+  PDF_EXTENSIONS,
+  isImageFile,
   type TreeNode,
 } from "@/lib/session-files/ui-utils";
 import { MarkdownRenderer } from "./MarkdownRenderer";
@@ -38,9 +50,12 @@ import { MarkdownRenderer } from "./MarkdownRenderer";
 export function SessionFilesPanel({
   conversationId,
   onClose,
+  focusPath,
 }: {
   conversationId: number;
   onClose: () => void;
+  /** When set, the panel opens straight to this file in the viewer (from session_present_file). */
+  focusPath?: string | null;
 }) {
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<SessionFileEntry | null>(null);
@@ -56,6 +71,22 @@ export function SessionFilesPanel({
     staleTime: 10_000,
   });
 
+  // Auto-open a presented file in the viewer. Uses the React-recommended
+  // "adjust state when a prop changes" pattern (setState during render,
+  // guarded by a previous-value comparison) instead of an effect, so a
+  // refetch of `data` (upload, delete, refresh, AI writing another file)
+  // doesn't re-select the presented file and override a file the user
+  // manually clicked in the tree — each focusPath fires exactly once.
+  const [handledFocus, setHandledFocus] = useState<string | null>(null);
+  if (focusPath && focusPath !== handledFocus && data) {
+    const target = data.files.find((f) => f.path === focusPath && f.isFile);
+    if (target) {
+      setHandledFocus(focusPath);
+      setSelected(target);
+      setConfirmDelete(null);
+    }
+  }
+
   const tree = useMemo(
     () => buildTree(data?.files ?? []),
     [data],
@@ -64,8 +95,21 @@ export function SessionFilesPanel({
   const fileCount = data?.files.filter((f) => f.isFile).length ?? 0;
   const totalSize = data?.files.reduce((sum, f) => sum + f.size, 0) ?? 0;
 
-  const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ["session-files", conversationId] });
+  const invalidate = useCallback(
+    () =>
+      queryClient.invalidateQueries({
+        queryKey: ["session-files", conversationId],
+      }),
+    [queryClient, conversationId],
+  );
+
+  // Refresh the listing when files change elsewhere in the app (e.g. the user
+  // uploads files through the chat composer, which saves them into the sandbox).
+  useEffect(() => {
+    const handler = () => invalidate();
+    window.addEventListener(SESSION_FILES_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(SESSION_FILES_CHANGED_EVENT, handler);
+  }, [invalidate]);
 
   const handleUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -227,14 +271,13 @@ export function SessionFilesPanel({
           </div>
         ) : tree.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 px-6 py-10 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-border/60 bg-background">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl">
               <Files className="h-5 w-5 text-muted-foreground/70" />
             </div>
             <div>
               <p className="text-sm font-medium">No session files yet</p>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Ask the AI to build something — files it creates will appear here,
-                ready to view or download as a .zip.
+                Ask the AI to build something
               </p>
             </div>
           </div>
@@ -245,6 +288,7 @@ export function SessionFilesPanel({
                 key={node.path}
                 node={node}
                 depth={0}
+                conversationId={conversationId}
                 collapsed={collapsed}
                 onToggleDir={toggleDir}
                 onSelect={(entry) => setSelected(entry)}
@@ -257,17 +301,153 @@ export function SessionFilesPanel({
   );
 }
 
+// ── Resizable wrapper (desktop) ────────────────────────────────────────────
+// Adds a draggable handle to the panel's left edge so the user can resize it.
+// The width is clamped to sane bounds, persisted to localStorage, and resets
+// to the default width on double-click (or Home/End via keyboard).
+
+const PANEL_MIN_WIDTH = 280;
+const PANEL_MAX_WIDTH = 640;
+const PANEL_DEFAULT_WIDTH = 384;
+const PANEL_WIDTH_KEY = "session-files-panel-width";
+const PANEL_RESIZE_STEP = 16;
+
+function clampPanelWidth(value: number) {
+  // Never let the panel swallow more than ~60% of the viewport, so the chat
+  // column keeps a usable minimum on smaller screens.
+  const viewportMax =
+    (typeof window !== "undefined" ? window.innerWidth : PANEL_MAX_WIDTH) * 0.6;
+  const max = Math.min(PANEL_MAX_WIDTH, Math.max(PANEL_MIN_WIDTH, viewportMax));
+  return Math.min(max, Math.max(PANEL_MIN_WIDTH, value));
+}
+
+export function ResizableSessionFilesPanel({
+  conversationId,
+  onClose,
+  focusPath,
+}: {
+  conversationId: number;
+  onClose: () => void;
+  focusPath?: string | null;
+}) {
+  // This wrapper only mounts client-side (the panel renders when `panelOpen`
+  // is true), so it's safe to read localStorage directly in the initializer —
+  // no SSR/hydration mismatch possible.
+  const [width, setWidth] = useState(() => {
+    try {
+      const stored = Number(window.localStorage.getItem(PANEL_WIDTH_KEY));
+      return Number.isFinite(stored) ? clampPanelWidth(stored) : PANEL_DEFAULT_WIDTH;
+    } catch {
+      // localStorage unavailable — keep default
+      return PANEL_DEFAULT_WIDTH;
+    }
+  });
+  const [isResizing, setIsResizing] = useState(false);
+  const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
+
+  // Persist width changes across sessions (same pattern as sidebar/theme prefs).
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(PANEL_WIDTH_KEY, String(Math.round(width)));
+    } catch {
+      // localStorage unavailable — ignore
+    }
+  }, [width]);
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragRef.current = { startX: e.clientX, startWidth: width };
+    setIsResizing(true);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragRef.current) return;
+    const delta = e.clientX - dragRef.current.startX;
+    setWidth(clampPanelWidth(dragRef.current.startWidth - delta));
+  };
+
+  const handlePointerUp = () => {
+    if (!dragRef.current) return;
+    dragRef.current = null;
+    setIsResizing(false);
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+  };
+
+  return (
+    <motion.div
+      initial={{ width: 0, opacity: 0 }}
+      animate={{ width, opacity: 1 }}
+      exit={{ width: 0, opacity: 0 }}
+      transition={
+        isResizing ? { duration: 0 } : { duration: 0.22, ease: "easeOut" }
+      }
+      className="relative hidden h-full shrink-0 overflow-hidden md:block"
+    >
+      {/* Drag handle — sits on the panel's left edge */}
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize session files panel"
+        title="Drag to resize · double-click to reset"
+        tabIndex={0}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        onDoubleClick={() => setWidth(PANEL_DEFAULT_WIDTH)}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowLeft") {
+            e.preventDefault();
+            setWidth((w) => clampPanelWidth(w - PANEL_RESIZE_STEP));
+          } else if (e.key === "ArrowRight") {
+            e.preventDefault();
+            setWidth((w) => clampPanelWidth(w + PANEL_RESIZE_STEP));
+          } else if (e.key === "Home") {
+            e.preventDefault();
+            setWidth(PANEL_MIN_WIDTH);
+          } else if (e.key === "End") {
+            e.preventDefault();
+            setWidth(clampPanelWidth(PANEL_MAX_WIDTH));
+          }
+        }}
+        className="group absolute inset-y-0 left-0 z-10 flex w-2 cursor-col-resize touch-none items-stretch justify-center select-none focus:outline-none"
+      >
+        <div
+          className={cn(
+            "my-1.5 w-0.5 rounded-full transition-colors duration-150",
+            isResizing
+              ? "bg-primary/60"
+              : "bg-transparent group-hover:bg-border group-focus-visible:bg-border",
+          )}
+        />
+      </div>
+
+      <SessionFilesPanel
+        conversationId={conversationId}
+        onClose={onClose}
+        focusPath={focusPath}
+      />
+    </motion.div>
+  );
+}
+
 // ── Tree row ───────────────────────────────────────────────────────────────
 
 function TreeNodeRow({
   node,
   depth,
+  conversationId,
   collapsed,
   onToggleDir,
   onSelect,
 }: {
   node: TreeNode;
   depth: number;
+  conversationId: number;
   collapsed: Set<string>;
   onToggleDir: (path: string) => void;
   onSelect: (entry: SessionFileEntry) => void;
@@ -305,11 +485,23 @@ function TreeNodeRow({
           <span className="w-3.5 shrink-0" />
         )}
         {!node.isDirectory &&
-          fileIconElement(
-            node.name,
-            false,
-            "h-4 w-4 shrink-0 text-muted-foreground/70",
-          )}
+          (isImageFile(node.name) ? (
+            /* Image thumbnails in the tree — lazy-loaded so big folders stay snappy */
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={sessionFilesApi.rawUrl(conversationId, node.path)}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              className="h-6 w-6 shrink-0 rounded-sm border border-border/60 bg-background object-cover"
+            />
+          ) : (
+            fileIconElement(
+              node.name,
+              false,
+              "h-4 w-4 shrink-0 text-muted-foreground/70",
+            )
+          ))}
         <span className={cn("truncate", !node.isDirectory && "text-foreground/90")}>
           {node.name}
         </span>
@@ -326,6 +518,7 @@ function TreeNodeRow({
               key={child.path}
               node={child}
               depth={depth + 1}
+              conversationId={conversationId}
               collapsed={collapsed}
               onToggleDir={onToggleDir}
               onSelect={onSelect}
@@ -356,14 +549,17 @@ function FileViewer({
 }) {
   const ext = extOf(entry.name);
   const isImage = IMAGE_EXTENSIONS.has(ext);
+  const isVideo = VIDEO_EXTENSIONS.has(ext);
+  const isAudio = AUDIO_EXTENSIONS.has(ext);
+  const isPdf = PDF_EXTENSIONS.has(ext);
   const isMarkdown = ext === "md" || ext === "markdown";
   const isText = TEXT_EXTENSIONS.has(ext);
-  const canPreview = isImage || isText || isMarkdown;
+  const canPreview = isImage || isVideo || isAudio || isPdf || isText || isMarkdown;
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["session-file-content", conversationId, entry.path],
     queryFn: () => sessionFilesApi.content(conversationId, entry.path),
-    enabled: canPreview && !isImage,
+    enabled: isText || isMarkdown,
     staleTime: 30_000,
   });
 
@@ -371,6 +567,37 @@ function FileViewer({
     () => (data && isText && !isMarkdown ? highlightCode(data.content, ext) : ""),
     [data, isText, isMarkdown, ext],
   );
+
+  const [copied, setCopied] = useState(false);
+
+  /**
+   * Copy the file's actual content to the clipboard (text/markdown files),
+   * falling back to the file URL for binary files where copying raw bytes
+   * as text would be useless.
+   */
+  const handleCopy = async () => {
+    try {
+      let text: string;
+      if (isText || isMarkdown) {
+        const res = await sessionFilesApi.content(conversationId, entry.path);
+        text = res.content;
+        toast.success(
+          res.isTruncated
+            ? `Copied first 1 MB — file is ${formatBytes(res.totalBytes)}`
+            : `Copied ${entry.name} content to clipboard`,
+        );
+      } else {
+        // Binary / no-preview file — copy the URL instead of garbage bytes.
+        text = sessionFilesApi.rawUrl(conversationId, entry.path);
+        toast.success("Copied file URL to clipboard");
+      }
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error("Could not copy to clipboard");
+    }
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -390,6 +617,19 @@ function FileViewer({
             {entry.path} · {formatBytes(entry.size)}
           </p>
         </div>
+        <button
+          type="button"
+          onClick={handleCopy}
+          aria-label="Copy file content"
+          title="Copy file content"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-95"
+        >
+          {copied ? (
+            <Check className="h-4 w-4 text-emerald-500" />
+          ) : (
+            <CopyIcon className="h-4 w-4" />
+          )}
+        </button>
         <a
           href={sessionFilesApi.rawUrl(conversationId, entry.path, true)}
           aria-label="Download file"
@@ -428,6 +668,37 @@ function FileViewer({
               className="max-h-[50vh] rounded-lg border border-border/60 bg-background object-contain"
             />
           </div>
+        ) : isVideo ? (
+          <div className="flex items-center justify-center p-4">
+            <video
+              src={sessionFilesApi.rawUrl(conversationId, entry.path)}
+              controls
+              preload="metadata"
+              className="max-h-[55vh] w-full max-w-2xl rounded-lg border border-border/60 bg-black object-contain"
+            >
+              Your browser does not support the video element.
+            </video>
+          </div>
+        ) : isAudio ? (
+          <div className="flex h-full flex-col items-center justify-center gap-4 p-6">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
+              <AudioLines className="h-7 w-7 text-primary" />
+            </div>
+            <p className="max-w-full truncate text-sm font-medium">{entry.name}</p>
+            <audio
+              src={sessionFilesApi.rawUrl(conversationId, entry.path)}
+              controls
+              className="w-full max-w-md"
+            >
+              Your browser does not support the audio element.
+            </audio>
+          </div>
+        ) : isPdf ? (
+          <iframe
+            src={sessionFilesApi.rawUrl(conversationId, entry.path)}
+            title={entry.name}
+            className="h-[75vh] w-full border-0 bg-background"
+          />
         ) : !canPreview ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-6 py-10 text-center">
             <FileArchive className="h-8 w-8 text-muted-foreground/40" />

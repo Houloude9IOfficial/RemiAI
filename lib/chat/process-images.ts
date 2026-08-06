@@ -1,12 +1,14 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { UPLOAD_BASE } from "@/lib/fs/access";
+import { resolveUploadUrl } from "@/lib/fs/access";
 
-// Matches image markdown references for chat uploads:
-//   ![filename](/api/chat/uploads/123/uuid_filename.png)
-//   ![filename](http://localhost:3000/api/chat/uploads/123/uuid_filename.png)
+// Matches image markdown references for chat-attached files, in both URL
+// schemes the app uses:
+//   ![filename](/api/chat/uploads/123/uuid_filename.png)             (legacy uploads)
+//   ![filename](/api/chat/5/session-files/uploads/photo.png)         (session sandbox uploads)
+// plus optional localhost origin prefixes.
 const IMAGE_UPLOAD_RE =
-  /!\[([^\]]*)\]\((?:https?:\/\/[^\/]+)?\/api\/chat\/uploads\/(\d+)\/([^)]+)\)/g;
+  /!\[([^\]]*)\]\((?:https?:\/\/[^\/]+)?(\/api\/chat\/(?:uploads\/\d+\/[^)]+|(?:\d+)\/session-files\/[^)]+))\)/g;
 
 // Map of recognised image extensions to MIME types
 const IMAGE_MIME_TYPES: Record<string, string> = {
@@ -21,7 +23,7 @@ const IMAGE_MIME_TYPES: Record<string, string> = {
 };
 
 export type ImageAttachment = {
-  /** The full markdown match (e.g. `![name](/api/chat/uploads/1/file.png)`) */
+  /** The full markdown match (e.g. `![name](/api/chat/5/session-files/uploads/file.png)`) */
   markdown: string;
   /** Raw file buffer read from disk */
   buffer: Buffer;
@@ -34,11 +36,14 @@ export type ImageAttachment = {
 };
 
 /**
- * Scan a text string for image upload markdown references and return the
- * matched markdown + raw file data for each found image.
+ * Scan a text string for image markdown references of chat-attached files
+ * (both legacy `/api/chat/uploads/...` and session sandbox
+ * `/api/chat/{id}/session-files/...` URLs) and return the matched markdown +
+ * raw file data for each found image.
  *
- * Images that fail to read (file not found, unreadable) are silently skipped.
- * Path-traversal attempts are also rejected.
+ * Paths are resolved through `resolveUploadUrl`, which validates containment
+ * for both URL schemes. Images that fail to read (file not found, unreadable)
+ * are silently skipped. Path-traversal attempts are also rejected.
  */
 export async function extractImageAttachments(
   text: string,
@@ -47,40 +52,43 @@ export async function extractImageAttachments(
   const seen = new Set<string>();
 
   for (const match of text.matchAll(IMAGE_UPLOAD_RE)) {
-    const [, altText, conversationId, rawFilename] = match;
-    const filename = decodeURIComponent(rawFilename);
+    const [, altText, rawUrl] = match;
 
-    // Deduplicate: same conversation + same filename
-    const key = `${conversationId}/${filename}`;
+    // Resolve to disk — handles both URL schemes with path-traversal and
+    // containment checks (throws on invalid/escaping URLs).
+    let resolved;
+    try {
+      resolved = await resolveUploadUrl(rawUrl);
+    } catch {
+      continue;
+    }
+
+    const filePath = resolved.resolvedPath;
+    const displayName = path
+      .basename(resolved.filename.replace(/\\/g, "/"));
+
+    // Deduplicate: same conversation + same file path
+    const key = `${resolved.conversationId}/${resolved.filename}`;
     if (seen.has(key)) continue;
     seen.add(key);
 
-    // Security: prevent path traversal
-    if (filename.includes("..") || filename.startsWith("/")) continue;
-
-    const filePath = path.join(UPLOAD_BASE, conversationId, filename);
-    const resolvedPath = path.resolve(filePath);
-    const normalizedBase = path.resolve(UPLOAD_BASE, conversationId);
-    if (!resolvedPath.startsWith(normalizedBase + path.sep)) continue;
-
     // Determine MIME type from extension
-    const ext = path.extname(filename).toLowerCase();
+    const ext = path.extname(displayName).toLowerCase();
     const mimeType = IMAGE_MIME_TYPES[ext];
     if (!mimeType) continue; // not a recognised image type
 
     try {
-      const stat = await fs.stat(resolvedPath);
+      const stat = await fs.stat(filePath);
       // Enforce the same 20 MB limit as the upload route
       if (stat.size > 20 * 1024 * 1024) continue;
 
-      const buffer = await fs.readFile(resolvedPath);
-      const url = `/api/chat/uploads/${conversationId}/${rawFilename}`;
+      const buffer = await fs.readFile(filePath);
       attachments.push({
         markdown: match[0],
         buffer,
         mimeType,
-        filename: altText || filename,
-        url,
+        filename: altText || displayName,
+        url: rawUrl,
       });
     } catch {
       // File not found or unreadable — skip silently
@@ -94,7 +102,7 @@ export async function extractImageAttachments(
  * Remove image markdown references from a text string so the AI doesn't
  * see duplicate markdown when the image is already passed natively.
  *
- * Only removes references that match chat upload URLs.
+ * Only removes references that match chat upload / session-file URLs.
  */
 export function stripImageMarkdown(text: string): string {
   return text.replace(IMAGE_UPLOAD_RE, "").replace(/\n{3,}/g, "\n\n").trim();

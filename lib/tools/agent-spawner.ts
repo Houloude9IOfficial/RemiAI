@@ -13,6 +13,7 @@ import { delayTool } from "@/lib/tools/delay";
 import { webFetchTool } from "@/lib/tools/web-fetch";
 import { buildTodoTools } from "@/lib/tools/todo";
 import { truncateToolResult, estimateTokenCount } from "@/lib/utils";
+import type { UserContext } from "@/lib/geo";
 
 // ---------------------------------------------------------------------------
 // Constants & types for agent chaining
@@ -34,6 +35,8 @@ interface ChainContext {
   conversationId: number;
   parentTaskId: number | null;
   chainDepth: number;
+  /** User context (timezone, country, language) — localizes search results. */
+  userContext?: UserContext;
 }
 
 // ---------------------------------------------------------------------------
@@ -48,6 +51,7 @@ interface AgentQueueItem {
   taskId: number;
   chainDepth: number;
   systemPromptOverride?: string;
+  userContext?: UserContext;
 }
 
 /**
@@ -100,6 +104,7 @@ class AgentQueue {
       item.taskId,
       item.chainDepth,
       item.systemPromptOverride,
+      item.userContext,
     );
   }
 
@@ -222,12 +227,14 @@ function normaliseTool(tool: any): any {
   return tool;
 }
 
-async function buildAgentTools(): Promise<Record<string, any>> {
+async function buildAgentTools(
+  userContext?: UserContext,
+): Promise<Record<string, any>> {
   const [fsTools, memoryTools, integrationTools, executionTools, docTools] =
     await Promise.all([
       buildFilesystemTools(),
       buildMemoryTools(),
-      buildIntegrationTools(),
+      buildIntegrationTools(userContext),
       buildExecutionTools(),
       buildDocumentReaderTools(),
     ]);
@@ -279,8 +286,8 @@ async function runAgent(
       ? systemPromptOverride
       : profile.systemPrompt;
 
-  // Build tools for the sub-agent
-  const agentTools = await buildAgentTools();
+  // Build tools for the sub-agent (pass user context so search is localized)
+  const agentTools = await buildAgentTools(chainContext?.userContext);
 
   // Add spawn_agent and get_agent_result for agent chaining.
   // Only allow spawning if we are NOT at the max chain depth.
@@ -310,6 +317,8 @@ async function runAgent(
     system: systemPrompt,
     messages: [{ role: "user", content: task }],
     tools: agentTools,
+    // Retry retryable provider failures up to 3 times before erroring out.
+    maxRetries: 3,
   });
 
   let accumulatedText = "";
@@ -365,6 +374,7 @@ async function executeAgentExecution(
   taskId: number,
   chainDepth: number,
   systemPromptOverride?: string,
+  userContext?: UserContext,
 ): Promise<void> {
   try {
     const provider = await db
@@ -405,6 +415,7 @@ async function executeAgentExecution(
       conversationId: taskRecord.conversationId,
       parentTaskId: taskId,
       chainDepth,
+      userContext,
     };
 
     const result = await runAgent(
@@ -685,6 +696,7 @@ This creates a tree of collaborating agents — e.g. a researcher spawns a summa
             taskId,
             chainDepth: childChainDepth,
             systemPromptOverride: system_prompt_override,
+            userContext: context.userContext,
           });
 
           const queueLen = agentQueue.queueLength;
@@ -791,6 +803,7 @@ export function buildMainSpawnAgentTool(
   provider: ProviderRow,
   modelId: string,
   conversationId: number,
+  userContext?: UserContext,
 ) {
   const chainContext: ChainContext = {
     provider,
@@ -798,6 +811,7 @@ export function buildMainSpawnAgentTool(
     conversationId,
     parentTaskId: null,
     chainDepth: 0,
+    userContext,
   };
   return buildSpawnAgentTool(chainContext);
 }

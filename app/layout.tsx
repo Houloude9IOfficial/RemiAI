@@ -7,6 +7,7 @@ import { ThemeFavicon } from "@/components/ThemeFavicon";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
 import { MobileSidebar } from "@/components/sidebar/MobileSidebar";
 import { SidebarProvider } from "@/components/sidebar/SidebarContext";
+import { ShortcutsProvider } from "@/components/sidebar/ShortcutsProvider";
 import { GlobalMobileHeader } from "@/components/GlobalMobileHeader";
 
 const inter = Inter({
@@ -52,7 +53,7 @@ export const viewport: Viewport = {
   viewportFit: "cover",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
+    { media: "(prefers-color-scheme: dark)", color: "#17181c" },
   ],
 };
 
@@ -84,6 +85,13 @@ export default function RootLayout({
                 else{r=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}
                 document.documentElement.classList.add(r);
                 document.documentElement.style.colorScheme=r;
+                // Re-apply a previously chosen accent color (cached by
+                // AccentColorProvider) so it shows before first paint.
+                var accent=localStorage.getItem("remi-accent-"+r);
+                if(accent){
+                  var vars=JSON.parse(accent);
+                  for(var k in vars){document.documentElement.style.setProperty(k, vars[k]);}
+                }
               } catch(e){}
             `,
           }}
@@ -94,14 +102,16 @@ export default function RootLayout({
           <ThemeFavicon />
           <ServiceWorkerRegistration />
           <SidebarProvider>
-            <div className="flex h-screen w-full">
-              <AppSidebar />
-              <MobileSidebar />
-              <main className="flex flex-1 flex-col overflow-auto">
-                <GlobalMobileHeader />
-                {children}
-              </main>
-            </div>
+            <ShortcutsProvider>
+              <div className="flex h-screen w-full supports-[height:100dvh]:h-dvh">
+                <AppSidebar />
+                <MobileSidebar />
+                <main className="flex flex-1 flex-col overflow-auto">
+                  <GlobalMobileHeader />
+                  {children}
+                </main>
+              </div>
+            </ShortcutsProvider>
           </SidebarProvider>
         </Providers>
       </body>

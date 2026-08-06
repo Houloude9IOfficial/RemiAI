@@ -4,6 +4,7 @@ import path from "node:path";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { backupHistory } from "@/db/schema";
+import { UPLOAD_DIR, AVATAR_DIR, SESSION_FILES_DIR } from "@/lib/paths";
 import { encryptBackup } from "./crypto";
 import { getAllTables } from "./schema";
 import { BACKUP_VERSION, type BackupFiles } from "./types";
@@ -27,9 +28,7 @@ const APP_VERSION = (() => {
 // Path helpers
 // ---------------------------------------------------------------------------
 
-const DATA_DIR = path.join(process.cwd(), "data");
-const UPLOAD_DIR = path.join(DATA_DIR, "uploads");
-const AVATAR_DIR = path.join(DATA_DIR, "avatars");
+
 
 // ---------------------------------------------------------------------------
 // Read all files from a directory as base64
@@ -77,6 +76,7 @@ export interface ExportResult {
     tables: Record<string, number>;
     uploads: number;
     avatars: number;
+    sessionFiles: number;
   };
 }
 
@@ -103,13 +103,14 @@ export async function exportBackup(
   }
 
   // ── Collect files ──────────────────────────────────────────────────────
-  let files: BackupFiles = { uploads: {}, avatars: {} };
+  let files: BackupFiles = { uploads: {}, avatars: {}, sessionFiles: {} };
   if (includeFiles) {
-    const [uploads, avatars] = await Promise.all([
+    const [uploads, avatars, sessionFiles] = await Promise.all([
       collectFiles(UPLOAD_DIR, ""),
       collectFiles(AVATAR_DIR, ""),
+      collectFiles(SESSION_FILES_DIR, ""),
     ]);
-    files = { uploads, avatars };
+    files = { uploads, avatars, sessionFiles };
   }
 
   // ── Build payload ──────────────────────────────────────────────────────
@@ -149,6 +150,7 @@ export async function exportBackup(
       tables: tableStats,
       uploads: Object.keys(files.uploads).length,
       avatars: Object.keys(files.avatars).length,
+      sessionFiles: Object.keys(files.sessionFiles).length,
     },
   };
 }

@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { preferencesApi } from "@/lib/api/preferences";
 import { Settings } from "lucide-react";
 
-export function SidebarProfile() {
+export function SidebarProfile({ collapsed = false }: { collapsed?: boolean }) {
   const { data: prefs } = useQuery({
     queryKey: ["preferences"],
     queryFn: preferencesApi.get,
@@ -25,15 +25,19 @@ export function SidebarProfile() {
 
   return (
     <Link
-      href="/settings/profile"
+      href={collapsed ? '' : "/settings/profile"}
       className={cn(
-        "group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-muted-foreground",
-        "hover:bg-muted hover:text-foreground",
+        "group flex items-center rounded-lg text-sm text-muted-foreground",
+        collapsed
+          ? "h-9 w-9 justify-center px-0 py-0 cursor-default"
+          : "gap-2.5 px-2.5 py-2 hover:bg-sidebar-accent hover:text-sidebar-foreground",
         "transition-all duration-200",
       )}
+      title={collapsed ? "Profile" : undefined}
+      aria-label={collapsed ? "Profile" : undefined}
     >
       {/* Avatar */}
-      <div className="relative h-8 w-8 flex-shrink-0 overflow-hidden rounded-full ring-1 ring-border/50">
+      <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full ring-1 ring-border/50">
         {avatarUrl ? (
           <img
             src={avatarUrl}
@@ -47,20 +51,24 @@ export function SidebarProfile() {
         )}
       </div>
 
-      {/* Name + subtle hint */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate text-sm font-medium leading-tight text-foreground">
-          {name}
-        </span>
-        <span className="truncate text-[11px] leading-tight text-muted-foreground/50">
-          View profile
-        </span>
-      </div>
+      {!collapsed && (
+        <>
+          {/* Name + subtle hint */}
+          <div className="flex min-w-0 flex-1 flex-col">
+            <span className="truncate text-sm font-medium leading-tight text-foreground">
+              {name}
+            </span>
+            <span className="truncate text-[11px] leading-tight text-muted-foreground/50">
+              View profile
+            </span>
+          </div>
 
-      {/* Settings icon — appears on hover */}
-      <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-        <Settings className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-muted-foreground" />
-      </div>
+          {/* Settings icon — appears on hover */}
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+            <Settings className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-muted-foreground" />
+          </div>
+        </>
+      )}
     </Link>
   );
 }

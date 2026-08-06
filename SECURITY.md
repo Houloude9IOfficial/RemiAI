@@ -2,12 +2,7 @@
 
 ## Supported Versions
 
-The following versions of RemiAI receive active security support:
-
-| Version | Supported |
-|---|---|
-| 1.2.x | Yes |
-| < 1.2 | No |
+The **latest stable release** of RemiAI receives active security support. Older releases are supported on a best-effort basis — we recommend upgrading to the newest version as soon as possible.
 
 ## Reporting a Vulnerability
 
@@ -57,23 +52,22 @@ RemiAI uses a **directory root system** that strictly limits file access:
 - AI provider API keys and tool integration keys are stored in the **local SQLite database** (`data/remiai.sqlite`)
 - Keys are **never sent to the client** in plaintext — the API masks them in responses (e.g., `sk-...abcd`)
 - The database file is stored locally and is **not** exposed via the web server
-- When using the **Backup** feature, all data including API keys is **encrypted with AES-256-GCM** before export
+- When using the **Backup** feature, all data including API keys is **encrypted** before export
 
 ### Backup Encryption
 
 All backups are encrypted before leaving your machine:
 
-- **Algorithm**: AES-256-GCM (authenticated encryption)
-- **Key derivation**: PBKDF2 with a random salt (100,000 iterations)
-- **Password required**: backups cannot be restored without the correct password
-- Both the salt and initialization vector (IV) are randomly generated per backup
+- Backups use **AES-256-GCM** (authenticated encryption) with a password-derived key and a random salt per backup
+- **Password required** — backups cannot be restored without the correct password
+- Each backup gets a fresh random salt and initialization vector, so identical data never produces identical ciphertext
 
 ### Code Execution Sandbox
 
 RemiAI supports executing JavaScript and Python code through its tool system:
 
 - Code runs in **isolated temporary directories** that are cleaned up after execution
-- **Strict timeouts** prevent runaway processes (30s default for Python, 15s for JavaScript)
+- **Strict timeouts** prevent runaway processes
 - JavaScript execution uses Node.js's **vm module** with no `fs`, `network`, or `timer` access
 - Python execution uses a **minimal environment** with only PATH and SYSTEMROOT variables
 
@@ -102,9 +96,9 @@ RemiAI uses a **local, single-account authentication layer**:
 
 - The first startup with no account generates a one-time signup code and prints it to the server console
 - Signup requires that code plus an email and password; the code is stored only as a hash and is consumed once
-- Passwords are stored using salted Node.js `scrypt` hashes; plaintext passwords are never persisted
+- Passwords are stored as salted, slow hashes; plaintext passwords are never persisted
 - Protected API requests require an opaque, server-side session stored in an HttpOnly SameSite cookie
-- Sessions are revocable and expire; users may choose a browser-only session or a 30-day remembered session
+- Sessions are revocable and expire; users may choose a browser-only session or a remembered session
 - Changing the password revokes all sessions, and `npm run auth:reset` provides a local console recovery path
 - Existing pre-auth databases are preserved and claimed by the first account
 - Encrypted backups preserve account credentials when restoring to a fresh installation, but never include active sessions or bootstrap secrets
@@ -122,8 +116,6 @@ For a public deployment:
 3. Use a strong account password, restrict access to the one-time signup code, and remove/restrict server-console log access after first setup.
 4. Review MCP servers, external provider keys, watched directories, and code-execution tools before allowing any remote access.
 5. Preserve the named Docker volume and test encrypted backups; losing `/app/data` loses the account and stored credentials.
-
-`npm audit --omit=dev` may still report advisories for nested packages shipped by the currently published Next.js 16.2.x release. Do not use `npm audit fix --force` here: it proposes an incompatible downgrade of Next.js. Re-run the audit after each Next.js release and upgrade when a compatible patched release is available.
 
 ---
 
@@ -173,6 +165,8 @@ This project uses automated tools to manage dependency security:
 - `npm audit` is run periodically to identify known vulnerabilities
 - Dependencies are updated regularly via standard npm update workflows
 - Critical security updates for Next.js, the AI SDK, and other core dependencies are applied promptly
+
+> **Note:** `npm audit` may report advisories in nested dependencies of the currently published Next.js release. Do **not** run `npm audit fix --force` to silence them — it proposes an incompatible downgrade. Re-run the audit after each Next.js upgrade and update when a compatible patched release is available.
 
 If you discover a vulnerability in a dependency, please report it following the [Reporting a Vulnerability](#reporting-a-vulnerability) process above, and we will update the affected package.
 

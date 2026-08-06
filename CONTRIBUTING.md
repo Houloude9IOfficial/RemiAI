@@ -7,7 +7,6 @@ Thank you for your interest in contributing to RemiAI! This document provides gu
 - [Code of Conduct](#code-of-conduct)
 - [Getting Started](#getting-started)
 - [Development Setup](#development-setup)
-- [Project Structure](#project-structure)
 - [Development Workflow](#development-workflow)
 - [Coding Guidelines](#coding-guidelines)
 - [Database](#database)
@@ -51,13 +50,13 @@ The app will be available at `http://127.0.0.1:3000`. The database auto-migrates
 
 ### Environment
 
-- **Node.js** >= 18
+- **Node.js** >= 18 (v22 recommended — see `.nvmrc`)
 - **npm**
 - A code editor (VS Code recommended)
 
 ### API Keys (Optional)
 
-Some features require API keys. You can configure these through the Settings UI once the app is running, or set them up via the tool configuration page:
+Some features require API keys. You can configure these through the Settings UI once the app is running:
 
 1. Go to **Settings -> Providers** to add an AI provider (Anthropic, OpenAI, or Ollama)
 2. Go to **Settings -> Tools** to configure external integrations (Firecrawl, Brave Search, ElevenLabs, NewsAPI, etc.)
@@ -73,47 +72,6 @@ npm install
 npm run dev
 ```
 
-## Project Structure
-
-```
-RemiAI/
-├── app/                    # Next.js App Router (pages & API routes)
-│   ├── api/                # API routes (chat, providers, tools, etc.)
-│   ├── chat/               # Chat pages
-│   ├── games/              # Game pages (Tic Tac Toe, Connect 4)
-│   ├── settings/           # Settings pages
-│   └── talk/               # Voice talk mode page
-├── components/             # React components
-│   ├── chat/               # Chat-related components
-│   ├── games/              # Game board components
-│   ├── layout/             # Layout components
-│   ├── settings/           # Settings-related components
-│   ├── talk/               # Talk mode components
-│   └── ui/                 # Reusable UI primitives (Base UI + custom)
-├── lib/                    # Application logic
-│   ├── api/                # API client functions
-│   ├── audio/              # Audio hooks (TTS, STT, ambient sound)
-│   ├── backup/             # Backup & restore logic
-│   ├── chat/               # Chat utilities (system prompt, persist, streaming)
-│   ├── fs/                 # File system operations & file watcher
-│   ├── games/              # Game logic
-│   ├── hooks/              # Shared React hooks
-│   ├── mcp/                # MCP client & tool management
-│   ├── providers/          # AI provider factory & catalog
-│   ├── routines/           # Routines runner
-│   ├── scheduler/          # Cron scheduler
-│   ├── tools/              # Tool implementations (firecrawl, exec, etc.)
-│   └── validation/         # Zod schemas & API validation
-├── db/                     # Database schema & migrations
-│   ├── schema.ts           # Drizzle ORM schema definitions
-│   ├── index.ts            # Database client & auto-migration
-│   └── migrations/         # SQL migration files
-├── assets/                 # Static assets (images, previews)
-├── creations/              # AI-generated projects
-├── data/                   # Local app data (SQLite DB) — gitignored
-└── website/                # Marketing website (separate Next.js app)
-```
-
 ## Development Workflow
 
 ### Branching
@@ -122,7 +80,7 @@ RemiAI/
 - **`v*.*.*`** — version branches for active development
 - Create **feature branches** from the relevant version branch:
   ```bash
-  git checkout v1.2.0
+  git checkout <version-branch>
   git checkout -b feature/my-feature
   ```
 
@@ -142,6 +100,48 @@ RemiAI/
   ```
 - **Imports**: prefer named exports over default exports
 - **Comments**: use JSDoc for public functions, inline comments for complex logic
+
+## Coding Guidelines
+
+### React Components
+
+- Use functional components with hooks
+- Use `"use client"` for client components (most UI components)
+- Leverage Base UI primitives from `components/ui/` rather than raw HTML elements
+- Use Framer Motion for animations (already a dependency)
+- Use `cn()` from `@/lib/utils` for conditional class names
+- Support dark/light themes via Tailwind classes (no inline color styles)
+
+### API Routes
+
+- Use Next.js App Router route handlers (`app/api/**/route.ts`)
+- Use `NextResponse` for responses
+- Use Drizzle ORM for database access (not raw SQL)
+- Return proper error codes (400, 404, 409, 500)
+- Use `force-dynamic` for SSE endpoints
+
+### Tools
+
+Tools are registered in `lib/tools/catalog.ts` and implement a specific interface. When adding a new tool:
+
+1. Add the implementation in `lib/tools/`
+2. Register it in `lib/tools/catalog.ts`
+3. Add configuration fields in the tool catalog definition
+4. Handle API key management through the existing tool configuration database pattern
+
+### Files & Session Files
+
+- The in-app file editor uses CodeMirror (`@uiw/react-codemirror`) with per-language extensions in `components/files/FileEditor.tsx`
+- Session files (per-chat sandboxes) live under `lib/session-files/` — reuse those helpers rather than re-implementing storage
+- When adding a new file type, check `lib/file-types.ts` and the CodeMirror language imports in `FileEditor.tsx`
+
+### Cross-Platform
+
+This project supports Windows, macOS, and Linux (web, PWA, and Electron desktop). Keep these in mind:
+
+- Normalize file paths with `path.normalize()` and convert backslashes to forward slashes
+- Use `z.coerce.number()` for IDs that may come as strings from the AI
+- Test on multiple platforms when making file system changes
 
 ## Database
 
@@ -197,7 +197,7 @@ If you add significant new functionality, consider including basic verification 
 1. **Rebase on the latest version branch**:
    ```bash
    git fetch upstream
-   git rebase upstream/v1.2.0
+   git rebase upstream/<version-branch>
    ```
 2. **Run the linter** — `npm run lint`
 3. **Verify the app starts** — `npm run dev` (check for console errors)
@@ -221,42 +221,6 @@ If you add significant new functionality, consider including basic verification 
 - Error handling and edge cases
 - UI consistency (animations, responsive behavior, theme support)
 - Database migration safety
-
-## Coding Guidelines
-
-### React Components
-
-- Use functional components with hooks
-- Use `"use client"` for client components (most UI components)
-- Leverage Base UI primitives from `components/ui/` rather than raw HTML elements
-- Use Framer Motion for animations (already a dependency)
-- Use `cn()` from `@/lib/utils` for conditional class names
-- Support dark/light themes via Tailwind classes (no inline color styles)
-
-### API Routes
-
-- Use Next.js App Router route handlers (`app/api/**/route.ts`)
-- Use `NextResponse` for responses
-- Use Drizzle ORM for database access (not raw SQL)
-- Return proper error codes (400, 404, 409, 500)
-- Use `force-dynamic` for SSE endpoints
-
-### Tools
-
-Tools are registered in `lib/tools/catalog.ts` and implement a specific interface. When adding a new tool:
-
-1. Add the implementation in `lib/tools/`
-2. Register it in `lib/tools/catalog.ts`
-3. Add configuration fields in the tool catalog definition
-4. Handle API key management through the existing `toolConfigs` database pattern
-
-### Cross-Platform
-
-This project supports Windows and macOS. Keep these in mind:
-
-- Normalize file paths with `path.normalize()` and convert backslashes to forward slashes
-- Use `z.coerce.number()` for IDs that may come as strings from the AI
-- Test on both platforms when making file system changes
 
 ## Questions & Support
 
