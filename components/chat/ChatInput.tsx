@@ -25,6 +25,18 @@ import { toast } from "sonner";
 import { FileAttachmentPreview, type AttachedFile } from "./FileAttachmentPreview";
 import { formatFileSize } from "@/lib/file-types";
 import type { ChatStatus } from "ai";
+import packagejson from "../../package.json";
+
+interface PackageJson {
+  name: string;
+  version: string;
+  author: string;
+  license: string;
+  description?: string;
+  repository?: { url?: string };
+}
+
+const packageJson = packagejson as PackageJson;
 
 /** Generate a descriptive filename for clipboard items that lack one. */
 function getClipboardFileName(file: File): string {
@@ -90,7 +102,7 @@ export function ChatInput({
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const dragCounterRef = useRef(0);
-  const [appVersion, setAppVersion] = useState("v1.5.0");
+  const [appVersion, setAppVersion] = useState(packageJson.version);
 
   const isStreaming = status === "streaming" || status === "submitted";
 

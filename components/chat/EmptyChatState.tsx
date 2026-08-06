@@ -47,7 +47,7 @@ export function EmptyChatState({
 
   const preferredName = (prefs?.preferredName ?? "").trim();
   const headline = preferredName
-    ? `What are you working on, <a className="font-semibold underline" href="/settings/profile">${preferredName}</a>?`
+    ? `What are you up to, <a className="font-semibold underline" href="/settings/profile">${preferredName}</a>?`
     : "What should we do?";
 
   return (
