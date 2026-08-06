@@ -116,3 +116,94 @@ Make file manager render media too, audio, video, images, etc... -->
 <!-- get time for ai gets the timezone from the server, not the user, and it should get the timezone from the user instead. Fix this.
 
 searching should use if possible user's location/region to get more relevant results. -->
+
+when writing a file in a non existent folder, it should create the folder and then write the file (but note in result that it created new folder). Fix this.
+
+tell the ai for big projects to use permitted dirs if possible and avoid session files, and if it needs to use session files, to use them only for temporary stuff and not for important files.
+
+after answering questions in plan mode, set mode to goal.
+
+add checkboxes to question tools and allow more flexibility in the questions, such as allowing multiple answers, and allow to add more than 7 questions.
+
+allow editing session files & permitted dirs files with changing lines, no need to rewrite the whole file, and allow to add new lines, and also allow to delete lines.
+
+allow running bash cmds fully, add in code execution tool.
+
+when activelly having todo tasks, when managing files/folders (CRUD) combine the tools in one group as thinking, so it wont show hundreds of tools in a row. example of bad: 
+`Created directory
+Worked for 1ms
+·
+1 file
+1 file changed
+components/ui
+
+Wrote file
+Worked for 100ms
+·
+1 file
+1 file changed
+ui/Logomark.tsx
++181
+
+Wrote file
+Worked for 1ms
+·
+1 file
+1 file changed
+package.json
++41
+
+Wrote file
+Worked for 1ms
+·
+1 file
+1 file changed
+next.config.mjs
++19
+
+Wrote file
+Worked for 1ms
+·
+1 file
+1 file changed
+tsconfig.json
++30
+
+Wrote file
+Worked for 100ms
+·
+1 file
+1 file changed
+tailwind.config.ts
++159
+
+Wrote file
+Worked for 100ms
+·
+1 file
+1 file changed
+postcss.config.mjs
++6
+
+Created directory
+Worked for 1ms
+·
+1 file
+1 file changed
+Silkon/src
+
+Created directory
+Worked for 100ms
+·
+1 file
+1 file changed
+src/app
+`
+
+make writing files/folders to permitted dirs easier, AI models often have issues with selecting parent folders, and it should be easier to select the parent folder, and also allow to create new folders if needed.
+
+Make questions tool more modern, asthetically pleasing and show in bottom of message
+
+if max 3 retries exchausted, and click continue it says that limit has been reached of 3. It should try again 3 times though every time the user clicks continue, and if it fails 3 times again, show the error message.
+
+make simply all tool calls with no text between them, to be grouped altogether, and show as one tool call, instead of showing each tool call as a separate one and bloating the UI.
