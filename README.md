@@ -634,8 +634,10 @@ For distribution builds, you'll need a valid Apple Developer ID certificate. See
 
 ## Made With
 
-- [Claude Code](https://claude.com) — AI-assisted development
 - [FreeBuff](https://freebuff.com) — Free AI coding assistant
+- [Claude Code](https://claude.com) — AI-assisted development
+- [ChatGPT Codex](https://openai.com/codex) — AI-assisted development
+- [Venice API](https://venice.ai) — AI-assisted development
 - [FreeLLMAPI](https://freellmapi.co) — Free LLM API access
 - [ProductHunt](https://www.producthunt.com/products/remiai) — Community
 
