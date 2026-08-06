@@ -46,6 +46,7 @@ import { buildProfileTools } from "@/lib/tools/profile";
 import { buildRoutinesTools } from "@/lib/tools/routines";
 import { buildScheduleTool } from "@/lib/tools/schedule";
 import { buildToolHelpTool, buildListAvailableToolsTool } from "@/lib/tools/tool-help";
+import { userContextFromHeaders } from "@/lib/geo";
 import { queryRecentChanges } from "@/lib/fs/file-index";
 import { estimateTokenCount } from "@/lib/utils";
 import {
@@ -176,16 +177,25 @@ export async function POST(req: Request) {
   // Gather filesystem tools from configured directories
   const fsToolSet = await buildFilesystemTools();
 
+  // User context sent by the browser (timezone + locale). Used to report the
+  // user's LOCAL time in get_time_details and to localize web search results.
+  const userContext = userContextFromHeaders(
+    req.headers.get("x-user-timezone"),
+    req.headers.get("x-user-locale"),
+  );
+
   // Gather context tools (time, device info)
   const contextToolSet = buildContextTools(
     req.headers.get("user-agent") ?? undefined,
+    userContext.timezone,
+    userContext.language,
   );
 
   // Gather memory tools (remember, search_memories)
   const memoryToolSet = buildMemoryTools();
 
   // Gather integration tools (Brave Search, Notion, Context7) based on config
-  const integrationToolSet = await buildIntegrationTools();
+  const integrationToolSet = await buildIntegrationTools(userContext);
 
   // Gather code execution tools (python_exec, js_exec)
   const executionToolSet = await buildExecutionTools();
@@ -210,7 +220,12 @@ export async function POST(req: Request) {
 
   // Agent spawner tools with chaining support
   const agentToolSet = {
-    spawn_agent: buildMainSpawnAgentTool(provider, conversation.modelId, conversationId),
+    spawn_agent: buildMainSpawnAgentTool(
+      provider,
+      conversation.modelId,
+      conversationId,
+      userContext,
+    ),
     get_agent_result: buildGetAgentResultTool(),
   };
 

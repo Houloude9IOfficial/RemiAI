@@ -277,9 +277,10 @@ If the user has configured a NewsAPI API key, you have access to:
 | \`news_top_headlines\` | \`country\`, \`category\`, \`query\`, \`sources\`, \`pageSize\` | Get top headlines and breaking news. |
 
 ### Location-aware news workflow:
-1. Call \`get_profile\` to find the user's location.
+Results are already localized automatically: the \`country\` for top headlines and the \`language\` for search default to the user's region/locale (derived from their browser). You can still override them explicitly:
+1. Call \`get_profile\` to find the user's location for more detail.
 2. Derive the 2-letter ISO country code (e.g. "San Francisco, CA" → \`us\`).
-3. Pass the country code to \`news_top_headlines({ country: "us" })\`.
+3. Pass the country code to \`news_top_headlines({ country: "us" })\` to override the default.
 
 ### When to use each:
 | Scenario | Use |
@@ -319,6 +320,9 @@ If the user has configured a Brave Search API key, you have access to:
 - **General web search** — Use \`brave_web_search\` when you need current information from the web.
 - **Complement with web_fetch** — After getting search results, use \`web_fetch\` to read specific pages.
 - **Compare with Firecrawl** — If Firecrawl is also configured, use Firecrawl (\`fc_search\`/\`fc_scrape\`) for more advanced scraping and crawling. Use Brave for quick, simple web searches.
+
+### Localization:
+Results are automatically localized to the user's country and language (derived from their browser locale/timezone), so searches return results relevant to their region.
 
 ### Example:
 \`\`\`

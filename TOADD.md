@@ -107,6 +107,6 @@ Make file manager render media too, audio, video, images, etc... -->
 
 <!-- File manager editor is bad, not theme friendly, and on paste of text, it pastes all as one line getting outside the container, no formatting & more. Fix this. -->
 
-get time for ai gets the timezone from the server, not the user, and it should get the timezone from the user instead. Fix this.
+<!-- get time for ai gets the timezone from the server, not the user, and it should get the timezone from the user instead. Fix this.
 
-searching should use if possible user's location/region to get more relevant results.
+searching should use if possible user's location/region to get more relevant results. -->

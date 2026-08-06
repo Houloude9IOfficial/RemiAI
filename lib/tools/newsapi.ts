@@ -1,5 +1,17 @@
 import { z } from "zod";
 import { truncateToolResult } from "@/lib/utils";
+import type { UserContext } from "@/lib/geo";
+
+// NewsAPI's top-headlines `country` parameter only supports these countries.
+// The user's derived country is used as a default only when it's supported,
+// otherwise the API would return a 400.
+const NEWSAPI_SUPPORTED_COUNTRIES = new Set([
+  "ae", "ar", "at", "au", "be", "bg", "br", "ca", "ch", "cn", "co",
+  "cu", "cz", "de", "eg", "fr", "gb", "gr", "hk", "hu", "id", "ie",
+  "il", "in", "it", "jp", "kr", "lt", "lv", "ma", "mx", "my", "ng",
+  "nl", "no", "nz", "ph", "pl", "pt", "ro", "rs", "ru", "sa", "se",
+  "sg", "si", "sk", "th", "tr", "tw", "ua", "us", "ve", "za",
+]);
 
 function mapArticles(
   articles: Array<{
@@ -23,12 +35,12 @@ function mapArticles(
   }));
 }
 
-export function buildNewsApiTool(apiKey: string) {
+export function buildNewsApiTool(apiKey: string, userContext?: UserContext) {
   return {
     // ── news_search: search all articles ──
     news_search: {
       description:
-        "Search news articles from thousands of sources worldwide using NewsAPI. Returns matching headlines with descriptions, URLs, publication dates, source names, and authors. Supports keyword operators (\"exact phrase\", +include, -exclude, AND/OR/NOT), language filtering, date range, and sorting by relevancy/popularity/date.\n\nTo personalise results for the user, first call get_profile to discover their location/language, then use that to tailor your query and language parameter.",
+        "Search news articles from thousands of sources worldwide using NewsAPI. Returns matching headlines with descriptions, URLs, publication dates, source names, and authors. Supports keyword operators (\"exact phrase\", +include, -exclude, AND/OR/NOT), language filtering, date range, and sorting by relevancy/popularity/date.\n\nThe language parameter defaults to the user's browser language. To personalise results further, call get_profile to discover their location/language and tailor your query.",
       parameters: z.object({
         query: z
           .string()
@@ -40,8 +52,8 @@ export function buildNewsApiTool(apiKey: string) {
         language: z
           .string()
           .length(2)
-          .default("en")
-          .describe("2-letter ISO-639-1 language code for results (default: en). Check the user's profile first to pick the right language."),
+          .optional()
+          .describe("2-letter ISO-639-1 language code for results. Defaults to the user's browser language (usually 'en'). Check the user's profile first to pick the right language."),
         sortBy: z
           .enum(["relevancy", "popularity", "publishedAt"])
           .default("publishedAt")
@@ -62,7 +74,7 @@ export function buildNewsApiTool(apiKey: string) {
       }),
       execute: async ({
         query,
-        language = "en",
+        language,
         sortBy = "publishedAt",
         pageSize = 10,
         from,
@@ -73,9 +85,10 @@ export function buildNewsApiTool(apiKey: string) {
         pageSize?: number;
         from?: string;
       }) => {
+        const resolvedLanguage = language ?? userContext?.language ?? "en";
         const url = new URL("https://newsapi.org/v2/everything");
         url.searchParams.set("q", query);
-        url.searchParams.set("language", language);
+        url.searchParams.set("language", resolvedLanguage);
         url.searchParams.set("sortBy", sortBy);
         url.searchParams.set("pageSize", String(pageSize));
         if (from) url.searchParams.set("from", from);
@@ -111,7 +124,7 @@ export function buildNewsApiTool(apiKey: string) {
     // ── news_top_headlines: get top/breaking headlines ──
     news_top_headlines: {
       description:
-        "Get the top headlines and breaking news from NewsAPI. You can filter by country, category, or keyword.\n\nTo personalise results for the user: call get_profile first to discover their location/country, then derive the 2-letter ISO 3166-1 country code and pass it as the country parameter. For example, if the user is in 'San Francisco, CA', use country='us'; if 'Paris, France', use country='fr'.\n\nAvailable categories: business, entertainment, general, health, science, sports, technology. If you omit country, the API returns global headlines.\n\nNOTE: The country and sources parameters cannot be used together. If you want a specific source, use the sources parameter instead of country.",
+        "Get the top headlines and breaking news from NewsAPI. You can filter by country, category, or keyword.\n\nWhen no country is given, headlines default to the user's country (derived from their browser locale/timezone). You can still pass an explicit country to override. For example, if the user is in 'San Francisco, CA', country='us'; if 'Paris, France', country='fr'.\n\nAvailable categories: business, entertainment, general, health, science, sports, technology.\n\nNOTE: The country and sources parameters cannot be used together. If you want a specific source, use the sources parameter instead of country.",
       parameters: z.object({
         country: z
           .string()
@@ -168,8 +181,13 @@ export function buildNewsApiTool(apiKey: string) {
         sources?: string;
         pageSize?: number;
       }) => {
+        const defaultCountry =
+          userContext?.country && NEWSAPI_SUPPORTED_COUNTRIES.has(userContext.country)
+            ? userContext.country
+            : undefined;
+        const resolvedCountry = country ?? defaultCountry;
         const url = new URL("https://newsapi.org/v2/top-headlines");
-        if (country) url.searchParams.set("country", country);
+        if (resolvedCountry) url.searchParams.set("country", resolvedCountry);
         if (category) url.searchParams.set("category", category);
         if (query) url.searchParams.set("q", query);
         if (sources) url.searchParams.set("sources", sources);

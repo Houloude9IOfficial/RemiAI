@@ -33,6 +33,7 @@ import {
 } from "@/lib/api/session-files";
 import { cn } from "@/lib/utils";
 import { errorToDisplayMessage } from "@/lib/chat/error-payload";
+import { userContextHeaders } from "@/lib/chat/user-context";
 
 // If the conversation fetch takes longer than this, abort it and surface an
 // error instead of leaving the user staring at an endless loading skeleton.
@@ -351,6 +352,9 @@ function ConversationChat({
     transport: new DefaultChatTransport({
       api: "/api/chat",
       body: { conversationId },
+      // Tell the server the user's timezone + locale so get_time_details
+      // reports the user's LOCAL time and search results are localized.
+      headers: () => userContextHeaders(),
     }),
     onFinish: () => {
       // Small delay to ensure server-side token update completes
@@ -529,7 +533,7 @@ function ConversationChat({
     try {
       const response = await fetch("/api/chat/start", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...userContextHeaders() },
         body: JSON.stringify({ conversationId }),
       });
 
