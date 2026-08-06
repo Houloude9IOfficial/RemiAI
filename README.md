@@ -420,9 +420,9 @@ Each creation includes the exact AI conversation that produced it — check the 
 
 This repo also includes a [landing page](./website/) (`/website`) for showcasing RemiAI. It's a separate Next.js 16 app with:
 
-- Animated hero section with scroll-driven parallax
-- Feature cards, tech stack badges, and MCP server recommendations
-- Creations gallery and CTA section
+- Sticky glass header and an animated hero featuring the v2 light-theme dashboard screenshot
+- Tech stack badges, a tight feature grid, and a quickstart terminal with copy-to-clipboard
+- Premium light design (Inter + JetBrains Mono, blue accent) matching the app's design language
 
 ```bash
 cd website
