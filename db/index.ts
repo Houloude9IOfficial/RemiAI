@@ -5,6 +5,7 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { sql } from "drizzle-orm";
 import * as schema from "./schema";
+import { DATA_DIR } from "@/lib/paths";
 import { startFileWatcher } from "@/lib/fs/watcher";
 
 /**
@@ -21,12 +22,7 @@ import { startFileWatcher } from "@/lib/fs/watcher";
  */
 const IS_BUILD_PHASE = process.env.NEXT_PHASE === "phase-production-build";
 
-const dataDir = path.join(
-  // turbopackIgnore: the local data dir must never be traced/copied into the
-  // standalone output — it contains the user's SQLite DB and uploads.
-  /* turbopackIgnore: true */ process.cwd(),
-  "data",
-);
+const dataDir = DATA_DIR;
 fs.mkdirSync(dataDir, { recursive: true });
 
 const sqlite = new Database(path.join(dataDir, "remiai.sqlite"));

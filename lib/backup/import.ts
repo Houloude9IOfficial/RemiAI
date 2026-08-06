@@ -2,6 +2,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
+import { UPLOAD_DIR, AVATAR_DIR, SESSION_FILES_DIR } from "@/lib/paths";
 import { decryptBackup } from "./crypto";
 import { getAllTables, getTableColumns } from "./schema";
 import {
@@ -16,10 +17,7 @@ import { revokeAllSessions } from "@/lib/auth/service";
 // Path helpers
 // ---------------------------------------------------------------------------
 
-const DATA_DIR = path.join(process.cwd(), "data");
-const UPLOAD_DIR = path.join(DATA_DIR, "uploads");
-const AVATAR_DIR = path.join(DATA_DIR, "avatars");
-const SESSION_FILES_DIR = path.join(DATA_DIR, "session-files");
+
 
 // ---------------------------------------------------------------------------
 // v1 → v2 migration helpers

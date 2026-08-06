@@ -5,6 +5,7 @@ import {
   readMediaFromResolvedPath,
   type MediaResult,
 } from "@/lib/fs/access";
+import { SESSION_FILES_DIR } from "@/lib/paths";
 
 // ---------------------------------------------------------------------------
 // Session file sandbox storage
@@ -18,11 +19,7 @@ import {
 // ---------------------------------------------------------------------------
 
 /** Base directory for all session file sandboxes. */
-export const SESSION_FILES_BASE = path.join(
-  process.cwd(),
-  "data",
-  "session-files",
-);
+export const SESSION_FILES_BASE = SESSION_FILES_DIR;
 
 /** Absolute path to a conversation's sandbox directory. */
 export function getSessionDir(conversationId: number): string {

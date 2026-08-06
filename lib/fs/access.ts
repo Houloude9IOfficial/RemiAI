@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import Fuse from "fuse.js";
 import { db } from "@/db";
 import { directories } from "@/db/schema";
+import { UPLOAD_DIR } from "@/lib/paths";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -605,14 +606,7 @@ export async function readMedia(
 /**
  * Upload base directory — matches app/api/chat/upload/route.ts
  */
-export const UPLOAD_BASE = path.join(
-  // turbopackIgnore: this is runtime state (the user's uploads dir), never
-  // the whole project — prevents Turbopack from tracing the entire repo
-  // during `next build` ("Encountered unexpected file in NFT list").
-  /* turbopackIgnore: true */ process.cwd(),
-  "data",
-  "uploads",
-);
+export const UPLOAD_BASE = UPLOAD_DIR;
 
 /**
  * Regex to match uploaded file URLs: /api/chat/uploads/{conversationId}/{filename}

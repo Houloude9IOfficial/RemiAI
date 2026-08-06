@@ -1,5 +1,6 @@
 import path from "node:path";
 import fs from "node:fs/promises";
+import { UPLOAD_DIR } from "@/lib/paths";
 
 /**
  * Legacy upload base directory — matches the old app/api/chat/upload/route.ts
@@ -8,7 +9,7 @@ import fs from "node:fs/promises";
  * up by deleteConversationSessionFiles. This handles leftover files from
  * before that change.
  */
-const UPLOAD_BASE = path.join(process.cwd(), "data", "uploads");
+const UPLOAD_BASE = UPLOAD_DIR;
 
 /**
  * Delete all legacy uploaded files for a conversation.

@@ -11,6 +11,10 @@ appId: com.remiai.app
 productName: RemiAI
 copyright: Copyright © 2026 RemiAI
 
+# Replaces the standalone output's better-sqlite3 copy with the Electron-ABI
+# build (the packaged app runs its server with Electron's bundled Node.js).
+afterPack: scripts/after-pack.cjs
+
 directories:
   output: release
   buildResources: build
