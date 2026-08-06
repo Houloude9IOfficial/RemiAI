@@ -470,6 +470,7 @@ After building RemiAI, I put its coding capabilities to the test by having it bu
 | [CLI Text Analyzer](./creations/CLI%20Text%20Analyzer/) | Command-line text analysis tool | Node.js |
 | [Aura](./creations/Aura/) | Minimalist personal dashboard | Vite.JS |
 | [Particlefield](./creations/Particlefield/) | Generative particle art playground | HTML5, Canvas |
+| [Silkon Labs](./creations/SilkonLabs/) | Landing page for an AI company | NextJS, Tailwind CSS |
 
 Each creation includes the exact AI conversation that produced it — check the `PROJECT.md` files for the full story.
 

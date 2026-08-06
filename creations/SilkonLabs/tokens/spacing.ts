@@ -1,0 +1,58 @@
+export const spacing = {
+  xxs: 4,
+  xs: 8,
+  sm: 12,
+  md: 16,
+  lg: 24,
+  xl: 32,
+  xxl: 48,
+  xxxl: 64,
+  section: 96,
+  hero: 128,
+} as const;
+
+export const sizing = {
+  radius: {
+    none: 0,
+    xs: 4,
+    sm: 6,
+    md: 8,
+    lg: 12,
+    xl: 16,
+    xxl: 24,
+    pill: 9999,
+  },
+  borderWidth: {
+    hairline: 1,
+    thin: 1,
+    normal: 2,
+    thick: 3,
+  },
+  container: {
+    sm: 640,
+    md: 768,
+    lg: 1024,
+    xl: 1280,
+    '2xl': 1440,
+    full: '100%',
+  },
+  zIndex: {
+    base: 0,
+    dropdown: 10,
+    sticky: 20,
+    fixed: 30,
+    modalBackdrop: 40,
+    modal: 50,
+    popover: 60,
+    tooltip: 70,
+    toast: 80,
+    max: 9999,
+  },
+  breakpoint: {
+    sm: 640,
+    md: 768,
+    lg: 1024,
+    xl: 1280,
+    '2xl': 1536,
+  },
+} as const;

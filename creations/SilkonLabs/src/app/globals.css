@@ -1,0 +1,189 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Silkon Labs Design System */
+:root {
+  --sl-canvas: #010102;
+  --sl-surface-1: #0f1011;
+  --sl-surface-2: #141516;
+  --sl-surface-3: #18191a;
+  --sl-hairline: #23252a;
+  --sl-hairline-strong: #34343a;
+  --sl-ink: #f7f8f8;
+  --sl-ink-muted: #d0d6e0;
+  --sl-ink-subtle: #8a8f98;
+  --sl-ink-tertiary: #62666d;
+  --sl-copper: #e0551a;
+  --sl-copper-hover: #eb763c;
+  --sl-copper-focus: #c94214;
+  --sl-brand-copper: #e0551a;
+  --sl-steel: #637385;
+  --sl-platinum: #707a8e;
+  --sl-font-display: var(--font-inter, 'Inter'), 'Inter', system-ui, -apple-system, sans-serif;
+  --sl-font-text: var(--font-inter, 'Inter'), 'Inter', system-ui, -apple-system, sans-serif;
+  --sl-font-mono: var(--font-jetbrains-mono, 'JetBrains Mono'), 'JetBrains Mono', ui-monospace, monospace;
+}
+
+* {
+  border-color: var(--sl-hairline);
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background-color: var(--sl-canvas);
+  color: var(--sl-ink);
+  font-family: var(--sl-font-text);
+  line-height: 1.5;
+}
+
+/* Typography */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--sl-font-display);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+h1 { font-size: 40px; line-height: 1.1; }
+h2 { font-size: 32px; line-height: 1.2; }
+h3 { font-size: 24px; line-height: 1.25; }
+h4 { font-size: 20px; line-height: 1.3; }
+
+/* Selection */
+::selection {
+  background: rgba(224, 85, 26, 0.3);
+  color: var(--sl-ink);
+}
+
+/* Focus */
+*:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sl-copper);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--sl-hairline-strong);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--sl-ink-subtle);
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ─────────────────────────────────────────────
+   Component classes (used across the site)
+   ───────────────────────────────────────────── */
+@layer components {
+  .container-narrow {
+    @apply mx-auto w-full max-w-3xl px-5 sm:px-6;
+  }
+
+  /* Buttons */
+  .btn,
+  .btn-primary,
+  .btn-secondary,
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-button font-medium transition-colors duration-normal ease-signature;
+  }
+
+  .btn-primary {
+    @apply bg-copper text-white hover:bg-copper-hover active:bg-copper-focus;
+  }
+
+  .btn-secondary {
+    @apply bg-surface-1 text-ink border border-hairline hover:bg-surface-2 hover:border-hairline-strong active:bg-surface-3;
+  }
+
+  .btn-ghost {
+    @apply bg-transparent text-ink hover:bg-surface-1 active:bg-surface-2;
+  }
+
+  .btn-sm {
+    @apply px-3 py-1.5 text-body-sm;
+  }
+
+  .btn-lg {
+    @apply px-6 py-3 text-body-lg;
+  }
+
+  /* Forms */
+  .label {
+    @apply block text-body-sm font-medium text-ink-muted mb-1.5;
+  }
+
+  .input {
+    @apply w-full rounded-md border border-hairline bg-surface-1 px-3.5 py-2 text-body text-ink placeholder:text-ink-tertiary transition-colors duration-normal ease-signature;
+  }
+
+  .input:hover {
+    @apply border-hairline-strong;
+  }
+
+  .input:focus {
+    @apply border-copper outline-none ring-2 ring-copper/25;
+  }
+
+  .input-error {
+    @apply border-danger-500;
+  }
+
+  /* Surfaces */
+  .surface-card {
+    @apply rounded-xl border border-hairline bg-surface-1 hover:bg-surface-2 hover:border-hairline-strong;
+  }
+
+  .surface-card-elevated {
+    @apply rounded-xl border border-hairline-strong bg-surface-2;
+  }
+
+  /* Gradients */
+  .bg-gradient-copper {
+    background-image: linear-gradient(135deg, #eb763c 0%, #e0551a 55%, #c94214 100%);
+  }
+
+  .bg-gradient-mesh {
+    background-image:
+      radial-gradient(ellipse 80% 60% at 20% 20%, rgba(224, 85, 26, 0.16), transparent 70%),
+      radial-gradient(ellipse 60% 50% at 80% 25%, rgba(99, 115, 133, 0.16), transparent 70%),
+      radial-gradient(ellipse 70% 60% at 50% 95%, rgba(224, 85, 26, 0.1), transparent 70%);
+  }
+
+  /* Code */
+  .code-inline {
+    @apply rounded border border-hairline bg-surface-2 px-1.5 py-0.5 font-mono text-[0.875em] text-copper;
+  }
+
+  .code-block {
+    @apply rounded-lg border border-hairline bg-surface-1 p-4 font-mono text-body-sm text-ink-muted;
+  }
+
+  /* Links */
+  .link-muted {
+    @apply text-ink-muted transition-colors duration-fast ease-signature hover:text-ink;
+  }
+
+  .text-decoration-none {
+    text-decoration: none;
+  }
+}
