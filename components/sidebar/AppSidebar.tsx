@@ -12,6 +12,7 @@ import { ConversationList } from "./ConversationList";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { SidebarProfile } from "./SidebarProfile";
 import { AboutModal } from "./AboutModal";
+import { ShortcutsTrigger } from "./ShortcutsModal";
 import { useSidebar } from "./SidebarContext";
 
 const primaryLinks = [
@@ -257,7 +258,10 @@ function DesktopSidebar() {
               <SidebarProfile />
             </div>
             <div className="mt-1 flex items-center justify-between px-2.5 py-1.5">
-              <AboutModal />
+              <div className="flex items-center gap-0.5">
+                <AboutModal />
+                <ShortcutsTrigger className="h-7 w-7" />
+              </div>
               <ThemeToggle />
             </div>
           </nav>

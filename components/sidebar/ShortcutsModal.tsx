@@ -155,7 +155,7 @@ export function ShortcutsTrigger({ className }: ShortcutsTriggerProps) {
       aria-label="Keyboard shortcuts"
       title="Keyboard shortcuts"
       className={cn(
-        "flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-95",
+        "flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors",
         className,
       )}
     >
