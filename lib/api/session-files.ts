@@ -32,8 +32,23 @@ export type SessionFilesOverviewEntry = {
 
 export const SESSION_FILES_PRESENT_EVENT = "remi:session-files:present";
 
+export const SESSION_FILES_CHANGED_EVENT = "remi:session-files:changed";
+
+/**
+ * Dispatch the event that tells an open session files panel to refresh its
+ * listing. Fired after files change outside the panel itself (e.g. a file
+ * uploaded through the chat composer).
+ */
+export function dispatchSessionFilesChanged() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(SESSION_FILES_CHANGED_EVENT));
+}
+
 export type SessionFilesPresentDetail = {
+  /** File paths to highlight in the panel tree (used by session_present_files). */
   paths?: string[];
+  /** When set, the panel opens straight to this file in the viewer (used by session_present_file). */
+  focusPath?: string;
   message?: string | null;
 };
 

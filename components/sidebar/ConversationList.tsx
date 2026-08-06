@@ -34,6 +34,13 @@ import { conversationsApi, type Conversation } from "@/lib/api/conversations";
 import { toast } from "sonner";
 import { useActiveStreams } from "@/lib/chat/streaming-context";
 
+function getConversationGroup(updatedAt: string): "Recent" | "Older" {
+  const updated = new Date(normalizeDate(updatedAt)).getTime();
+  const now = Date.now();
+  const twoDaysMs = 2 * 24 * 60 * 60 * 1000;
+  return now - updated <= twoDaysMs ? "Recent" : "Older";
+}
+
 function formatNumber(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
@@ -57,10 +64,16 @@ function formatDate(dateStr: string): string {
 function ContextMenuPortal({
   conversation,
   position,
+  onRename,
+  onDuplicate,
+  onDelete,
   onClose,
 }: {
   conversation: Conversation;
   position: { x: number; y: number };
+  onRename: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
   onClose: () => void;
 }) {
   return createPortal(
@@ -83,6 +96,43 @@ function ContextMenuPortal({
         <div className="truncate px-1.5 py-1 text-sm font-medium">
           {conversation.title}
         </div>
+
+        <div className="mx-1 h-px bg-border" />
+
+        {/* Actions */}
+        <button
+          type="button"
+          className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-sm select-none hover:bg-accent hover:text-accent-foreground"
+          onClick={() => {
+            onRename();
+            onClose();
+          }}
+        >
+          <PenLine className="h-3.5 w-3.5" />
+          Rename
+        </button>
+        <button
+          type="button"
+          className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-sm select-none hover:bg-accent hover:text-accent-foreground"
+          onClick={() => {
+            onDuplicate();
+            onClose();
+          }}
+        >
+          <Copy className="h-3.5 w-3.5" />
+          Duplicate
+        </button>
+        <button
+          type="button"
+          className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-sm text-destructive select-none hover:bg-destructive/10"
+          onClick={() => {
+            onDelete();
+            onClose();
+          }}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          Delete
+        </button>
 
         <div className="mx-1 h-px bg-border" />
 
@@ -186,6 +236,18 @@ export function ConversationList() {
       c.totalOutputTokens > 0 ||
       pathname === `/chat/${c.id}` ||
       activeStreams.has(c.id),
+  );
+
+  const grouped = filteredConversations.reduce(
+    (acc, conversation) => {
+      const group = getConversationGroup(conversation.updatedAt);
+      acc[group].push(conversation);
+      return acc;
+    },
+    {
+      Recent: [] as Conversation[],
+      Older: [] as Conversation[],
+    },
   );
 
   // Rename state
@@ -396,9 +458,9 @@ export function ConversationList() {
           </>
         ) : (
           <>
-            <span className="text-xs uppercase tracking-wide text-muted-foreground/60">
+            {/* <span className="text-xs uppercase tracking-wide text-muted-foreground/60">
               Chats
-            </span>
+            </span> */}
             <button
               type="button"
               onClick={() => setSelectMode(true)}
@@ -410,8 +472,18 @@ export function ConversationList() {
         )}
       </div>
 
-      <div className="flex flex-col gap-0.5">
-        {filteredConversations.map((conversation) => {
+      <div className="flex flex-col gap-1">
+        {(["Recent", "Older"] as const).map((groupName) => {
+          const groupItems = grouped[groupName];
+          if (groupItems.length === 0) return null;
+
+          return (
+            <div key={groupName} className="flex flex-col gap-0.5">
+              <div className="px-2 pb-0.5 pt-2 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground/45 first:pt-0">
+                {groupName}
+              </div>
+
+              {groupItems.map((conversation) => {
           const isActive = pathname === `/chat/${conversation.id}`;
           const isSelected = selectedIds.has(conversation.id);
           const isStreaming = activeStreams.has(conversation.id);
@@ -428,58 +500,59 @@ export function ConversationList() {
                 }
               }}
             >
-              <div
-                className={cn(
-                  "group/conversation flex w-full items-center justify-start rounded-md px-2 py-1.5 text-sm text-left",
-                  isActive && !selectMode
-                    ? "bg-muted text-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                  selectMode && isSelected && "bg-primary/10",
-                  selectMode && "cursor-pointer",
-                  (!selectMode) && "cursor-default",
-                )}
-                onClick={
-                  selectMode ? () => toggleSelect(conversation.id) : undefined
-                }
-              >
                   {renamingId === conversation.id ? (
                     /* ---- Inline rename input ---- */
-                    <form
-                      className="flex flex-1 items-center gap-1"
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        commitRename();
-                      }}
+                    <div
+                      className={cn(
+                        "group/conversation flex w-full items-center justify-start rounded-md px-2 py-1.5 text-sm text-left",
+                        isActive
+                          ? "bg-sidebar-accent text-sidebar-foreground"
+                          : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                      )}
                     >
-                      <Input
-                        value={renameValue}
-                        onChange={(e) => setRenameValue(e.target.value)}
-                        onBlur={commitRename}
-                        onKeyDown={(e) => {
-                          if (e.key === "Escape") cancelRename();
+                      <form
+                        className="flex flex-1 items-center gap-1"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          commitRename();
                         }}
-                        className="h-6 min-w-0 flex-1 px-1 text-sm"
-                        autoFocus
-                      />
-                      <button
-                        type="submit"
-                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground"
-                        tabIndex={-1}
                       >
-                        <Check className="h-3 w-3" />
-                      </button>
-                      <button
-                        type="button"
-                        className="flex h-5 w-5 shrink-0 rounded text-muted-foreground hover:text-foreground"
-                        onClick={cancelRename}
-                        tabIndex={-1}
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </form>
+                        <Input
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onBlur={commitRename}
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") cancelRename();
+                          }}
+                          className="h-7 min-w-0 flex-1 px-1.5 text-sm"
+                          autoFocus
+                        />
+                        <button
+                          type="submit"
+                          className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+                          tabIndex={-1}
+                        >
+                          <Check className="h-3 w-3" />
+                        </button>
+                        <button
+                          type="button"
+                          className="flex h-5 w-5 shrink-0 rounded text-muted-foreground hover:text-foreground"
+                          onClick={cancelRename}
+                          tabIndex={-1}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </form>
+                    </div>
                   ) : selectMode ? (
-                    /* ---- Select mode: checkbox + title ---- */
-                    <>
+                    /* ---- Select mode: whole row toggles selection ---- */
+                    <div
+                      className={cn(
+                        "group/conversation flex w-full items-center justify-start rounded-md px-2 py-1.5 text-sm text-left cursor-pointer",
+                        isSelected && "bg-primary/10",
+                      )}
+                      onClick={() => toggleSelect(conversation.id)}
+                    >
                       <div className="flex h-5 w-5 shrink-0 rounded text-muted-foreground">
                         {isSelected ? (
                           <CheckSquare className="h-4 w-4 text-primary" />
@@ -495,87 +568,41 @@ export function ConversationList() {
                       >
                         {conversation.title}
                       </span>
-                    </>
+                    </div>
                   ) : (
-                    /* ---- Normal link view with prefetch on hover ---- */
-                    <>
-                      <Link
-                        href={`/chat/${conversation.id}`}
-                        className="flex-1 truncate"
-                        onMouseEnter={() => prefetchConversation(conversation.id)}
-                        onFocus={() => prefetchConversation(conversation.id)}
-                      >
-                        {isStreaming && (
-                          <span className="inline-flex items-center mr-1.5">
-                            <span className="relative flex h-2 w-2">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
-                              <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
-                            </span>
+                    /* ---- Normal view: the whole row is the link ---- */
+                    <Link
+                      href={`/chat/${conversation.id}`}
+                      className={cn(
+                        "group/conversation flex w-full items-center justify-start rounded-md px-2 py-1.5 text-sm text-left",
+                        isActive
+                          ? "bg-sidebar-accent text-sidebar-foreground"
+                          : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                      )}
+                      onMouseEnter={() => prefetchConversation(conversation.id)}
+                      onFocus={() => prefetchConversation(conversation.id)}
+                    >
+                      {isStreaming && (
+                        <span className="inline-flex items-center mr-1.5">
+                          <span className="relative flex h-2 w-2">
+                            <span className="absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
                           </span>
-                        )}
-                        {conversation.title}
-                      </Link>
+                        </span>
+                      )}
+                      <span className="flex-1 truncate">{conversation.title}</span>
 
-                      {/* Hover actions (hide when streaming) */}
-                      <div
-                        className={cn(
-                          "flex shrink-0 items-center gap-0.5 transition-opacity",
-                          isStreaming
-                            ? "opacity-100"
-                            : "opacity-0 group-hover/conversation:opacity-100",
-                        )}
-                      >
-                        {isStreaming ? (
-                          <span className="flex h-6 w-6 items-center justify-center" title="Generating...">
-                            <span className="h-3 w-3 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-                          </span>
-                        ) : (
-                          <>
-                            <span
-                              className="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted-foreground/10 hover:text-foreground"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                startRename(conversation.id, conversation.title);
-                              }}
-                              role="button"
-                              tabIndex={-1}
-                              title="Rename"
-                            >
-                              <PenLine className="h-3 w-3" />
-                            </span>
-                            <span
-                              className="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted-foreground/10 hover:text-foreground"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                duplicateMutation.mutate(conversation.id);
-                              }}
-                              role="button"
-                              tabIndex={-1}
-                              title="Duplicate"
-                            >
-                              <Copy className="h-3 w-3" />
-                            </span>
-                            <span
-                              className="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                setDeletingId(conversation.id);
-                              }}
-                              role="button"
-                              tabIndex={-1}
-                              title="Delete"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </span>
-                          </>
-                        )}
-                      </div>
-                    </>
+                      {/* Keep only critical state icon */}
+                      {isStreaming && (
+                        <span className="flex h-6 w-6 items-center justify-center" title="Generating...">
+                          <span className="h-3 w-3 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                        </span>
+                      )}
+                    </Link>
                   )}
-                </div>
+            </div>
+          );
+              })}
             </div>
           );
         })}
@@ -673,6 +700,9 @@ export function ConversationList() {
           <ContextMenuPortal
             conversation={conversation}
             position={contextMenuPos}
+            onRename={() => startRename(conversation.id, conversation.title)}
+            onDuplicate={() => duplicateMutation.mutate(conversation.id)}
+            onDelete={() => setDeletingId(conversation.id)}
             onClose={() => {
               setContextMenuId(null);
               setContextMenuPos(null);

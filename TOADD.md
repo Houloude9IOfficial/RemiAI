@@ -79,6 +79,12 @@ Descriptions: A tool (togglable) that allows the AI with javascript to create ro
 
 <!-- remove icon background from tool calling visual text -->
 
+
+
+
+<!-- V2  -->
+
+
 <!-- Centerize visualizations by default, and allow to be aligned left/right if needed. -->
 
 <!-- Add session file storage (mostly txt, md, py, js, etc...) and have tools to modify them (same as now the file management system tools, but for sandboxes only for each chat), and also have a present tool to show the user a file/files -->
@@ -86,3 +92,27 @@ Descriptions: A tool (togglable) that allows the AI with javascript to create ro
 <!-- Add a file manager section to the dashboard, and allow the user to manage the files that are associated with each chat & the AI has access to, with options to create, edit, delete, download and organize files. -->
 
 <!-- when opening on deployment the website, it sometimes loads /chat/1 and stays loading, on mobile it doesnt show the sidebar and it stays stuck on loading, and on desktop it shows the sidebar but the chat content is empty and it stays loading. Fix this. -->
+
+<!-- tool cards have 2 scroll bars on console output. -->
+
+<!-- add controls to messages, copy for yours and copy + regenerate for AI messages (say that it'll delete all messages after it if any exist.)
+
+Make file manager render media too, audio, video, images, etc... -->
+
+<!-- Make files uploaded in a chat, to automatically be added /shown to the file manager for that chat, and allow the AI to access them. Save in a folder in session files called 'uploads' and allow the AI to access them. Also allow the user to manage them in the file manager (already done). -->
+
+<!-- make accent color configurable in profile settings. -->
+
+<!-- Make on start of new chat, to remove suggestions, move chat input as a bigger in the center & middle, keep the headline, kind of how code editors are. And on start, to smoothly move it as it is now. -->
+
+<!-- if an AI request fails, retry up to 3 times before erroring out. -->
+
+<!-- allow resizing the session files panel. -->
+
+<!-- file attaching from allowed dirs shows only top folders, but on open, it doesnt show any content inside, whether files or folders. Fix this. -->
+
+<!-- File manager editor is bad, not theme friendly, and on paste of text, it pastes all as one line getting outside the container, no formatting & more. Fix this. -->
+
+<!-- get time for ai gets the timezone from the server, not the user, and it should get the timezone from the user instead. Fix this.
+
+searching should use if possible user's location/region to get more relevant results. -->

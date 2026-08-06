@@ -5,6 +5,13 @@ const nextConfig: NextConfig = {
   // directory (.next/standalone/) that can be shipped with Electron.
   // In dev mode this flag has no effect.
   output: "standalone",
+  // Guarantee the SQLite migration files are copied into the standalone
+  // output. db/index.ts runs migrations at runtime (process.cwd() is
+  // .next/standalone in the packaged app) and skips them during `next build`,
+  // so we can't rely on Turbopack's automatic file tracing alone.
+  outputFileTracingIncludes: {
+    "/**": ["./db/migrations/**"],
+  },
   devIndicators: false,
   serverExternalPackages: ["better-sqlite3"],
   // Encrypted backups may contain uploaded files and exceed Next's default

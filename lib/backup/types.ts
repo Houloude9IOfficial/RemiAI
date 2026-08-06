@@ -64,6 +64,12 @@ export interface BackupFiles {
   uploads: Record<string, string>;
   /** Map of `avatars/{filename}` → base64 content. */
   avatars: Record<string, string>;
+  /**
+   * Map of `session-files/{conversationId}/{path}` → base64 content.
+   * Chat uploads live in the session sandbox under `uploads/`, so they are
+   * backed up here.
+   */
+  sessionFiles: Record<string, string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -77,6 +83,7 @@ export interface RestoreResult {
   files: {
     uploads: number;
     avatars: number;
+    sessionFiles: number;
   };
   exportedAt: string;
   appVersion: string;

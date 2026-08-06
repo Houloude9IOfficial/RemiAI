@@ -24,8 +24,12 @@ const files = [
   "favicon-48x48.png",
   "favicon-48x48-Light.png",
   "favicon-48x48-Lighter.png",
-  // Manifest
-  "manifest.json",
+  // PWA / apple icons
+  "icon-192x192.png",
+  "icon-512x512.png",
+  "apple-touch-icon.png",
+  // manifest.json intentionally NOT copied: the website keeps its own
+  // light-themed manifest (the app's is dark-themed).
 ];
 
 if (!existsSync(dstPublic)) {

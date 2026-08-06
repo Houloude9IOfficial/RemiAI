@@ -17,6 +17,8 @@ import { useAmbientSound } from "@/lib/audio/use-ambient-sound";
 import { usePremiumTTS } from "@/lib/audio/use-premium-tts";
 import { useSpeechRecognition } from "@/lib/audio/use-speech-recognition";
 import { cn } from "@/lib/utils";
+import { errorToDisplayMessage } from "@/lib/chat/error-payload";
+import { toast } from "sonner";
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -277,33 +279,48 @@ export default function TalkPage() {
             if (line === "data: [DONE]") continue;
             if (!line.startsWith("data: ")) continue;
 
+            let data: any;
             try {
-              const data = JSON.parse(line.slice(6));
+              data = JSON.parse(line.slice(6));
+            } catch {
+              // Ignore parse errors for incomplete lines
+              continue;
+            }
 
-              if (data.type === "text-delta") {
-                fullResponse += data.delta ?? "";
-                const cleaned = stripMarkdownAndEmojis(fullResponse);
+            if (data.type === "text-delta") {
+              fullResponse += data.delta ?? "";
+              const cleaned = stripMarkdownAndEmojis(fullResponse);
 
-                streamedTextRef.current = fullResponse;
-                setStreamedText(fullResponse);
+              streamedTextRef.current = fullResponse;
+              setStreamedText(fullResponse);
 
-                // Update the spoken text and current line
-                spokenTextRef.current += data.delta;
-                setSpokenText(stripMarkdownAndEmojis(spokenTextRef.current));
+              // Update the spoken text and current line
+              spokenTextRef.current += data.delta;
+              setSpokenText(stripMarkdownAndEmojis(spokenTextRef.current));
 
-                // Extract the last sentence being formed
-                const sentences = splitIntoSentences(cleaned);
-                if (sentences.length > 0) {
-                  setCurrentLine(sentences[sentences.length - 1]);
-                }
-
-                // Switch circle to speaking once we have output
-                if (circleState === "thinking") {
-                  ambient.stopAmbient();
-                  setCircleState("speaking");
-                }
+              // Extract the last sentence being formed
+              const sentences = splitIntoSentences(cleaned);
+              if (sentences.length > 0) {
+                setCurrentLine(sentences[sentences.length - 1]);
               }
-            } catch {}
+
+              // Switch circle to speaking once we have output
+              if (circleState === "thinking") {
+                ambient.stopAmbient();
+                setCircleState("speaking");
+              }
+            }
+
+            if (data.type === "error") {
+              const mapped = errorToDisplayMessage(
+                data.errorText ?? data.error ?? "Talk stream failed",
+              );
+              throw new Error(
+                mapped.message
+                  ? `${mapped.title}\n${mapped.message}`
+                  : mapped.title,
+              );
+            }
           }
         }
 
@@ -320,6 +337,11 @@ export default function TalkPage() {
       } catch (err: any) {
         if (err?.name === "AbortError") return;
         console.error("Talk error:", err);
+        const mapped = errorToDisplayMessage(err);
+        toast.error(mapped.title, {
+          description: mapped.message,
+          duration: 5000,
+        });
       } finally {
         // Stop STT before TTS to prevent feedback loop
         // (microphone picking up speaker output)
@@ -545,7 +567,7 @@ export default function TalkPage() {
             transition={{ duration: 0.3, ease: "easeInOut" }}
             className="overflow-hidden border-b border-border/20"
           >
-            <div className="flex items-start gap-3 bg-primary/[0.02] px-4 py-3">
+            <div className="flex items-start gap-3 bg-primary/2 px-4 py-3">
               <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-primary/20">
                 <span className="text-[9px] font-bold text-primary/60">i</span>
               </div>
@@ -651,7 +673,7 @@ export default function TalkPage() {
               />
 
               {/* ── Transcript Area ── */}
-              <div className="flex min-h-[100px] w-full items-center justify-center">
+              <div className="flex min-h-25 w-full items-center justify-center">
                 {!hasConversation && !interimTranscript ? (
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
@@ -686,7 +708,7 @@ export default function TalkPage() {
                         {interimTranscript}
                       </p>
                       <motion.span
-                        className="inline-block h-4 w-[2px] bg-primary/50"
+                        className="inline-block h-4 w-0.5 bg-primary/50"
                         animate={{ opacity: [1, 0] }}
                         transition={{ duration: 0.7, repeat: Infinity, ease: "easeInOut" }}
                       />

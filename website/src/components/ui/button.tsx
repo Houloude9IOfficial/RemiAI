@@ -12,22 +12,22 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     return (
       <button
         className={cn(
-          "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+          "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 cursor-pointer",
 
           // Variants
           variant === "primary" &&
-            "bg-zinc-900 text-white shadow-sm hover:bg-zinc-800 active:bg-zinc-700",
+            "bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98]",
           variant === "secondary" &&
-            "bg-zinc-100 text-zinc-900 hover:bg-zinc-200 active:bg-zinc-300",
+            "bg-accent text-accent-foreground hover:bg-accent/80 active:scale-[0.98]",
           variant === "outline" &&
-            "border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 active:bg-zinc-100 active:text-zinc-900",
+            "border border-border bg-background text-foreground hover:bg-muted hover:border-border active:scale-[0.98]",
           variant === "ghost" &&
-            "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900",
+            "text-muted-foreground hover:bg-muted hover:text-foreground",
 
           // Sizes
-          size === "sm" && "h-8 px-3 text-xs",
+          size === "sm" && "h-9 px-3.5 text-[13px]",
           size === "md" && "h-10 px-4 text-sm",
-          size === "lg" && "h-12 px-6 text-base",
+          size === "lg" && "h-12 px-6 text-[15px]",
 
           className
         )}

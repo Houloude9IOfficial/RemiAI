@@ -1,6 +1,7 @@
 "use client";
 
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { AccentColorProvider } from "@/components/AccentColorProvider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { QueryProvider } from "@/lib/query-client";
@@ -17,7 +18,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
           <StreamingProvider>
             <TooltipProvider>
               <NotificationListener />
-              <AuthWall>{children}</AuthWall>
+              <AuthWall>
+                <AccentColorProvider>{children}</AccentColorProvider>
+              </AuthWall>
               <Toaster />
             </TooltipProvider>
           </StreamingProvider>

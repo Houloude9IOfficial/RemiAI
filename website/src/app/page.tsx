@@ -1,61 +1,53 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import Image from "next/image";
+import { motion, useReducedMotion } from "framer-motion";
 import {
   IconBrandGithub,
-  IconCode,
-  IconCpu,
-  IconDatabase,
+  IconBrain,
+  IconCheck,
+  IconClipboard,
   IconFileText,
+  IconMicrophone,
   IconPlugConnected,
   IconRobot,
-  IconSearch,
+  IconShieldLock,
   IconTerminal2,
-  IconTools,
-  IconBrain,
-  IconArrowUpRight,
-  IconChevronDown,
-  IconStar,
-  IconSun,
-  IconMoon,
-  IconBrowser,
-  IconGitBranch,
-  IconClipboard,
-  IconCheck,
 } from "@tabler/icons-react";
-import { motion, useScroll, useTransform, useInView } from "framer-motion";
-import Image from "next/image";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { GITHUB_URL, CREATIONS_URL, SITE_NAME, MCP_SERVERS } from "@/lib/constants";
+import { GITHUB_URL, SITE_NAME } from "@/lib/constants";
 
 /* ------------------------------------------------------------------ */
-/*  Animation helpers                                                  */
+/*  Shared animation variants                                          */
 /* ------------------------------------------------------------------ */
 
-function StaggerFadeUp({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return (
-    <motion.div
-      initial="hidden"
-      whileInView="visible"
-      viewport={{ once: true, amount: 0.1 }}
-      variants={{
-        visible: { transition: { staggerChildren: 0.12 } },
-      }}
-      className={className}
-    >
-      {children}
-    </motion.div>
-  );
+const ease: [number, number, number, number] = [0.16, 1, 0.3, 1];
+
+function fadeUp(delay = 0) {
+  return {
+    hidden: { opacity: 0, y: 24 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.7, ease, delay } },
+  };
 }
 
-function StaggerItem({ children }: { children: React.ReactNode }) {
+function Reveal({
+  children,
+  delay = 0,
+  className = "",
+}: {
+  children: React.ReactNode;
+  delay?: number;
+  className?: string;
+}) {
+  const prefersReduced = useReducedMotion();
   return (
     <motion.div
-      variants={{
-        hidden: { opacity: 0, y: 30 },
-        visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: [0.25, 0.1, 0, 1] } },
-      }}
+      initial={prefersReduced ? false : "hidden"}
+      whileInView="visible"
+      viewport={{ once: true, amount: 0.2 }}
+      variants={fadeUp(delay)}
+      className={className}
     >
       {children}
     </motion.div>
@@ -70,83 +62,262 @@ function Header() {
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 40);
+    const onScroll = () => setScrolled(window.scrollY > 24);
+    onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
   return (
-    <motion.header
-      initial={{ y: -20, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      transition={{ duration: 0.6, ease: [0.25, 0.1, 0, 1] }}
-      className={`fixed top-0 inset-x-0 z-50 transition-all duration-300 ${
+    <header
+      className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${
         scrolled
-          ? "bg-white/80 backdrop-blur-xl shadow-sm"
-          : "bg-transparent"
+          ? "bg-background/80 backdrop-blur-xl border-b border-border shadow-[0_1px_0_0_rgba(16,18,22,0.02)]"
+          : "bg-transparent border-b border-transparent"
       }`}
     >
-      <div className="mx-auto max-w-6xl flex items-center justify-between px-6 h-16">
-        <a href="#" className="flex items-center gap-2.5 group" aria-label="Home">
-          <Image
-            src="/RemiAI.png"
-            alt={SITE_NAME}
-            width={28}
-            height={28}
-            draggable={false}
-            className="rounded-lg transition-transform duration-200 group-hover:scale-105"
-          />
-          {/* <span className="font-semibold text-sm tracking-tight">{SITE_NAME}</span> */}
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
+        <a href="#top" className="group flex items-center gap-2.5" aria-label={`${SITE_NAME} home`}>
+          <span className="relative">
+            <Image
+              src="/RemiAI.png"
+              alt={SITE_NAME}
+              width={28}
+              height={28}
+              className="rounded-[7px] transition-transform duration-200 group-hover:scale-105"
+            />
+          </span>
+          {/* <span className="text-[15px] font-semibold tracking-tight">{SITE_NAME}</span> */}
         </a>
 
-        <nav className="hidden md:flex items-center gap-8">
+        <nav className="hidden items-center gap-7 md:flex">
           {[
             { href: "#features", label: "Features" },
-            { href: "#highlights", label: "Tech" },
-            { href: "#mcp-servers", label: "MCP" },
-            { href: "#creations", label: "Creations" },
+            { href: "#quickstart", label: "Quickstart" },
           ].map((link) => (
             <a
               key={link.href}
               href={link.href}
-              className="text-sm text-zinc-500 hover:text-zinc-900 transition-colors duration-200"
+              className="text-sm font-medium text-muted-foreground transition-colors duration-200 hover:text-foreground"
             >
               {link.label}
             </a>
           ))}
+        </nav>
+
+        <div className="flex items-center gap-2">
           <a
             href={GITHUB_URL}
             target="_blank"
             rel="noopener noreferrer"
-            aria-label="GitHub repository"
+            className="hidden sm:inline-flex"
+            aria-label={`${SITE_NAME} on GitHub`}
           >
-            <Button variant="primary" size="sm" className="gap-1.5">
-              <IconBrandGithub className="w-3.5 h-3.5" />
-              GitHub
+            <Button variant="outline" size="sm" className="gap-1.5">
+              <IconBrandGithub className="h-3.5 w-3.5" />
+              Star on GitHub
             </Button>
           </a>
-        </nav>
-
-        {/* Mobile menu button */}
-        <a
-          href={GITHUB_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="md:hidden"
-          aria-label="GitHub repository"
-        >
-          <Button variant="primary" size="sm" className="gap-1.5">
-            <IconBrandGithub className="w-3.5 h-3.5" />
-            GitHub
-          </Button>
-        </a>
+          <a
+            href="#quickstart"
+            aria-label="Get started"
+          >
+            <Button size="sm">Get started</Button>
+          </a>
+        </div>
       </div>
-    </motion.header>
+    </header>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/*  Features data                                                      */
+/*  Hero                                                               */
+/* ------------------------------------------------------------------ */
+
+const HERO_CHIPS = [
+  { label: "File System", icon: IconFileText, className: "left-0 top-10 lg:-left-10" },
+  { label: "Memory", icon: IconBrain, className: "right-0 top-24 lg:-right-12" },
+  { label: "MCP Tools", icon: IconPlugConnected, className: "left-2 bottom-14 lg:-left-14" },
+  { label: "Agents", icon: IconRobot, className: "right-0 bottom-8 lg:-right-10" },
+];
+
+const TECH_BADGES = [
+  { name: "Next.js 16", src: "/assets/nextjs.svg" },
+  { name: "TypeScript", src: "/assets/typescript.svg" },
+  { name: "SQLite", src: "/assets/sqlite.svg" },
+  { name: "Drizzle ORM", src: "/assets/drizzle.svg" },
+  { name: "AI SDK", src: "/assets/vercel.svg" },
+  { name: "Tailwind CSS", src: "/assets/tailwindcss.svg" },
+  { name: "MCP", src: "/assets/mcp.svg" },
+];
+
+function DashboardShot() {
+  const prefersReduced = useReducedMotion();
+
+  return (
+    <div className="relative mx-auto mt-16 max-w-5xl md:mt-20">
+      {/* Glow behind the frame */}
+      <div className="glow-hero absolute -inset-x-8 -top-16 -bottom-10 -z-10" aria-hidden />
+
+      <motion.div
+        initial={prefersReduced ? false : { opacity: 0, y: 48, scale: 0.97 }}
+        whileInView={{ opacity: 1, y: 0, scale: 1 }}
+        viewport={{ once: true, amount: 0.2 }}
+        transition={{ duration: 0.9, ease }}
+      >
+        {/* Browser frame */}
+        <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-[0_24px_80px_-32px_rgba(16,18,22,0.35)]">
+          {/* Window chrome */}
+          <div className="flex items-center gap-3 border-b border-border bg-muted/60 px-4 py-3">
+            <div className="flex gap-1.5">
+              <span className="h-3 w-3 rounded-full bg-[#ff5f57]" />
+              <span className="h-3 w-3 rounded-full bg-[#febc2e]" />
+              <span className="h-3 w-3 rounded-full bg-[#28c840]" />
+            </div>
+            <div className="mx-auto flex h-7 w-full max-w-sm items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 text-[11px] font-medium text-muted-foreground">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              localhost:3000
+            </div>
+            <div className="w-12" />
+          </div>
+
+          {/* Screenshot */}
+          <Image
+            src="/assets/RemiAIv2Light.png"
+            alt={`${SITE_NAME} dashboard — light theme`}
+            width={3420}
+            height={1812}
+            priority
+            className="h-auto w-full select-none"
+            sizes="(max-width: 1024px) 100vw, 1024px"
+          />
+        </div>
+      </motion.div>
+
+      {/* Floating capability chips */}
+      {!prefersReduced &&
+        HERO_CHIPS.map((chip, i) => (
+          <motion.div
+            key={chip.label}
+            className={`absolute hidden lg:block ${chip.className}`}
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.5 + i * 0.12, duration: 0.6, ease }}
+          >
+            <motion.div
+              animate={{ y: [0, -7, 0] }}
+              transition={{
+                duration: 5 + i,
+                repeat: Infinity,
+                ease: "easeInOut",
+                delay: 0.9 + i * 0.12,
+              }}
+            >
+              <div className="flex items-center gap-2 rounded-full border border-border bg-background/90 px-3.5 py-2 shadow-[0_8px_24px_-12px_rgba(16,18,22,0.25)] backdrop-blur">
+                <chip.icon className="h-4 w-4 text-primary" />
+                <span className="text-xs font-medium">{chip.label}</span>
+              </div>
+            </motion.div>
+          </motion.div>
+        ))}
+    </div>
+  );
+}
+
+function Hero() {
+  return (
+    <section id="top" className="relative overflow-hidden pt-32 pb-20 md:pt-40 md:pb-28">
+      {/* Grid backdrop */}
+      <div
+        className="bg-grid absolute inset-0 -z-20 [mask-image:radial-gradient(70%_55%_at_50%_0%,black,transparent)]"
+        aria-hidden
+      />
+      {/* Soft top glow */}
+      <div
+        className="absolute inset-x-0 -top-40 -z-10 h-[520px] bg-gradient-to-b from-accent/50 to-transparent"
+        aria-hidden
+      />
+
+      <div className="mx-auto max-w-6xl px-6">
+        <div className="mx-auto max-w-3xl text-center">
+          {/* <Reveal>
+            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-background/70 px-3 py-1 shadow-sm">
+              <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <IconBrandGithub className="h-3.5 w-3.5" />
+                Open source
+              </span>
+              <span className="h-3 w-px bg-border" />
+              <span className="text-xs font-medium text-muted-foreground">MIT License</span>
+              <span className="h-3 w-px bg-border" />
+              <span className="flex items-center gap-1 text-xs font-medium text-emerald-600">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                Self-hosted
+              </span>
+            </div>
+          </Reveal> */}
+
+          <Reveal delay={0.08}>
+            <h1 className="mt-7 text-balance text-4xl font-bold leading-[1.08] tracking-tight sm:text-6xl">
+              Your local AI assistant, for your own data.
+            </h1>
+          </Reveal>
+
+          <Reveal delay={0.16}>
+            <p className="mx-auto mt-6 max-w-xl text-pretty text-lg leading-relaxed text-muted-foreground">
+              {SITE_NAME} is a self-hosted AI assistant with deep file system
+              integration, persistent memory, MCP tool support, and a powerful
+              agent system running entirely on your own hardware.
+            </p>
+          </Reveal>
+
+          <Reveal delay={0.24}>
+            <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
+              <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer">
+                <Button size="lg" className="gap-2">
+                  <IconBrandGithub className="h-4 w-4" />
+                  View on GitHub
+                </Button>
+              </a>
+              <a href="#quickstart">
+                <Button variant="outline" size="lg" className="gap-2">
+                  <IconTerminal2 className="h-4 w-4" />
+                  Quickstart
+                </Button>
+              </a>
+            </div>
+          </Reveal>
+
+          {/* Tech badges */}
+          <Reveal delay={0.32}>
+            <div className="mt-12 flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
+              {TECH_BADGES.map((tech) => (
+                <div
+                  key={tech.name}
+                  className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
+                >
+                  <Image
+                    src={tech.src}
+                    alt=""
+                    width={16}
+                    height={16}
+                    className="h-4 w-4 object-contain opacity-80 grayscale transition-opacity duration-200 hover:opacity-100"
+                  />
+                  {tech.name}
+                </div>
+              ))}
+            </div>
+          </Reveal>
+        </div>
+
+        <DashboardShot />
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Features                                                           */
 /* ------------------------------------------------------------------ */
 
 const FEATURES = [
@@ -154,517 +325,94 @@ const FEATURES = [
     icon: IconFileText,
     title: "File System Integration",
     description:
-      "List, read, search, and write files in permitted directories. Full local file access with permission controls.",
-    gradient: "from-blue-50 to-indigo-50",
-    iconColor: "text-blue-600",
+      "Read, search, and write files inside permitted directories — with granular permission controls and live file watching.",
   },
   {
     icon: IconBrain,
-    title: "Memory Management",
+    title: "Persistent Memory",
     description:
-      "Persistent user-specific preferences, interests, and personal details that are retained across sessions.",
-    gradient: "from-violet-50 to-purple-50",
-    iconColor: "text-violet-600",
+      "RemiAI remembers your preferences, interests, and personal details across every conversation, locally.",
   },
   {
     icon: IconPlugConnected,
     title: "MCP Extensibility",
     description:
-      "Call external services using namespaced tools. Connect databases, APIs, and custom servers seamlessly.",
-    gradient: "from-emerald-50 to-teal-50",
-    iconColor: "text-emerald-600",
+      "Connect databases, APIs, and custom servers through the Model Context Protocol — hundreds of additional tools.",
   },
   {
     icon: IconRobot,
     title: "Agent System",
     description:
-      "Spawn sub-agents for isolated tasks, optimizing token usage and enabling parallel problem-solving.",
-    gradient: "from-amber-50 to-orange-50",
-    iconColor: "text-amber-600",
+      "Spawn focused sub-agents for research, coding, and analysis — parallel problem-solving with efficient token use.",
   },
   {
-    icon: IconDatabase,
-    title: "Automated Migrations",
+    icon: IconMicrophone,
+    title: "Talk Mode",
     description:
-      "Drizzle ORM with SQLite. Database migrations run automatically on startup. Zero manual setup required.",
-    gradient: "from-rose-50 to-pink-50",
-    iconColor: "text-rose-600",
+      "A hands-free voice interface with streaming speech-to-text, interruption support, and premium TTS.",
   },
   {
-    icon: IconTerminal2,
-    title: "Cross-Platform Ready",
+    icon: IconShieldLock,
+    title: "Private by Design",
     description:
-      "Handles Windows path normalization, numeric ID coercion, and works flawlessly across all major platforms.",
-    gradient: "from-cyan-50 to-sky-50",
-    iconColor: "text-cyan-600",
+      "Encrypted backups, no telemetry, and zero cloud dependencies. Your data never leaves your hardware.",
   },
 ];
 
-const TECH_STACK = [
-  { name: "Next.js", src: "/assets/nextjs.svg" },
-  { name: "TypeScript", src: "/assets/typescript.svg" },
-  { name: "React", src: "/assets/react.svg" },
-  { name: "SQLite", src: "/assets/sqlite.svg" },
-  { name: "Tailwind CSS", src: "/assets/tailwindcss.svg" },
-  { name: "AI SDK", src: "/assets/vercel.svg" },
-  { name: "MCP Protocol", src: "/assets/mcp.svg" },
-  { name: "Turbopack", src: "/assets/vercel.svg" },
-];
-
-const CREATIONS = [
-  {
-    title: "Service Monitor",
-    description:
-      "A lightweight uptime checker that monitors service availability. Built by RemiAI with Mistral — a fully working prototype.",
-    tags: ["Node.js", "REST API", "Monitoring"],
-    githubPath: "service-monitor",
-  },
-  {
-    title: "Text to Speech",
-    description:
-      "Python-based TTS converter that transforms written content into natural-sounding speech audio files.",
-    tags: ["Python", "TTS", "Audio"],
-    githubPath: "Text2Speech",
-  },
-  {
-    title: "Text to Morse Code",
-    description:
-      "Convert plain text to Morse code and back. A fun utility showcasing RemiAI's coding versatility.",
-    tags: ["Node.js", "Utility", "Encoder"],
-    githubPath: "TextToMorseCode",
-  },
-  {
-    title: "CLI Text Analyzer",
-    description:
-      "A simple Node.js command-line tool for analyzing text files. Counts words, characters, lines, and provides word frequency analysis.",
-    tags: ["Node.js", "Analysis", "CLI"],
-    githubPath: "CLI%20Text%20Analyzer",
-  },
-  {
-    title: "Aura",
-    description:
-      "A dark monochrome personal dashboard built with ViteJS, featuring support for tasks, documents, and links.",
-    tags: ["Vite.JS", "Dashboard", "Minimal"],
-    githubPath: "Aura",
-  },
-  {
-    title: "Particlefield",
-    description:
-      "Generative particle art playground.",
-    tags: ["HTML5", "Canvas", "Playground"],
-    githubPath: "Particlefield",
-  },
-];
-
-/* ------------------------------------------------------------------ */
-/*  Dashboard Image — scroll-driven parallax                           */
-/* ------------------------------------------------------------------ */
-
-function DashboardImage() {
-  const sectionRef = useRef<HTMLDivElement>(null);
-  const [showDark, setShowDark] = useState(false);
-
-  // Scroll‑driven values — progress goes 0→1 as section enters viewport
-  const { scrollYProgress } = useScroll({
-    target: sectionRef,
-    offset: ["start end", "end start"],
-  });
-
-  const y = useTransform(scrollYProgress, [0, 1], [40, -60]);
-  const scale = useTransform(scrollYProgress, [0, 1], [1.05, 0.88]);
-  const rotate = useTransform(scrollYProgress, [0, 1], [0, 2]);
-  const shadowOpacity = useTransform(scrollYProgress, [0, 0.3, 0.7, 1], [0.08, 0.15, 0.2, 0.25]);
-  const borderRadius = useTransform(scrollYProgress, [0, 1], [16, 20]);
-
+function Features() {
   return (
-    <div ref={sectionRef} className="relative mt-14 md:mt-20 mb-6 md:mb-10">
-      {/* Glass card wrapper */}
-      <motion.div
-        className="relative mx-auto max-w-5xl"
-        style={{ y, scale, rotate, perspective: 1200 }}
-      >
-        {/* Shadow layer */}
-        <motion.div
-          className="absolute -inset-4 rounded-2xl bg-black/5 blur-xl -z-10"
-          style={{ opacity: shadowOpacity }}
-        />
-
-        {/* Image container with subtle frame */}
-        <motion.div
-          className="relative overflow-hidden rounded-2xl bg-white shadow-xl"
-          style={{ borderRadius }}
-        >
-          <Image
-            src={showDark ? "/assets/RemiAI-Dash-Dark.png" : "/assets/RemiAI-Dash-Light.png"}
-            alt={`${SITE_NAME} Dashboard – ${showDark ? "Dark" : "Light"} theme`}
-            width={1920}
-            height={1080}
-            priority
-            draggable={false}
-            className="w-full h-auto select-none pointer-events-none"
-            sizes="(max-width: 1024px) 100vw, 1024px"
-          />
-        </motion.div>
-
-        {/* Theme toggle badge */}
-        {/* <motion.button
-          onClick={() => setShowDark((p) => !p)}
-          className="absolute -bottom-3 -right-3 md:-bottom-4 md:-right-4 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-zinc-200 shadow-sm text-[11px] font-medium text-zinc-500 hover:border-zinc-300 hover:text-zinc-700 hover:shadow-md transition-all duration-200 cursor-pointer"
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 1, duration: 0.4 }}
-          aria-label={`Switch to ${showDark ? "light" : "dark"} theme preview`}
-        >
-          {showDark ? (
-            <>
-              <IconMoon className="w-3 h-3" />
-              <span>Dark UI</span>
-            </>
-          ) : (
-            <>
-              <IconSun className="w-3 h-3" />
-              <span>Light UI</span>
-            </>
-          )}
-        </motion.button> */}
-      </motion.div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Hero144-inspired Grid Section                                      */
-/* ------------------------------------------------------------------ */
-
-const TILES = [
-  { label: "File System", icon: IconFileText, gradient: "from-blue-400/10 to-blue-500/5" },
-  { label: "Memory", icon: IconBrain, gradient: "from-violet-400/10 to-violet-500/5" },
-  { label: "MCP", icon: IconPlugConnected, gradient: "from-emerald-400/10 to-emerald-500/5" },
-  { label: "Agents", icon: IconRobot, gradient: "from-amber-400/10 to-amber-500/5" },
-  { label: "RemiAI", icon: IconStar, gradient: "from-zinc-100 to-white", isCenter: true, isLogo: true },
-  { label: "Search", icon: IconSearch, gradient: "from-cyan-400/10 to-cyan-500/5" },
-  { label: "Tools", icon: IconTools, gradient: "from-rose-400/10 to-rose-500/5" },
-  { label: "Database", icon: IconDatabase, gradient: "from-indigo-400/10 to-indigo-500/5" },
-  { label: "Code", icon: IconCode, gradient: "from-orange-400/10 to-orange-500/5" },
-];
-
-function HeroGrid() {
-  return (
-    <section className="relative pt-28 pb-20 md:pt-36 md:pb-28">
-      {/* Subtle background gradient */}
-      <div className="absolute inset-0 -z-10">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-gradient-to-b from-zinc-50 to-white rounded-full blur-3xl opacity-70" />
-      </div>
-
+    <section id="features" className="scroll-mt-24 py-20 md:py-28">
       <div className="mx-auto max-w-6xl px-6">
-        {/* Label */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1, duration: 0.5 }}
-          className="flex justify-center mb-6"
-        >
-          {/* <Badge variant="secondary" className="gap-1.5 px-3 py-1">
-            <IconCpu className="w-3 h-3" />
-            Open Source · Self-Hosted
-          </Badge> */}
-        </motion.div>
+        <div className="mx-auto max-w-2xl text-center">
+          <Reveal delay={0.06}>
+            <h2 className="text-balance text-3xl font-bold tracking-tight md:text-4xl">
+              Everything you need, locally
+            </h2>
+          </Reveal>
+          <Reveal delay={0.12}>
+            <p className="mt-4 text-pretty text-lg leading-relaxed text-muted-foreground">
+              RemiAI combines powerful AI capabilities with deep local
+              integration giving you full control over your data and workflow.
+            </p>
+          </Reveal>
+        </div>
 
-        {/* Heading */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.7 }}
-          className="text-center max-w-3xl mx-auto"
-        >
-          <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight text-zinc-900 leading-[1.1]">
-            Your Local AI Assistant
-            {/* Your Local{" "}
-            <span className="bg-gradient-to-r from-zinc-700 to-zinc-500 bg-clip-text text-transparent">
-              AI Assistant
-            </span> */}
-          </h1>
-          <p className="mt-5 text-lg sm:text-xl text-zinc-500 leading-relaxed max-w-2xl mx-auto">
-            A self-hosted AI assistant with file system integration,
-            persistent memory, MCP support, and a powerful agent system.
-          </p>
-        </motion.div>
-
-        {/* CTA Buttons */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4, duration: 0.6 }}
-          className="flex justify-center gap-3 mt-8 flex-wrap"
-        >
-          <a
-            href={GITHUB_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="View on GitHub"
-          >
-            <Button variant="primary" size="lg" className="gap-2">
-              <IconBrandGithub className="w-4 h-4" />
-              View on GitHub
-              {/* <IconArrowUpRight className="w-3.5 h-3.5 opacity-60" /> */}
-            </Button>
-          </a>
-          <a href="#features">
-            <Button variant="outline" size="lg">
-              Explore Features
-            </Button>
-          </a>
-        </motion.div>
-
-        {/* Dashboard Image — scroll‑driven animation */}
-        <DashboardImage />
-
-        {/* Hero144-inspired Grid */}
-        <motion.div
-          initial={{ opacity: 0, y: 40 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.6, duration: 0.8 }}
-          className="mt-16 md:mt-20"
-        >
-          <div className="grid grid-cols-3 gap-3 md:gap-4 max-w-lg mx-auto">
-            {TILES.map((tile, i) => (
-              <div
-                key={tile.label}
-                className={`
-                  relative rounded-xl border overflow-hidden
-                  flex flex-col items-center justify-center
-                  p-4 md:p-6 aspect-square
-                  transition-all duration-500
-                  ${
-                    tile.isCenter
-                      ? "border-zinc-200 bg-white shadow-md scale-100 z-10"
-                      : "border-zinc-100 bg-white/60 shadow-sm scale-[0.92] md:scale-[0.88] blur-[1px] hover:blur-none hover:scale-95 md:hover:scale-95 hover:shadow-md hover:border-zinc-200 hover:z-10"
-                  }
-                `}
-                style={{
-                  background: tile.isCenter
-                    ? "linear-gradient(135deg, #fafafa, #ffffff)"
-                    : undefined,
-                }}
-              >
-                {/* Gradient overlay */}
+        <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {FEATURES.map((feature, i) => (
+            <Reveal key={feature.title} delay={i * 0.06}>
+              <div className="group relative h-full overflow-hidden rounded-2xl border border-border bg-card p-6">
                 <div
-                  className={`absolute inset-0 bg-gradient-to-br ${tile.gradient} opacity-60`}
+                  className="absolute inset-x-0 top-0 h-px transition-opacity duration-300 group-hover:opacity-100"
+                  aria-hidden
                 />
-
-                {/* Content */}
-                <div className="relative flex flex-col items-center gap-1.5">
-                  {tile.isLogo ? (
-                    <Image
-                      src="/RemiAI.png"
-                      alt={SITE_NAME}
-                      width={90}
-                      height={90}
-                      draggable={false}
-                      className="rounded-lg"
-                    />
-                  ) : (
-                    <tile.icon
-                      className={`w-5 h-5 md:w-6 md:h-6 ${
-                        tile.isCenter ? "text-zinc-900" : "text-zinc-500"
-                      }`}
-                    />
-                  )}
-                  <span
-                    className={`text-[10px] md:text-xs font-medium text-center leading-tight ${
-                      tile.isCenter ? "text-zinc-800" : "text-zinc-500"
-                    }`}
-                  >
-                    {tile.label !== "RemiAI" ? tile.label : null}
-                  </span>
-                </div>
-
-                {/* Glow effect on center tile */}
-                {tile.isCenter && (
-                  <div className="absolute -inset-0.5 bg-gradient-to-br from-zinc-200/50 to-white/0 rounded-xl -z-10 blur-md" />
-                )}
+                {/* <div className="mb-5 inline-flex h-11 w-11 items-center justify-center rounded-xl text-accent-foreground transition-transform duration-300">
+                  <feature.icon className="h-5 w-5" />
+                </div> */}
+                <h3 className="mb-2 font-semibold tracking-tight">{feature.title}</h3>
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  {feature.description}
+                </p>
               </div>
-            ))}
-          </div>
-        </motion.div>
-
-        {/* Scroll indicator */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1.2, duration: 0.8 }}
-          className="flex justify-center mt-16"
-        >
-          <motion.div
-            animate={{ y: [0, 6, 0] }}
-            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-            className="text-zinc-300"
-          >
-            <IconChevronDown className="w-5 h-5" />
-          </motion.div>
-        </motion.div>
+            </Reveal>
+          ))}
+        </div>
       </div>
     </section>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/*  Features Section                                                    */
+/*  Quickstart / CTA                                                   */
 /* ------------------------------------------------------------------ */
 
-function FeaturesSection() {
-  const ref = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({
-    target: ref,
-    offset: ["start end", "end start"],
-  });
+const TERMINAL_LINES = [
+  { prompt: "$", text: "git clone https://github.com/Houloude9IOfficial/RemiAI.git" },
+  { prompt: "$", text: "cd RemiAI" },
+  { prompt: "$", text: "npm install" },
+  { prompt: "$", text: "npm run dev", highlight: true },
+];
 
-  const headingY = useTransform(scrollYProgress, [0, 0.3], [40, 0]);
-  const headingScale = useTransform(scrollYProgress, [0, 0.3], [0.92, 1]);
-  const headingOpacity = useTransform(scrollYProgress, [0, 0.25], [0.5, 1]);
-  const cardsY = useTransform(scrollYProgress, [0, 0.4], [60, 0]);
-  const cardsOpacity = useTransform(scrollYProgress, [0, 0.35], [0.4, 1]);
-
-  return (
-    <section
-      id="features"
-      ref={ref}
-      className="py-20 md:py-28 scroll-mt-20"
-    >
-      <div className="mx-auto max-w-6xl px-6">
-        <motion.div
-          style={{ y: headingY, scale: headingScale, opacity: headingOpacity }}
-          className="text-center max-w-2xl mx-auto mb-14 md:mb-18"
-        >
-          {/* <Badge variant="secondary" className="mb-4">Features</Badge> */}
-          <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-zinc-900">
-            Everything you need, locally
-          </h2>
-          <p className="mt-4 text-zinc-500 text-lg leading-relaxed">
-            RemiAI combines powerful AI capabilities with deep local integration,
-            giving you full control over your data and workflow.
-          </p>
-        </motion.div>
-
-        <motion.div
-          style={{ y: cardsY, opacity: cardsOpacity, perspective: 800 }}
-        >
-          <StaggerFadeUp className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {FEATURES.map((feature) => (
-              <StaggerItem key={feature.title}>
-                <div className="group relative rounded-2xl border border-zinc-100 bg-white p-6 hover:border-zinc-200 transition-all duration-300">
-                  <div
-                    className={`w-11 h-11 rounded-xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-4 transition-transform duration-300 group-hover:scale-105`}
-                  >
-                    <feature.icon className={`w-5 h-5 ${feature.iconColor}`} />
-                  </div>
-                  <h3 className="font-semibold text-zinc-900 mb-2">
-                    {feature.title}
-                  </h3>
-                  <p className="text-sm text-zinc-500 leading-relaxed">
-                    {feature.description}
-                  </p>
-                </div>
-              </StaggerItem>
-            ))}
-          </StaggerFadeUp>
-        </motion.div>
-      </div>
-    </section>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Technical Highlights Section                                       */
-/* ------------------------------------------------------------------ */
-
-function TechHighlightsSection() {
-  const ref = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({
-    target: ref,
-    offset: ["start end", "end start"],
-  });
-
-  const headingScale = useTransform(scrollYProgress, [0, 0.5], [0.95, 1]);
-  const headingOpacity = useTransform(scrollYProgress, [0, 0.3], [0.6, 1]);
-  const headingY = useTransform(scrollYProgress, [0, 0.4], [30, 0]);
-  const badgesY = useTransform(scrollYProgress, [0, 0.5], [50, 0]);
-  const badgesOpacity = useTransform(scrollYProgress, [0, 0.4], [0.3, 1]);
-  const statsY = useTransform(scrollYProgress, [0.2, 0.7], [40, 0]);
-  const statsOpacity = useTransform(scrollYProgress, [0.2, 0.6], [0, 1]);
-
-  return (
-    <section
-      id="highlights"
-      ref={ref}
-      className="py-20 md:py-28 scroll-mt-20"
-    >
-      <div className="mx-auto max-w-6xl px-6">
-        <motion.div
-          style={{ scale: headingScale, opacity: headingOpacity, y: headingY }}
-          className="text-center max-w-2xl mx-auto mb-14 md:mb-18"
-        >
-          {/* <Badge variant="secondary" className="mb-4">Tech Stack</Badge> */}
-          <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-zinc-900">
-            Built with modern tools
-          </h2>
-          <p className="mt-4 text-zinc-500 text-lg leading-relaxed">
-            A powerful stack that emphasizes developer experience and performance.
-          </p>
-        </motion.div>
-
-        <motion.div
-          style={{ y: badgesY, opacity: badgesOpacity, perspective: 800 }}
-        >
-          <StaggerFadeUp className="flex flex-wrap justify-center gap-3 max-w-3xl mx-auto">
-            {TECH_STACK.map((tech) => (
-              <StaggerItem key={tech.name}>
-                <div className="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-white border border-zinc-100 hover:border-zinc-200 transition-all duration-200 cursor-default">
-                  <Image
-                    src={tech.src}
-                    alt={tech.name}
-                    width={20}
-                    height={20}
-                    draggable={false}
-                    className="w-5 h-5 object-contain"
-                  />
-                  <span className="text-sm font-medium text-zinc-700">{tech.name}</span>
-                </div>
-              </StaggerItem>
-            ))}
-          </StaggerFadeUp>
-        </motion.div>
-
-        {/* Stats */}
-        <motion.div
-          style={{ y: statsY, opacity: statsOpacity }}
-        >
-          <StaggerFadeUp>
-            <div className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-              {[
-                { value: "100%", label: "Local & Private" },
-                { value: "Open Source", label: "MIT Licensed" },
-                { value: "Multi-Platform", label: "Windows / MacOS" },
-                { value: "Extensible", label: "MCP Protocol" },
-              ].map((stat) => (
-                <StaggerItem key={stat.label}>
-                  <div className="text-center p-5 rounded-xl bg-white border border-zinc-100">
-                    <div className="text-lg md:text-xl font-bold text-zinc-900">{stat.value}</div>
-                    <div className="text-xs text-zinc-500 mt-1">{stat.label}</div>
-                  </div>
-                </StaggerItem>
-              ))}
-            </div>
-          </StaggerFadeUp>
-        </motion.div>
-      </div>
-    </section>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Copy-to-clipboard helper                                           */
-/* ------------------------------------------------------------------ */
+const QUICKSTART_COMMAND = TERMINAL_LINES.map((l) => l.text).join("\n");
 
 function CopyButton({ command }: { command: string }) {
   const [copied, setCopied] = useState(false);
@@ -672,332 +420,138 @@ function CopyButton({ command }: { command: string }) {
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(command);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Fallback for older browsers
       const textarea = document.createElement("textarea");
       textarea.value = command;
       document.body.appendChild(textarea);
       textarea.select();
       document.execCommand("copy");
       document.body.removeChild(textarea);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
     }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
     <button
       type="button"
       onClick={handleCopy}
-      className="inline-flex items-center gap-1.5 text-[11px] font-medium text-zinc-400 hover:text-zinc-700 transition-colors duration-200"
-      aria-label={copied ? "Copied" : "Copy command"}
+      className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-zinc-400 transition-colors duration-200 hover:bg-white/5 hover:text-zinc-200"
+      aria-label={copied ? "Copied" : "Copy quickstart command"}
     >
       {copied ? (
         <>
-          <IconCheck className="w-3 h-3 text-emerald-500" />
-          <span className="text-emerald-500">Copied</span>
+          <IconCheck className="h-3.5 w-3.5 text-emerald-400" />
+          <span className="text-emerald-400">Copied</span>
         </>
       ) : (
         <>
-          <IconClipboard className="w-3 h-3" />
-          <span>Copy</span>
+          <IconClipboard className="h-3.5 w-3.5" />
+          Copy
         </>
       )}
     </button>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  MCP Servers Section                                                */
-/* ------------------------------------------------------------------ */
-
-const SERVER_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  IconBrandGithub,
-  IconDatabase,
-  IconPlugConnected,
-  IconBrowser,
-  IconBrain,
-  IconFileText,
-  IconGitBranch,
-};
-
-function McpServersSection() {
-  const ref = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({
-    target: ref,
-    offset: ["start end", "end start"],
-  });
-
-  const headingY = useTransform(scrollYProgress, [0, 0.3], [30, 0]);
-  const headingScale = useTransform(scrollYProgress, [0, 0.3], [0.93, 1]);
-  const headingOpacity = useTransform(scrollYProgress, [0, 0.25], [0.5, 1]);
-  const cardsY = useTransform(scrollYProgress, [0, 0.4], [50, 0]);
-  const cardsOpacity = useTransform(scrollYProgress, [0, 0.35], [0.3, 1]);
+function Quickstart() {
+  const prefersReduced = useReducedMotion();
 
   return (
-    <section
-      id="mcp-servers"
-      ref={ref}
-      className="py-20 md:py-28 scroll-mt-20"
-    >
+    <section id="quickstart" className="scroll-mt-24 py-20 md:py-28">
       <div className="mx-auto max-w-6xl px-6">
-        <motion.div
-          style={{ y: headingY, scale: headingScale, opacity: headingOpacity }}
-          className="text-center max-w-2xl mx-auto mb-14 md:mb-18"
-        >
-          <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-zinc-900">
-            Recommended MCP Servers
-          </h2>
-          <p className="mt-4 text-zinc-500 text-lg leading-relaxed">
-            Extend RemiAI with powerful third-party MCP servers.
-          </p>
-        </motion.div>
+        <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
+          {/* Copy */}
+          <div>
+            <Reveal delay={0.06}>
+              <h2 className="text-balance text-3xl font-bold tracking-tight md:text-4xl">
+                Running in under a minute
+              </h2>
+            </Reveal>
+            <Reveal delay={0.12}>
+              <p className="mt-4 max-w-md text-pretty text-lg leading-relaxed text-muted-foreground">
+                Clone the repo, install dependencies, and start talking to your
+                own local AI assistant.
+              </p>
+            </Reveal>
 
-        <motion.div
-          style={{ y: cardsY, opacity: cardsOpacity, perspective: 800 }}
-        >
-          <StaggerFadeUp className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {MCP_SERVERS.map((server) => {
-              const IconComponent = server.iconName ? SERVER_ICONS[server.iconName] : undefined;
-              return (
-                <StaggerItem key={server.name}>
-                  <div className="group relative rounded-2xl border border-zinc-100 bg-white p-6 hover:border-zinc-200 transition-all duration-300 h-full flex flex-col">
-                    {/* Icon */}
-                    <div
-                      className={`w-11 h-11 flex items-center justify-center overflow-hidden mb-4 transition-transform duration-300`}
-                    >
-                      {server.iconUrl ? (
-                        <img
-                          src={server.iconUrl}
-                          alt={`${server.name} icon`}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : IconComponent ? (
-                        <IconComponent
-                          className={`w-5 h-5 ${server.iconColor}`}
-                        />
-                      ) : null}
-                    </div>
+            <Reveal delay={0.18}>
+              <ul className="mt-8 space-y-3.5">
+                {[
+                  "Node.js 18+",
+                  "One-time signup code printed in your terminal",
+                  "Ollama, Anthropic, OpenAI or bring your own provider",
+                ].map((item) => (
+                  <li key={item} className="flex items-start gap-3">
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full ">
+                      <IconCheck className="h-3 w-3" strokeWidth={3} />
+                    </span>
+                    <span className="text-sm leading-relaxed text-muted-foreground">{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </Reveal>
 
-                    {/* Name + Copy row */}
-                    <div className="flex items-start justify-between mb-2">
-                      <h3 className="font-semibold text-zinc-900">
-                        {server.name}
-                      </h3>
-                      <a
-                        href={server.docsUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-zinc-300 hover:text-zinc-500 transition-colors shrink-0 ml-2"
-                        aria-label={`${server.name} documentation`}
-                      >
-                        <IconArrowUpRight className="w-4 h-4" />
-                      </a>
-                    </div>
-
-                    {/* Description */}
-                    <p className="text-sm text-zinc-500 leading-relaxed mb-4 flex-1">
-                      {server.description}
-                    </p>
-
-                    {/* Package name + copy button */}
-                    {/* <div className="flex items-center justify-between mb-3">
-                      <code className="text-[11px] font-mono text-zinc-400 truncate max-w-[70%]">
-                        {server.pkg}
-                      </code>
-                      <CopyButton
-                        command={`${server.command} ${server.args.join(" ")}`}
-                      />
-                    </div> */}
-
-                    {/* Tags */}
-                    <div className="flex flex-wrap gap-1.5">
-                      {server.tags.map((tag) => (
-                        <Badge key={tag} variant="secondary" className="text-[11px]">
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                </StaggerItem>
-              );
-            })}
-          </StaggerFadeUp>
-        </motion.div>
-
-        {/* Note about sources */}
-        {/* <motion.p
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          viewport={{ once: true }}
-          className="text-center text-xs text-zinc-400 mt-10"
-        >
-          All servers are from the{" "}
-          <a
-            href="https://github.com/modelcontextprotocol/servers"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-zinc-500 hover:text-zinc-700 underline underline-offset-2 transition-colors"
-          >
-            official MCP reference repository
-          </a>
-          {" "}and community. Configure them in Settings → MCP Servers.
-        </motion.p> */}
-      </div>
-    </section>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Creations Section                                                  */
-/* ------------------------------------------------------------------ */
-
-function CreationsSection() {
-  const ref = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({
-    target: ref,
-    offset: ["start end", "end start"],
-  });
-
-  const headingY = useTransform(scrollYProgress, [0, 0.3], [30, 0]);
-  const headingScale = useTransform(scrollYProgress, [0, 0.3], [0.93, 1]);
-  const headingOpacity = useTransform(scrollYProgress, [0, 0.25], [0.5, 1]);
-  const cardsY = useTransform(scrollYProgress, [0, 0.4], [50, 0]);
-  const cardsOpacity = useTransform(scrollYProgress, [0, 0.35], [0.3, 1]);
-
-  return (
-    <section
-      id="creations"
-      ref={ref}
-      className="py-20 md:py-28 scroll-mt-20"
-    >
-      <div className="mx-auto max-w-6xl px-6">
-        <motion.div
-          style={{ y: headingY, scale: headingScale, opacity: headingOpacity }}
-          className="text-center max-w-2xl mx-auto mb-14 md:mb-18"
-        >
-          {/* <Badge variant="secondary" className="mb-4">Creations</Badge> */}
-          <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-zinc-900">
-            Built by RemiAI
-          </h2>
-          <p className="mt-4 text-zinc-500 text-lg leading-relaxed">
-            After building its own core, RemiAI put its coding tools to the test
-            by creating these projects from scratch.
-          </p>
-        </motion.div>
-
-        <motion.div
-          style={{ y: cardsY, opacity: cardsOpacity, perspective: 800 }}
-        >
-          <StaggerFadeUp className="grid sm:grid-cols-2 gap-5">
-            {CREATIONS.map((creation) => (
-              <StaggerItem key={creation.title}>
-                <a
-                  href={`${CREATIONS_URL}/${creation.githubPath}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block group"
-                  aria-label={`View ${creation.title} on GitHub`}
-                >
-                  <div className="rounded-2xl border border-zinc-100 bg-white p-6 hover:border-zinc-200 transition-all duration-300">
-                    <div className="flex items-start justify-between mb-3">
-                      <h3 className="font-semibold text-zinc-900 group-hover:text-zinc-700 transition-colors">
-                        {creation.title}
-                      </h3>
-                      <IconArrowUpRight className="w-4 h-4 text-zinc-300 group-hover:text-zinc-500 transition-colors shrink-0" />
-                    </div>
-                    <p className="text-sm text-zinc-500 leading-relaxed mb-4">
-                      {creation.description}
-                    </p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {creation.tags.map((tag) => (
-                        <Badge key={tag} variant="secondary" className="text-[11px]">
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
+            <Reveal delay={0.24}>
+              <div className="mt-9 flex flex-wrap gap-3">
+                <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer">
+                  <Button size="lg" className="gap-2">
+                    <IconBrandGithub className="h-4 w-4" />
+                    Get Started on GitHub
+                  </Button>
                 </a>
-              </StaggerItem>
-            ))}
-          </StaggerFadeUp>
-        </motion.div>
-      </div>
-    </section>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  CTA Section                                                        */
-/* ------------------------------------------------------------------ */
-
-function CTASection() {
-  const ref = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({
-    target: ref,
-    offset: ["start end", "end start"],
-  });
-
-  const contentY = useTransform(scrollYProgress, [0, 0.4], [50, 0]);
-  const contentScale = useTransform(scrollYProgress, [0, 0.4], [0.92, 1]);
-  const contentOpacity = useTransform(scrollYProgress, [0, 0.3], [0.3, 1]);
-
-  return (
-    <section
-      ref={ref}
-      className="py-20 md:py-28 bg-zinc-900 border-t border-zinc-800"
-    >
-      <div className="mx-auto max-w-3xl px-6 text-center">
-        <motion.div
-          style={{ y: contentY, scale: contentScale, opacity: contentOpacity, perspective: 800 }}
-        >
-          {/* <Badge
-            variant="secondary"
-            className="mb-4 bg-zinc-800 text-zinc-300 border-none"
-          >
-            Get Started
-          </Badge> */}
-          <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-white">
-            Ready to run locally?
-          </h2>
-          <p className="mt-4 text-zinc-400 text-lg leading-relaxed max-w-xl mx-auto">
-            Clone the repo, install dependencies, and start interacting with
-            your own local AI assistant in minutes.
-          </p>
-          <div className="flex justify-center gap-3 mt-8 flex-wrap">
-            <a
-              href={GITHUB_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Get started on GitHub"
-            >
-              <Button
-                variant="primary"
-                size="lg"
-                className="bg-white text-zinc-900 hover:bg-zinc-100 gap-2"
-              >
-                <IconBrandGithub className="w-4 h-4" />
-                Get Started on GitHub
-              </Button>
-            </a>
-            {/* <a
-              href={`${GITHUB_URL}#readme`}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Read the documentation"
-            >
-              <Button
-                variant="outline"
-                size="lg"
-                className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-white"
-              >
-                Read the Docs
-              </Button>
-            </a> */}
+                <a href={`${GITHUB_URL}#readme`} target="_blank" rel="noopener noreferrer">
+                  <Button variant="outline" size="lg">
+                    Read the docs
+                  </Button>
+                </a>
+              </div>
+            </Reveal>
           </div>
-        </motion.div>
+
+          {/* Terminal */}
+          <Reveal delay={0.12}>
+            <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 shadow-[0_32px_80px_-32px_rgba(0,0,0,0.55)]">
+              <div className="flex items-center justify-between border-b border-zinc-800/80 px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
+                </div>
+                <CopyButton command={QUICKSTART_COMMAND} />
+              </div>
+              <div
+                className={`space-y-1.5 p-5 font-mono text-[13px] leading-relaxed ${
+                  prefersReduced ? "" : "terminal-enter"
+                }`}
+              >
+                <p
+                  className="text-zinc-500"
+                  style={{ animationDelay: prefersReduced ? undefined : "0.15s" }}
+                >
+                  # Clone, install, and run
+                </p>
+                {TERMINAL_LINES.map((line, i) => (
+                  <p
+                    key={i}
+                    className={line.highlight ? "text-emerald-400" : "text-zinc-300"}
+                    style={{ animationDelay: prefersReduced ? undefined : `${0.4 + i * 0.12}s` }}
+                  >
+                    <span className="mr-2 select-none text-zinc-600">{line.prompt}</span>
+                    {line.text}
+                  </p>
+                ))}
+                <p
+                  className="pt-1 text-zinc-500"
+                  style={{ animationDelay: prefersReduced ? undefined : "0.95s" }}
+                >
+                  <span className="mr-2 select-none text-zinc-600">→</span>
+                  <span className="text-zinc-300">localhost:3000</span>
+                </p>
+              </div>
+            </div>
+          </Reveal>
+        </div>
       </div>
     </section>
   );
@@ -1008,43 +562,54 @@ function CTASection() {
 /* ------------------------------------------------------------------ */
 
 function Footer() {
+  const year = new Date().getFullYear();
+
   return (
-    <footer className="border-t border-zinc-100 bg-white py-12">
-      <div className="mx-auto max-w-6xl px-6">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-2">
-            <Image
-              src="/RemiAI.png"
-              alt={SITE_NAME}
-              width={22}
-              height={22}
-              draggable={false}
-              className="rounded-md"
-            />
-            <span className="text-sm font-medium text-zinc-700">{SITE_NAME}</span>
-            <span className="text-xs text-zinc-400 ml-2">
-              MIT License
-            </span>
-          </div>
-          <div className="flex items-center gap-6">
-            <a
-              href={GITHUB_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors"
-            >
-              GitHub
-            </a>
-            <a
-              href={`${GITHUB_URL}/blob/main/LICENSE`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors"
-            >
-              License
-            </a>
-          </div>
+    <footer className="border-t border-border">
+      <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 px-6 py-10 md:flex-row">
+        <div className="flex items-center gap-2.5">
+          <Image
+            src="/RemiAI.png"
+            alt={SITE_NAME}
+            width={22}
+            height={22}
+            className="rounded-md"
+          />
+          <span className="text-sm font-semibold tracking-tight">{SITE_NAME}</span>
+          <span className="ml-1 text-xs text-muted-foreground">MIT License</span>
         </div>
+
+        <div className="flex items-center gap-6">
+          <a
+            href={GITHUB_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors duration-200 hover:text-foreground"
+          >
+            <IconBrandGithub className="h-3.5 w-3.5" />
+            GitHub
+          </a>
+          <a
+            href={`${GITHUB_URL}/blob/main/LICENSE`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs font-medium text-muted-foreground transition-colors duration-200 hover:text-foreground"
+          >
+            License
+          </a>
+          <a
+            href={`${GITHUB_URL}#readme`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs font-medium text-muted-foreground transition-colors duration-200 hover:text-foreground"
+          >
+            Documentation
+          </a>
+        </div>
+
+        <p className="text-xs text-muted-foreground/70">
+          © {year} {SITE_NAME}. Built in the open by <a href="https://crickdevs.com" target="_blank" rel="noopener noreferrer" className="text-foreground hover:underline">CrickDevs&trade;</a>.
+        </p>
       </div>
     </footer>
   );
@@ -1057,14 +622,11 @@ function Footer() {
 export default function Home() {
   return (
     <>
-      {/* <Header /> */}
+      <Header />
       <main>
-        <HeroGrid />
-        <FeaturesSection />
-        <TechHighlightsSection />
-        <McpServersSection />
-        <CreationsSection />
-        <CTASection />
+        <Hero />
+        <Features />
+        <Quickstart />
       </main>
       <Footer />
     </>

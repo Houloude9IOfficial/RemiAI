@@ -8,13 +8,17 @@ import { DefaultChatTransport } from "ai";
 import { motion, AnimatePresence } from "framer-motion";
 import { Files, Menu, Plus } from "lucide-react";
 import { MessageList } from "@/components/chat/MessageList";
+import { EmptyChatState } from "@/components/chat/EmptyChatState";
 import { ChatInput, type ChatMode } from "@/components/chat/ChatInput";
 import { ChatSkeleton } from "@/components/chat/ChatSkeleton";
 import { ModelPicker } from "@/components/chat/ModelPicker";
 import { TodoProgressBar } from "@/components/chat/TodoProgressBar";
 import { ExportDialog } from "@/components/chat/ExportDialog";
 import { MobileChatHeader, DesktopChatHeader } from "@/components/chat/MobileChatHeader";
-import { SessionFilesPanel } from "@/components/chat/SessionFilesPanel";
+import {
+  SessionFilesPanel,
+  ResizableSessionFilesPanel,
+} from "@/components/chat/SessionFilesPanel";
 import { ErrorCard } from "@/components/ui/error-card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -22,8 +26,13 @@ import { useErrorHandler } from "@/lib/hooks/use-error-handler";
 import { conversationsApi } from "@/lib/api/conversations";
 import { useStreamingContext } from "@/lib/chat/streaming-context";
 import { useSidebar } from "@/components/sidebar/SidebarContext";
-import { SESSION_FILES_PRESENT_EVENT } from "@/lib/api/session-files";
+import {
+  SESSION_FILES_PRESENT_EVENT,
+  type SessionFilesPresentDetail,
+} from "@/lib/api/session-files";
 import { cn } from "@/lib/utils";
+import { errorToDisplayMessage } from "@/lib/chat/error-payload";
+import { userContextHeaders } from "@/lib/chat/user-context";
 
 // If the conversation fetch takes longer than this, abort it and surface an
 // error instead of leaving the user staring at an endless loading skeleton.
@@ -38,7 +47,7 @@ function ReconnectingBanner() {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.25, ease: "easeOut" }}
-      className="flex items-center justify-center gap-2.5 border-b border-primary/20 bg-primary/[0.04] px-4 py-2 text-sm text-primary backdrop-blur-sm"
+      className="flex items-center justify-center gap-2.5 border-b border-primary/20 bg-primary/4 px-4 py-2 text-sm text-primary backdrop-blur-sm"
     >
       <span className="relative flex h-2.5 w-2.5">
         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-60" />
@@ -57,16 +66,16 @@ function ReconnectingBanner() {
 
 function ChatMobileHeader({ onToggleSidebar }: { onToggleSidebar: () => void }) {
   return (
-    <div className="flex items-center gap-2 border-b px-3 py-2.5 bg-background/95 backdrop-blur supports-[padding-top:env(safe-area-inset-top)]:pt-[calc(0.625rem+env(safe-area-inset-top))] md:hidden">
+    <div className="sticky top-0 z-20 flex shrink-0 items-center gap-2 border-b border-border/60 bg-background/95 px-3 py-2 backdrop-blur supports-[padding-top:env(safe-area-inset-top)]:pt-[calc(0.5rem+env(safe-area-inset-top))] md:hidden">
       <button
         type="button"
         onClick={onToggleSidebar}
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted active:scale-95 transition-all duration-150"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-95"
         aria-label="Open menu"
       >
         <Menu className="h-5 w-5" />
       </button>
-      <span className="flex-1 truncate text-sm font-medium text-foreground">
+      <span className="min-w-0 flex-1 truncate text-sm font-medium tracking-tight text-foreground">
         RemiAI
       </span>
     </div>
@@ -288,12 +297,21 @@ function ConversationChat({
   const [mode, setMode] = useState<ChatMode>(
     (initialConversation as any).mode ?? "chat",
   );
+  const queryClient = useQueryClient();
   const [panelOpen, setPanelOpen] = useState(false);
+  // When the AI presents a single file (session_present_file), the panel
+  // opens straight to that file in the viewer.
+  const [panelFocusPath, setPanelFocusPath] = useState<string | null>(null);
   const { activeStreams, startStream, endStream } = useStreamingContext();
 
   // Auto-open the session files panel when the AI calls session_present_files
+  // or session_present_file; for the single-file variant, focus that file.
   useEffect(() => {
-    const handler = () => setPanelOpen(true);
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<SessionFilesPresentDetail>).detail;
+      if (detail?.focusPath) setPanelFocusPath(detail.focusPath);
+      setPanelOpen(true);
+    };
     window.addEventListener(SESSION_FILES_PRESENT_EVENT, handler);
     return () => window.removeEventListener(SESSION_FILES_PRESENT_EVENT, handler);
   }, []);
@@ -316,31 +334,68 @@ function ConversationChat({
   const resumeRef = useRef(isReconnecting);
   const resume = resumeRef.current;
 
-  const { messages, setMessages, sendMessage, status, stop, error } = useChat({
+  const {
+    messages,
+    setMessages,
+    sendMessage,
+    status,
+    stop,
+    error,
+    resumeStream,
+    regenerate,
+    clearError: clearChatError,
+  } = useChat({
     id: String(conversationId),
     messages: initialMessages,
     resume,
     transport: new DefaultChatTransport({
       api: "/api/chat",
       body: { conversationId },
+      // Tell the server the user's timezone + locale so get_time_details
+      // reports the user's LOCAL time and search results are localized.
+      headers: () => userContextHeaders(),
     }),
     onFinish: () => {
       // Small delay to ensure server-side token update completes
       // before the sidebar refetches the conversation list.
       setTimeout(() => onConversationChanged(), 500);
+      // First exchange in a brand-new chat (user + assistant only): the
+      // server generates a real AI title in the background, so refetch again
+      // shortly after to pick it up in the sidebar AND the header.
+      if (messagesRef.current.length <= 2) {
+        setTimeout(() => {
+          onConversationChanged();
+          queryClient.invalidateQueries({ queryKey: ["conversation"] });
+        }, 6_000);
+      }
       endStream(conversationId);
     },
   });
 
+  // Keep the latest message list available to the retryable closure without
+  // putting the (constantly changing) `messages` array in the effect deps:
+  // editing the deps array LENGTH under Fast Refresh makes React throw
+  // ("changed size between renders"), and a live messages dep would also
+  // re-register the handler on every streamed chunk.
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+
   useEffect(() => {
     if (status === "submitted" || status === "streaming") {
       startStream(conversationId);
-    } else if (!resume) {
+      return;
+    }
+
+    // Keep stream state intact on transport errors so Resume/Continue can
+    // reconnect instead of immediately downgrading to a blind resend flow.
+    if (status === "error") {
+      return;
+    }
+
+    if (!resume) {
       endStream(conversationId);
     }
   }, [status, conversationId, resume, startStream, endStream]);
-
-  const lastSentText = useRef<string>("");
 
   const {
     error: handlerError,
@@ -358,24 +413,115 @@ function ConversationChat({
     }
   }, [error, handleError]);
 
-  // Register the retryable action — resend the last failed message
+  // Register the retryable action — continue the interrupted run first.
   useEffect(() => {
     onRetryable(async () => {
-      if (lastSentText.current) {
-        sendMessage({ text: lastSentText.current });
+      const mapped = errorToDisplayMessage(error ?? handlerError ?? "");
+
+      // Resume-first policy: never resend the user prompt automatically.
+      // If resume is not possible, bubble a clear error so the user can
+      // explicitly decide to send a new message.
+      if (mapped.shouldResume !== false) {
+        // Only reconnect to the live stream if the server still has one.
+        // Otherwise the AI SDK's resumeStream() silently no-ops (204 → null
+        // → early return), which makes the run appear to "just end" when the
+        // error card is cleared.
+        const streamActive = await fetch(
+          `/api/chat/${conversationId}/stream/status`,
+        )
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d) => d?.active === true)
+          .catch(() => false);
+
+        if (streamActive) {
+          startStream(conversationId);
+          try {
+            await resumeStream();
+          } catch (err) {
+            endStream(conversationId);
+            throw err;
+          }
+          return;
+        }
+
+        // Nothing to continue from — tell the user instead of POSTing an
+        // empty request to /api/chat (which would 400 confusingly).
+        if (messagesRef.current.length === 0) {
+          throw new Error(
+            mapped.message ??
+              "This run cannot be continued automatically. Send a new message to try again.",
+          );
+        }
+
+        // The run already ended server-side — continue it by re-running the
+        // generation with the accumulated messages (including any partial
+        // assistant output), so the AI keeps working from where it stopped.
+        // The continuation is appended as a new assistant message.
+        clearError();
+        clearChatError();
+        sendMessage();
+        return;
       }
+
+      throw new Error(
+        mapped.message ??
+          "This run cannot be continued automatically. Send a new message to try again.",
+      );
     });
-  }, [onRetryable, sendMessage]);
+  }, [
+    onRetryable,
+    error,
+    handlerError,
+    startStream,
+    endStream,
+    conversationId,
+    resumeStream,
+    clearError,
+    clearChatError,
+    sendMessage,
+    messagesRef,
+  ]);
 
   const [isAiStarting, setIsAiStarting] = useState(false);
 
   const handleSend = useCallback(
     (text: string) => {
-      lastSentText.current = text;
       clearError();
+      clearChatError();
       sendMessage({ text });
     },
-    [clearError, sendMessage],
+    [clearError, clearChatError, sendMessage],
+  );
+
+  /**
+   * Regenerate an assistant message: truncate the persisted messages at that
+   * point (deleting it and everything after), then re-run the generation.
+   */
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const handleRegenerate = useCallback(
+    async (messageId: string) => {
+      if (isRegenerating || status === "submitted" || status === "streaming") return;
+      setIsRegenerating(true);
+      clearError();
+      clearChatError();
+      try {
+        const res = await fetch(`/api/chat/${conversationId}/messages`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ uiId: messageId }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error ?? "Failed to prepare regeneration");
+        }
+        await regenerate({ messageId });
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to regenerate");
+      } finally {
+        setIsRegenerating(false);
+      }
+    },
+    [conversationId, isRegenerating, status, clearError, clearChatError, regenerate],
   );
 
   const handleAiStart = useCallback(async () => {
@@ -386,7 +532,7 @@ function ConversationChat({
     try {
       const response = await fetch("/api/chat/start", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...userContextHeaders() },
         body: JSON.stringify({ conversationId }),
       });
 
@@ -462,21 +608,36 @@ function ConversationChat({
     modelId: initialConversation.modelId,
   });
 
+  const closePanel = useCallback(() => {
+    setPanelOpen(false);
+    setPanelFocusPath(null);
+  }, []);
+
   const filesToggle = (
     <button
       type="button"
-      onClick={() => setPanelOpen((o) => !o)}
+      onClick={() => {
+        if (panelOpen) setPanelFocusPath(null);
+        setPanelOpen((o) => !o);
+      }}
       aria-label="Toggle session files"
       title="Session files"
       className={cn(
-        "inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-muted-foreground transition-all hover:bg-muted hover:text-foreground active:scale-95",
+        "inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-95",
         panelOpen && "bg-primary/10 text-primary",
       )}
     >
       <Files className="h-4 w-4" />
-      <span className="hidden text-xs font-medium lg:inline">Files</span>
     </button>
   );
+
+  // True while the conversation has no content yet — renders the centered,
+  // code-editor-style composer instead of the docked messages + input.
+  const lastMessage = messages[messages.length - 1];
+  const isWaiting =
+    (status === "submitted" || status === "streaming") &&
+    (!lastMessage || lastMessage.role === "user");
+  const isEmpty = messages.length === 0 && !isWaiting;
 
   const handleModelChange = async (nextProviderId: number, nextModelId: string) => {
     await conversationsApi.update(conversationId, {
@@ -512,8 +673,14 @@ function ConversationChat({
         providerId={providerId}
         modelId={modelId}
         onModelChange={handleModelChange}
-        actions={filesToggle}
-        extra={messages.length > 0 && <ExportDialog messages={messages} title={initialConversation.title} />}
+        actions={
+          <>
+            {messages.length > 0 && (
+              <ExportDialog messages={messages} title={initialConversation.title} />
+            )}
+            {filesToggle}
+          </>
+        }
       />
 
       {/* ── Todo progress ── */}
@@ -521,31 +688,93 @@ function ConversationChat({
 
       {/* ── Messages + Session files panel ── */}
       <div className="relative flex min-h-0 flex-1">
-        <div className="min-w-0 flex-1 overflow-y-auto">
-          <MessageList
-            messages={messages}
-            status={status}
-            onSend={(text) => sendMessage({ text })}
-            onAiStart={handleAiStart}
-            isAiStarting={isAiStarting}
-          />
+        {/* Chat column: messages, error card, and input live together so they
+            shrink as one when the session files panel opens — keeping the
+            input aligned with the message column. */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="min-w-0 flex-1 overflow-y-auto">
+            {isEmpty ? (
+              <EmptyChatState
+                conversationId={conversationId}
+                status={status}
+                disabled={!providerId || !modelId}
+                mode={mode}
+                onModeChange={setMode}
+                onSend={handleSend}
+                onStop={stop}
+                onAiStart={handleAiStart}
+                isAiStarting={isAiStarting}
+              >
+                {handlerError && (
+                  <div className="w-full max-w-2xl">
+                    <ErrorCard
+                      error={handlerError}
+                      onRetry={retry}
+                      isRetrying={isRetrying}
+                      retryLabel="Continue"
+                      onDismiss={clearError}
+                    />
+                  </div>
+                )}
+              </EmptyChatState>
+            ) : (
+              <MessageList
+                messages={messages}
+                status={status}
+                onSend={(text) => sendMessage({ text })}
+                onRegenerate={handleRegenerate}
+              />
+            )}
+          </div>
+
+          {/* Docked composer + error — only once the conversation has content. */}
+          {!isEmpty && (
+            <>
+              {/* ── Error ── */}
+              {handlerError && (
+                <div className="mx-auto w-full max-w-3xl px-4 pb-2 md:px-6">
+                  <ErrorCard
+                    error={handlerError}
+                    onRetry={retry}
+                    isRetrying={isRetrying}
+                    retryLabel="Continue"
+                    onDismiss={clearError}
+                  />
+                </div>
+              )}
+
+              {/* ── Input ── */}
+              <div className="sticky bottom-0 z-20 supports-[padding-bottom:env(safe-area-inset-bottom)]:pb-[env(safe-area-inset-bottom)]">
+                {/* Shared layoutId with the centered EmptyChatState composer —
+                    makes the input glide down to the dock when chat starts. */}
+                <motion.div
+                  layoutId="chat-input"
+                  transition={{ type: "spring", stiffness: 340, damping: 32 }}
+                  className="relative"
+                >
+                  <ChatInput
+                    conversationId={conversationId}
+                    status={status}
+                    disabled={!providerId || !modelId}
+                    mode={mode}
+                    onModeChange={setMode}
+                    onSend={handleSend}
+                    onStop={stop}
+                  />
+                </motion.div>
+              </div>
+            </>
+          )}
         </div>
 
-        {/* Desktop — inline right-side panel */}
+        {/* Desktop — inline right-side panel (user-resizable width) */}
         <AnimatePresence>
           {panelOpen && (
-            <motion.div
-              initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 384, opacity: 1 }}
-              exit={{ width: 0, opacity: 0 }}
-              transition={{ duration: 0.22, ease: "easeOut" }}
-              className="hidden h-full shrink-0 overflow-hidden md:block"
-            >
-              <SessionFilesPanel
-                conversationId={conversationId}
-                onClose={() => setPanelOpen(false)}
-              />
-            </motion.div>
+            <ResizableSessionFilesPanel
+              conversationId={conversationId}
+              onClose={closePanel}
+              focusPath={panelFocusPath}
+            />
           )}
         </AnimatePresence>
 
@@ -569,37 +798,13 @@ function ConversationChat({
               >
                 <SessionFilesPanel
                   conversationId={conversationId}
-                  onClose={() => setPanelOpen(false)}
+                  onClose={closePanel}
+                  focusPath={panelFocusPath}
                 />
               </motion.div>
             </>
           )}
         </AnimatePresence>
-      </div>
-
-      {/* ── Error ── */}
-      {handlerError && (
-        <div className="px-4 pb-2">
-          <ErrorCard
-            error={handlerError}
-            onRetry={retry}
-            isRetrying={isRetrying}
-            onDismiss={clearError}
-          />
-        </div>
-      )}
-
-      {/* ── Input ── */}
-      <div className="sticky bottom-0 z-20 bg-background/95 backdrop-blur supports-[padding-bottom:env(safe-area-inset-bottom)]:pb-[env(safe-area-inset-bottom)]">
-        <ChatInput
-          conversationId={conversationId}
-          status={status}
-          disabled={!providerId || !modelId}
-          mode={mode}
-          onModeChange={setMode}
-          onSend={handleSend}
-          onStop={stop}
-        />
       </div>
     </div>
   );

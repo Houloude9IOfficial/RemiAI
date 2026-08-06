@@ -343,6 +343,8 @@ After completing the task, the user will receive a desktop notification with you
       ],
       tools: Object.keys(tools).length > 0 ? tools : undefined,
       stopWhen: stepCountIs(50), // Allow multi-step tool-calling chains
+      // Retry retryable provider failures up to 3 times before erroring out.
+      maxRetries: 3,
     });
 
     const fullText = result.text;

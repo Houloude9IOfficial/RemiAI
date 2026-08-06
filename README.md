@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="./assets/Preview.png" alt="RemiAI Preview" style="border-radius: 15px; max-width: 100%;" />
+  <img src="./assets/RemiAIv2Dark.png" alt="RemiAI Preview" style="border-radius: 15px; max-width: 100%;" />
 </div>
 
 <h1 align="center">RemiAI</h1>
@@ -22,11 +22,17 @@
 
 ---
 
+## Release Notes
+
+What's new in the latest release? Check the **[RemiAI v2.0.0 release notes](./v2.md)**. Release notes for each major version live in the repo root as `vX.md` (e.g. `v2.md`, `v3.md`).
+
+---
+
 ## Overview
 
 RemiAI is a **self-hosted AI assistant** that lives on your machine. It combines a conversational AI interface with deep local file system access, persistent memory, an extensible tool system, and support for the Model Context Protocol (MCP). You can think of it as a private, customizable AI that understands your files, remembers your preferences, and connects to external services — all without sending your data to third parties.
 
-Built with **Next.js 16**, **TypeScript**, **Drizzle ORM** (SQLite), and the **AI SDK**, RemiAI runs entirely on your own hardware.
+Built with **Next.js 16**, **TypeScript**, **Drizzle ORM** (SQLite), and the **AI SDK**, RemiAI runs entirely on your own hardware — in the browser, as an installable PWA, or as a native desktop app.
 
 ---
 
@@ -37,6 +43,10 @@ Built with **Next.js 16**, **TypeScript**, **Drizzle ORM** (SQLite), and the **A
 - Conversational interface with streaming AI responses
 - **Multiple AI providers**: Anthropic (Claude), OpenAI (GPT), Ollama (local models), OpenAI-compatible endpoints
 - **Per-conversation model picker** — switch models mid-conversation
+- **Centered composer** on new chats — a clean, focused input in the middle of the screen that smoothly expands to the full chat input
+- **Auto-generated chat titles** — new conversations are named for you in the background
+- **Regenerate & media previews** — re-roll AI responses and preview images/video inline, with support for streaming ranges
+- **Automatic retries** — failed AI requests are retried (up to 3 attempts) before erroring out
 - **Context-aware conversation starts** — the AI automatically gathers time, user profile, preferences, memories, and recent file changes before the first greeting
 - **Markdown rendering** with syntax-highlighted code blocks and inline images
 - **Todo list tracking** within conversations — plan and track multi-step tasks
@@ -55,6 +65,16 @@ Built with **Next.js 16**, **TypeScript**, **Drizzle ORM** (SQLite), and the **A
 - **@FILE / @DIRECTORY mentions** — reference permitted files and directories directly in chat
 - Automatic parent directory creation when writing files
 
+### Session Files & File Manager
+
+Every chat gets its own **sandboxed session folder** that the AI can read and write:
+
+- **Uploads land in the session** — files attached to a chat are stored in that chat's sandbox, and the AI can access them
+- **File manager** (`/files`) — a dedicated page to manage the files associated with each chat: create, edit, delete, rename, download, and organize
+- **Built-in code editor** — edit text and code files with a theme-aware editor featuring syntax highlighting (JS, Python, Markdown, JSON, SQL, HTML, CSS, YAML, and more)
+- **Media previews** — images, audio, and video render inline
+- **Resizable panel** — the session files panel in chat can be resized to your liking
+
 ### Memory System
 
 - **Persistent facts** — the AI saves and recalls information across conversations
@@ -68,6 +88,7 @@ Built with **Next.js 16**, **TypeScript**, **Drizzle ORM** (SQLite), and the **A
 - **Structured profile**: name, bio, location, occupation, interests, skills, pronouns, birthday, social links
 - **Avatar upload** — add a profile picture
 - **AI personality customization** — define how the AI should behave and address you
+- **Accent color** — personalize the UI with your own accent color
 
 ### Sub-Agent System
 
@@ -147,6 +168,21 @@ Play classic strategy games against the AI:
 
 The AI reacts to your moves with personality — "Now you locked me bro!"
 
+### Desktop App (Electron)
+
+RemiAI is available as a **native desktop app** for macOS, Windows, and Linux:
+
+- **System tray** with minimize-to-tray behavior
+- **Native OS notifications**
+- **Automatic updates** — installers are published to GitHub Releases and the app updates itself
+- Cross-platform installers via `npm run dist:*` (mac DMG, Windows NSIS, Linux AppImage)
+
+### PWA & Mobile
+
+- **Installable** as a Progressive Web App on mobile and desktop
+- **Fully responsive** dashboard — works great on phones and tablets
+- Mobile-friendly sticky headers and touch-optimized interactions
+
 ### Backup & Restore
 
 - **Encrypted backups** — protect your data and API keys with a password
@@ -168,14 +204,16 @@ RemiAI has a comprehensive settings system with dedicated pages for every aspect
 | **Routines** | Create and manage automation routines |
 | **Scheduled Tasks** | Set up cron-based scheduled tasks |
 | **Memories** | View, search, and delete saved memories |
+| **Tasks** | Monitor spawned sub-agents and their results |
 | **Usage** | Token usage statistics across all conversations |
 | **Backup** | Export and import encrypted backups |
-| **Customize** | Theme and UI customization |
+| **Customize** | Theme, accent color, and UI customization |
 | **File Watcher** | Monitor file indexing status |
 
 ### UI & Design
 
 - **Dark/light theme** with persistent preference and flash-free initialization
+- **Custom accent colors** — pick a color that matches your style
 - **Responsive sidebar** with conversation history and profile section
 - **Framer Motion animations** throughout
 - **Toast notifications** for status updates (sonner)
@@ -196,6 +234,8 @@ RemiAI has a comprehensive settings system with dedicated pages for every aspect
 | **SQLite** (better-sqlite3) | Local database — zero configuration |
 | **Tailwind CSS v4** | Utility-first styling |
 | **Base UI** (MUI) | Accessible, composable UI primitives |
+| **CodeMirror** | In-app code editor with syntax highlighting |
+| **Electron** | Cross-platform desktop app |
 | **Framer Motion** | Animation library |
 | **Zod** | Runtime validation |
 | **React Query** | Server state management |
@@ -240,6 +280,23 @@ Then visit **http://127.0.0.1:3000**.
 The database is **automatically migrated** on startup, so you don't need to run any migration commands manually. On the first run, the server prints a one-time signup code in the terminal. Enter that code in the browser to create the first account. The code is stored only as a hash and is consumed once.
 
 Your local database, uploaded files, provider credentials, and other app data are stored under `data/`. This directory is intentionally gitignored — protect it like application data and use the encrypted Backup page before moving or resetting an installation.
+
+### Desktop App
+
+Build installers for your platform:
+
+```bash
+npm run dist           # current platform
+npm run dist:mac       # macOS (DMG)
+npm run dist:win       # Windows (NSIS installer)
+npm run dist:linux     # Linux (AppImage)
+```
+
+Or run the app in development mode:
+
+```bash
+npm run dev:electron
+```
 
 ### Production Build
 
@@ -303,14 +360,14 @@ The container listens on `0.0.0.0:3000` internally. TLS termination, firewall ru
 
 #### Deploying a released image from GHCR
 
-Every GitHub Release with a `v`-prefixed tag (e.g. `v1.5.0`) automatically builds the Docker image and pushes it to the GitHub Container Registry (GHCR) — your server does **not** need to build the image itself. The workflow lives in `.github/workflows/docker-release.yml` and runs on the `release: published` event only; pushes to `main` never trigger it.
+Every GitHub Release with a `v`-prefixed tag automatically builds the Docker image and pushes it to the GitHub Container Registry (GHCR) — your server does **not** need to build the image itself. The workflow lives in `.github/workflows/docker-release.yml` and runs on the `release: published` event only; pushes to `main` never trigger it.
 
 Two image tags are produced per release:
 
-- `ghcr.io/houloude9iofficial/remiai:v1.5.0` — pinned to the release tag
+- `ghcr.io/houloude9iofficial/remiai:<tag>` — pinned to the release tag
 - `ghcr.io/houloude9iofficial/remiai:latest` — always points to the newest release
 
-**To release a new version:** merge your changes to `main` via pull request, then create a GitHub Release (Releases → Draft a new release) targeting `main` with a tag such as `v1.5.0`. Publishing the release triggers the build and push.
+**To release a new version:** merge your changes to `main` via pull request, then create a GitHub Release (Releases → Draft a new release) targeting `main` with a `v`-prefixed tag. Publishing the release triggers the build and push. No version numbers are hardcoded in the docs or configs — only `package.json` needs to be updated per release, and everything else (installer names, image tags) derives from it.
 
 **Pull the released image with Compose.** In the included `docker-compose.yml`, replace `build: .` with the image reference (keep the rest of the service definition unchanged):
 
@@ -339,7 +396,7 @@ docker compose pull
 docker compose up -d
 ```
 
-To pin a specific version instead of `latest`, set the tag to the release, e.g. `image: ghcr.io/houloude9iofficial/remiai:v1.5.0`.
+To pin a specific version instead of `latest`, set the tag to the release tag, e.g. `image: ghcr.io/houloude9iofficial/remiai:vX.Y.Z`.
 
 Or run the released image directly:
 
@@ -371,11 +428,13 @@ Once running, you'll be greeted by RemiAI in a new conversation. Here's what you
 
 - **Chat naturally** — ask questions, give instructions, have conversations
 - **Work with files** — "List my projects folder", "Read notes.md", "Search for TODO in my code"
+- **Manage session files** — visit `/files` to manage each chat's sandboxed files with the built-in editor
 - **Save memories** — share facts about yourself, the AI remembers them
 - **Call external tools** — configure MCP servers or integrations in Settings
 - **Play games** — visit `/games` for Tic Tac Toe and Connect 4
 - **Talk hands-free** — visit `/talk` for voice conversation mode
 - **Automate tasks** — create routines and scheduled tasks
+- **Install as an app** — use your browser's "Install App" option, or the native desktop build
 - **Backup your data** — use the Backup page for encrypted exports
 
 ### Configuration
@@ -420,9 +479,9 @@ Each creation includes the exact AI conversation that produced it — check the 
 
 This repo also includes a [landing page](./website/) (`/website`) for showcasing RemiAI. It's a separate Next.js 16 app with:
 
-- Animated hero section with scroll-driven parallax
-- Feature cards, tech stack badges, and MCP server recommendations
-- Creations gallery and CTA section
+- Sticky glass header and an animated hero featuring the v2 light-theme dashboard screenshot
+- Tech stack badges, a tight feature grid, and a quickstart terminal with copy-to-clipboard
+- Premium light design (Inter + JetBrains Mono, blue accent) matching the app's design language
 
 ```bash
 cd website
@@ -432,23 +491,9 @@ npm run dev
 
 ---
 
-## Dependency Security & npm Overrides
-
-Both the root project and `website/` ship npm `overrides` entries that pin vulnerable transitive dependencies to patched versions. These are intentional — do not remove them when tidying dependencies:
-
-| Override | Why it exists |
-|---|---|
-| `next` → `postcss: 8.5.25` | `next` pins `postcss@8.4.31`, which is vulnerable (source map disclosure / path traversal). Forces the patched line while keeping Next.js's expected API. |
-| `sharp: ^0.35.3` | `next` declares `sharp@^0.34.5` as an optional dependency; the older line inherits libvips CVEs. |
-| `fast-uri: ^3.1.5` | `fast-uri@3.1.3` has a host-confusion vulnerability; `^3.1.5` is the patched line. |
-| `@modelcontextprotocol/sdk: ^1.30.0` + `@hono/node-server: ^2.0.12` | `@hono/node-server@1.x` has a Windows path-traversal; SDK `1.30.0` is the first release that supports the patched `2.x` adapter. |
-| `tar: ^7.5.22` | `tar@<=7.5.20` has a stack-overflow DoS (via node-gyp / electron-builder). |
-| `minimatch@9.0.9` / `minimatch@10.2.5` → `brace-expansion: 5.0.9` | `brace-expansion@<=5.0.7` has an unbounded-expansion DoS. Scoped (not global) because `minimatch@3.x`/`5.x` call `brace-expansion` as a function, which the patched `5.x` object API breaks. |
-| `@esbuild-kit/core-utils` → `esbuild: ^0.25.12` | `@esbuild-kit` pins `esbuild@~0.18.20`, which has the dev-server SSRF/request-read vulnerability. |
-
-> **Known residual:** `npm audit` still reports `brace-expansion` (and its `minimatch`/`eslint`/`electron-builder` chain) as high. Those instances are **dev-time only** (eslint, electron-builder, drizzle-kit) and cannot be upgraded without breaking those tools — the patched `brace-expansion@5.x` is API-incompatible with the `minimatch@3.x`/`5.x` they pin, and upstream hasn't released compatible versions yet. They never ship in the app runtime, and the DoS requires processing attacker-controlled glob patterns that never reach these dev tools.
-
 ## Troubleshooting
+
+> **Note on dependency security:** `package.json` ships with intentional npm `overrides` that pin a few vulnerable transitive dependencies to patched versions. Keep them in place when tidying dependencies — they exist to fix known advisories without breaking the tools that depend on the affected packages.
 
 ### "no such table" database errors
 
@@ -458,18 +503,9 @@ npm run db:migrate
 
 Then restart the app. (Auto-migration on startup should handle this automatically in most cases.)
 
-### Native module mismatch (`better-sqlite3` / `NODE_MODULE_VERSION`)
+### Native module mismatch (`better-sqlite3`)
 
-If the build fails with:
-
-```
-Error: The module '.../better-sqlite3/build/Release/better_sqlite3.node'
-was compiled against a different Node.js version using
-NODE_MODULE_VERSION 148. This version of Node.js requires
-NODE_MODULE_VERSION 127.
-```
-
-The native `better-sqlite3` binary was compiled for a different Node.js version than the one you're currently running. Rebuild it:
+If the build fails with a `NODE_MODULE_VERSION` mismatch error, the native `better-sqlite3` binary was compiled for a different Node.js version than the one you're currently running. Rebuild it:
 
 ```bash
 npm rebuild better-sqlite3
@@ -482,21 +518,15 @@ rm -rf node_modules
 npm install
 ```
 
+For the Electron desktop app, use the dedicated rebuild script:
+
+```bash
+npm run rebuild:electron
+```
+
 ### `<button> cannot be a descendant of <button>` hydration error
 
 This happens when a `<button>` is nested inside a Base UI compound component that renders its own `<button>` (like `DialogTrigger`). Pass `className` and `aria-label` directly to the trigger instead of wrapping it.
-
-### Turbopack root warning (multiple lockfiles)
-
-Add to `next.config.ts`:
-
-```ts
-const nextConfig: NextConfig = {
-  turbopack: {
-    root: process.cwd(),
-  },
-};
-```
 
 ### Port already in use
 
@@ -533,22 +563,6 @@ npm install
 ```
 
 On macOS, avoid installing libvips via Homebrew — it can conflict with sharp's bundled version.
-
-### Electron build / code signing errors (macOS)
-
-When building the macOS desktop app (`npm run dist:mac`), you may encounter code signing errors:
-
-```
-Error: code signing is required for product type Application
-```
-
-For development builds, skip signing:
-
-```bash
-npx electron-builder --mac --config.forceCodeSigning=false
-```
-
-For distribution builds, you'll need a valid Apple Developer ID certificate. See [electron-builder's macOS docs](https://www.electron.build/code-signing).
 
 ### Ollama connection refused
 
@@ -596,35 +610,15 @@ To avoid data loss, use the **Backup** page in Settings to export an encrypted b
 
 The project handles Windows path normalization automatically. Use forward slashes (`/`) in all paths when talking to the AI.
 
-### Runtime Issues
+### Electron code signing errors (macOS)
 
-#### Ollama connection refused
-
-If you're using Ollama as a local provider and get `Connection refused`:
+When building the macOS desktop app, you may encounter code signing errors. For development builds, skip signing:
 
 ```bash
-# Check if Ollama is running
-ollama serve
-
-# Verify the endpoint
-curl http://localhost:11434/api/tags
+npx electron-builder --mac --config.forceCodeSigning=false
 ```
 
-Ollama must be running on `http://localhost:11434` (or your configured endpoint) before starting RemiAI.
-
-#### Missing Python for `python_exec` tool
-
-The AI's `python_exec` tool requires Python 3. Verify it's available:
-
-```bash
-python3 --version
-```
-
-If missing, install Python from [python.org](https://python.org) or via Homebrew:
-
-```bash
-brew install python
-```
+For distribution builds, you'll need a valid Apple Developer ID certificate. See [electron-builder's macOS docs](https://www.electron.build/code-signing).
 
 ---
 
@@ -640,8 +634,10 @@ brew install python
 
 ## Made With
 
-- [Claude Code](https://claude.com) — AI-assisted development
 - [FreeBuff](https://freebuff.com) — Free AI coding assistant
+- [Claude Code](https://claude.com) — AI-assisted development
+- [ChatGPT Codex](https://openai.com/codex) — AI-assisted development
+- [Venice API](https://venice.ai) — AI-assisted development
 - [FreeLLMAPI](https://freellmapi.co) — Free LLM API access
 - [ProductHunt](https://www.producthunt.com/products/remiai) — Community
 

@@ -38,21 +38,29 @@ async function ensureRoots(): Promise<PermittedRoot[]> {
 // ---------------------------------------------------------------------------
 
 /**
- * List all configured directory roots the AI can access, with permissions.
+ * List all configured directory roots the AI can actually access, with permissions.
+ *
+ * Roots where BOTH `canRead` and `canWrite` are false are fully locked and are
+ * deliberately OMITTED — the AI must not attempt to access directories it has
+ * no permission for. Only roots the AI has at least some access to are listed.
  */
 export const listPermittedRootsTool = {
   description:
-    "List all directory roots the user has granted access to, along with read/write permissions for each. Use this first to discover available roots before accessing files.",
+    "List all directory roots you can access, with read/write permissions for each. Only roots you have at least read or write access to are returned — roots you have NO access to are intentionally omitted, so never guess or attempt to use a rootId that is not listed here. Use this first to discover available roots before accessing files.",
   parameters: z.object({}),
   execute: async () => {
     const roots = await getPermittedRoots();
-    return roots.map((r) => ({
-      id: r.id,
-      label: r.label,
-      path: r.path,
-      canRead: r.canRead,
-      canWrite: r.canWrite,
-    }));
+    // Filter out fully-locked roots (no read AND no write access): listing them
+    // only invites the model to attempt calls that are guaranteed to be denied.
+    return roots
+      .filter((r) => r.canRead || r.canWrite)
+      .map((r) => ({
+        id: r.id,
+        label: r.label,
+        path: r.path,
+        canRead: r.canRead,
+        canWrite: r.canWrite,
+      }));
   },
 };
 
@@ -61,7 +69,7 @@ export const listPermittedRootsTool = {
  */
 export const listDirectoryTool = {
   description:
-    "List files and directories inside a permitted root directory (or subdirectory). Returns entries sorted with directories first, then alphabetically, with file sizes and types.\n\n**Workflow:** Call `list_permitted_roots` first to discover available rootIds, then pass the numeric rootId here to browse its contents. Leave relativePath empty to list the root itself. Pass a relativePath to browse a subdirectory.",
+    "List files and directories inside a permitted root directory (or subdirectory). Returns entries sorted with directories first, then alphabetically, with file sizes and types.\n\n**Workflow:** Call `list_permitted_roots` first to discover available rootIds, then pass the numeric rootId here to browse its contents. Leave relativePath empty to list the root itself. Pass a relativePath to browse a subdirectory.\n\n**Only use rootIds returned by `list_permitted_roots`** — roots you have no access to are not listed there, and attempting them will fail with an access-denied error.",
   parameters: z.object({
     rootId: z
       .coerce.number()
@@ -100,7 +108,7 @@ export const listDirectoryTool = {
  */
 export const readFileTool = {
   description:
-    "Read the text content of a file. Supports either a chat upload URL or a root file path. Max 100KB per read.\n\n**Two calling conventions:**\n1. Pass `url` for chat-uploaded files (e.g. /api/chat/uploads/123/notes.txt) — no directory root needed.\n2. Pass `rootId` + `relativePath` for files in configured directories.",
+    "Read the text content of a file. Supports a chat file URL or a root file path. Max 100KB per read.\n\n**Calling conventions:**\n1. Pass `url` for chat file URLs — user uploads (e.g. /api/chat/uploads/123/notes.txt) or session sandbox files (e.g. /api/chat/5/session-files/src/app.js) — no directory root needed.\n2. Pass `rootId` + `relativePath` for files in configured directories.",
   parameters: z
     .object({
       rootId: z
@@ -119,7 +127,7 @@ export const readFileTool = {
         .string()
         .optional()
         .describe(
-          "Upload URL for a file the user attached via the chat input (e.g. `/api/chat/uploads/123/notes.txt`). Use this instead of rootId + relativePath for uploaded files.",
+          "Chat file URL — a user upload (e.g. `/api/chat/uploads/123/notes.txt`) or a session sandbox file (e.g. `/api/chat/5/session-files/notes.txt`). Use this instead of rootId + relativePath for files tied to the chat.",
         ),
       offset: z
         .number()
@@ -144,7 +152,7 @@ export const readFileTool = {
       },
       {
         message:
-          "Either `url` (for uploaded files) or both `rootId` and `relativePath` (for directory files) are required.",
+          "Either `url` (for chat file URLs) or both `rootId` and `relativePath` (for directory files) are required.",
       },
     ),
   execute: async ({
@@ -161,7 +169,7 @@ export const readFileTool = {
     limit?: number | null;
   }) => {
     if (url) {
-      // Read from chat upload URL
+      // Read from chat file URL
       const { filename, resolvedPath } = await resolveUploadUrl(url);
       const stats = await fs.stat(resolvedPath);
       if (!stats.isFile()) {
@@ -270,7 +278,7 @@ export const globFilesTool = {
  */
 export const readMediaTool = {
   description:
-    "Read a media file from a configured directory root. For images, returns a `dataUrl` (base64 thumbnail) you can examine. For videos, returns metadata (filename, type, size) — you can also check the `url` to reference the video. **NOTE: Chat-uploaded images are ALREADY visible to you natively via your vision encoder — do NOT use this tool for those.** This tool is for reading media files from your configured directory roots (using `rootId` + `relativePath`) or for examining video metadata from chat uploads. Supported formats: images (.jpg, .png, .gif, .webp, .svg, .avif) and videos (.mp4, .webm, .mov, .avi, .mkv). Max file size: 20 MB.",
+    "Read a media file and return a `dataUrl` (base64 pixels) you can examine. **NOTE: Chat-uploaded images are ALREADY visible to you natively via your vision encoder — do NOT use this tool for those.** Use this tool for: media in configured directory roots (`rootId` + `relativePath`), session sandbox files via URL (e.g. `/api/chat/5/session-files/assets/earth.jpg`), or video metadata from chat uploads. For sandbox images, `session_file_read_media` is the more direct option. Supported formats: images (.jpg, .png, .gif, .webp, .svg, .avif) and videos (.mp4, .webm, .mov, .avi, .mkv). Max file size: 20 MB.",
   parameters: z
     .object({
       rootId: z
@@ -289,7 +297,7 @@ export const readMediaTool = {
         .string()
         .optional()
         .describe(
-          "Upload URL for a file the user attached via the chat input (e.g. `/api/chat/uploads/123/filename.png`). Use this instead of rootId + relativePath when the user sends you an image/file via markdown in their message.",
+          "Chat file URL — a user upload (e.g. `/api/chat/uploads/123/filename.png`) or a session sandbox file (e.g. `/api/chat/5/session-files/assets/earth.jpg`). Use this instead of rootId + relativePath for files tied to the chat. For sandbox images you can also use `session_file_read_media`.",
         ),
     })
     .refine(
@@ -300,7 +308,7 @@ export const readMediaTool = {
       },
       {
         message:
-          "Either `url` (for uploaded files) or both `rootId` and `relativePath` (for directory files) are required.",
+          "Either `url` (for chat file URLs) or both `rootId` and `relativePath` (for directory files) are required.",
       },
     ),
   execute: async ({
@@ -313,7 +321,7 @@ export const readMediaTool = {
     url?: string;
   }) => {
     if (url) {
-      // Read from chat upload URL
+      // Read from chat file URL
       return await readMediaFromUrl(url);
     }
     if (!rootId || !relativePath) {
@@ -472,7 +480,17 @@ export const writeFileTool = {
     indexFile(rootId, relativePath, result.path).catch((err) =>
       console.error("[fs-tools] Failed to index written file:", err),
     );
-    return result;
+    // Prefer relativePath for UI digests; keep absolute path for debugging.
+    return {
+      wrote: result.wrote,
+      path: result.relativePath,
+      absolutePath: result.path,
+      mode: result.mode,
+      created: result.created,
+      linesWritten: result.linesWritten,
+      linesAdded: result.linesAdded,
+      linesRemoved: result.linesRemoved,
+    };
   },
 };
 

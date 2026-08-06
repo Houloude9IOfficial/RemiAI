@@ -224,7 +224,7 @@ export async function POST(req: Request) {
       model,
       system: systemPrompt,
       messages: [{ role: "user", content: userMessage }],
-      maxRetries: 1,
+      maxRetries: 3,
     });
 
     const rawText = result.text.trim();

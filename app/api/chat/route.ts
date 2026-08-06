@@ -5,10 +5,11 @@ import {
   stepCountIs,
   createUIMessageStreamResponse,
   type UIMessage,
+  type UIMessageChunk,
 } from "ai";
 import { streamRegistry } from "@/lib/chat/stream-registry";
 import { periodicallyPersistMessages } from "@/lib/chat/persist-interval";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, count } from "drizzle-orm";
 import { db } from "@/db";
 import {
   conversations,
@@ -16,10 +17,12 @@ import {
   mcpServers,
   userPreferences,
   memories,
+  messages,
 } from "@/db/schema";
 import { getLanguageModel } from "@/lib/providers/factory";
 import { SYSTEM_PROMPT_BASE, CREATE_VISUAL_SECTION, SESSION_FILES_SECTION } from "@/lib/chat/system-prompt";
 import { persistUIMessage } from "@/lib/chat/persist";
+import { autoTitleConversation } from "@/lib/chat/title-generator";
 import { createMcpToolsManager } from "@/lib/mcp/tools";
 import { buildFilesystemTools } from "@/lib/fs/tools";
 import { buildContextTools } from "@/lib/tools/context";
@@ -43,12 +46,28 @@ import { buildProfileTools } from "@/lib/tools/profile";
 import { buildRoutinesTools } from "@/lib/tools/routines";
 import { buildScheduleTool } from "@/lib/tools/schedule";
 import { buildToolHelpTool, buildListAvailableToolsTool } from "@/lib/tools/tool-help";
+import { userContextFromHeaders } from "@/lib/geo";
 import { queryRecentChanges } from "@/lib/fs/file-index";
 import { estimateTokenCount } from "@/lib/utils";
 import {
   extractImageAttachments,
   stripImageMarkdown,
 } from "@/lib/chat/process-images";
+import {
+  normalizeStreamError,
+  encodeStreamError,
+  type StreamErrorPayload,
+} from "@/lib/chat/error-payload";
+
+// A response that ends with a commitment to take an action (e.g. "let me dig
+// deeper into the pages") while the run made ZERO tool calls is almost always
+// an interrupted run — the model intended to keep working but the generation
+// was cut short (provider truncation, dropped tool calls, or an early stop).
+// Used to detect silent stops that would otherwise look like a normal (but
+// empty) completion. Only the TAIL of the response is matched: a completed
+// reply ends with its conclusion, not with a promise to act.
+const DANGLING_ACTION_TAIL_RE =
+  /\b(let me|i'?ll|i'?m (going|about) to|gonna)\s+(also|just|first|now|then|quickly)?\s*(dig|check|look|search|fetch|find|crawl|scrape|read|pull|grab|dive|verify|confirm|explore|review|investigate|take a look|look into|see if|see what|find out|get|open|run|try|test|examine|inspect|gather|compile)\b/i;
 
 function titleFromMessage(message: UIMessage): string {
   const text = message.parts
@@ -81,6 +100,9 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
+  // Captured here (after the guard) so the narrowed `string` type survives
+  // into closures like streamText's onFinish below.
+  const conversationModelId = conversation.modelId;
 
   // Read mode from the conversation in the database
   const mode = (conversation as any).mode ?? "chat";
@@ -100,6 +122,22 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
+
+  // ── First-exchange detection (for background auto-titling) ───────────
+  // A brand-new chat starts with zero persisted messages and the default
+  // "New chat" title. If that still holds at request time, the response we
+  // are about to generate is the FIRST AI response — when it completes we'll
+  // kick off a cheap background completion that turns the first two messages
+  // into a proper title (e.g. "Particle Engine Error Fix"), so the sidebar
+  // shows something meaningful even if the user already navigated away.
+  const [countRow] = await db
+    .select({ count: count() })
+    .from(messages)
+    .where(eq(messages.conversationId, conversationId))
+    .all();
+  const existingMessageCount = countRow?.count ?? 0;
+  const isFirstExchange =
+    existingMessageCount === 0 && conversation.title === "New chat";
 
   const lastMessage = uiMessages[uiMessages.length - 1];
   if (lastMessage?.role === "user") {
@@ -139,16 +177,25 @@ export async function POST(req: Request) {
   // Gather filesystem tools from configured directories
   const fsToolSet = await buildFilesystemTools();
 
+  // User context sent by the browser (timezone + locale). Used to report the
+  // user's LOCAL time in get_time_details and to localize web search results.
+  const userContext = userContextFromHeaders(
+    req.headers.get("x-user-timezone"),
+    req.headers.get("x-user-locale"),
+  );
+
   // Gather context tools (time, device info)
   const contextToolSet = buildContextTools(
     req.headers.get("user-agent") ?? undefined,
+    userContext.timezone,
+    userContext.language,
   );
 
   // Gather memory tools (remember, search_memories)
   const memoryToolSet = buildMemoryTools();
 
   // Gather integration tools (Brave Search, Notion, Context7) based on config
-  const integrationToolSet = await buildIntegrationTools();
+  const integrationToolSet = await buildIntegrationTools(userContext);
 
   // Gather code execution tools (python_exec, js_exec)
   const executionToolSet = await buildExecutionTools();
@@ -173,7 +220,12 @@ export async function POST(req: Request) {
 
   // Agent spawner tools with chaining support
   const agentToolSet = {
-    spawn_agent: buildMainSpawnAgentTool(provider, conversation.modelId, conversationId),
+    spawn_agent: buildMainSpawnAgentTool(
+      provider,
+      conversation.modelId,
+      conversationId,
+      userContext,
+    ),
     get_agent_result: buildGetAgentResultTool(),
   };
 
@@ -202,6 +254,8 @@ export async function POST(req: Request) {
     "delete_directory",
     "rename_item",
     "session_file_write",
+    "session_file_mkdir",
+    "session_file_move",
     "session_file_delete",
   ];
   const effectiveFsToolSet =
@@ -342,8 +396,10 @@ You are currently in **Plan mode**. This means:
   const modelMessages = await convertToModelMessages(uiMessages);
 
   // ── Native image processing ───────────────────────────────────
-  // Scan user messages for image upload markdown references (`![...](/api/chat/uploads/...)`)
-  // and inject the raw image data as native multimodal content parts.
+  // Scan user messages for image markdown references of attached files
+  // (legacy `/api/chat/uploads/...` or session sandbox
+  // `/api/chat/{id}/session-files/...` URLs) and inject the raw image data
+  // as native multimodal content parts.
   // Modern LLMs (Claude 3.5, GPT-4o, Gemini) process these natively via their vision
   // encoder — far more efficient and reliable than the old read_media tool approach.
   for (const msg of modelMessages) {
@@ -411,24 +467,80 @@ You are currently in **Plan mode**. This means:
   // doesn't double-count by applying the same usage again.
   let tokensApplied = false;
 
-  // Capture the full error object from streamText's onError callback so we
-  // can enrich the error chunk sent to the client (the SDK's default error
-  // chunk only contains a generic "An error occurred." message).
-  let capturedError: unknown = null;
+  // Capture a normalized error payload from streamText's onError callback so
+  // the frontend can render a friendly, structured error (instead of a raw
+  // provider stack or a generic "An error occurred").
+  let capturedErrorPayload: StreamErrorPayload | null = null;
 
   const result = streamText({
     model,
     system: fullSystemPrompt,
     messages: modelMessages,
     tools: Object.keys(tools).length > 0 ? tools : undefined,
+    // Retry retryable provider failures (network, 5xx, rate limits) up to
+    // 3 times with exponential backoff before surfacing the error.
+    maxRetries: 3,
+    // Ask providers for a generous output budget so low default caps don't
+    // cut the model off mid-response — the #1 cause of runs that appear to
+    // "just stop" after a partial reply. 4096 covers typical chat replies;
+    // goal mode gets a much larger budget for long autonomous runs. Kept
+    // conservative so small-context models don't reject the request.
+    maxOutputTokens: mode === "goal" ? 16_384 : 4_096,
     // Allow up to 100 steps normally (chat/plan), or 500 in goal mode
     // so the model can work autonomously until task completion
-    stopWhen: stepCountIs(mode === "goal" ? 500 : 100),
+    stopWhen: stepCountIs(mode === "goal" ? 10000 : 7500),
     onError: (err) => {
-      capturedError = err;
+      capturedErrorPayload = normalizeStreamError(err);
       console.error("[stream] Provider error:", err);
     },
-    onFinish: async ({ text: outputText, usage }) => {
+    onFinish: async ({ text: outputText, usage, finishReason, steps, toolCalls }) => {
+      // Treat provider/SDK hard stops as a structured "interrupted" error so
+      // users understand why a run appeared to "just stop" — and so the UI
+      // can offer a one-click Continue. Without this, these runs end with a
+      // clean finish chunk and the partial response silently sits there.
+      const runText =
+        (steps ?? [])
+          .map((step) => step.text ?? "")
+          .filter(Boolean)
+          .join("\n") || outputText || "";
+      const hasToolCalls = Array.isArray(toolCalls) && toolCalls.length > 0;
+      // Dangling-promise detection: only fire for short text-only responses.
+      // A dangling stop is a brief fragment (the reported case was ~250
+      // chars); a long completed reply that happens to close with a promise
+      // phrase would be a false positive, so keep the length gate tight.
+      const isShortTextOnly =
+        runText.length < 600 && (steps ?? []).at(-1)?.toolCalls?.length === 0;
+      const stoppedEarly =
+        // Output token limit / max steps reached, or the loop ended while
+        // tool calls were still pending.
+        finishReason === "length" ||
+        finishReason === "tool-calls" ||
+        // The model's FINAL sentence commits to an action ("let me dig
+        // deeper...") but the run ended without calling any more tools — the
+        // generation was cut short. Only the last sentence counts: a
+        // completed reply ends with its conclusion, not with a promise to act.
+        (finishReason === "stop" &&
+          isShortTextOnly &&
+          DANGLING_ACTION_TAIL_RE.test(
+            runText.slice(-240).split(/[.!?]\s+/).filter(Boolean).pop() ?? "",
+          ));
+
+      if (stoppedEarly) {
+        capturedErrorPayload = {
+          version: 1,
+          category: "step_limit",
+          title:
+            finishReason === "stop" ? "Remi stopped mid-task" : "Step limit reached",
+          message:
+            finishReason === "stop"
+              ? "The response ended before the task was completed. Continue to resume from where it stopped."
+              : "This run reached the configured step/token limit before completion. Continue to resume from where it stopped.",
+          technical: `finishReason=${finishReason} steps=${(steps ?? []).length} toolCalls=${hasToolCalls ? toolCalls.length : 0}`,
+          retryable: true,
+          shouldResume: true,
+        };
+      }
+
       try {
         // Use provider's usage if available, otherwise estimate
         const inputTokens = usage?.inputTokens ?? 0;
@@ -471,6 +583,31 @@ You are currently in **Plan mode**. This means:
       } catch (err) {
         console.error("Failed to update token usage in onFinish:", err);
       }
+
+      // ── Background auto-title ─────────────────────────────────────
+      // First AI response in a brand-new chat: fire a tiny, cheap request
+      // that reads the first user message + this reply and writes a short
+      // title to the DB. Fire-and-forget — never blocks the stream, and it
+      // keeps running server-side even after the user navigates away.
+      if (isFirstExchange && !capturedErrorPayload && runText.trim()) {
+        const firstUser = uiMessages.find((m) => m.role === "user");
+        if (firstUser) {
+          const userText = firstUser.parts
+            .filter(
+              (p): p is { type: "text"; text: string } => p.type === "text",
+            )
+            .map((p) => p.text)
+            .join(" ");
+          void autoTitleConversation({
+            conversationId,
+            provider,
+            modelId: conversationModelId,
+            userText,
+            assistantText: runText,
+            expectedTitle: titleFromMessage(firstUser),
+          });
+        }
+      }
     },
   });
 
@@ -485,72 +622,57 @@ You are currently in **Plan mode**. This means:
   const uiMessageStream = result.toUIMessageStream({
     originalMessages: uiMessages,
     generateMessageId: () => crypto.randomUUID(),
+    // Return the PLAIN error message here. The SDK uses this callback's return
+    // value as the `errorText` for inline tool errors (tool-input-error,
+    // tool-output-error parts) that render directly on the tool card — encoding
+    // those as RMERR_JSON blobs made cards show raw "RMERR_JSON:%7B..." garbage
+    // instead of the real message. Terminal stream failures are still converted
+    // into structured RMERR_JSON payloads by the transform below.
     onError: (error) => {
-      if (error instanceof Error && error.message) return error.message;
-      if (typeof error === "string" && error) return error;
-      if (error && typeof error === "object") {
-        const msg = (error as { message?: unknown }).message;
-        if (typeof msg === "string" && msg) return msg;
-      }
-      try {
-        const serialized = JSON.stringify(error);
-        if (typeof serialized === "string" && serialized && serialized !== "{}") {
-          return serialized;
-        }
-      } catch {
-        // ignore — fall through to the generic fallback
-      }
-      return "An error occurred.";
+      const message =
+        error instanceof Error ? error.message : String(error ?? "");
+      return message.trim() || "An error occurred.";
     },
   });
 
   // Tee the stream: [persistBranch, responseBranch]
   const [persistBranch, responseBranch] = uiMessageStream.tee();
 
-  // Pipe the response branch through a transform that enriches error chunks
-  // with the full error details captured from onError.  Without this, the
-  // client only sees "Error: An error occurred." instead of the actual
-  // status code, response body, and other debugging information.
+  // Pipe the response branch through a transform that injects a structured
+  // error payload for user-friendly frontend messaging.
+  //
+  // Interrupted runs (step/output limit, dangling promise, provider
+  // truncation) end with a CLEAN finish chunk — the SDK never emits an error
+  // chunk for them, so the UI would silently stop with no Continue option.
+  // We hold the terminal finish chunk and, when the run was interrupted
+  // (capturedErrorPayload was set by onFinish), emit an error chunk instead.
+  // This is race-safe: streamText's onFinish fires in the SDK's upstream
+  // consumer flush, which always completes before this transform's flush.
+  let pendingFinishChunk: UIMessageChunk | null = null;
   const enrichedBranch = responseBranch.pipeThrough(
-    new TransformStream({
+    new TransformStream<UIMessageChunk, UIMessageChunk>({
       transform(chunk, controller) {
-        if (chunk.type === "error" && capturedError) {
-          const err = capturedError as Record<string, unknown>;
-
-          // For AI_RetryError the responseBody lives on nested errors
-          const errs = (Array.isArray(err.errors) ? err.errors : []) as Array<Record<string, unknown>>;
-          const responseBody = err.responseBody ?? (errs[0]?.responseBody ?? null);
-          const statusCode = err.statusCode ?? (errs[0]?.statusCode ?? null);
-          const url = err.url ?? (errs[0]?.url ?? null);
-
+        if (chunk.type === "error") {
+          const payload = capturedErrorPayload ?? normalizeStreamError(chunk.errorText);
           controller.enqueue({
             type: "error",
-            errorText: [
-              `${err.name || "Error"}: ${err.message ?? ""}`,
-              statusCode != null ? `\nStatus: ${statusCode}` : "",
-              url ? `URL: ${url}` : "",
-              responseBody
-                ? `\nResponse:\n${typeof responseBody === "string" ? responseBody : JSON.stringify(responseBody, null, 2)}`
-                : "",
-              err.reason ? `\nReason: ${err.reason}` : "",
-              errs.length > 0
-                ? `\nRetries (${errs.length}): ` +
-                  errs
-                    .slice(0, 3)
-                    .map(
-                      (e, i) =>
-                        `[${i + 1}] ${e.name || "Error"}: ${e.message ?? ""}` +
-                        (e.statusCode != null ? ` (${e.statusCode})` : ""),
-                    )
-                    .join(" → ") +
-                  (errs.length > 3 ? ` +${errs.length - 3} more` : "")
-                : "",
-            ]
-              .filter(Boolean)
-              .join("\n"),
-          } as any);
+            errorText: encodeStreamError(payload),
+          } as UIMessageChunk);
+        } else if (chunk.type === "finish") {
+          pendingFinishChunk = chunk;
         } else {
           controller.enqueue(chunk);
+        }
+      },
+      flush(controller) {
+        if (!pendingFinishChunk) return;
+        if (capturedErrorPayload) {
+          controller.enqueue({
+            type: "error",
+            errorText: encodeStreamError(capturedErrorPayload),
+          } as UIMessageChunk);
+        } else {
+          controller.enqueue(pendingFinishChunk);
         }
       },
     }),

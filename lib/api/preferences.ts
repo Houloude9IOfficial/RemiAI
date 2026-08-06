@@ -11,6 +11,7 @@ export type UserPreferences = {
   pronouns: string;
   birthday: string;
   links: Record<string, string>;
+  accentColor: string;
 };
 
 async function get(): Promise<UserPreferences> {

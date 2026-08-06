@@ -16,6 +16,7 @@ const DEFAULT_PREFERENCES = {
   pronouns: "",
   birthday: "",
   links: {} as Record<string, string>,
+  accentColor: "",
 };
 
 export async function GET() {
@@ -43,6 +44,7 @@ export async function GET() {
     pronouns: prefs!.pronouns,
     birthday: prefs!.birthday,
     links: prefs!.links,
+    accentColor: prefs!.accentColor,
   });
 }
 
@@ -60,6 +62,7 @@ export async function PUT(req: Request) {
     pronouns?: string;
     birthday?: string;
     links?: Record<string, string>;
+    accentColor?: string;
   };
 
   const existing = await db.select().from(userPreferences).get();
@@ -77,6 +80,7 @@ export async function PUT(req: Request) {
     pronouns: body.pronouns ?? existing?.pronouns ?? "",
     birthday: body.birthday ?? existing?.birthday ?? "",
     links: body.links ?? existing?.links ?? {},
+    accentColor: body.accentColor ?? existing?.accentColor ?? "",
     updatedAt: new Date().toISOString(),
   };
 

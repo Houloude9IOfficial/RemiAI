@@ -1,4 +1,14 @@
-import { Folder, FileImage, FileJson, FileCode2, FileArchive, FileText } from "lucide-react";
+import {
+  Folder,
+  FileImage,
+  FileJson,
+  FileCode2,
+  FileArchive,
+  FileText,
+  Video,
+  AudioLines,
+  FileType2,
+} from "lucide-react";
 import hljs from "highlight.js";
 import type { SessionFileEntry } from "./storage";
 
@@ -14,6 +24,17 @@ export const IMAGE_EXTENSIONS = new Set([
   "png", "jpg", "jpeg", "gif", "webp", "avif", "ico", "bmp",
 ]);
 
+export const VIDEO_EXTENSIONS = new Set([
+  "mp4", "webm", "mov", "m4v", "avi", "mkv", "ogv",
+]);
+
+export const AUDIO_EXTENSIONS = new Set([
+  "mp3", "wav", "ogg", "oga", "m4a", "flac", "aac", "opus", "wma",
+]);
+
+/** Extensions that can be embedded inline (PDF in an <iframe>). */
+export const PDF_EXTENSIONS = new Set(["pdf"]);
+
 export function extOf(name: string): string {
   const idx = name.lastIndexOf(".");
   return idx >= 0 ? name.slice(idx + 1).toLowerCase() : "";
@@ -27,11 +48,26 @@ export function isImageFile(name: string): boolean {
   return IMAGE_EXTENSIONS.has(extOf(name));
 }
 
+export function isVideoFile(name: string): boolean {
+  return VIDEO_EXTENSIONS.has(extOf(name));
+}
+
+export function isAudioFile(name: string): boolean {
+  return AUDIO_EXTENSIONS.has(extOf(name));
+}
+
+export function isPdfFile(name: string): boolean {
+  return PDF_EXTENSIONS.has(extOf(name));
+}
+
 /** Render the right icon for a file (returns elements, not component refs). */
 export function fileIconElement(name: string, isDir: boolean, className: string) {
   if (isDir) return <Folder className={className} />;
   const ext = extOf(name);
   if (IMAGE_EXTENSIONS.has(ext)) return <FileImage className={className} />;
+  if (VIDEO_EXTENSIONS.has(ext)) return <Video className={className} />;
+  if (AUDIO_EXTENSIONS.has(ext)) return <AudioLines className={className} />;
+  if (PDF_EXTENSIONS.has(ext)) return <FileType2 className={className} />;
   if (ext === "json" || ext === "jsonl") return <FileJson className={className} />;
   if (["zip", "gz", "tar", "rar", "7z"].includes(ext)) return <FileArchive className={className} />;
   if (TEXT_EXTENSIONS.has(ext)) return <FileCode2 className={className} />;

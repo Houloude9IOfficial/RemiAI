@@ -4,10 +4,10 @@ import { useState } from "react";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import { getToolName, isDynamicToolUIPart, isToolUIPart } from "ai";
 import { cn } from "@/lib/utils";
+import { decodeStreamError, STREAM_ERROR_PREFIX } from "@/lib/chat/error-payload";
 import {
   ChevronDown,
-  ChevronRight,
-  Hammer,
+  ChevronUp,
   Loader2,
   CheckCircle2,
   XCircle,
@@ -21,6 +21,29 @@ import { TodoBoard } from "./TodoBoard";
 import { VisualCard } from "./VisualCard";
 
 type AnyToolPart = ToolUIPart<any> | DynamicToolUIPart;
+
+/** Lightweight / metadata tools — render as a single expandable line. */
+const MINOR_TOOLS = new Set([
+  "get_time_details",
+  "get_device_details",
+  "get_recent_memories",
+  "query_recent_changes",
+  "search_memories",
+  "remember",
+  "get_profile",
+  "update_profile",
+  "get_tool_help",
+  "list_available_tools",
+  "get_tool_details",
+  "todos_view",
+  "list_permitted_roots",
+  "get_agent_result",
+]);
+
+function bareName(name: string): string {
+  const lower = name.toLowerCase();
+  return lower.includes("__") ? lower.split("__").slice(1).join("__") : lower;
+}
 
 function getState(part: AnyToolPart): string {
   return (part as any).state ?? "call-result";
@@ -38,6 +61,29 @@ function getError(part: AnyToolPart): string | undefined {
   return (part as any).errorText;
 }
 
+/**
+ * Tool errors can arrive either as plain text (current server behavior) or as
+ * an encoded RMERR_JSON payload (older persisted messages). Decode the payload
+ * so cards show the real, readable error instead of a raw "RMERR_JSON:%7B..."
+ * blob.
+ */
+function formatToolError(errorText: string | undefined): string {
+  if (!errorText || !errorText.includes(STREAM_ERROR_PREFIX)) {
+    return errorText ?? "";
+  }
+  const decoded = decodeStreamError(errorText);
+  if (!decoded) return errorText;
+  // Prefer the real underlying message (the last "message=..." segment of the
+  // technical field, mirroring ErrorCard's digging) over the generic title.
+  const tech = decoded.technical ?? "";
+  const idx = tech.lastIndexOf("message=");
+  if (idx >= 0) {
+    const rest = tech.slice(idx + "message=".length).trim();
+    if (rest) return rest;
+  }
+  return decoded.title ?? errorText;
+}
+
 function getApproved(part: AnyToolPart): boolean | undefined {
   return (part as any).approved;
 }
@@ -51,6 +97,63 @@ function isEmptyObject(obj: unknown): boolean {
   );
 }
 
+function minorSummary(name: string, output: unknown, running: boolean): string {
+  if (running) {
+    const labels: Record<string, string> = {
+      get_time_details: "Checking time…",
+      get_device_details: "Checking device…",
+      get_recent_memories: "Recalling memory…",
+      query_recent_changes: "Checking changes…",
+      search_memories: "Searching memory…",
+      remember: "Saving memory…",
+      get_profile: "Checking profile…",
+      update_profile: "Updating profile…",
+      get_tool_help: "Getting help…",
+      list_available_tools: "Listing tools…",
+      get_tool_details: "Checking tool…",
+      todos_view: "Viewing tasks…",
+      list_permitted_roots: "Listing directories…",
+      get_agent_result: "Checking agent…",
+    };
+    return labels[name] ?? `Running ${name}…`;
+  }
+
+  const out = output && typeof output === "object" ? (output as Record<string, unknown>) : null;
+  if (name === "get_time_details" && out) {
+    const t = out.localTime ?? out.time ?? out.iso ?? out.formatted;
+    if (typeof t === "string") return `Time · ${t}`;
+  }
+  if (name === "remember") return "Saved to memory";
+  if (name === "get_recent_memories" || name === "search_memories") {
+    const count = Array.isArray(out?.memories)
+      ? out.memories.length
+      : Array.isArray(out?.results)
+        ? out.results.length
+        : typeof out?.count === "number"
+          ? out.count
+          : null;
+    if (count !== null) return `Memory · ${count} result${count === 1 ? "" : "s"}`;
+    return "Checked memory";
+  }
+  if (name === "query_recent_changes") {
+    const count = Array.isArray(out?.changes)
+      ? out.changes.length
+      : typeof out?.count === "number"
+        ? out.count
+        : null;
+    if (count !== null) return `Changes · ${count} result${count === 1 ? "" : "s"}`;
+    return "Checked changes";
+  }
+  if (name === "get_profile") return "Checked profile";
+  if (name === "update_profile") return "Updated profile";
+  if (name === "get_device_details") return "Checked device";
+  if (name === "list_permitted_roots") {
+    const n = Array.isArray(out?.roots) ? out.roots.length : null;
+    return n !== null ? `Directories · ${n}` : "Listed directories";
+  }
+  return name.replace(/_/g, " ");
+}
+
 export function ToolCallCard({
   part,
   compact = true,
@@ -58,12 +161,9 @@ export function ToolCallCard({
   part: any;
   compact?: boolean;
 }) {
-  // --- Defensive guard: any unexpected part shape silently
-  // returns null instead of crashing the whole message bubble. ---
   if (!part || typeof part !== "object") return null;
   if (!isToolUIPart(part)) return null;
 
-  // Safely extract fields — defensive against any potential runtime issues
   const toolPart = part as AnyToolPart;
   let toolName: string;
   try {
@@ -79,13 +179,13 @@ export function ToolCallCard({
   const state = getState(toolPart);
   const input = getInput(toolPart);
   const output = getOutput(toolPart);
-  const errorText = getError(toolPart);
+  const errorText = formatToolError(getError(toolPart));
   const approved = getApproved(toolPart);
 
   const [inputOpen, setInputOpen] = useState(false);
-  const [outputOpen, setOutputOpen] = useState(
-    state === "output-available" || state === "output-error",
-  );
+  // Collapsed by default — avoids oversized cards and nested scroll traps.
+  const [outputOpen, setOutputOpen] = useState(false);
+  const [minorOpen, setMinorOpen] = useState(false);
 
   const isCallResult = state === "call-result";
   const isStreamingInput =
@@ -95,12 +195,10 @@ export function ToolCallCard({
     state === "output-denied" ||
     state === "approval-responded";
   const isError = state === "output-error";
+  const isRunning = !isComplete && !isError;
 
-  // Extract readable filename from the read_media input (shown in scanning indicator)
   const mediaFilename =
-    input &&
-    typeof input === "object" &&
-    !Array.isArray(input)
+    input && typeof input === "object" && !Array.isArray(input)
       ? (input as Record<string, unknown>).url ??
         (input as Record<string, unknown>).relativePath ??
         undefined
@@ -110,7 +208,6 @@ export function ToolCallCard({
       String(mediaFilename)
     : undefined;
 
-  // Detect if the output is a media result (from read_media tool)
   const isMediaResult =
     output !== undefined &&
     output !== null &&
@@ -119,7 +216,6 @@ export function ToolCallCard({
     ((output as Record<string, unknown>).type === "image" ||
       (output as Record<string, unknown>).type === "video");
 
-  // Detect if the output is a code execution result (from python_exec / js_exec)
   const isExecResult =
     output !== undefined &&
     output !== null &&
@@ -127,31 +223,26 @@ export function ToolCallCard({
     "stdout" in (output as Record<string, unknown>) &&
     typeof (output as Record<string, unknown>).stdout === "string";
 
-  // Detect if the output is a questions result (from ask_questions)
   const isQuestionsResult =
     output !== undefined &&
     output !== null &&
     typeof output === "object" &&
     (output as Record<string, unknown>).type === "questions";
 
-  // Check if this is a read_media tool call (use endsWith for MCP namespace tolerance)
   const isReadMedia = toolName.endsWith("read_media");
 
-  // Detect if the output is a todo list (from todos_init / todos_update / todos_view)
   const isTodoList =
     output !== undefined &&
     output !== null &&
     typeof output === "object" &&
     (output as Record<string, unknown>).type === "todo_list";
 
-  // Detect if the output is a visual result (from create_visual)
   const isVisualResult =
     output !== undefined &&
     output !== null &&
     typeof output === "object" &&
     (output as Record<string, unknown>).type === "visual";
 
-  // Detect if the output is an agent spawn/result
   const isAgentResult =
     output !== undefined &&
     output !== null &&
@@ -161,7 +252,6 @@ export function ToolCallCard({
       (output as Record<string, unknown>).type === "agent_status" ||
       (output as Record<string, unknown>).type === "agent_error");
 
-  // Split MCP namespaced name "server__tool" into server + display name
   const displayName = displayTitle.includes("__")
     ? displayTitle.split("__").slice(1).join("__")
     : displayTitle;
@@ -169,70 +259,103 @@ export function ToolCallCard({
     ? displayTitle.split("__")[0]
     : undefined;
 
-  const statusColor = isError
-    ? "destructive"
-    : isComplete
-      ? "emerald"
-      : "blue";
+  const toolBare = bareName(toolName);
+  const isMinor = MINOR_TOOLS.has(toolBare);
 
+  // Special rich outputs — always take precedence
   if (compact) {
-    // ---- Compact layout (inside ToolCallGroup) ----
-
-    // For questions output, render the interactive QuestionsCard instead
     if (isQuestionsResult && output && isComplete) {
       return <QuestionsCard data={output} />;
     }
-
-    // For todo list output, render the visual TodoBoard
     if (isTodoList && output && isComplete) {
       return <TodoBoard data={output} />;
     }
-
-    // For visual results, render the VisualCard
     if (isVisualResult && output && isComplete) {
       return <VisualCard data={output} />;
     }
-
-    // For agent results, render the AgentResultCard
-    if (isAgentResult && output && isComplete) {
+    if (isAgentResult && output && isComplete && !isMinor) {
       return <AgentResultCard data={output as Record<string, unknown>} />;
     }
 
+    // ── Minor tools: single line, expand on click ─────────────────────
+    if (isMinor) {
+      return (
+        <div className="overflow-hidden rounded-lg">
+          <button
+            type="button"
+            onClick={() => setMinorOpen((o) => !o)}
+            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-muted/40"
+          >
+            {isRunning ? (
+              <Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" />
+            ) : isError ? (
+              <XCircle className="h-3 w-3 shrink-0 text-status-danger" />
+            ) : (
+              <CheckCircle2 className="h-3 w-3 shrink-0 text-muted-foreground/70" />
+            )}
+            <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">
+              {minorSummary(toolBare, output, isRunning)}
+            </span>
+            {(output !== undefined || errorText) && (
+              <ChevronDown
+                className={cn(
+                  "h-3.5 w-3.5 shrink-0 text-muted-foreground/60 transition-transform duration-200",
+                  minorOpen && "rotate-180",
+                )}
+              />
+            )}
+          </button>
+          {minorOpen && (
+            <div className="mt-2 mb-1 ml-5 mr-1 rounded-md border border-border/40 bg-surface-2/50 px-2.5 py-2">
+              {errorText ? (
+                <p className="text-[11px] text-status-danger">{errorText}</p>
+              ) : (
+                <ResultBody
+                  output={output}
+                  isExecResult={isExecResult}
+                  isAgentResult={isAgentResult}
+                  isMediaResult={isMediaResult}
+                />
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ── Standard compact card ─────────────────────────────────────────
     return (
       <div
         className={cn(
-          "overflow-hidden rounded-lg border text-sm transition-all duration-150",
+          "overflow-hidden rounded-xl border text-sm transition-colors",
           isError
-            ? "border-destructive/20 bg-destructive/[0.04]"
-            : isComplete
-              ? "border-emerald-500/15 bg-emerald-500/[0.04]"
-              : "border-blue-500/15 bg-blue-500/[0.04]",
+            ? "border-status-danger/25 bg-status-danger/[0.03]"
+            : "border-border/45 bg-surface-2/25",
         )}
       >
-        {/* Compact header row */}
-        <div className="flex items-center gap-2 px-2.5 py-1.5">
-          {/* Icon */}
+        <button
+          type="button"
+          onClick={() => setOutputOpen((o) => !o)}
+          className="flex w-full items-center gap-2 px-2.5 py-2 text-left transition-colors hover:bg-muted/30"
+        >
           <div
             className={cn(
-              "flex h-5 w-5 shrink-0 items-center justify-center rounded",
-              isError && "bg-destructive/10 text-destructive",
-              isComplete && "text-emerald-600 dark:text-emerald-400",
-              !isError && !isComplete && "text-blue-600 dark:text-blue-400",
+              "flex h-5 w-5 shrink-0 items-center justify-center",
+              isError && "text-status-danger",
+              isComplete && "text-status-success",
+              isRunning && "text-muted-foreground",
             )}
           >
             {isError ? (
-              <XCircle className="h-3 w-3" />
+              <XCircle className="h-3.5 w-3.5" />
             ) : isComplete ? (
-              <CheckCircle2 className="h-3 w-3" />
-            ) : isStreamingInput ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
+              <CheckCircle2 className="h-3.5 w-3.5" />
             ) : (
-              <Hammer className="h-3 w-3" />
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
             )}
           </div>
 
-          {/* Tool name */}
-          <span className="truncate font-mono text-[11px] font-medium">
+          <span className="truncate font-mono text-[12px] font-medium text-foreground/90">
             {displayName}
           </span>
 
@@ -242,124 +365,101 @@ export function ToolCallCard({
             </span>
           )}
 
-          {/* Status badge */}
-          <span
-            className={cn(
-              "ml-auto shrink-0 text-[9px] font-medium uppercase tracking-wider",
-              isError && "text-destructive",
-              isComplete && "text-emerald-600 dark:text-emerald-400",
-              !isError && !isComplete && "text-blue-600 dark:text-blue-400",
-            )}
-          >
+          <span className="ml-auto text-[10px] tabular-nums text-muted-foreground">
             {isError ? "Error" : isComplete ? "Done" : "Running"}
           </span>
-        </div>
+          <ChevronDown
+            className={cn(
+              "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200",
+              outputOpen && "rotate-180",
+            )}
+          />
+        </button>
 
-        {/* Input section */}
-        {!isEmptyObject(input) && (
-          <CompactSection
-            open={inputOpen}
-            onToggle={() => setInputOpen(!inputOpen)}
-            label="Input"
-          >
-            <JsonBlock data={input} />
-          </CompactSection>
-        )}
-
-        {/* Scanning indicator — shown while read_media is running but hasn't produced output yet */}
         {!isComplete && !isError && isReadMedia && (
-          <div className="border-t border-blue-500/10 bg-blue-500/[0.03]">
-            <div className="flex items-start gap-3 px-3 py-3">
-              {/* Scanning animation */}
-              <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 ring-1 ring-blue-500/20">
-                <Image className="h-5 w-5 text-blue-500" />
-                <div className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-blue-500 shadow-sm shadow-blue-500/20">
-                  <Loader2 className="h-3 w-3 animate-spin text-white" />
-                </div>
-              </div>
-              {/* Text */}
-              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
-                  Scanning image
-                </span>
+          <div className="border-t border-border/35 px-3 py-2.5">
+            <div className="flex items-center gap-2.5">
+              <Image className="h-4 w-4 text-muted-foreground" />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-foreground">Scanning image</p>
                 {shortMediaName && (
-                  <span className="truncate text-xs text-blue-600/60 dark:text-blue-400/60">
+                  <p className="truncate text-[11px] text-muted-foreground">
                     {shortMediaName}
-                  </span>
+                  </p>
                 )}
-                {/* Animated scanning bar */}
-                <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-blue-500/10">
-                  <div className="h-full w-full origin-left animate-[scan-progress_2s_ease-in-out_infinite] rounded-full bg-gradient-to-r from-blue-500/0 via-blue-500/50 to-blue-500/0" />
-                </div>
               </div>
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
             </div>
           </div>
         )}
 
-        {/* Output section — media renders directly (no collapse/expand), text uses collapsible */}
-        {output !== undefined && !isError && (
-          isMediaResult ? (
-            <div className="border-t border-border/30">
-              <MediaDisplay data={output as Record<string, unknown>} />
-            </div>
-          ) : (
-            <CompactSection
-              open={outputOpen}
-              onToggle={() => setOutputOpen(!outputOpen)}
-              label="Result"
-            >
-              {isExecResult ? (
-                <TerminalOutput data={output as Record<string, unknown>} />
-              ) : isAgentResult ? (
-                <AgentResultCard data={output as Record<string, unknown>} compact />
+        {outputOpen && (
+          <div className="border-t border-border/35 mb-5">
+            {!isEmptyObject(input) && (
+              <DetailSection
+                open={inputOpen}
+                onToggle={() => setInputOpen(!inputOpen)}
+                label="Input"
+              >
+                <JsonBlock data={input} />
+              </DetailSection>
+            )}
+
+            {output !== undefined && !isError && (
+              isMediaResult ? (
+                <div className="px-2 py-2">
+                  <MediaDisplay data={output as Record<string, unknown>} />
+                </div>
               ) : (
-                <JsonBlock data={output} />
-              )}
-            </CompactSection>
-          )
-        )}
+                <div className="px-2.5 py-2">
+                  <ResultBody
+                    output={output}
+                    isExecResult={isExecResult}
+                    isAgentResult={isAgentResult}
+                    isMediaResult={false}
+                  />
+                </div>
+              )
+            )}
 
-        {/* Error */}
-        {errorText && (
-          <div className="flex items-start gap-1.5 border-t border-destructive/15 px-2.5 py-1.5">
-            <AlertCircle className="mt-[1px] h-3 w-3 shrink-0 text-destructive" />
-            <span className="text-[10px] leading-relaxed text-destructive">
-              {errorText}
-            </span>
-          </div>
-        )}
+            {errorText && (
+              <div className="flex items-start gap-1.5 px-2.5 py-2">
+                <AlertCircle className="mt-0.5 h-3 w-3 shrink-0 text-status-danger" />
+                <span className="text-[11px] leading-relaxed text-status-danger">
+                  {errorText}
+                </span>
+              </div>
+            )}
 
-        {/* Approval denied */}
-        {state === "output-denied" && (
-          <div className="flex items-center gap-1.5 border-t border-amber-500/20 px-2.5 py-1.5 text-[10px] text-muted-foreground">
-            <AlertCircle className="h-3 w-3 text-amber-500" />
-            {approved === false ? "Denied" : "Approval required"}
+            {state === "output-denied" && (
+              <div className="flex items-center gap-1.5 px-2.5 py-2 text-[11px] text-muted-foreground">
+                <AlertCircle className="h-3 w-3 text-status-warning" />
+                {approved === false ? "Denied" : "Approval required"}
+              </div>
+            )}
           </div>
         )}
       </div>
     );
   }
 
-  // ---- Full-width layout (standalone, not inside a group) ----
+  // ---- Full-width layout (standalone) ----
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-lg border text-sm transition-colors",
+        "overflow-hidden rounded-xl border text-sm",
         isError
-          ? "border-destructive/30 bg-destructive/5"
-          : isComplete
-            ? "border-emerald-500/20 bg-emerald-500/5"
-            : "border-blue-500/20 bg-blue-500/5",
+          ? "border-status-danger/30 bg-status-danger/5"
+          : "border-border/50 bg-surface-2/30",
       )}
     >
-      {/* Header row */}
       <div className="flex items-center gap-2 px-3 py-2">
         <div
           className={cn(
             "flex h-6 w-6 shrink-0 items-center justify-center rounded-md",
-            isError && "bg-destructive/10 text-destructive",
-            isComplete && "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-            !isError && !isComplete && "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+            isError && "bg-status-danger/10 text-status-danger",
+            isComplete && "bg-status-success/10 text-status-success",
+            isRunning && "bg-muted text-muted-foreground",
           )}
         >
           {isError ? (
@@ -384,14 +484,7 @@ export function ToolCallCard({
           )}
         </div>
 
-        <span
-          className={cn(
-            "shrink-0 text-[10px] font-medium uppercase tracking-wider",
-            isError && "text-destructive",
-            isComplete && "text-emerald-600 dark:text-emerald-400",
-            !isError && !isComplete && "text-blue-600 dark:text-blue-400",
-          )}
-        >
+        <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
           {isError
             ? "Error"
             : isComplete
@@ -402,50 +495,47 @@ export function ToolCallCard({
         </span>
       </div>
 
-      {/* Input section */}
       {!isEmptyObject(input) && (
-        <CollapsibleSection
+        <DetailSection
           open={inputOpen}
           onToggle={() => setInputOpen(!inputOpen)}
           label="Input"
         >
           <JsonBlock data={input} />
-        </CollapsibleSection>
+        </DetailSection>
       )}
 
-      {/* Error */}
       {errorText && (
-        <div className="flex items-start gap-2 border-t border-destructive/20 px-3 py-2">
-          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
-          <span className="text-xs text-destructive">{errorText}</span>
+        <div className="flex items-start gap-2 border-t border-status-danger/20 px-3 py-2">
+          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-status-danger" />
+          <span className="text-xs text-status-danger">{errorText}</span>
         </div>
       )}
 
-      {/* Output section — media renders directly (no collapse/expand), text uses collapsible */}
       {output !== undefined && !isError && (
         isMediaResult ? (
-          <div className="border-t border-border/50">
+          <div className="border-t border-border/40">
             <MediaDisplay data={output as Record<string, unknown>} />
           </div>
         ) : (
-          <CollapsibleSection
+          <DetailSection
             open={outputOpen}
             onToggle={() => setOutputOpen(!outputOpen)}
             label="Result"
           >
-            {isExecResult ? (
-              <TerminalOutput data={output as Record<string, unknown>} />
-            ) : (
-              <JsonBlock data={output} />
-            )}
-          </CollapsibleSection>
+            <ResultBody
+              output={output}
+              isExecResult={isExecResult}
+              isAgentResult={isAgentResult}
+              isMediaResult={false}
+            />
+          </DetailSection>
         )
       )}
 
-      {/* Approval denied */}
       {state === "output-denied" && (
-        <div className="flex items-center gap-2 border-t border-amber-500/20 px-3 py-2 text-xs text-muted-foreground">
-          <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
+        <div className="flex items-center gap-2 border-t border-status-warning/20 px-3 py-2 text-xs text-muted-foreground">
+          <AlertCircle className="h-3.5 w-3.5 text-status-warning" />
           {approved === false
             ? "Tool call was denied"
             : "Tool call requires approval"}
@@ -453,6 +543,29 @@ export function ToolCallCard({
       )}
     </div>
   );
+}
+
+function ResultBody({
+  output,
+  isExecResult,
+  isAgentResult,
+  isMediaResult,
+}: {
+  output: unknown;
+  isExecResult: boolean;
+  isAgentResult: boolean;
+  isMediaResult: boolean;
+}) {
+  if (isMediaResult && output) {
+    return <MediaDisplay data={output as Record<string, unknown>} />;
+  }
+  if (isExecResult && output) {
+    return <ExecOutput data={output as Record<string, unknown>} />;
+  }
+  if (isAgentResult && output) {
+    return <AgentResultCard data={output as Record<string, unknown>} compact />;
+  }
+  return <JsonBlock data={output} />;
 }
 
 /* ---- Agent Result Card ---- */
@@ -464,6 +577,7 @@ function AgentResultCard({
   data: Record<string, unknown>;
   compact?: boolean;
 }) {
+  void compact;
   const type = data.type as string;
   const agentType = data.agent_type as string;
   const agentLabel = (data.agent_label as string) ?? agentType;
@@ -471,14 +585,10 @@ function AgentResultCard({
 
   if (type === "agent_spawn" && status === "background") {
     return (
-      <div className="rounded-md bg-amber-500/5 border border-amber-500/20 p-2.5 text-xs">
-        <div className="flex items-center gap-2 mb-1.5">
-          <div className="flex h-5 w-5 items-center justify-center rounded bg-amber-500/10 text-amber-600 dark:text-amber-400">
-            <Loader2 className="h-3 w-3 animate-spin" />
-          </div>
-          <span className="font-medium text-amber-700 dark:text-amber-300">
-            {agentLabel} started
-          </span>
+      <div className="rounded-md border border-status-warning/25 bg-status-warning/5 p-2.5 text-xs">
+        <div className="mb-1.5 flex items-center gap-2">
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-status-warning" />
+          <span className="font-medium text-foreground">{agentLabel} started</span>
         </div>
         <p className="text-muted-foreground">
           Task #{String(data.task_id)} is running in the background.{" "}
@@ -488,10 +598,7 @@ function AgentResultCard({
     );
   }
 
-  if (
-    type === "agent_result" &&
-    status === "completed"
-  ) {
+  if (type === "agent_result" && status === "completed") {
     const resultText = data.result as string;
     const usage = data.usage as Record<string, unknown> | undefined;
     const inTokens = Number(usage?.inputTokens ?? 0);
@@ -499,29 +606,20 @@ function AgentResultCard({
     const hasUsage = inTokens > 0 || outTokens > 0;
 
     return (
-      <div className="rounded-md overflow-hidden">
-        {/* Agent header */}
-        <div
-          className={cn(
-            "flex items-center gap-2 px-2.5 py-2",
-            "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-          )}
-        >
+      <div className="overflow-hidden rounded-md border border-border/40">
+        <div className="flex items-center gap-2 bg-status-success/10 px-2.5 py-2 text-status-success">
           <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
           <span className="text-xs font-semibold">{agentLabel} result</span>
           {hasUsage && (
-            <span className="ml-auto text-[10px] text-muted-foreground tabular-nums">
-              {inTokens} in / {outTokens} out tokens
+            <span className="ml-auto text-[10px] tabular-nums text-muted-foreground">
+              {inTokens} in / {outTokens} out
             </span>
           )}
         </div>
-        {/* Result content */}
         {resultText && (
-          <div className="max-h-80 overflow-y-auto border-t border-emerald-500/10 bg-background p-2.5 custom-scrollbar">
-            <pre className="whitespace-pre-wrap text-xs leading-relaxed text-foreground/90 font-sans">
-              {resultText}
-            </pre>
-          </div>
+          <pre className="whitespace-pre-wrap p-2.5 text-xs leading-relaxed text-foreground/90 font-sans">
+            {resultText}
+          </pre>
         )}
       </div>
     );
@@ -529,28 +627,16 @@ function AgentResultCard({
 
   if (type === "agent_status" && status === "completed") {
     const resultText = data.result as string;
-    const usage = data.usage as Record<string, unknown> | undefined;
-    const inTokens = Number(usage?.inputTokens ?? 0);
-    const outTokens = Number(usage?.outputTokens ?? 0);
-    const hasUsage = inTokens > 0 || outTokens > 0;
-
     return (
-      <div className="rounded-md overflow-hidden">
-        <div className="flex items-center gap-2 bg-emerald-500/10 px-2.5 py-2 text-emerald-700 dark:text-emerald-300">
+      <div className="overflow-hidden rounded-md border border-border/40">
+        <div className="flex items-center gap-2 bg-status-success/10 px-2.5 py-2 text-status-success">
           <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
           <span className="text-xs font-semibold">{agentLabel} ready</span>
-          {hasUsage && (
-            <span className="ml-auto text-[10px] text-muted-foreground tabular-nums">
-              {inTokens} in / {outTokens} out
-            </span>
-          )}
         </div>
         {resultText && (
-          <div className="max-h-80 overflow-y-auto border-t border-emerald-500/10 bg-background p-2.5 custom-scrollbar">
-            <pre className="whitespace-pre-wrap text-xs leading-relaxed text-foreground/90 font-sans">
-              {resultText}
-            </pre>
-          </div>
+          <pre className="whitespace-pre-wrap p-2.5 text-xs leading-relaxed text-foreground/90 font-sans">
+            {resultText}
+          </pre>
         )}
       </div>
     );
@@ -558,10 +644,10 @@ function AgentResultCard({
 
   if (type === "agent_status" && status === "running") {
     return (
-      <div className="rounded-md bg-blue-500/5 border border-blue-500/20 p-2.5 text-xs">
+      <div className="rounded-md border border-border/50 bg-surface-2/50 p-2.5 text-xs">
         <div className="flex items-center gap-2">
-          <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600 dark:text-blue-400" />
-          <span className="font-medium text-blue-700 dark:text-blue-300">
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+          <span className="font-medium text-foreground">
             {agentLabel} is still working...
           </span>
         </div>
@@ -574,19 +660,16 @@ function AgentResultCard({
     (status === "failed" || status === "error" || status === "not_found")
   ) {
     return (
-      <div className="rounded-md bg-destructive/5 border border-destructive/20 p-2.5 text-xs">
-        <div className="flex items-center gap-2 mb-1">
-          <XCircle className="h-3.5 w-3.5 shrink-0 text-destructive" />
-          <span className="font-medium text-destructive">
+      <div className="rounded-md border border-status-danger/20 bg-status-danger/5 p-2.5 text-xs">
+        <div className="mb-1 flex items-center gap-2">
+          <XCircle className="h-3.5 w-3.5 shrink-0 text-status-danger" />
+          <span className="font-medium text-status-danger">
             {agentLabel} {status === "not_found" ? "not found" : "failed"}
           </span>
         </div>
-        <p className="text-destructive/80">
+        <p className="text-status-danger/80">
           {(data.error as string) ?? "Unknown error"}
         </p>
-        {(data.hint as string) && (
-          <p className="mt-1 text-muted-foreground italic">{String(data.hint)}</p>
-        )}
       </div>
     );
   }
@@ -596,11 +679,7 @@ function AgentResultCard({
 
 /* ---- Sub-components ---- */
 
-/**
- * Animated collapsible section — uses the grid-template-rows trick for
- * smooth open/close, with margin from card sides and scrollable content.
- */
-function CollapsibleSection({
+function DetailSection({
   open,
   onToggle,
   label,
@@ -612,105 +691,48 @@ function CollapsibleSection({
   children: React.ReactNode;
 }) {
   return (
-    <div className="border-t border-border/50">
+    <div className="border-t border-border/35">
       <button
         type="button"
-        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground hover:bg-muted/50 transition-colors"
+        className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground transition-colors hover:bg-muted/30"
         onClick={onToggle}
       >
         {open ? (
-          <ChevronDown className="h-3 w-3 transition-transform duration-200" />
+          <ChevronDown className="h-3 w-3" />
         ) : (
-          <ChevronRight className="h-3 w-3 transition-transform duration-200" />
+          <ChevronUp className="h-3 w-3" />
         )}
         {label}
       </button>
-      {/* Animated body — grid rows + scrollable content */}
-      <div
-        className={cn(
-          "grid transition-[grid-template-rows] duration-200 ease-out",
-          open ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
-        )}
-      >
-        <div className="overflow-hidden">
-          <div className="mx-2 mb-2 max-h-60 overflow-y-auto custom-scrollbar">
-            {children}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/**
- * Compact animated collapsible (inside ToolCallGroup) with margin and
- * sliding animation instead of instant pop.
- */
-function CompactSection({
-  open,
-  onToggle,
-  label,
-  children,
-}: {
-  open: boolean;
-  onToggle: () => void;
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="border-t border-border/30">
-      <button
-        type="button"
-        className="flex w-full items-center gap-1.5 px-2.5 py-1 text-left text-[9px] font-medium uppercase tracking-wider text-muted-foreground hover:bg-muted/30 transition-colors"
-        onClick={onToggle}
-      >
-        {open ? (
-          <ChevronDown className="h-2.5 w-2.5 transition-transform duration-200" />
-        ) : (
-          <ChevronRight className="h-2.5 w-2.5 transition-transform duration-200" />
-        )}
-        {label}
-      </button>
-      {/* Animated body */}
-      <div
-        className={cn(
-          "grid transition-[grid-template-rows] duration-200 ease-out",
-          open ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
-        )}
-      >
-        <div className="overflow-hidden">
-          <div className="mx-1.5 mb-1.5 max-h-48 overflow-y-auto custom-scrollbar">
-            {children}
-          </div>
-        </div>
-      </div>
+      {open && <div className="px-2.5 pb-2.5">{children}</div>}
     </div>
   );
 }
 
 function JsonBlock({ data }: { data: unknown }) {
   const formatted = formatJson(data);
-  const [collapsed, setCollapsed] = useState(formatted ? formatted.length > 200 : false);
+  const [collapsed, setCollapsed] = useState(
+    formatted ? formatted.length > 320 : false,
+  );
 
-  if (!formatted)
-    return (
-      <span className="text-xs italic text-muted-foreground">empty</span>
-    );
+  if (!formatted) {
+    return <span className="text-xs italic text-muted-foreground">empty</span>;
+  }
 
   return (
-    <div className="relative">
+    <div>
       <pre
         className={cn(
-          "custom-scrollbar overflow-x-auto rounded-md bg-muted/50 p-2 text-xs leading-relaxed",
-          collapsed && "max-h-24 overflow-y-hidden",
+          "overflow-x-auto rounded-md bg-none p-2.5 text-[11px] leading-relaxed text-foreground/85",
+          collapsed && "max-h-28 overflow-hidden",
         )}
       >
         <code>{formatted}</code>
       </pre>
-      {formatted.length > 200 && (
+      {formatted.length > 320 && (
         <button
           type="button"
-          className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+          className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
           onClick={() => setCollapsed(!collapsed)}
         >
           {collapsed ? (
@@ -719,7 +741,7 @@ function JsonBlock({ data }: { data: unknown }) {
             </>
           ) : (
             <>
-              <ChevronRight className="h-3 w-3" /> Collapse
+              <ChevronUp className="h-3 w-3" /> Collapse
             </>
           )}
         </button>
@@ -737,10 +759,9 @@ function formatJson(data: unknown): string {
 }
 
 /**
- * Terminal-like output for code execution results (python_exec / js_exec).
- * Shows stdout in green, stderr in red, with an exit code badge.
+ * Modern exec output — no fake terminal chrome, single expand (no nested scroll).
  */
-function TerminalOutput({ data }: { data: Record<string, unknown> }) {
+function ExecOutput({ data }: { data: Record<string, unknown> }) {
   const stdout = (data.stdout as string) ?? "";
   const stderr = (data.stderr as string) ?? "";
   const exitCode = data.exitCode as number | null;
@@ -751,46 +772,55 @@ function TerminalOutput({ data }: { data: Record<string, unknown> }) {
   const hasStdout = stdout.length > 0;
   const hasStderr = stderr.length > 0;
   const hasReturn = returnValue !== undefined;
+  const fullText = [stdout, stderr].filter(Boolean).join("\n");
+  const [collapsed, setCollapsed] = useState(fullText.length > 600);
 
   if (!hasStdout && !hasStderr && !hasReturn) {
     return (
-      <div className="rounded-md bg-[#1e1e2e] p-3 text-xs font-mono leading-relaxed">
-        <span className="text-muted-foreground italic">(no output)</span>
-      </div>
+      <p className="text-xs italic text-muted-foreground">(no output)</p>
     );
   }
 
+  const ok = !timedOut && exitCode === 0;
+
   return (
-    <div className="rounded-md bg-[#1e1e2e] overflow-hidden">
-      {/* Terminal header bar */}
-      <div className="flex items-center gap-1.5 border-b border-white/5 px-3 py-1.5">
-        <div className="flex gap-1">
-          <span className="h-2.5 w-2.5 rounded-full bg-red-500/70" />
-          <span className="h-2.5 w-2.5 rounded-full bg-yellow-500/70" />
-          <span className="h-2.5 w-2.5 rounded-full bg-green-500/70" />
-        </div>
-        <span className="ml-2 text-[10px] text-white/40 font-mono">
-          {timedOut ? "⏱ Timed out" : exitCode === 0 ? "✓ Success" : `✗ Exit ${exitCode}`}
+    <div className="overflow-hidden rounded-lg border border-border/45">
+      <div className="flex items-center gap-2 border-b border-border/35 px-2.5 py-1.5">
+        <span
+          className={cn(
+            "text-[11px] font-medium",
+            timedOut || (exitCode !== null && exitCode !== 0)
+              ? "text-status-danger"
+              : "text-status-success",
+          )}
+        >
+          {timedOut ? "Timed out" : ok ? "Success" : `Exit ${exitCode}`}
         </span>
         {duration && (
-          <span className="ml-auto text-[10px] text-white/30 font-mono">
+          <span className="ml-auto text-[10px] tabular-nums text-muted-foreground">
             {duration}
           </span>
         )}
       </div>
 
-      {/* Terminal body */}
-      <div className="max-h-60 overflow-y-auto p-3 text-xs font-mono leading-relaxed custom-scrollbar">
+      <div
+        className={cn(
+          "px-2.5 py-2 text-[12px] font-mono leading-relaxed",
+          collapsed && "max-h-40 overflow-hidden",
+        )}
+      >
         {hasStdout && (
-          <pre className="text-green-400/90 whitespace-pre-wrap m-0">{stdout}</pre>
+          <pre className="m-0 whitespace-pre-wrap text-foreground/90">{stdout}</pre>
         )}
         {hasStderr && (
-          <pre className="text-red-400/90 whitespace-pre-wrap m-0">{stderr}</pre>
+          <pre className="m-0 whitespace-pre-wrap text-status-danger/90">{stderr}</pre>
         )}
         {hasReturn && (
-          <div className="mt-2 border-t border-white/5 pt-2">
-            <span className="text-[10px] text-white/30 uppercase tracking-wider">Return value</span>
-            <pre className="text-blue-400/90 whitespace-pre-wrap mt-1">
+          <div className={cn((hasStdout || hasStderr) && "mt-2 border-t border-border/30 pt-2")}>
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Return
+            </span>
+            <pre className="mt-1 whitespace-pre-wrap text-foreground/80">
               {typeof returnValue === "object"
                 ? JSON.stringify(returnValue, null, 2)
                 : String(returnValue)}
@@ -798,6 +828,24 @@ function TerminalOutput({ data }: { data: Record<string, unknown> }) {
           </div>
         )}
       </div>
+
+      {fullText.length > 600 && (
+        <button
+          type="button"
+          onClick={() => setCollapsed(!collapsed)}
+          className="flex w-full items-center justify-center gap-1 border-t border-border/35 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
+        >
+          {collapsed ? (
+            <>
+              <ChevronDown className="h-3 w-3" /> Show all
+            </>
+          ) : (
+            <>
+              <ChevronUp className="h-3 w-3" /> Collapse
+            </>
+          )}
+        </button>
+      )}
     </div>
   );
 }

@@ -1,28 +1,25 @@
 @import "tailwindcss";
 
 @theme inline {
-  --color-background: #ffffff;
-  --color-foreground: #18181b;
-  --color-muted: #f4f4f5;
-  --color-muted-foreground: #71717a;
-  --color-border: #e4e4e7;
-  --color-primary: #18181b;
-  --color-primary-foreground: #fafafa;
-  --color-secondary: #f4f4f5;
-  --color-secondary-foreground: #18181b;
-  --color-accent: #f4f4f5;
-  --color-accent-foreground: #18181b;
+  --color-background: #fbfbfc;
+  --color-foreground: #101216;
+  --color-muted: #f3f4f6;
+  --color-muted-foreground: #596170;
+  --color-border: #e6e8ec;
   --color-card: #ffffff;
-  --color-card-foreground: #18181b;
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-card-foreground: #101216;
+  --color-primary: #2563eb;
+  --color-primary-foreground: #ffffff;
+  --color-accent: #eef2ff;
+  --color-accent-foreground: #1e3a8a;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, "SF Mono", monospace;
   --radius: 0.75rem;
 }
 
-* {
-  scrollbar-width: thin;
-  scrollbar-color: #d4d4d8 transparent;
-}
+/* ------------------------------------------------------------------ */
+/*  Base                                                               */
+/* ------------------------------------------------------------------ */
 
 html {
   scroll-behavior: smooth;
@@ -31,23 +28,84 @@ html {
 body {
   background: var(--color-background);
   color: var(--color-foreground);
-  font-family: var(--font-sans), system-ui, sans-serif;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
 }
 
-img,
-a {
+::selection {
+  background: oklch(0.62 0.18 255 / 0.28);
+  color: inherit;
+}
+
+/* Slim, subtle scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d4d6dc transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: #d4d6dc;
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Keep product screenshots from being dragged around */
+img {
   -webkit-user-drag: none;
   user-select: none;
-  -moz-user-select: none;
-  -webkit-user-select: none;
-  -ms-user-select: none;
 }
 
-/* Smooth reveal animations */
-@keyframes fade-up {
+/* ------------------------------------------------------------------ */
+/*  Utilities                                                          */
+/* ------------------------------------------------------------------ */
+
+/* Faint engineering grid used in the hero background */
+.bg-grid {
+  background-image:
+    linear-gradient(to right, oklch(0.2 0.02 262 / 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.2 0.02 262 / 0.045) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
+/* Radial glow behind the hero screenshot */
+.glow-hero {
+  background:
+    radial-gradient(42% 46% at 50% 42%, oklch(0.68 0.16 255 / 0.22), transparent 72%),
+    radial-gradient(30% 34% at 72% 26%, oklch(0.62 0.14 295 / 0.12), transparent 70%);
+}
+
+/* Reduced motion — kill decorative animation */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Terminal line entrance                                             */
+/* ------------------------------------------------------------------ */
+
+@keyframes terminal-line-in {
   from {
     opacity: 0;
-    transform: translateY(24px);
+    transform: translateY(4px);
   }
   to {
     opacity: 1;
@@ -55,15 +113,7 @@ a {
   }
 }
 
-@keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-.animate-fade-up {
-  animation: fade-up 0.6s ease-out;
-}
-
-.animate-fade-in {
-  animation: fade-in 0.8s ease-out;
+.terminal-enter > p {
+  opacity: 0;
+  animation: terminal-line-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }

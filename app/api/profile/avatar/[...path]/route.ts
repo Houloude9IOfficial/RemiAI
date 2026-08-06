@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import path from "node:path";
 import fs from "node:fs/promises";
+import { AVATAR_DIR } from "@/lib/paths";
 
-const AVATAR_DIR = path.join(process.cwd(), "data", "avatars");
 
 const MIME_TYPES: Record<string, string> = {
   ".jpg": "image/jpeg",

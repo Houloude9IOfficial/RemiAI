@@ -2,6 +2,28 @@ import { z } from "zod";
 import { Firecrawl } from "firecrawl";
 import { truncateToolResult } from "@/lib/utils";
 
+const FIRECRAWL_TIMEOUT_MS = 45_000;
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  return new Promise<T>((resolve, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`Timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    promise
+      .then((value) => {
+        if (timer) clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((err) => {
+        if (timer) clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
 /**
  * Build Firecrawl integration tools — search, crawl, scrape, interact, and
  * stop interaction. All tools use the shared Firecrawl client instance.
@@ -41,20 +63,29 @@ export function buildFirecrawlTools(apiKey: string) {
       sources?: ("web" | "news" | "images")[];
     }) => {
       try {
-        const result = await client.search(query, {
-          limit,
-          sources: sources as any,
-        });
+        const result = await withTimeout(
+          client.search(query, {
+            limit,
+            sources: sources as any,
+          }),
+          FIRECRAWL_TIMEOUT_MS,
+        );
 
         return truncateToolResult({
           query,
           results: result,
         });
       } catch (err) {
+        const msg = (err as Error).message;
+        const isTimeout = /timed out/i.test(msg);
         return truncateToolResult({
           query,
-          error: `Firecrawl search failed: ${(err as Error).message}`,
-          hint: "Verify your Firecrawl API key in Settings > Tools.",
+          error: isTimeout
+            ? `Firecrawl search timed out after ${FIRECRAWL_TIMEOUT_MS}ms`
+            : `Firecrawl search failed: ${msg}`,
+          hint: isTimeout
+            ? "Retry with a narrower query or lower limit."
+            : "Verify your Firecrawl API key in Settings > Tools.",
         });
       }
     },
@@ -101,10 +132,13 @@ export function buildFirecrawlTools(apiKey: string) {
       onlyMainContent?: boolean;
     }) => {
       try {
-        const result = await client.scrapeUrl(url, {
-          formats: formats as any,
-          onlyMainContent,
-        } as any);
+        const result = await withTimeout(
+          client.scrapeUrl(url, {
+            formats: formats as any,
+            onlyMainContent,
+          } as any),
+          FIRECRAWL_TIMEOUT_MS,
+        );
 
         return truncateToolResult({
           url,
@@ -112,10 +146,16 @@ export function buildFirecrawlTools(apiKey: string) {
           ...result,
         });
       } catch (err) {
+        const msg = (err as Error).message;
+        const isTimeout = /timed out/i.test(msg);
         return truncateToolResult({
           url,
-          error: `Firecrawl scrape failed: ${(err as Error).message}`,
-          hint: "Verify your Firecrawl API key in Settings > Tools.",
+          error: isTimeout
+            ? `Firecrawl scrape timed out after ${FIRECRAWL_TIMEOUT_MS}ms`
+            : `Firecrawl scrape failed: ${msg}`,
+          hint: isTimeout
+            ? "Retry with fewer formats or a lighter page."
+            : "Verify your Firecrawl API key in Settings > Tools.",
         });
       }
     },
@@ -166,16 +206,19 @@ export function buildFirecrawlTools(apiKey: string) {
     }) => {
       try {
         // Use the convenience crawl() method that polls until completion
-        const result = await client.crawl(url, {
-          limit: maxPages,
-          includePaths,
-          excludePaths,
-          sitemap,
-          scrapeOptions: {
-            formats: ["markdown"],
-            onlyMainContent: true,
-          },
-        });
+        const result = await withTimeout(
+          client.crawl(url, {
+            limit: maxPages,
+            includePaths,
+            excludePaths,
+            sitemap,
+            scrapeOptions: {
+              formats: ["markdown"],
+              onlyMainContent: true,
+            },
+          }),
+          FIRECRAWL_TIMEOUT_MS,
+        );
 
         const docs = result.data ?? [];
         return truncateToolResult({
@@ -192,10 +235,16 @@ export function buildFirecrawlTools(apiKey: string) {
           summary: `Crawled ${docs.length} page(s) from ${url}. Status: ${result.status}.`,
         });
       } catch (err) {
+        const msg = (err as Error).message;
+        const isTimeout = /timed out/i.test(msg);
         return truncateToolResult({
           url,
-          error: `Firecrawl crawl failed: ${(err as Error).message}`,
-          hint: "Verify your Firecrawl API key in Settings > Tools. The crawl may have timed out — try with fewer pages.",
+          error: isTimeout
+            ? `Firecrawl crawl timed out after ${FIRECRAWL_TIMEOUT_MS}ms`
+            : `Firecrawl crawl failed: ${msg}`,
+          hint: isTimeout
+            ? "Try fewer pages or tighter include paths."
+            : "Verify your Firecrawl API key in Settings > Tools. The crawl may have timed out — try with fewer pages.",
         });
       }
     },
@@ -252,7 +301,10 @@ export function buildFirecrawlTools(apiKey: string) {
         if (prompt) args.prompt = prompt;
         if (code) args.code = code;
 
-        const result = await client.interact(scrapeId, args);
+        const result = await withTimeout(
+          client.interact(scrapeId, args),
+          FIRECRAWL_TIMEOUT_MS,
+        );
 
         return truncateToolResult({
           output: result.output ?? null,
@@ -264,9 +316,13 @@ export function buildFirecrawlTools(apiKey: string) {
           note: "The browser session is still active. Chain more interactions or call fc_stop_interaction to end it.",
         });
       } catch (err) {
+        const msg = (err as Error).message;
+        const isTimeout = /timed out/i.test(msg);
         return truncateToolResult({
           scrapeId,
-          error: `Firecrawl interact failed: ${(err as Error).message}`,
+          error: isTimeout
+            ? `Firecrawl interact timed out after ${FIRECRAWL_TIMEOUT_MS}ms`
+            : `Firecrawl interact failed: ${msg}`,
           hint: "Make sure the scrapeId is valid and the browser session is still active. Call fc_scrape first to get a scrapeId.",
         });
       }
@@ -287,7 +343,10 @@ export function buildFirecrawlTools(apiKey: string) {
     }),
     execute: async ({ scrapeId }: { scrapeId: string }) => {
       try {
-        const result = await client.stopInteraction(scrapeId);
+        const result = await withTimeout(
+          client.stopInteraction(scrapeId),
+          FIRECRAWL_TIMEOUT_MS,
+        );
 
         return truncateToolResult({
           success: true,
@@ -296,9 +355,13 @@ export function buildFirecrawlTools(apiKey: string) {
           note: "Browser interaction session has been stopped and cleaned up.",
         });
       } catch (err) {
+        const msg = (err as Error).message;
+        const isTimeout = /timed out/i.test(msg);
         return truncateToolResult({
           scrapeId,
-          error: `Failed to stop interaction: ${(err as Error).message}`,
+          error: isTimeout
+            ? `Stopping Firecrawl interaction timed out after ${FIRECRAWL_TIMEOUT_MS}ms`
+            : `Failed to stop interaction: ${msg}`,
           hint: "The session may have already been closed or timed out.",
         });
       }

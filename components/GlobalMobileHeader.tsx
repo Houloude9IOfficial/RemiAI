@@ -20,7 +20,7 @@ export function GlobalMobileHeader() {
 
   // Only render on mobile
   return (
-    <div className="flex items-center gap-2 border-b px-3 py-2.5 bg-background/95 backdrop-blur supports-[padding-top:env(safe-area-inset-top)]:pt-[calc(0.625rem+env(safe-area-inset-top))] md:hidden">
+    <div className="sticky top-0 z-20 flex shrink-0 items-center gap-2 border-b px-3 py-2.5 bg-background/95 backdrop-blur supports-[padding-top:env(safe-area-inset-top)]:pt-[calc(0.625rem+env(safe-area-inset-top))] md:hidden">
       <button
         type="button"
         onClick={toggleMobileSidebar}

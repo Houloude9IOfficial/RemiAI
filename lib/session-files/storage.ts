@@ -1,6 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { zipSync } from "fflate";
+import {
+  readMediaFromResolvedPath,
+  type MediaResult,
+} from "@/lib/fs/access";
+import { SESSION_FILES_DIR } from "@/lib/paths";
 
 // ---------------------------------------------------------------------------
 // Session file sandbox storage
@@ -14,11 +19,7 @@ import { zipSync } from "fflate";
 // ---------------------------------------------------------------------------
 
 /** Base directory for all session file sandboxes. */
-export const SESSION_FILES_BASE = path.join(
-  process.cwd(),
-  "data",
-  "session-files",
-);
+export const SESSION_FILES_BASE = SESSION_FILES_DIR;
 
 /** Absolute path to a conversation's sandbox directory. */
 export function getSessionDir(conversationId: number): string {
@@ -280,17 +281,64 @@ export async function readSessionFile(
   }
 }
 
+export type WriteSessionFileResult = {
+  wrote: number;
+  path: string;
+  relativePath: string;
+  mode: "overwrite" | "append";
+  created: boolean;
+  linesWritten: number;
+  /** Line-count delta (mixed precision — not a true hunk diff). */
+  linesAdded: number;
+  linesRemoved: number;
+};
+
 export async function writeSessionFile(
   conversationId: number,
   relativePath: string,
   content: string,
   mode?: "overwrite" | "append" | null,
-): Promise<{ wrote: number; path: string }> {
+): Promise<WriteSessionFileResult> {
   const targetPath = await resolveSessionPath(conversationId, relativePath);
+  const writeMode = mode === "append" ? "append" : "overwrite";
+  const normalizedRel = relativePath.replace(/\\/g, "/").replace(/^\/+/, "");
+
+  let previousLines: number | null = null;
+  let created = true;
+  try {
+    const existing = await fs.readFile(targetPath, "utf-8");
+    previousLines = existing.split("\n").length;
+    created = false;
+  } catch {
+    // File does not exist yet
+  }
+
   await fs.mkdir(path.dirname(targetPath), { recursive: true });
-  const flag = mode === "append" ? "a" : "w";
+  const flag = writeMode === "append" ? "a" : "w";
   await fs.writeFile(targetPath, content, { encoding: "utf-8", flag });
-  return { wrote: Buffer.byteLength(content, "utf-8"), path: targetPath };
+
+  const linesWritten = content.length === 0 ? 0 : content.split("\n").length;
+  let linesAdded = 0;
+  let linesRemoved = 0;
+  if (writeMode === "append") {
+    linesAdded = linesWritten;
+  } else if (created || previousLines === null) {
+    linesAdded = linesWritten;
+  } else {
+    linesAdded = Math.max(0, linesWritten - previousLines);
+    linesRemoved = Math.max(0, previousLines - linesWritten);
+  }
+
+  return {
+    wrote: Buffer.byteLength(content, "utf-8"),
+    path: targetPath,
+    relativePath: normalizedRel,
+    mode: writeMode,
+    created,
+    linesWritten,
+    linesAdded,
+    linesRemoved,
+  };
 }
 
 /**
@@ -486,6 +534,42 @@ export async function uploadSessionFile(
 }
 
 // ---------------------------------------------------------------------------
+// URLs & media
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the canonical URL for a file inside the conversation's sandbox.
+ * These URLs are served by the /api/chat/:id/session-files/[...path] route
+ * and can be embedded in chat messages (e.g. `![diagram](/api/chat/5/session-files/assets/diagram.png)`)
+ * or passed to URL-based tools (read_file, read_media, web_fetch).
+ */
+export function buildSessionFileUrl(
+  conversationId: number,
+  relativePath: string,
+): string {
+  const normalized = normalizeSessionPath(relativePath);
+  const encoded = normalized
+    .split("/")
+    .map((s) => encodeURIComponent(s))
+    .join("/");
+  return `/api/chat/${conversationId}/session-files/${encoded}`;
+}
+
+/**
+ * Read an image/video from the session sandbox so the AI can examine it.
+ * Returns metadata + the canonical server URL, plus a base64 dataUrl for
+ * images so the model can "see" the actual content.
+ */
+export async function readSessionFileMedia(
+  conversationId: number,
+  relativePath: string,
+): Promise<MediaResult> {
+  const targetPath = await resolveSessionPath(conversationId, relativePath);
+  const url = buildSessionFileUrl(conversationId, relativePath);
+  return readMediaFromResolvedPath(targetPath, relativePath, url);
+}
+
+// ---------------------------------------------------------------------------
 // ZIP archive
 // ---------------------------------------------------------------------------
 
@@ -579,6 +663,24 @@ const MIME_BY_EXT: Record<string, string> = {
   ".ico": "image/x-icon",
   ".pdf": "application/pdf",
   ".zip": "application/zip",
+  // Videos
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
+  ".mov": "video/quicktime",
+  ".m4v": "video/x-m4v",
+  ".avi": "video/x-msvideo",
+  ".mkv": "video/x-matroska",
+  ".ogv": "video/ogg",
+  // Audio
+  ".mp3": "audio/mpeg",
+  ".wav": "audio/wav",
+  ".ogg": "audio/ogg",
+  ".oga": "audio/ogg",
+  ".m4a": "audio/mp4",
+  ".flac": "audio/flac",
+  ".aac": "audio/aac",
+  ".opus": "audio/opus",
+  ".wma": "audio/x-ms-wma",
 };
 
 /** Look up a MIME type for a filename. Defaults to octet-stream. */

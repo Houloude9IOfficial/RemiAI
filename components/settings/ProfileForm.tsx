@@ -35,8 +35,13 @@ import {
   Medal,
   Plus,
   X,
+  Palette,
+  Check,
 } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { ACCENT_PRESETS } from "@/lib/accent-colors";
+import { useTheme } from "@/components/ThemeProvider";
 
 const DEFAULT_PREFERENCES: UserPreferences = {
   preferredName: "",
@@ -51,6 +56,7 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   pronouns: "",
   birthday: "",
   links: {},
+  accentColor: "",
 };
 
 interface LinkEntry {
@@ -65,7 +71,9 @@ const LINK_PRESETS = [    { key: "github", label: "GitHub", icon: Code2, placeho
 ];
 
 export function ProfileForm() {
+  const { resolvedTheme } = useTheme();
   const queryClient = useQueryClient();
+  const accentTheme: "light" | "dark" = resolvedTheme === "dark" ? "dark" : "light";
   const [form, setForm] = useState<UserPreferences>(DEFAULT_PREFERENCES);
   const [links, setLinks] = useState<LinkEntry[]>([]);
   const [customLinkKey, setCustomLinkKey] = useState("");
@@ -124,6 +132,7 @@ export function ProfileForm() {
     form.skills !== (data?.skills ?? "") ||
     form.pronouns !== (data?.pronouns ?? "") ||
     form.birthday !== (data?.birthday ?? "") ||
+    form.accentColor !== (data?.accentColor ?? "") ||
     JSON.stringify(links) !==
       JSON.stringify(Object.entries(data?.links || {}).map(([k, v]) => ({ key: k, value: v })));
 
@@ -309,6 +318,87 @@ export function ProfileForm() {
               />
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Appearance Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-sm font-medium">
+            <Palette className="h-4 w-4 text-primary" />
+            Accent Color
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Pick the accent color used across the app — buttons, highlights,
+            focus rings, and the sidebar.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Default */}
+            <button
+              type="button"
+              onClick={() => setForm({ ...form, accentColor: "" })}
+              className={cn(
+                "flex h-9 w-9 items-center justify-center rounded-full border border-border transition-all duration-150 hover:scale-110 hover:border-foreground/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                form.accentColor === "" && "ring-2 ring-foreground ring-offset-2",
+              )}
+              style={{
+                background:
+                  accentTheme === "dark"
+                    ? "oklch(0.72 0.12 252)"
+                    : "oklch(0.58 0.14 252)",
+              }}
+              title="Default"
+              aria-label="Default accent color"
+            >
+              {form.accentColor === "" && (
+                <Check
+                  className={cn(
+                    "h-4 w-4",
+                    accentTheme === "dark" ? "text-foreground" : "text-white",
+                  )}
+                />
+              )}
+            </button>
+
+            {/* Presets */}
+            {ACCENT_PRESETS.map((preset) => {
+              const selected = form.accentColor === preset.id;
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => setForm({ ...form, accentColor: preset.id })}
+                  className={cn(
+                    "flex h-9 w-9 items-center justify-center rounded-full border border-border/40 transition-all duration-150 hover:scale-110 hover:border-foreground/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                    selected && "ring-2 ring-foreground ring-offset-2",
+                  )}
+                  style={{
+                    backgroundColor:
+                      accentTheme === "dark" ? preset.dark : preset.light,
+                  }}
+                  title={preset.label}
+                  aria-label={`${preset.label} accent color`}
+                >
+                  {selected && (
+                    <Check
+                      className={cn(
+                        "h-4 w-4",
+                        accentTheme === "dark"
+                          ? "text-foreground"
+                          : "text-white",
+                      )}
+                    />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-3 text-[11px] text-muted-foreground/60">
+            Applies app-wide after you save, and adapts automatically to light
+            and dark mode.
+          </p>
         </CardContent>
       </Card>
 
@@ -543,13 +633,13 @@ export function ProfileForm() {
           {/* Add custom link */}
           <div className="flex items-center gap-2 border-t pt-3">
             <Input
-              placeholder="Link name (e.g. youtube)"
+              placeholder="Link name"
               value={customLinkKey}
               onChange={(e) => setCustomLinkKey(e.target.value)}
               className="h-8 w-40 text-xs"
             />
             <Input
-              placeholder="https://..."
+              placeholder="https://crickdevs.com"
               value={customLinkValue}
               onChange={(e) => setCustomLinkValue(e.target.value)}
               className="h-8 flex-1 text-xs"

@@ -9,11 +9,13 @@
  *   - Checks for app updates via electron-updater (GitHub Releases)
  *
  * Architecture note:
- *   Next.js server is spawned as a child process using the **system Node.js**
- *   binary (\`node\`) rather than Electron's bundled Node.js. This avoids the
- *   native module ABI mismatch problem — \`better-sqlite3\` only needs to be
- *   compiled for one Node.js version (the system one), and both the web app
- *   and Electron desktop share the same compiled binary.
+ *   In development the Next.js server is spawned as a child process using the
+ *   **system Node.js** binary (\`node\`), which matches the ABI of the locally
+ *   installed \`better-sqlite3\`. In packaged builds the server runs with
+ *   **Electron's bundled Node.js** instead (ELECTRON_RUN_AS_NODE) — users
+ *   don't have a system Node.js installed (this used to fail with
+ *   \`spawn node ENOENT\`). The native module is rebuilt for Electron's ABI
+ *   during packaging (electron-builder + scripts/after-pack.cjs).
  */
 
 import {
@@ -114,21 +116,31 @@ function getNextCommand(): NextCommand {
     };
   }
 
-  // Production — try standalone server first
-  const standaloneServer = path.join(APP_ROOT, ".next", "standalone", "server.js");
-  if (fs.existsSync(standaloneServer)) {
-    return {
-      script: standaloneServer,
-      args: [],
-      cwd: path.join(APP_ROOT, ".next", "standalone"),
-    };
+  // Production — run the standalone server. In packaged builds the app files
+  // live inside resources/app.asar, but spawn() needs a REAL directory for
+  // cwd (and the standalone output is extracted to app.asar.unpacked by the
+  // asarUnpack config). Using the resources/app/... virtual asar path for cwd
+  // makes spawn fail with ENOENT, so resolve against the unpacked root.
+  const productionRoot = app.isPackaged
+    ? path.join(process.resourcesPath, "app.asar.unpacked")
+    : APP_ROOT;
+
+  const standaloneServer = path.join(
+    productionRoot,
+    ".next",
+    "standalone",
+    "server.js",
+  );
+  if (!fs.existsSync(standaloneServer)) {
+    throw new Error(
+      "Standalone Next.js server not found: " + standaloneServer,
+    );
   }
 
-  // Fallback: next start
   return {
-    script: resolveNextCli(),
-    args: ["start", "-p", String(PORT), "-H", "127.0.0.1"],
-    cwd: APP_ROOT,
+    script: standaloneServer,
+    args: [],
+    cwd: path.join(productionRoot, ".next", "standalone"),
   };
 }
 
@@ -136,22 +148,41 @@ function startNextServer(): Promise<void> {
   return new Promise((resolve, reject) => {
     const { script, args, cwd } = getNextCommand();
 
-    console.log(`[electron] Starting Next.js server via system node...`);
+    // Packaged apps must NOT rely on a system `node` binary — most users
+    // (especially on Windows) don't have Node.js installed, which made the
+    // app fail on launch with `spawn node ENOENT`. Instead we run the server
+    // with Electron's own bundled Node.js: ELECTRON_RUN_AS_NODE makes the
+    // Electron binary behave as a plain Node.js process. The native
+    // better-sqlite3 module is rebuilt for Electron's ABI during packaging
+    // (electron-builder rebuild + scripts/after-pack.cjs), so the ABI matches.
+    // In dev we keep the system node: it exists on dev machines and matches
+    // the ABI of the locally installed better-sqlite3.
+    const serverNodeBinary = app.isPackaged ? process.execPath : "node";
+
+    console.log(`[electron] Starting Next.js server...`);
+    console.log(
+      `[electron]   binary: ${app.isPackaged ? "Electron bundled Node.js" : "node"}`,
+    );
     console.log(`[electron]   script: ${script}`);
     console.log(`[electron]   args:   ${args.join(" ")}`);
     console.log(`[electron]   cwd:    ${cwd}`);
 
-    // Spawn with the system Node.js binary instead of Electron's bundled
-    // Node.js. This avoids native module ABI mismatches — better-sqlite3
-    // only needs to be compiled for system Node.js, and both the dev:web
-    // and dev:electron workflows share the same compiled binary.
-    serverProcess = spawn("node", [script, ...args], {
+    serverProcess = spawn(serverNodeBinary, [script, ...args], {
       cwd,
       stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...process.env,
         NODE_ENV: isDev ? "development" : "production",
         PORT: String(PORT),
+        // Run as a plain Node.js process when using Electron's binary.
+        ...(app.isPackaged ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
+        // The app bundle is read-only (macOS /Applications, Windows Program
+        // Files), so all writable app data (SQLite DB, uploads, session
+        // files, avatars, backups) lives in the OS user-data dir instead of
+        // <cwd>/data. lib/paths.ts reads this variable.
+        ...(!isDev
+          ? { REMI_DATA_DIR: path.join(app.getPath("userData"), "data") }
+          : {}),
       },
     });
 

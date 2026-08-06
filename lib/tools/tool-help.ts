@@ -16,6 +16,8 @@ const TOOL_HELP_DOCS: Record<string, string> = {
 3. Pass the numeric \`id\` as \`rootId\` to all other tools (\`list_directory\`, \`read_file\`, \`search_files\`, \`glob_files\`, \`write_file\`).
 4. Then pass a \`relativePath\` (a string) to reach subdirectories inside that root.
 
+**⚠️ IMPORTANT — only listed roots are accessible:** "list_permitted_roots" returns ONLY roots you have at least read or write access to. Roots with no access are intentionally omitted — never guess rootIds or attempt to access an unlisted directory; the attempt will be denied. If a requested file isn't in any listed root, tell the user you can't access it.
+
 **Example workflow:**
 - \`list_permitted_roots\` → returns [{ id: 1, path: "/Users/me/Docs", label: "Docs" }]
 - \`list_directory({ rootId: 1 })\` → browse root
@@ -25,7 +27,7 @@ const TOOL_HELP_DOCS: Record<string, string> = {
 **Available filesystem tools:**
 | Tool | Purpose |
 |---|---|
-| \`list_permitted_roots\` | List all directory roots with permissions. Always call this first. |
+| \`list_permitted_roots\` | List directory roots you have access to (read and/or write), with permissions. Roots you have no access to are omitted. Always call this first. |
 | \`list_directory\` | List files and subdirectories inside a root. |
 | \`read_file\` | Read text content. Supports URL for chat-uploaded files OR rootId+relativePath for directory files. Max 100KB. |
 | \`read_media\` | Read media files (images/videos) from directory roots. For images returns a base64 thumbnail. |
@@ -275,9 +277,10 @@ If the user has configured a NewsAPI API key, you have access to:
 | \`news_top_headlines\` | \`country\`, \`category\`, \`query\`, \`sources\`, \`pageSize\` | Get top headlines and breaking news. |
 
 ### Location-aware news workflow:
-1. Call \`get_profile\` to find the user's location.
+Results are already localized automatically: the \`country\` for top headlines and the \`language\` for search default to the user's region/locale (derived from their browser). You can still override them explicitly:
+1. Call \`get_profile\` to find the user's location for more detail.
 2. Derive the 2-letter ISO country code (e.g. "San Francisco, CA" → \`us\`).
-3. Pass the country code to \`news_top_headlines({ country: "us" })\`.
+3. Pass the country code to \`news_top_headlines({ country: "us" })\` to override the default.
 
 ### When to use each:
 | Scenario | Use |
@@ -317,6 +320,9 @@ If the user has configured a Brave Search API key, you have access to:
 - **General web search** — Use \`brave_web_search\` when you need current information from the web.
 - **Complement with web_fetch** — After getting search results, use \`web_fetch\` to read specific pages.
 - **Compare with Firecrawl** — If Firecrawl is also configured, use Firecrawl (\`fc_search\`/\`fc_scrape\`) for more advanced scraping and crawling. Use Brave for quick, simple web searches.
+
+### Localization:
+Results are automatically localized to the user's country and language (derived from their browser locale/timezone), so searches return results relevant to their region.
 
 ### Example:
 \`\`\`
@@ -489,9 +495,11 @@ Then use what you learned to craft a personalized, context-aware response.
 
   "file-attachments": `## File attachments — how to handle uploaded files
 
-When the user attaches a file, the app includes it as a markdown reference:
-- **Images**: \`![filename](/api/chat/uploads/{id}/{filename})\`
-- **Other files**: \`[filename](/api/chat/uploads/{id}/{filename})\`
+When the user attaches a file, it is saved into this conversation's session files under an \`uploads/\` folder and included as a markdown reference:
+- **Images**: \`![filename](/api/chat/{id}/session-files/uploads/{filename})\`
+- **Other files**: \`[filename](/api/chat/{id}/session-files/uploads/{filename})\`
+
+These files live in the session sandbox, so you can also discover/read them with \`session_file_list\`, \`session_file_read\`, and \`session_file_read_media\`, and the user can manage them in the session files panel.
 
 **Images — YOU CAN SEE THEM NATIVELY.** The system automatically reads uploaded images and passes them directly to your vision encoder. You do NOT need to call any tool.
 
@@ -564,6 +572,7 @@ The \`create_visual\` tool lets you generate SVG or HTML visuals and display the
 
 ### Design guidelines:
 - **Use a TRANSPARENT background** by default — do NOT add background colors to the root SVG or HTML body. The visual should blend seamlessly into the chat theme.
+- Prefer theme tokens when needed: \`var(--chat-bg)\`, \`var(--chat-fg)\`, \`var(--chat-muted)\`, \`var(--chat-border)\`, \`var(--chat-primary)\` (injected by the chat UI).
 - Keep it **clean and minimal** — use whitespace, subtle colors, and clear typography.
 - Use responsive widths (\`100%\`) so visuals adapt to the chat container.
 - Visuals are **centered by default** — only set \`options.align\` to left or right when the layout calls for it (e.g. pairing with text on the opposite side).
@@ -610,11 +619,22 @@ Every conversation has its own private **session files** sandbox. Files you crea
 ### Tools
 | Tool | Parameters | Purpose |
 |---|---|---|
-| \`session_file_list\` | \`path\` (optional) | List files in the conversation's sandbox. |
+| \`session_file_list\` | \`path\` (optional) | List files in the conversation's sandbox (each entry includes its \`url\`). |
 | \`session_file_read\` | \`path\`, \`offset\`, \`limit\` (optional) | Read a file's text content (max 1 MB per read). |
+| \`session_file_read_media\` | \`path\` | Inspect an image/video in the sandbox — returns the actual pixels as a data URL. |
 | \`session_file_write\` | \`path\`, \`content\`, \`mode\` (overwrite/append) | Create or modify a file. Creates parent folders automatically. |
+| \`session_file_mkdir\` | \`path\` | Create an empty folder (rarely needed — writes create folders automatically). |
+| \`session_file_move\` | \`from\`, \`to\` | Rename or move a file/folder within the sandbox. |
+| \`session_file_download\` | \`path\` | Get a download link for a single file; present it as a markdown link. |
 | \`session_file_delete\` | \`path\` | Permanently delete a file or folder. |
+| \`session_present_file\` | \`path\`, \`message\` (optional) | Open the file panel straight to one file in the built-in viewer. |
 | \`session_present_files\` | \`paths\` (optional), \`message\` (optional) | Open the file panel so the user can view/download the files. |
+
+### File URLs — referencing sandbox files in the chat
+Every sandbox file has a canonical URL: **\`/api/chat/{conversationId}/session-files/{path}\`** (e.g. \`/api/chat/5/session-files/assets/earth.jpg\`). The list/present results include these URLs. Use them to:
+- **Show images** in your reply: \`![earth.jpg](/api/chat/5/session-files/assets/earth.jpg)\`
+- **Link files** for the user to open/download: \`[report.pdf](/api/chat/5/session-files/output/report.pdf?download=1)\`
+- **Read files with URL-based tools**: \`read_file({ url })\`, \`read_media({ url })\`, \`read_document({ url })\`, \`web_fetch({ url })\` all accept these URLs (read directly from disk).
 
 ### Workflow — generating a website
 1. \`session_file_write({ path: "index.html", content: "..." })\` — repeat for each file (styles.css, app.js, ...).
@@ -622,6 +642,7 @@ Every conversation has its own private **session files** sandbox. Files you crea
 
 ### Rules
 - Always use **forward slashes** (/) in paths.
+- **User uploads**: Files the user attaches to chat messages are stored here under an \`uploads/\` folder \u2014 list/read them like any other session file.
 - The sandbox is **scoped to this conversation** — other chats can't see these files, and they don't touch the user's real directories.
 - Deleting a conversation removes its sandbox files.`,
 
