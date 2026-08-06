@@ -204,6 +204,4 @@ make writing files/folders to permitted dirs easier, AI models often have issues
 
 Make questions tool more modern, asthetically pleasing and show in bottom of message
 
-if max 3 retries exchausted, and click continue it says that limit has been reached of 3. It should try again 3 times though every time the user clicks continue, and if it fails 3 times again, show the error message.
-
 make simply all tool calls with no text between them, to be grouped altogether, and show as one tool call, instead of showing each tool call as a separate one and bloating the UI.

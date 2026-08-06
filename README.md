@@ -472,6 +472,8 @@ After building RemiAI, I put its coding capabilities to the test by having it bu
 | [Particlefield](./creations/Particlefield/) | Generative particle art playground | HTML5, Canvas |
 | [Silkon Labs](./creations/SilkonLabs/) | Landing page for an AI company | NextJS, Tailwind CSS |
 
+Demo of Silkon Labs: [Try it out](https://remiai-creations-silkonlabs.vercel.app)
+
 Each creation includes the exact AI conversation that produced it — check the `PROJECT.md` files for the full story.
 
 ---
