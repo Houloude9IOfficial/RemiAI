@@ -36,6 +36,9 @@ jobs:
     strategy:
       matrix:
         arch: [x64, arm64]
+      # Don't cancel the other arch when one fails — the two jobs are
+      # independent and a failure in one should not abort the other.
+      fail-fast: false
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -49,6 +52,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Generate app icons
+        run: npm run icons
+
       - name: Build Next.js
         run: npm run build
 
@@ -56,7 +62,7 @@ jobs:
         run: npm run build:electron
 
       - name: Build macOS installer
-        run: npx electron-builder --mac --${{ matrix.arch }}
+        run: npx electron-builder --mac --${{ matrix.arch }} --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # macOS code signing (optional — omit to skip signing)
@@ -98,6 +104,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Generate app icons
+        run: npm run icons
+
       - name: Build Next.js
         run: npm run build
 
@@ -106,7 +115,7 @@ jobs:
         shell: bash
 
       - name: Build Windows installer
-        run: npx electron-builder --win
+        run: npx electron-builder --win --publish never
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -160,6 +169,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Generate app icons
+        run: npm run icons
+
       - name: Build Next.js
         run: npm run build
 
@@ -167,7 +179,7 @@ jobs:
         run: npm run build:electron
 
       - name: Build Linux installer
-        run: npx electron-builder --linux
+        run: npx electron-builder --linux --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

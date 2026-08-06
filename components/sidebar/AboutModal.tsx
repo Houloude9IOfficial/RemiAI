@@ -14,13 +14,19 @@ import packagejson from "../../package.json";
 interface PackageJson {
   name: string;
   version: string;
-  author: string;
+  author: string | { name?: string; email?: string };
   license: string;
   description?: string;
   repository?: { url?: string };
 }
 
 const packageJson = packagejson as PackageJson;
+
+// Normalise author — package.json stores either "Name" or { name, email }
+const authorName =
+  typeof packageJson.author === "string"
+    ? packageJson.author
+    : packageJson.author?.name ?? "";
 
 // Normalise "git+https://github.com/...git" → "https://github.com/..."
 const repoUrl = packageJson.repository?.url
@@ -74,7 +80,7 @@ export function AboutModal() {
 
         <div className="divide-y divide-border/60 overflow-hidden rounded-xl border border-border/60">
           <DetailRow label="Name">{packageJson.name}</DetailRow>
-          <DetailRow label="Author">{packageJson.author}</DetailRow>
+          <DetailRow label="Author">{authorName}</DetailRow>
           <DetailRow label="Version">{packageJson.version}</DetailRow>
           <DetailRow label="License">{packageJson.license}</DetailRow>
           {repoUrl ? (

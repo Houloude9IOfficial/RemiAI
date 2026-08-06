@@ -30,7 +30,7 @@ import packagejson from "../../package.json";
 interface PackageJson {
   name: string;
   version: string;
-  author: string;
+  author: string | { name?: string; email?: string };
   license: string;
   description?: string;
   repository?: { url?: string };

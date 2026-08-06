@@ -86,8 +86,10 @@ mac:
   artifactName: "${productName}-${version}-mac-${arch}.${ext}"
   category: public.app-category.productivity
   hardenedRuntime: true
-  entitlements: build/entitlements.mac.plist
-  entitlementsInherit: build/entitlements.mac.plist
+  # Tracked at repo root (the build/ dir is gitignored, so CI would not
+  # have the entitlements file otherwise).
+  entitlements: entitlements.mac.plist
+  entitlementsInherit: entitlements.mac.plist
   # macOS code signing — set CSC_LINK / CSC_KEY_PASSWORD in CI
   # identity: null  # uncomment to skip signing for local builds
 
