@@ -11,6 +11,7 @@ import { useNewChat } from "@/lib/hooks/use-new-chat";
 import { ConversationList } from "./ConversationList";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { SidebarProfile } from "./SidebarProfile";
+import { AboutModal } from "./AboutModal";
 import { useSidebar } from "./SidebarContext";
 
 const primaryLinks = [
@@ -255,7 +256,8 @@ function DesktopSidebar() {
             <div className="mt-2 border-t border-sidebar-border pt-2">
               <SidebarProfile />
             </div>
-            <div className="mt-1 flex items-center justify-start px-2.5 py-1.5">
+            <div className="mt-1 flex items-center justify-between px-2.5 py-1.5">
+              <AboutModal />
               <ThemeToggle />
             </div>
           </nav>
