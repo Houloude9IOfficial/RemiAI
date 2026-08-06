@@ -25,11 +25,11 @@ export function SidebarProfile({ collapsed = false }: { collapsed?: boolean }) {
 
   return (
     <Link
-      href="/settings/profile"
+      href={collapsed ? '' : "/settings/profile"}
       className={cn(
         "group flex items-center rounded-lg text-sm text-muted-foreground",
         collapsed
-          ? "h-9 w-9 justify-center px-0 py-0 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          ? "h-9 w-9 justify-center px-0 py-0 cursor-default"
           : "gap-2.5 px-2.5 py-2 hover:bg-sidebar-accent hover:text-sidebar-foreground",
         "transition-all duration-200",
       )}
