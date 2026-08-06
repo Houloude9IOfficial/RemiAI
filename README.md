@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="./assets/Preview.png" alt="RemiAI Preview" style="border-radius: 15px; max-width: 100%;" />
+  <img src="./assets/RemiAIv2Dark.png" alt="RemiAI Preview" style="border-radius: 15px; max-width: 100%;" />
 </div>
 
 <h1 align="center">RemiAI</h1>
