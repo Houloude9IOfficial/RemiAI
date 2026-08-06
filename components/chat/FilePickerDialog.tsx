@@ -259,7 +259,7 @@ export function FilePickerDialog({ open, onOpenChange, onSelect }: FilePickerDia
                   className={cn(
                     "flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition-all",
                     isSelected
-                      ? "bg-primary/10 text-primary shadow-sm"
+                      ? "bg-primary/10 text-primary"
                       : "text-foreground/80 hover:bg-muted/50",
                   )}
                   onClick={() => handleSelect(item)}
