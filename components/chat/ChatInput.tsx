@@ -733,7 +733,7 @@ export function ChatInput({
                               ? "h-8 px-2.5 text-xs"
                               : "h-7 px-2 text-[11px]",
                             mode === id
-                              ? "bg-background text-foreground shadow-sm"
+                              ? "bg-accent text-foreground transition-colors hover:bg-accent/90"
                               : "text-muted-foreground hover:text-foreground",
                             (disabled || isStreaming) &&
                               "pointer-events-none opacity-40",
