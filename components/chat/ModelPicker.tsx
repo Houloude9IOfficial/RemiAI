@@ -41,7 +41,10 @@ export function ModelPicker({
   const currentProvider = availableProviders.find((p) => p.providerId === providerId);
   const currentModel = currentProvider?.models.find((m) => m.modelId === modelId);
   const triggerLabel = currentModel?.modelLabel ?? modelId ?? null;
-
+  const modelLabel =
+    triggerLabel
+      ?.replaceAll(/[_-]/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase()) ?? null;
   if (availableProviders.length === 0) {
     return (
       <span className="text-xs text-muted-foreground">
@@ -61,7 +64,7 @@ export function ModelPicker({
     >
       <SelectTrigger size="sm" className="h-7 w-50 text-xs">
         <SelectValue placeholder="Pick a model">
-          {value ? triggerLabel : null}
+          {value ? String(modelLabel).charAt(0).toUpperCase() + String(modelLabel).slice(1) : null}
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
