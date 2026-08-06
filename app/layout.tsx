@@ -103,7 +103,7 @@ export default function RootLayout({
           <ServiceWorkerRegistration />
           <SidebarProvider>
             <ShortcutsProvider>
-              <div className="flex h-screen w-full">
+              <div className="flex h-screen w-full supports-[height:100dvh]:h-dvh">
                 <AppSidebar />
                 <MobileSidebar />
                 <main className="flex flex-1 flex-col overflow-auto">
