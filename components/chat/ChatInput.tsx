@@ -631,7 +631,7 @@ export function ChatInput({
         <div
           className={cn(
             "relative flex flex-col rounded-3xl border border-border/70 bg-surface-1 transition-colors duration-200",
-            large && "focus-within:border-primary/40",
+            large && "focus-within:border-primary/60",
             isDragging && "border-primary/45 bg-primary/[0.03]",
             isStreaming && "opacity-95",
           )}
@@ -639,7 +639,7 @@ export function ChatInput({
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
-          <div className={large ? "px-5 pt-4" : "px-3.5 pt-3"}>
+          <div className={large ? "px-2 pt-4" : "px-3.5 pt-3"}>
             <Textarea
               ref={inputRef}
               value={text}

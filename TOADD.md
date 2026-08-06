@@ -105,7 +105,7 @@ Make file manager render media too, audio, video, images, etc... -->
 
 <!-- file attaching from allowed dirs shows only top folders, but on open, it doesnt show any content inside, whether files or folders. Fix this. -->
 
-File manager editor is bad, not theme friendly, and on paste of text, it pastes all as one line getting outside the container, no formatting & more. Fix this.
+<!-- File manager editor is bad, not theme friendly, and on paste of text, it pastes all as one line getting outside the container, no formatting & more. Fix this. -->
 
 get time for ai gets the timezone from the server, not the user, and it should get the timezone from the user instead. Fix this.
 

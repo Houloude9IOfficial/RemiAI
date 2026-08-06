@@ -136,24 +136,28 @@
 }
 
 .dark {
-  --background: oklch(0.196 0.012 262);
-  --foreground: oklch(0.936 0.008 258);
-  --card: oklch(0.232 0.013 262);
-  --card-foreground: oklch(0.936 0.008 258);
-  --popover: oklch(0.232 0.013 262);
-  --popover-foreground: oklch(0.936 0.008 258);
+  /* Deep charcoal canvas — noticeably deeper than the old theme but a clear
+     step away from near-black, so it keeps a premium Codex-like depth
+     without going full #0d0d0d. */
+  --background: oklch(0.17 0.01 262);
+  --foreground: oklch(0.945 0.006 258);
+  --card: oklch(0.205 0.011 262);
+  --card-foreground: oklch(0.945 0.006 258);
+  --popover: oklch(0.205 0.011 262);
+  --popover-foreground: oklch(0.945 0.006 258);
   --primary: oklch(0.72 0.12 252);
   --primary-foreground: oklch(0.215 0.015 262);
-  --secondary: oklch(0.279 0.011 262);
-  --secondary-foreground: oklch(0.936 0.008 258);
-  --muted: oklch(0.267 0.01 262);
-  --muted-foreground: oklch(0.72 0.012 258);
-  --accent: oklch(0.308 0.013 246);
-  --accent-foreground: oklch(0.936 0.008 258);
+  --secondary: oklch(0.245 0.011 262);
+  --secondary-foreground: oklch(0.945 0.006 258);
+  --muted: oklch(0.238 0.011 262);
+  --muted-foreground: oklch(0.71 0.012 258);
+  --accent: oklch(0.275 0.012 250);
+  --accent-foreground: oklch(0.945 0.006 258);
   --destructive: oklch(0.67 0.2 24);
-  --border: oklch(0.41 0.012 262 / 0.5);
+  /* Hairline borders — low-albedo like ChatGPT/Codex separators */
+  --border: oklch(0.38 0.012 262 / 0.5);
   --border-focus: oklch(0.72 0.09 252 / 0.85);
-  --input: oklch(0.34 0.01 262 / 0.62);
+  --input: oklch(0.31 0.01 262 / 0.65);
   --ring: oklch(0.72 0.12 252);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
@@ -161,9 +165,11 @@
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
 
-  --surface-1: oklch(0.226 0.012 262);
-  --surface-2: oklch(0.246 0.012 262);
-  --surface-3: oklch(0.274 0.011 262);
+  /* Surfaces — only gently lighter than the canvas, so panels read as
+     subtle elevations instead of gray slabs */
+  --surface-1: oklch(0.195 0.011 262);
+  --surface-2: oklch(0.22 0.011 262);
+  --surface-3: oklch(0.25 0.011 262);
 
   --status-success: oklch(0.74 0.14 152);
   --status-warning: oklch(0.81 0.14 79);
@@ -173,13 +179,13 @@
   --shadow-elevated: 0 14px 38px -24px oklch(0.03 0.01 260 / 0.7), 0 8px 20px -14px oklch(0.03 0.01 260 / 0.52);
   --shadow-floating: 0 22px 52px -30px oklch(0.02 0.01 260 / 0.82), 0 12px 28px -18px oklch(0.02 0.01 260 / 0.65);
 
-  --sidebar: oklch(0.212 0.011 262);
-  --sidebar-foreground: oklch(0.936 0.008 258);
+  --sidebar: oklch(0.185 0.01 262);
+  --sidebar-foreground: oklch(0.945 0.006 258);
   --sidebar-primary: oklch(0.72 0.12 252);
   --sidebar-primary-foreground: oklch(0.215 0.015 262);
-  --sidebar-accent: oklch(0.286 0.012 246);
-  --sidebar-accent-foreground: oklch(0.936 0.008 258);
-  --sidebar-border: oklch(0.41 0.012 262 / 0.5);
+  --sidebar-accent: oklch(0.27 0.012 250);
+  --sidebar-accent-foreground: oklch(0.945 0.006 258);
+  --sidebar-border: oklch(0.38 0.012 262 / 0.5);
   --sidebar-ring: oklch(0.72 0.12 252);
 
   /* Code editor (CodeMirror) syntax colors — dark variant */
@@ -194,6 +200,19 @@
   --editor-variable: oklch(0.75 0.16 55);
   --editor-punctuation: oklch(0.65 0 0);
   --editor-meta: oklch(0.62 0.01 260);
+}
+
+/* Ambient depth for the dark canvas — a faint cool glow near the top and a
+   warm undertone in the far corner keep the background from reading as a
+   flat slab (the subtle ChatGPT/Codex "studio" treatment). Layers under
+   everything since it lives on <body>. */
+.dark body {
+  background-image:
+    radial-gradient(1200px 640px at 50% -14%, oklch(0.36 0.05 262 / 0.13), transparent 72%),
+    radial-gradient(1000px 760px at 88% 118%, oklch(0.24 0.035 280 / 0.09), transparent 68%);
+  /* Keep the glow pinned to the viewport so the depth persists while
+     scrolling long conversations instead of scrolling away with the page. */
+  background-attachment: fixed;
 }
 
 @layer base {
@@ -387,8 +406,8 @@
 .markdown-body pre:last-child { margin-bottom: 0; }
 
 .dark .markdown-body pre {
-  background: oklch(0.19 0.008 260);
-  border-color: oklch(0.28 0.015 260);
+  background: oklch(0.18 0.009 260);
+  border-color: oklch(0.29 0.012 260 / 0.6);
 }
 
 /* Inner code element inside pre (highlight.js container) */
