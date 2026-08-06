@@ -79,6 +79,12 @@ Descriptions: A tool (togglable) that allows the AI with javascript to create ro
 
 <!-- remove icon background from tool calling visual text -->
 
+
+
+
+<!-- V2  -->
+
+
 <!-- Centerize visualizations by default, and allow to be aligned left/right if needed. -->
 
 <!-- Add session file storage (mostly txt, md, py, js, etc...) and have tools to modify them (same as now the file management system tools, but for sandboxes only for each chat), and also have a present tool to show the user a file/files -->
