@@ -103,7 +103,7 @@ Make file manager render media too, audio, video, images, etc... -->
 
 <!-- allow resizing the session files panel. -->
 
-file attaching from allowed dirs shows only top folders, but on open, it doesnt show any content inside, whether files or folders. Fix this.
+<!-- file attaching from allowed dirs shows only top folders, but on open, it doesnt show any content inside, whether files or folders. Fix this. -->
 
 File manager editor is bad, not theme friendly, and on paste of text, it pastes all as one line getting outside the container, no formatting & more. Fix this.
 
