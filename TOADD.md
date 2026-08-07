@@ -220,4 +220,4 @@ the ai users bash to write/edit/delete files, but it should use bash for command
 
 <!-- make session files panel update in real time when files are added/removed/edited, and also make it update when the AI creates/edits/deletes files/folders in permitted dirs. -->
 
-make copy/regenerate on messages to be shown on hover, and not always visible, to make the UI cleaner. On mobile always show it, since hover is not possible.
+<!-- make copy/regenerate on messages to be shown on hover, and not always visible, to make the UI cleaner. On mobile always show it, since hover is not possible. -->

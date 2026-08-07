@@ -206,8 +206,11 @@ function RegenerateButton({
 }
 
 /**
- * Action bar shown under a message. Always visible with quiet styling so it
- * never reserves invisible space under tool-call-heavy messages.
+ * Action bar shown under a message. On desktop the buttons stay hidden until
+ * the message is hovered (or a button is focused via keyboard) for a cleaner
+ * look; on mobile — where hover doesn't exist — they're always visible.
+ * Opacity (not `hidden`) is used so the row keeps its layout space and the
+ * reveal fades in smoothly.
  */
 function MessageActionsRow({
   children,
@@ -221,6 +224,7 @@ function MessageActionsRow({
       className={cn(
         "flex items-center gap-0.5",
         align === "right" ? "justify-end" : "justify-start",
+        "md:opacity-0 md:transition-opacity md:duration-200 md:group-hover:opacity-100 md:focus-within:opacity-100",
       )}
     >
       {children}
