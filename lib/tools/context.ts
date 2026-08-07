@@ -51,6 +51,7 @@ export function buildContextTools(
         timezone:
           timezone ??
           (Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"),
+        note: "The timezone is provided by the browser and may not be accurate if the user has manually changed their system timezone. Also, you may or may not be running on user's device, so the timezone may not be accurate. Use this information as a hint, but do not rely on it for critical decisions, if you have access you may use Bash to get timezone/hardware info, or use the get_time_details tool to get the timezone and time in the user's timezone.",
       };
     },
   };
