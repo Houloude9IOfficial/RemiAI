@@ -50,22 +50,47 @@ function getSafeEnv(): NodeJS.ProcessEnv {
 }
 
 /**
- * Safely kill a child process cross-platform.
- * - On Unix: sends SIGTERM, then SIGKILL after 2s if still alive.
- * - On Windows: sends TerminateProcess (SIGKILL doesn't exist there).
+ * Safely kill a child process — and, crucially, its whole process tree —
+ * cross-platform.
+ *
+ * Killing only the shell (e.g. `bash -lc "npm run build"`) would orphan the
+ * actual command, which keeps running in the background. Subprocesses are
+ * therefore spawned with `detached: true` (Unix), making each child a
+ * process-group leader, so we can signal the entire group:
+ * - On Unix: SIGTERM to the group (-pid), then SIGKILL after 2s for anything
+ *   that ignores SIGTERM (stubborn daemons, trapped handlers).
+ * - On Windows: `taskkill /T` terminates the whole process tree.
  */
 function killProcess(proc: import("node:child_process").ChildProcess): void {
+  const pid = proc.pid;
   try {
     if (process.platform === "win32") {
-      proc.kill();
+      if (pid) {
+        // taskkill /T /F kills the process and all descendants.
+        spawn("taskkill", ["/pid", String(pid), "/T", "/F"], {
+          stdio: "ignore",
+          windowsHide: true,
+        });
+      } else {
+        proc.kill();
+      }
+      return;
+    }
+    if (pid) {
+      try {
+        process.kill(-pid, "SIGTERM");
+      } catch {
+        proc.kill("SIGTERM");
+      }
       setTimeout(() => {
-        try { proc.kill(); } catch { /* already dead */ }
+        try {
+          process.kill(-pid, "SIGKILL");
+        } catch {
+          try { proc.kill("SIGKILL"); } catch { /* already dead */ }
+        }
       }, 2000);
     } else {
       proc.kill("SIGTERM");
-      setTimeout(() => {
-        try { proc.kill("SIGKILL"); } catch { /* already dead */ }
-      }, 2000);
     }
   } catch {
     // Process may already be dead
@@ -94,8 +119,15 @@ async function spawnSubprocess(
     const proc = spawn(command, args, {
       cwd: opts.cwd,
       stdio: ["pipe", "pipe", "pipe"],
-      timeout: opts.timeoutMs,
       windowsHide: true,
+      // Make each child a process-group leader on Unix so a timeout can
+      // cancel the whole tree (shell + the command it runs), not just the
+      // direct child. Windows uses `taskkill /T` instead (see killProcess).
+      // NOTE: children are intentionally not tied to the parent's lifetime
+      // (detached) — the manual timer below is what guarantees they get
+      // reaped on timeout even if the shell ignores SIGTERM. The process is
+      // *not* unref()'d, so we still await its 'close' event.
+      detached: process.platform !== "win32",
       env: getSafeEnv(),
     });
 
@@ -209,8 +241,8 @@ async function trySpawnPython(
     const proc = spawn(cmd, ["-u", "-c", code], {
       cwd: opts.cwd,
       stdio: ["pipe", "pipe", "pipe"],
-      timeout: opts.timeoutMs,
       windowsHide: true,
+      detached: process.platform !== "win32",
       env: getSafeEnv(),
     });
 
@@ -518,14 +550,38 @@ async function resolveBashCwd(
   };
 }
 
-function buildBashExecuteTool(mode: "sandboxed" | "full") {
+/**
+ * Human-readable note appended to a tool result when the command was killed
+ * by the timeout, so the model clearly sees the run was cut short.
+ */
+function buildTimeoutNote(timeoutMs: number): string {
+  const secs = timeoutMs / 1000;
+  // Whole seconds for long timeouts, one decimal for short ones (1.5s).
+  const label =
+    secs >= 10
+      ? `${Math.round(secs)}s`
+      : `${Math.round(secs * 10) / 10}s`;
+  return (
+    `\n⚠️ Command timed out after ${label} and was terminated. ` +
+    `The output above was captured up to the timeout.`
+  );
+}
+
+export function buildBashExecuteTool(mode: "sandboxed" | "full") {
   return {
     description: mode === "sandboxed"
-      ? "Run a Bash command in the session's permitted project directory (relative paths only; commands leaving the project tree are rejected)."
-      : "Run a Bash command with full device access (explicitly enabled by the user for this session). Use only for work the user requested.",
+      ? "Run a Bash command in the session's permitted project directory (relative paths only; commands leaving the project tree are rejected). Default timeout: 30s, max: 120s. On timeout the command is terminated and partial output is returned."
+      : "Run a Bash command with full device access (explicitly enabled by the user for this session). Use only for work the user requested. Default timeout: 30s, max: 120s. On timeout the command is terminated and partial output is returned.",
     parameters: z.object({
       command: z.string().min(1).describe("Bash command to execute"),
-      timeout: z.number().int().positive().max(120_000).optional().default(30_000),
+      timeout: z
+        .number()
+        .int()
+        .positive()
+        .max(120_000)
+        .optional()
+        .default(30_000)
+        .describe("Timeout in ms (default: 30s, max: 120s)"),
     }),
     execute: async ({ command, timeout }: { command: string; timeout?: number }) => {
       if (mode === "sandboxed" && !sandboxCommandIsSafe(command)) {
@@ -556,13 +612,22 @@ function buildBashExecuteTool(mode: "sandboxed" | "full") {
             : { cwd: process.cwd(), warning: undefined, tempDir: undefined };
         tempDir = fallbackDir;
 
+        const timeoutMs = timeout ?? 30_000;
         const result = await runShellCommand(command, {
           cwd,
-          timeoutMs: timeout ?? 30_000,
+          timeoutMs,
           start,
         });
 
-        const stderr = [warning, result.stderr].filter(Boolean).join("\n");
+        const stderr = [
+          warning,
+          result.stderr,
+          // When the command was killed by the timeout, make it explicit in
+          // the output itself (not just the timedOut flag).
+          result.timedOut ? buildTimeoutNote(timeoutMs) : undefined,
+        ]
+          .filter((s): s is string => Boolean(s))
+          .join("\n");
 
         return truncateToolResult({
           stdout: result.stdout,

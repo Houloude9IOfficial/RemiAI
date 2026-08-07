@@ -394,8 +394,12 @@ context7_get_docs({ library: "react", query: "useActionState" })
 
 | Tool | Parameters | Purpose |
 |---|---|---|
-| \`python_exec\` | \`code\`, \`timeout\` (optional, max 120s) | Execute Python code in a subprocess. Returns stdout, stderr, exit code. |
-| \`js_exec\` | \`code\`, \`timeout\` (optional, max 60s) | Execute JavaScript in a sandboxed Node.js VM. Supports console.log, await. No fs/network/timers access. |
+| \`python_exec\` | \`code\`, \`timeout\` (optional, default 30s, max 120s) | Execute Python code in a subprocess. Returns stdout, stderr, exit code. |
+| \`js_exec\` | \`code\`, \`timeout\` (optional, default 15s, max 60s) | Execute JavaScript in a sandboxed Node.js VM. Supports console.log, await. No fs/network/timers access. |
+| \`bash_execute\` | \`command\`, \`timeout\` (optional, default 30s, max 120s) | Run a Bash command in the session's permitted project directory (sandboxed) or with full device access (full mode). Returns stdout, stderr, exit code. |
+
+### Timeouts
+All three tools accept a \`timeout\` parameter (ms). If a command exceeds it, the process tree is terminated and the partial console output captured up to that point is returned with \`timedOut: true\`.
 
 ### Use cases:
 - Run calculations, algorithms, or data processing
@@ -404,7 +408,8 @@ context7_get_docs({ library: "react", query: "useActionState" })
 - Solve programming problems
 
 For \`python_exec\`: use print() to see output.
-For \`js_exec\`: use console.log() to see output. \`await\` is supported at top level.`,
+For \`js_exec\`: use console.log() to see output. \`await\` is supported at top level.
+For \`bash_execute\`: run shell commands, CLI tools, and scripts. Relative project paths only in sandboxed mode.`,
 
   "document-reader": `## Document reader tool
 
