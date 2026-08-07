@@ -54,7 +54,7 @@ export function QuestionsCard({ data }: { data: unknown }) {
 // ---------------------------------------------------------------------------
 
 function QuestionsForm({ data }: { data: QuestionsData }) {
-  const { sendMessage } = useChatMessage();
+  const { sendMessage, status } = useChatMessage();
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
   const [customTexts, setCustomTexts] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
@@ -76,6 +76,12 @@ function QuestionsForm({ data }: { data: QuestionsData }) {
   }).length;
 
   const allAnswered = answeredCount === questions.length;
+  // Never submit while a response is still streaming: sending starts a SECOND
+  // concurrent request whose stream interleaves with the first, which makes
+  // the SDK push a duplicate copy of the questions message (same id twice →
+  // React duplicate-key crash + duplicated UI). The button stays disabled
+  // until the current run finishes.
+  const isBusy = status === "submitted" || status === "streaming";
 
   const handleSelectOption = useCallback(
     (questionId: string, option: string) => {
@@ -108,7 +114,7 @@ function QuestionsForm({ data }: { data: QuestionsData }) {
   );
 
   const handleSubmit = useCallback(() => {
-    if (!allAnswered) return;
+    if (!allAnswered || isBusy) return;
 
     // Build a nicely formatted answer string
     const lines: string[] = [];
@@ -133,7 +139,7 @@ function QuestionsForm({ data }: { data: QuestionsData }) {
     const message = lines.join("\n").trim();
     setSubmitted(true);
     sendMessage(message);
-  }, [answers, customTexts, questions, title, allAnswered, sendMessage]);
+  }, [answers, customTexts, questions, title, allAnswered, sendMessage, isBusy]);
 
   // Auto-scroll into view when the card appears
   useEffect(() => {
@@ -330,18 +336,20 @@ function QuestionsForm({ data }: { data: QuestionsData }) {
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={!allAnswered}
+              disabled={!allAnswered || isBusy}
               className={cn(
                 "flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200",
-                allAnswered
+                allAnswered && !isBusy
                   ? "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 active:scale-[0.98]"
                   : "cursor-not-allowed bg-muted text-muted-foreground/50",
               )}
             >
               <Send className="h-3.5 w-3.5" />
-              {allAnswered
+              {allAnswered && !isBusy
                 ? "Send answers"
-                : `Answer all questions first (${answeredCount}/${questions.length})`}
+                : isBusy
+                  ? "Waiting for the assistant to finish…"
+                  : `Answer all questions first (${answeredCount}/${questions.length})`}
             </button>
           </div>
         </div>
