@@ -15,7 +15,10 @@ export const suggestFollowupsTool = {
     "These appear as clickable chips at the bottom of your response. " +
     "Use this after answering a question — offer natural next steps, " +
     "deeper exploration, or related topics the user might find useful. " +
-    "Each suggestion should be a complete question the user can send as-is.",
+    "Each suggestion should be a complete question the user can send as-is. " +
+    "Call this tool at most once per response. " +
+    "Never include meta-questions like 'What do you want to do next?' or " +
+    "'What should I do next?' — every suggestion must be specific and actionable.",
 
   inputSchema: z.object({
     suggestions: z
@@ -27,6 +30,8 @@ export const suggestFollowupsTool = {
           .describe(
             "A complete question or prompt the user could send as their next message. " +
             "Make each suggestion self-contained and useful on its own. " +
+            "Never suggest meta-questions like 'What do you want to do next?' or " +
+            "'What should I do next?'. " +
             "Examples: 'What is a closure in JavaScript?', 'Show me an example', " +
             "'How do I optimize React performance?'",
           ),
@@ -35,7 +40,8 @@ export const suggestFollowupsTool = {
       .max(6)
       .describe(
         "2–6 followup questions or prompts the user might want to ask. " +
-        "Each should be a complete sentence the user can click and send as-is.",
+        "Each should be a complete sentence the user can click and send as-is. " +
+        "No meta-questions like 'What do you want to do next?' — be specific and actionable.",
       ),
   }),
 

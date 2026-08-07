@@ -199,7 +199,9 @@ suggest_followups({
 - Each suggestion must be a complete, self-contained question or prompt
 - Vary the types: deep dive, example, related concept
 - 3-4 suggestions is the sweet spot
-- Don't use on every response — only when followups make sense`,
+- Don't use on every response — only when followups make sense
+- ⚠️ Never use meta-questions like "What do you want to do next?" or "What should I do next?" — every suggestion must be a specific, actionable prompt
+- Call \`suggest_followups\` at most once per response — if called multiple times, only the last set is shown`,
 
   "agent-spawner": `## Agent Spawner — spawn sub-agents for complex tasks
 

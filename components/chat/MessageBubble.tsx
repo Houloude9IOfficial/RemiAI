@@ -553,6 +553,16 @@ export function MessageBubble({
     .map((p) => p.text)
     .join("\n\n");
 
+  // The AI can call suggest_followups multiple times per response — only the
+  // LAST completed set is shown so duplicate followup cards never stack.
+  const suggestionSegments = segments.filter(
+    (s): s is Segment & { type: "suggestions" } => s.type === "suggestions",
+  );
+  const lastSuggestion =
+    suggestionSegments.length > 0
+      ? suggestionSegments[suggestionSegments.length - 1]
+      : undefined;
+
   return (
     <div className="group flex justify-start">
       <div className="w-full text-[15px] leading-relaxed text-foreground">
@@ -584,14 +594,14 @@ export function MessageBubble({
               ),
             )}
 
-          {/* Suggestions always rendered at the bottom, cleanly separated */}
-          {segments
-            .filter((s): s is Segment & { type: "suggestions" } => s.type === "suggestions")
-            .map((segment, idx) => (
-              <div key={`suggestions-${idx}`} className="mt-0.5">
-                <FollowupSuggestions data={segment.data} />
-              </div>
-            ))}
+          {/* Suggestions always rendered at the bottom, cleanly separated.
+              The AI can call suggest_followups multiple times per response —
+              only the LAST set is shown so duplicate cards never stack. */}
+          {lastSuggestion && (
+            <div key="suggestions-last" className="mt-0.5">
+              <FollowupSuggestions data={lastSuggestion.data} />
+            </div>
+          )}
         </div>
 
         {/* Thinking indicator — shown under content while AI is still processing */}
