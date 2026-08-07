@@ -210,7 +210,7 @@ src/app
 
 <!-- Optimize the app, 41k input tokens for a simple 'hi' is fully unacceptable, and it should be optimized to use way less. (it did use 3 tools but still unacceptable, and it should be optimized to use way less tokens for simple requests, and also for complex requests, it should be optimized to use way less tokens too.) -->
 
-remove todo card from showing in chat on tool run, keep only the header show.
+<!-- remove todo card from showing in chat on tool run, keep only the header show. -->
 
 add timeouts to bash execute tool and if times out, cancel the run of the bash command, and return the output of the console until the timeout, and also return a message that it timed out.
 

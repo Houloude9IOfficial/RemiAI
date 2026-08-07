@@ -18,7 +18,6 @@ import {
 } from "lucide-react";
 import { MediaDisplay } from "./MediaDisplay";
 import { QuestionsCard } from "./QuestionsCard";
-import { TodoBoard } from "./TodoBoard";
 import { VisualCard } from "./VisualCard";
 
 type AnyToolPart = ToolUIPart<any> | DynamicToolUIPart;
@@ -37,6 +36,8 @@ const MINOR_TOOLS = new Set([
   "list_available_tools",
   "get_tool_details",
   "todos_view",
+  "todos_init",
+  "todos_update",
   "list_permitted_roots",
   "get_agent_result",
 ]);
@@ -113,6 +114,8 @@ function minorSummary(name: string, output: unknown, running: boolean): string {
       list_available_tools: "Listing tools…",
       get_tool_details: "Checking tool…",
       todos_view: "Viewing tasks…",
+      todos_init: "Planning tasks…",
+      todos_update: "Updating tasks…",
       list_permitted_roots: "Listing directories…",
       get_agent_result: "Checking agent…",
     };
@@ -147,6 +150,31 @@ function minorSummary(name: string, output: unknown, running: boolean): string {
   }
   if (name === "get_profile") return "Checked profile";
   if (name === "update_profile") return "Updated profile";
+  if (name === "todos_init" || name === "todos_update" || name === "todos_view") {
+    const itemsCount = Array.isArray(out?.items) ? out.items.length : null;
+    const updatedCount = Array.isArray(out?.updated)
+      ? out.updated.length
+      : null;
+    if (out?.action === "initialized") {
+      return itemsCount !== null
+        ? `Created todo list · ${itemsCount} item${itemsCount === 1 ? "" : "s"}`
+        : "Created todo list";
+    }
+    if (out?.action === "updated") {
+      return updatedCount !== null
+        ? `Updated ${updatedCount} todo${updatedCount === 1 ? "" : "s"}`
+        : "Updated todos";
+    }
+    if (out?.action === "viewed") {
+      if (typeof out?.progress === "string" && out.progress) {
+        return `Todo list · ${out.progress}`;
+      }
+      return itemsCount !== null
+        ? `Viewed todo list · ${itemsCount} item${itemsCount === 1 ? "" : "s"}`
+        : "Viewed todo list";
+    }
+    return `Todo list${itemsCount !== null ? ` · ${itemsCount} items` : ""}`;
+  }
   if (name === "get_device_details") return "Checked device";
   if (name === "list_permitted_roots") {
     const n = Array.isArray(out?.roots) ? out.roots.length : null;
@@ -249,12 +277,6 @@ export function ToolCallCard({
 
   const isReadMedia = toolName.endsWith("read_media");
 
-  const isTodoList =
-    output !== undefined &&
-    output !== null &&
-    typeof output === "object" &&
-    (output as Record<string, unknown>).type === "todo_list";
-
   const isVisualResult =
     output !== undefined &&
     output !== null &&
@@ -284,9 +306,6 @@ export function ToolCallCard({
   if (compact) {
     if (isQuestionsResult && output && isComplete) {
       return <QuestionsCard data={output} />;
-    }
-    if (isTodoList && output && isComplete) {
-      return <TodoBoard data={output} />;
     }
     if (isVisualResult && output && isComplete) {
       return <VisualCard data={output} />;
