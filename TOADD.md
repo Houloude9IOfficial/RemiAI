@@ -216,4 +216,6 @@ add timeouts to bash execute tool and if times out, cancel the run of the bash c
 
 the ai users bash to write/edit/delete files, but it should use bash for commands only, and use the file management tools to manage files/folders, and not bash.
 
-if pasting a way too long text in input it should attach it as a file instead of pasting it in the input. It breaks the input and makes it too large now.
+<!-- if pasting a way too long text in input it should attach it as a file instead of pasting it in the input. It breaks the input and makes it too large now. -->
+
+make session files panel update in real time when files are added/removed/edited, and also make it update when the AI creates/edits/deletes files/folders in permitted dirs.
