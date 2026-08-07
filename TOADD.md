@@ -212,10 +212,12 @@ src/app
 
 <!-- remove todo card from showing in chat on tool run, keep only the header show. -->
 
-add timeouts to bash execute tool and if times out, cancel the run of the bash command, and return the output of the console until the timeout, and also return a message that it timed out.
+<!-- add timeouts to bash execute tool and if times out, cancel the run of the bash command, and return the output of the console until the timeout, and also return a message that it timed out.
 
-the ai users bash to write/edit/delete files, but it should use bash for commands only, and use the file management tools to manage files/folders, and not bash.
+the ai users bash to write/edit/delete files, but it should use bash for commands only, and use the file management tools to manage files/folders, and not bash. -->
 
 <!-- if pasting a way too long text in input it should attach it as a file instead of pasting it in the input. It breaks the input and makes it too large now. -->
 
-make session files panel update in real time when files are added/removed/edited, and also make it update when the AI creates/edits/deletes files/folders in permitted dirs.
+<!-- make session files panel update in real time when files are added/removed/edited, and also make it update when the AI creates/edits/deletes files/folders in permitted dirs. -->
+
+make copy/regenerate on messages to be shown on hover, and not always visible, to make the UI cleaner. On mobile always show it, since hover is not possible.

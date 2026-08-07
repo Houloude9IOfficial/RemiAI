@@ -6,6 +6,7 @@ import {
   resolveSessionPath,
   sanitizeUploadName,
 } from "@/lib/session-files/storage";
+import { emitSessionFilesChanged } from "@/lib/session-files/events";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
 const MAX_FILES_PER_REQUEST = 10;
@@ -123,6 +124,10 @@ export async function POST(request: Request) {
           const targetPath = await resolveSessionPath(convId, `uploads/${name}`);
           await fs.mkdir(path.dirname(targetPath), { recursive: true });
           await fs.writeFile(targetPath, buffer, { flag: "wx" });
+          emitSessionFilesChanged(convId, {
+            operation: "upload",
+            path: `uploads/${name}`,
+          });
           break;
         } catch (err) {
           const code = (err as NodeJS.ErrnoException).code;

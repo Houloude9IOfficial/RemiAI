@@ -6,6 +6,7 @@ import {
   type MediaResult,
 } from "@/lib/fs/access";
 import { SESSION_FILES_DIR } from "@/lib/paths";
+import { emitSessionFilesChanged } from "./events";
 
 // ---------------------------------------------------------------------------
 // Session file sandbox storage
@@ -326,6 +327,10 @@ export async function writeSessionFile(
   }
   const flag = writeMode === "append" ? "a" : "w";
   await fs.writeFile(targetPath, content, { encoding: "utf-8", flag });
+  emitSessionFilesChanged(conversationId, {
+    operation: "write",
+    path: normalizedRel,
+  });
 
   const linesWritten = content.length === 0 ? 0 : content.split("\n").length;
   let linesAdded = 0;
@@ -386,6 +391,10 @@ export async function editSessionFile(
     };
   }
   await fs.writeFile(targetPath, content.replace(oldStr, newStr), "utf-8");
+  emitSessionFilesChanged(conversationId, {
+    operation: "edit",
+    path: normalizeSessionPath(relativePath),
+  });
   return {
     path: targetPath,
     relativePath: normalizeSessionPath(relativePath),
@@ -420,6 +429,10 @@ export async function deleteSessionFile(
     throw err;
   }
   await fs.rm(targetPath, { recursive: stats.isDirectory(), force: false });
+  emitSessionFilesChanged(conversationId, {
+    operation: "delete",
+    path: normalizeSessionPath(relativePath),
+  });
   return { path: targetPath, deleted: true };
 }
 
@@ -435,6 +448,10 @@ export async function createSessionFolder(
   const targetPath = await resolveSessionPath(conversationId, normalized);
   await fs.mkdir(targetPath, { recursive: true });
   const st = await fs.stat(targetPath);
+  emitSessionFilesChanged(conversationId, {
+    operation: "mkdir",
+    path: normalized,
+  });
   return {
     path: normalized,
     name: path.basename(targetPath),
@@ -531,6 +548,10 @@ export async function moveSessionFile(
   }
 
   const st = await fs.stat(toPath);
+  emitSessionFilesChanged(conversationId, {
+    operation: "move",
+    path: toNormalized,
+  });
   return {
     path: toNormalized,
     name: path.basename(toPath),
@@ -576,6 +597,10 @@ export async function uploadSessionFile(
   const targetPath = await resolveSessionPath(conversationId, relTarget);
   await fs.mkdir(path.dirname(targetPath), { recursive: true });
   await fs.writeFile(targetPath, data);
+  emitSessionFilesChanged(conversationId, {
+    operation: "upload",
+    path: relTarget,
+  });
   const st = await fs.stat(targetPath);
   return {
     path: relTarget,
