@@ -37,6 +37,7 @@
     "dist:win": "npm run clean:dist && npm run icons && npm run build && npm run build:electron && electron-builder --win",
     "dist:linux": "npm run clean:dist && npm run icons && npm run build && npm run build:electron && electron-builder --linux",
     "lint": "eslint",
+    "test": "npx tsx scripts/test-chat-reconstruction.ts",
     "postinstall": "drizzle-kit migrate || echo '(Migration skipped - it will run on app startup)'",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",

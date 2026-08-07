@@ -354,6 +354,21 @@ function ConversationChat({
       // Tell the server the user's timezone + locale so get_time_details
       // reports the user's LOCAL time and search results are localized.
       headers: () => userContextHeaders(),
+      // ChatGPT-style requests: never upload the whole conversation on every
+      // message (that caused HTTP 413 payload-too-large errors and re-
+      // serialization lag on long chats). Only the newest few messages — the
+      // "delta" — are shipped; the server reconstructs the full history from
+      // the database and merges this delta in (deduping by message id). The
+      // small bounded tail is a safety net so a message that failed to reach
+      // the server on a previous attempt is not lost.
+      prepareSendMessagesRequest: async ({ messages, body, trigger, messageId }) => ({
+        body: {
+          ...body,
+          trigger,
+          messageId,
+          messages: messages.slice(-3),
+        },
+      }),
     }),
     onFinish: () => {
       // Small delay to ensure server-side token update completes

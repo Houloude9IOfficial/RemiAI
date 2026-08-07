@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
+import { jsonError } from "@/lib/validation/api";
 import {
   convertToModelMessages,
   streamText,
@@ -43,7 +45,10 @@ import {
   parseStoredToolState,
   persistActiveToolGroups,
 } from "@/lib/chat/tool-groups";
-import { persistUIMessage } from "@/lib/chat/persist";
+import {
+  reconstructConversationHistory,
+  MAX_DELTA_MESSAGES,
+} from "@/lib/chat/history-reconstruction";
 import { autoTitleConversation } from "@/lib/chat/title-generator";
 import { createMcpToolsManager } from "@/lib/mcp/tools";
 import { buildFilesystemTools } from "@/lib/fs/tools";
@@ -102,11 +107,50 @@ function titleFromMessage(message: UIMessage): string {
   return text.length > 60 ? `${text.slice(0, 60)}…` : text;
 }
 
+// ── Request validation ────────────────────────────────────────────────
+// ChatGPT-style chat requests: the client ships only the NEW message(s) plus
+// the conversation id — never the full history (that caused 413s on long
+// chats). The server rebuilds the full conversation from the `messages`
+// table and merges this delta in.
+const chatRequestSchema = z.object({
+  conversationId: z.coerce.number().int().positive(),
+  messages: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        role: z.enum(["user", "assistant", "system"]),
+        parts: z.array(z.unknown()).default([]),
+      }),
+    )
+    .min(1, "A chat request must include at least one message")
+    .max(
+      MAX_DELTA_MESSAGES,
+      `A chat request can carry at most ${MAX_DELTA_MESSAGES} messages — new clients only send the delta; the server reconstructs the full history`,
+    ),
+  trigger: z.enum(["submit-message", "regenerate-message"]).optional(),
+  messageId: z.string().optional(),
+});
+
 export async function POST(req: Request) {
-  const { conversationId, messages: uiMessages = [] } = (await req.json()) as {
-    conversationId: number;
-    messages?: UIMessage[];
-  };
+  // Validate the request body server-side so a malformed payload is rejected
+  // with a clear 400 instead of silently corrupting conversation state.
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json(
+      { error: "Invalid JSON body" },
+      { status: 400 },
+    );
+  }
+  const parsed = chatRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return jsonError(parsed.error);
+  }
+  const { conversationId, trigger, messageId } = parsed.data;
+  // The delta's `parts` are a JSON round-trip of UI parts — validated as a
+  // generic array above, narrowed to the SDK's UIMessage shape here.
+  const deltaMessages = parsed.data.messages as UIMessage[];
 
   const conversation = await db
     .select()
@@ -139,7 +183,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Provider not found" }, { status: 404 });
   }
 
-  if (uiMessages.length === 0) {
+  if (deltaMessages.length === 0) {
     return NextResponse.json(
       { error: "No messages to process" },
       { status: 400 },
@@ -162,9 +206,21 @@ export async function POST(req: Request) {
   const isFirstExchange =
     existingMessageCount === 0 && conversation.title === "New chat";
 
+  // ── Reconstruct the full conversation server-side (ChatGPT-style) ───
+  // The client only sent the newest message(s). Load everything already
+  // persisted for this conversation, apply regenerate truncation, merge the
+  // delta (deduped by uiId), and persist any NEW user messages. Everything
+  // downstream (`uiMessages`) now sees the complete, ordered history — the
+  // exact same shape the client used to upload on every message.
+  const uiMessages = await reconstructConversationHistory(db, {
+    conversationId,
+    deltaMessages,
+    trigger,
+    messageId,
+  });
+
   const lastMessage = uiMessages[uiMessages.length - 1];
   if (lastMessage?.role === "user") {
-    await persistUIMessage(conversationId, lastMessage);
     await db
       .update(conversations)
       .set({
