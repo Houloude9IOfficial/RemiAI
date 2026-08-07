@@ -209,3 +209,11 @@ src/app
 sometimes ai may return many followup tool runs, show only 1. and specify to not ask questions in followups e.g 'What do you want to do next?' or 'What should I do next?'.
 
 Optimize the app, 41k input tokens for a simple 'hi' is fully unacceptable, and it should be optimized to use way less. (it did use 3 tools but still unacceptable, and it should be optimized to use way less tokens for simple requests, and also for complex requests, it should be optimized to use way less tokens too.)
+
+remove todo card from showing in chat on tool run, keep only the header show.
+
+add timeouts to bash execute tool and if times out, cancel the run of the bash command, and return the output of the console until the timeout, and also return a message that it timed out.
+
+the ai users bash to write/edit/delete files, but it should use bash for commands only, and use the file management tools to manage files/folders, and not bash.
+
+if pasting a way too long text in input it should attach it as a file instead of pasting it in the input. It breaks the input and makes it too large now.
