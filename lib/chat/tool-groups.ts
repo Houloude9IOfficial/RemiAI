@@ -459,28 +459,60 @@ export function buildToolAvailabilityNote(
     `Some tools are loaded on demand to save tokens. **Only call the tools listed above.**\n` +
     `Loaded: ${loaded}.\n` +
     `Not loaded: ${unloadedLabels.sort().join(", ")}.\n` +
-    `To enable an unloaded group for the next message, call \`load_tool_groups({ groups: [...] })\`, then ask the user to repeat their request.`
+    `To enable an unloaded group, call \`load_tool_groups({ groups: [...] })\` — the tools become available immediately in this same response, then continue with the current request.`
   );
 }
 
 /**
- * The `load_tool_groups` tool: lets the model explicitly enable conditional
- * groups. Tools are fixed for the CURRENT stream, so the enabled groups take
- * effect from the NEXT message — the tool result says exactly that. Enabled
- * groups are stored as `explicit` and persist across requests.
+ * The tool NAMES that should be registered for a given active-group set:
+ * core tools + active conditional groups (+ unregistered tools like MCP).
+ * Used as the SDK `activeTools` filter so unloaded tools' definitions never
+ * reach the provider — and so they CAN be added mid-stream by prepareStep
+ * when load_tool_groups enables a group.
  */
-export function buildLoadToolGroupsTool(conversationId: number): {
+export function activeToolNames(
+  tools: Record<string, unknown>,
+  activeGroups: ReadonlySet<string>,
+): string[] {
+  return Object.keys(filterTools(tools, activeGroups)).concat(["load_tool_groups"]);
+}
+
+/**
+ * The `load_tool_groups` tool: lets the model explicitly enable conditional
+ * groups. The chat route re-evaluates the active tool set before every step
+ * (SDK `prepareStep` + `activeTools`), so a group enabled here becomes
+ * available to the model in the very NEXT step of the SAME response — no
+ * "repeat your request" round-trip. Enabled groups are stored as `explicit`
+ * and persist across requests.
+ *
+ * @param toolSet the fully-built tool set for this request (used to skip
+ *   groups whose tools aren't actually present, e.g. unconfigured
+ *   integrations, so the tool never promises tools that can't materialize).
+ */
+export function buildLoadToolGroupsTool(
+  conversationId: number,
+  toolSet?: Record<string, unknown>,
+): {
   description: string;
   // AI SDK v7 property (the legacy `parameters` key is silently ignored —
   // the model would get an empty schema and input would never be validated).
   inputSchema: z.ZodType;
   execute: (args: { groups?: string[] | string }) => Promise<string>;
 } {
+  // A group is only "loadable" when at least one of its tools exists in this
+  // build (mirrors buildToolAvailabilityNote's presence check). Without the
+  // tool set (older callers) assume everything is present.
+  const groupIsPresent = (g: string): boolean => {
+    if (!toolSet) return true;
+    return CONDITIONAL_GROUPS[g].tools.some((name) => toolSet[name] !== undefined);
+  };
+
   return {
     description:
-      `Enable tool groups that are currently unloaded so they become available in the NEXT message. ` +
+      `Enable tool groups that are currently unloaded so they become available to you immediately. ` +
+      `You can use them in your next step of this same response. ` +
       `Valid groups: ${CONDITIONAL_GROUP_IDS.join(", ")}. ` +
-      `Call list_available_tools first to confirm a tool exists, then call this, then tell the user to repeat their request.`,
+      `Call list_available_tools first to confirm a tool exists, then call this, then continue with the user's request.`,
     inputSchema: z.object({
       groups: z
         .array(z.string().min(1))
@@ -493,9 +525,16 @@ export function buildLoadToolGroupsTool(conversationId: number): {
       // ("fs_write, fs_read") or omit the field instead of a proper array.
       // Normalise any shape so this never throws (e.g. the old
       // "groups.filter is not a function" crash).
-      const valid = asStringArray(groups).filter((g) => CONDITIONAL_GROUPS[g]);
+      const requested = asStringArray(groups).filter((g) => CONDITIONAL_GROUPS[g]);
+      const valid = requested.filter(groupIsPresent);
+      const skipped = requested.filter((g) => !groupIsPresent(g));
       if (valid.length === 0) {
-        return `No valid tool groups in request. Valid groups: ${CONDITIONAL_GROUP_IDS.join(", ")}.`;
+        return (
+          `No loadable tool groups in request. Valid groups: ${CONDITIONAL_GROUP_IDS.join(", ")}. ` +
+          (skipped.length > 0
+            ? `Requested but not available in this build: ${skipped.join(", ")}.`
+            : "")
+        );
       }
 
       db.transaction(() => {
@@ -513,8 +552,11 @@ export function buildLoadToolGroupsTool(conversationId: number): {
       });
 
       return (
-        `Enabled tool group(s) for the next message: ${valid.join(", ")}. ` +
-        `The current response cannot use them yet — tell the user to repeat their request.`
+        `Enabled tool group(s): ${valid.join(", ")}. ` +
+        `The tools are now loaded — they will be available in your next step, so continue with the user's request.` +
+        (skipped.length > 0
+          ? ` Skipped (tools not available in this build): ${skipped.join(", ")}.`
+          : "")
       );
     },
   };
@@ -527,14 +569,23 @@ export function buildLoadToolGroupsTool(conversationId: number): {
  * - `explicit` groups (load_tool_groups adds) are preserved forever.
  * - `recent` is set to THIS request's own classifier∪recency signal (not the
  *   full active set, which would grow monotonically), so stale groups decay.
+ *
+ * The stored state is RE-READ from the database rather than trusting a
+ * snapshot: load_tool_groups can add explicit groups mid-stream, and writing
+ * a stale snapshot back would silently clobber them.
  */
 export async function persistActiveToolGroups(opts: {
   conversationId: number;
   activeGroups: ReadonlySet<string>;
-  stored: StoredToolState;
 }): Promise<void> {
   try {
-    const { conversationId, activeGroups, stored } = opts;
+    const { conversationId, activeGroups } = opts;
+    const row = await db
+      .select({ toolGroups: conversations.toolGroups })
+      .from(conversations)
+      .where(eq(conversations.id, conversationId))
+      .get();
+    const stored = parseStoredToolState(row?.toolGroups);
     const recent = new Set(activeGroups);
     for (const group of stored.explicit) recent.delete(group);
     await db

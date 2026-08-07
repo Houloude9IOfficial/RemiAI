@@ -38,10 +38,10 @@ import {
   SUMMARIZE_RECENT_KEEP,
 } from "@/lib/chat/summarizer";
 import {
+  activeToolNames,
   buildLoadToolGroupsTool,
   buildToolAvailabilityNote,
   computeActiveToolGroups,
-  filterTools,
   parseStoredToolState,
   persistActiveToolGroups,
 } from "@/lib/chat/tool-groups";
@@ -473,22 +473,33 @@ You are currently in **Plan mode**. This means:
   // usage, and the conversation's stored groups. The model can always enable
   // more via load_tool_groups / list_available_tools.
   const storedToolGroups = parseStoredToolState(conversation.toolGroups);
-  const activeToolGroups = computeActiveToolGroups({
+  // `let`: prepareStep below updates it when load_tool_groups enables a group
+  // mid-stream, so onFinish's persist uses the freshest active set.
+  let activeToolGroups = computeActiveToolGroups({
     userText: lastUserText,
     // Keep groups alive that were used in the recent window (mid-project
     // follow-ups like "make the button blue" must not lose session files).
     recentMessages: uiMessages.slice(-10),
     stored: storedToolGroups,
   });
+  // Every registered tool lives in the BASE set; the SDK `activeTools` filter
+  // (initial value below, re-evaluated every step by prepareStep) decides
+  // which definitions actually reach the provider. Simple chats therefore
+  // still send only the core subset (~1-2k tokens), while load_tool_groups
+  // can add an unloaded group MID-STREAM — the model uses it in the very
+  // next step of the same response, no "repeat your request" round-trip.
+  //
   // `Record<string, any>` is how every other tool set in this app is typed
   // (the AI SDK accepts these raw `{ description, inputSchema, execute }`
   // objects, e.g. in lib/tools/*.ts) — it also keeps the load_tool_groups
   // shape from breaking the ToolSet union.
-  const toolsForRequest: Record<string, any> = {
-    ...filterTools(tools, activeToolGroups),
-    // Escape hatch: lets the model enable an unloaded group for the NEXT
-    // message (tools are fixed for the current stream).
-    load_tool_groups: buildLoadToolGroupsTool(conversationId),
+  const baseTools: Record<string, any> = {
+    ...tools,
+    // Appended LAST on purpose: markLastToolForCache puts the Anthropic
+    // cache breakpoint on it, and since load_tool_groups is always active
+    // and always last in the per-step filtered set, the tool-definitions
+    // prefix stays cacheable on every step of the loop.
+    load_tool_groups: buildLoadToolGroupsTool(conversationId, tools),
   };
 
   // AI SDK v7 requires `inputSchema` on every tool definition — some builders
@@ -498,9 +509,14 @@ You are currently in **Plan mode**. This means:
   // array is expected — the "groups.filter is not a function" crash — and
   // tool call input would never be validated). Normalise once so every tool
   // gets its real schema sent to the model and its input validated.
-  for (const [name, tool] of Object.entries(toolsForRequest)) {
-    toolsForRequest[name] = normaliseTool(tool);
+  for (const [name, tool] of Object.entries(baseTools)) {
+    baseTools[name] = normaliseTool(tool);
   }
+  const cachedBaseTools = markLastToolForCache(provider, baseTools);
+
+  // The initial active set = core + classified + stored groups (identical to
+  // the old filtered set). prepareStep re-derives it before every step.
+  const initialActiveToolNames = activeToolNames(tools, activeToolGroups);
 
   // Inject recent file changes into the system prompt for freshness.
   // Capped to 5 — the model can call query_recent_changes for more.
@@ -561,9 +577,15 @@ You are currently in **Plan mode**. This means:
   // actually filtered out, so fully-loaded conversations pay zero overhead.
   const toolAvailabilityNote = buildToolAvailabilityNote(tools, activeToolGroups);
 
-  const dynamicSystemPrompt =
+  // Split off the availability note so prepareStep can rebuild the
+  // instructions with a FRESH note once load_tool_groups enables a group
+  // mid-stream (the note is the only part of the dynamic prompt that can
+  // change mid-request).
+  const dynamicSystemPromptBase =
     systemTip + profileTip + memoryTip + fileChangeTip + summarySection +
-    planModePrompt + toolAvailabilityNote;
+    planModePrompt;
+
+  const dynamicSystemPrompt = dynamicSystemPromptBase + toolAvailabilityNote;
 
   const fullSystemPrompt = staticSystemPrompt + dynamicSystemPrompt;
 
@@ -656,6 +678,19 @@ You are currently in **Plan mode**. This means:
   // provider stack or a generic "An error occurred").
   let capturedErrorPayload: StreamErrorPayload | null = null;
 
+  // Cached prepareStep result. Reused verbatim on every step unless
+  // load_tool_groups ran in the previous step (only then can the active tool
+  // set have changed) — avoids a DB read + prompt rebuild on ordinary steps.
+  // Returning the SAME object (not undefined) is important: prepareStep
+  // returning undefined would fall back to the OUTER activeTools, reverting
+  // any mid-stream group additions.
+  let lastStepComputed:
+    | {
+        activeTools: string[];
+        instructions: ReturnType<typeof buildCachedInstructions>;
+      }
+    | undefined;
+
   const result = streamText({
     model,
     instructions: buildCachedInstructions(
@@ -664,10 +699,54 @@ You are currently in **Plan mode**. This means:
       dynamicSystemPrompt,
     ),
     messages: modelMessages,
-    tools:
-      Object.keys(toolsForRequest).length > 0
-        ? markLastToolForCache(provider, toolsForRequest)
-        : undefined,
+    tools: cachedBaseTools,
+    // Initial active set (core + classified + stored groups). prepareStep
+    // re-evaluates it before every step, so load_tool_groups can add groups
+    // mid-stream.
+    activeTools: initialActiveToolNames,
+    // Re-evaluate the active tool set before every step. When load_tool_groups
+    // ran in the previous step, the newly enabled group's tools become
+    // registered for THIS step — the model can use them in the same response
+    // instead of asking the user to repeat their request. Also refreshes the
+    // tool-availability note so the model stops treating the group as
+    // unloaded. (The per-step set is a subset of the base set, so unloaded
+    // definitions never reach the provider and token savings are preserved.)
+    prepareStep: async ({ steps }) => {
+      // Fast path: unless load_tool_groups ran in the previous step, the
+      // active tool set cannot have changed — reuse the cached result so
+      // ordinary multi-step runs pay zero extra DB reads / prompt rebuilds.
+      const prevStep = steps.at(-1);
+      const enabledGroupsThisRound =
+        prevStep?.toolCalls?.some(
+          (tc) => tc.toolName === "load_tool_groups",
+        ) ?? false;
+      if (!enabledGroupsThisRound && lastStepComputed) {
+        return lastStepComputed;
+      }
+
+      const currentRow = await db
+        .select({ toolGroups: conversations.toolGroups })
+        .from(conversations)
+        .where(eq(conversations.id, conversationId))
+        .get();
+      const freshStored = parseStoredToolState(currentRow?.toolGroups);
+      const freshActive = computeActiveToolGroups({
+        userText: lastUserText,
+        recentMessages: uiMessages.slice(-10),
+        stored: freshStored,
+      });
+      activeToolGroups = freshActive;
+      lastStepComputed = {
+        activeTools: activeToolNames(tools, freshActive),
+        instructions: buildCachedInstructions(
+          provider,
+          staticSystemPrompt,
+          dynamicSystemPromptBase +
+            buildToolAvailabilityNote(tools, freshActive),
+        ),
+      };
+      return lastStepComputed;
+    },
     // Retry retryable provider failures (network, 5xx, rate limits) up to
     // 3 times with exponential backoff before surfacing the error.
     maxRetries: 3,
@@ -783,7 +862,6 @@ You are currently in **Plan mode**. This means:
       void persistActiveToolGroups({
         conversationId,
         activeGroups: activeToolGroups,
-        stored: storedToolGroups,
       });
 
       // ── Background rolling summary ─────────────────────────────────

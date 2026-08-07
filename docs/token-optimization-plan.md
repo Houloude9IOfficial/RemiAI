@@ -299,10 +299,13 @@ activeGroups = CORE ∪ classifier(latest user message)
   conversation's tools. It self-decays: each request overwrites the set with its own active
   groups, so a long chat-only stretch drops stale groups.
 - **`load_tool_groups`** — escape hatch. The model discovers tools via `list_available_tools`
-  and enables a group for the NEXT message (tool sets are fixed per stream, so the model
-  then asks the user to repeat the request).
+  and enables a group for the CURRENT response: the chat route re-evaluates the active tool
+  set before every step (SDK `prepareStep` + `activeTools`), so a group enabled mid-stream
+  becomes available to the model in the very next step — no "repeat your request" round-trip.
 - A short **"Tool availability" note** is appended to the dynamic system prompt only when
-  something was actually filtered out — fully-loaded conversations pay zero overhead.
+  something was actually filtered out — fully-loaded conversations pay zero overhead. The
+  note is rebuilt per step by `prepareStep`, so after `load_tool_groups` runs the model sees
+  the group listed as loaded instead of a stale "not loaded" warning.
 
 ### Core set (always loaded, ~1.1–1.5k tokens)
 
@@ -333,7 +336,7 @@ context (`get_time_details`, `get_device_details`) · memory (`remember`, `get_r
 
 | Trade-off | Mitigation |
 |---|---|
-| Model may need a tool that wasn't loaded | Generous classifier + recency + stored groups cover ~all real flows; `load_tool_groups` + `list_available_tools` are the escape hatch |
+| Model may need a tool that wasn't loaded | Generous classifier + recency + stored groups cover ~all real flows; `load_tool_groups` + `list_available_tools` are the escape hatch, and enabled groups take effect in the same response via per-step `prepareStep` re-evaluation |
 | An unloaded tool call hard-errors the stream (AI SDK `NoSuchToolError`) | The dynamic "Tool availability" note explicitly says *only call the tools listed above*; core tools cover the start-of-conversation flow |
 | Stored groups could linger after a project ends | Self-decaying: `onFinish` overwrites the stored set with the current request's groups |
 | Static prompt still describes `create_visual` when unloaded | Cosmetic; the model can enable it via `load_tool_groups` |
