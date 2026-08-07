@@ -16,7 +16,6 @@ import {
   providers,
   mcpServers,
   userPreferences,
-  memories,
   messages,
 } from "@/db/schema";
 import { getLanguageModel } from "@/lib/providers/factory";
@@ -26,6 +25,16 @@ import {
   buildCachedInstructions,
   markLastToolForCache,
 } from "@/lib/chat/prompt-cache";
+import {
+  optimizeMessageHistory,
+  RECENT_MESSAGES_KEPT,
+} from "@/lib/chat/history-optimizer";
+import { retrieveRelevantMemories } from "@/lib/chat/memories";
+import {
+  summarizeConversationBackground,
+  shouldSummarize,
+  SUMMARIZE_RECENT_KEEP,
+} from "@/lib/chat/summarizer";
 import { persistUIMessage } from "@/lib/chat/persist";
 import { autoTitleConversation } from "@/lib/chat/title-generator";
 import { createMcpToolsManager } from "@/lib/mcp/tools";
@@ -74,79 +83,6 @@ import {
 // reply ends with its conclusion, not with a promise to act.
 const DANGLING_ACTION_TAIL_RE =
   /\b(let me|i'?ll|i'?m (going|about) to|gonna)\s+(also|just|first|now|then|quickly)?\s*(dig|check|look|search|fetch|find|crawl|scrape|read|pull|grab|dive|verify|confirm|explore|review|investigate|take a look|look into|see if|see what|find out|get|open|run|try|test|examine|inspect|gather|compile)\b/i;
-
-/**
- * If a tool output is large, return a short summary placeholder string;
- * otherwise return `null` to leave the output untouched.
- */
-function compactOutput(output: unknown): string | null {
-  let json: string;
-  try {
-    json = JSON.stringify(output);
-  } catch {
-    return "[Tool result could not be serialised]";
-  }
-  if (json.length <= 600) return null;
-  return `[Tool result compacted — ${json.slice(0, 600)}… [+${(json.length - 600).toLocaleString()} chars omitted]]`;
-}
-
-/**
- * Replace large tool outputs in message history with compact placeholders.
- *
- * The last {@link KEEP_RECENT_MESSAGES} messages keep their full tool
- * outputs (so the model can answer follow-ups immediately). Older turns get
- * their tool outputs collapsed to a short summary — the model can always
- * re-run the tool to re-fetch content. This caps the input-token growth of
- * long conversations without losing conversational context.
- */
-function compactToolOutputs(
-  uiMessages: UIMessage[],
-  keepRecent: number = 8,
-): UIMessage[] {
-  if (uiMessages.length <= keepRecent) return uiMessages;
-  const cutoff = uiMessages.length - keepRecent;
-
-  return uiMessages.map((msg, i) => {
-    if (i >= cutoff) return msg; // keep recent turns intact
-
-    const parts = msg.parts.map((part: any) => {
-      // AI SDK v7 tool-result parts (typed as `tool-${string}`)
-      if (
-        typeof part.type === "string" &&
-        part.type.startsWith("tool") &&
-        part.type !== "tool-invocation" &&
-        part.output !== undefined
-      ) {
-        const compacted = compactOutput(part.output);
-        if (compacted !== null) {
-          return { ...part, output: compacted };
-        }
-      }
-      // Legacy tool-invocation parts (persisted by older SDK versions)
-      if (
-        part.type === "tool-invocation" &&
-        part.toolInvocation?.output !== undefined &&
-        part.toolInvocation.state === "result"
-      ) {
-        const compacted = compactOutput(part.toolInvocation.output);
-        if (compacted !== null) {
-          return {
-            ...part,
-            toolInvocation: {
-              ...part.toolInvocation,
-              output: compacted,
-            },
-          };
-        }
-      }
-      return part;
-    });
-
-    // Only clone the message if something actually changed
-    const changed = parts.some((p, idx) => p !== msg.parts[idx]);
-    return changed ? { ...msg, parts } : msg;
-  });
-}
 
 function titleFromMessage(message: UIMessage): string {
   const text = message.parts
@@ -448,18 +384,22 @@ You are currently in **Plan mode**. This means:
     ? `\n\n## User preferences\n${prefParts.join("\n")}`
     : "";
 
-  // Inject saved memories into the system prompt for context.
-  // Capped to the 10 most recent so the prompt doesn't grow unboundedly as
-  // memories accumulate (search_memories / get_recent_memories cover the rest).
-  const memoryRows = await db
-    .select()
-    .from(memories)
-    .orderBy(sql`${memories.createdAt} DESC`)
-    .limit(10)
-    .all();
-  memoryRows.reverse(); // chronological order in the prompt
-  const memoryTip = memoryRows.length > 0
-    ? `\n\n## Saved memories\nThings you have remembered about the user across conversations. Use them to personalize responses.\n${memoryRows.map((m) => `- ${m.content}`).join("\n")}`
+  // Inject memories relevant to the CURRENT request, capped to a hard token
+  // budget (relevance + recency scoring, deduped). Irrelevant memories are
+  // still reachable via search_memories / get_recent_memories tools, so this
+  // only trims what the model sees — never what it can recall on demand.
+  const lastUserText =
+    [...uiMessages]
+      .reverse()
+      .find((m) => m.role === "user")
+      ?.parts.filter(
+        (p): p is { type: "text"; text: string } => p.type === "text",
+      )
+      .map((p) => p.text)
+      .join(" ") ?? "";
+  const relevantMemories = await retrieveRelevantMemories(lastUserText);
+  const memoryTip = relevantMemories.length > 0
+    ? `\n\n## Saved memories\nThings you have remembered about the user across conversations, ranked by relevance to the current request. Use them to personalize responses.\n${relevantMemories.map((m) => `- ${m.content}`).join("\n")}`
     : "";
 
   // Inject recent file changes into the system prompt for freshness.
@@ -500,19 +440,38 @@ You are currently in **Plan mode**. This means:
     ? SYSTEM_PROMPT_BASE + visualSection + SESSION_FILES_SECTION + PERSISTENCE_GUIDANCE +
       `\n\n**CRITICAL: Keep responses very short and focused.** Use the simplest tool for each task. If unsure about a tool, call \`get_tool_help\`. Avoid multi-step planning unless the task truly requires it.`
     : SYSTEM_PROMPT_BASE + visualSection + SESSION_FILES_SECTION + PERSISTENCE_GUIDANCE;
+  // Rolling-conversation summary: the earliest messages (covered by a
+  // background summary) are replaced in the model payload by a compact prose
+  // recap injected into the dynamic prompt below. The full messages stay in
+  // the DB for the UI and future edits — this only trims what reaches the LLM.
+  const conversationSummary = conversation.summary ?? "";
+  const summaryCovered = conversation.summaryMessageCount ?? 0;
+  // Never drop the recent verbatim window, even if the stored summary covers
+  // more than the client currently has (e.g. after a regenerate trimmed rows).
+  const historyDrop = Math.min(
+    summaryCovered,
+    Math.max(0, uiMessages.length - RECENT_MESSAGES_KEPT),
+  );
+  const summarySection =
+    conversationSummary && historyDrop > 0
+      ? `\n\n## Earlier conversation (summarized)\nThe following summarizes the earlier part of this conversation. Use it for continuity — do not reference raw tool results you have not actually re-run.\n${conversationSummary}`
+      : "";
+
   const dynamicSystemPrompt =
-    systemTip + profileTip + memoryTip + fileChangeTip + planModePrompt;
+    systemTip + profileTip + memoryTip + fileChangeTip + summarySection + planModePrompt;
 
   const fullSystemPrompt = staticSystemPrompt + dynamicSystemPrompt;
 
-  // Compress the message history before sending it to the model.
-  // Tool outputs from OLD turns (e.g. a read_file that returned 50k chars)
-  // would otherwise be re-sent verbatim on every subsequent request, which
-  // makes long conversations balloon in input tokens. We keep the most
-  // recent turns fully intact and replace older tool outputs with a short
-  // placeholder — the model can re-run the tool if it needs the content.
+  // Optimize the message history before sending it to the model:
+  // - UI-only parts (step-start markers, reasoning) are dropped.
+  // - Old tool rounds collapse into compact natural-language traces
+  //   (inputs with file contents/code and oversized outputs are replaced by
+  //   short references — the model can re-run the tool to re-fetch).
+  // - Messages covered by the rolling summary are dropped from the payload.
   const modelMessages = await convertToModelMessages(
-    compactToolOutputs(uiMessages),
+    optimizeMessageHistory(
+      historyDrop > 0 ? uiMessages.slice(historyDrop) : uiMessages,
+    ),
   );
 
   // ── Native image processing ───────────────────────────────────
@@ -709,6 +668,27 @@ You are currently in **Plan mode**. This means:
         tokensApplied = true;
       } catch (err) {
         console.error("Failed to update token usage in onFinish:", err);
+      }
+
+      // ── Background rolling summary ─────────────────────────────────
+      // When the conversation has grown far past the last summary, fire a
+      // cheap background completion that compresses the earliest segment
+      // (everything before the recent verbatim window) into a compact prose
+      // recap. Future requests inject it into the system prompt and drop the
+      // summarized messages from the model payload, capping input-token
+      // growth on long conversations. Fire-and-forget — never blocks the
+      // stream and swallows all errors.
+      if (!capturedErrorPayload) {
+        const covered = conversation.summaryMessageCount ?? 0;
+        if (shouldSummarize({ totalMessages: uiMessages.length, coveredMessages: covered })) {
+          const untilCount = Math.max(0, uiMessages.length - SUMMARIZE_RECENT_KEEP);
+          void summarizeConversationBackground({
+            conversationId,
+            provider,
+            modelId: conversationModelId,
+            untilCount,
+          });
+        }
       }
 
       // ── Background auto-title ─────────────────────────────────────

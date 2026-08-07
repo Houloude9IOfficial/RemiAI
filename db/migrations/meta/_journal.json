@@ -148,6 +148,13 @@
       "when": 1786091230000,
       "tag": "0025_conversation_bash_mode",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1786100400000,
+      "tag": "0026_conversation_summary",
+      "breakpoints": true
     }
   ]
 }

@@ -92,6 +92,13 @@ export const conversations = sqliteTable("conversations", {
     .default("sandboxed"),
   totalInputTokens: integer("total_input_tokens").notNull().default(0),
   totalOutputTokens: integer("total_output_tokens").notNull().default(0),
+  // Rolling-conversation summary: a compact prose recap of the EARLIEST part
+  // of the conversation, generated in the background. Requests inject it into
+  // the system prompt and drop the summarized messages from the model payload
+  // (they still exist in the `messages` table for the UI and future edits).
+  summary: text("summary").notNull().default(""),
+  // Number of leading messages (by orderIndex) the summary covers.
+  summaryMessageCount: integer("summary_message_count").notNull().default(0),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });

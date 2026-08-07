@@ -14,7 +14,6 @@ import {
   conversations,
   providers,
   mcpServers,
-  memories,
   userPreferences,
 } from "@/db/schema";
 import { getLanguageModel } from "@/lib/providers/factory";
@@ -23,6 +22,7 @@ import {
   buildCachedInstructions,
   markLastToolForCache,
 } from "@/lib/chat/prompt-cache";
+import { retrieveRelevantMemories } from "@/lib/chat/memories";
 import { persistUIMessage } from "@/lib/chat/persist";
 import { buildFilesystemTools } from "@/lib/fs/tools";
 import { buildContextTools } from "@/lib/tools/context";
@@ -295,13 +295,11 @@ export async function executeTask(task: ScheduledTaskRow) {
     if (prefs?.interests) profileParts.push(`Interests: ${prefs.interests}`);
     if (prefs?.skills) profileParts.push(`Skills: ${prefs.skills}`);
 
-    const memoryRows = await db
-      .select()
-      .from(memories)
-      .orderBy(memories.createdAt)
-      .all();
-    const memoryTip = memoryRows.length > 0
-      ? `\n\nSaved memories:\n${memoryRows.map((m) => `- ${m.content}`).join("\n")}`
+    // Inject only the memories relevant to THIS task, capped to a hard token
+    // budget — the model can still search_memories for anything else.
+    const relevantMemories = await retrieveRelevantMemories(task.task);
+    const memoryTip = relevantMemories.length > 0
+      ? `\n\nSaved memories:\n${relevantMemories.map((m) => `- ${m.content}`).join("\n")}`
       : "";
 
     const recentChanges = await queryRecentChanges(10);
