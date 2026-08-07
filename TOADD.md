@@ -207,3 +207,5 @@ src/app
 <!-- make simply all tool calls with no text between them, to be grouped altogether, and show as one tool call, instead of showing each tool call as a separate one and bloating the UI. -->
 
 sometimes ai may return many followup tool runs, show only 1. and specify to not ask questions in followups e.g 'What do you want to do next?' or 'What should I do next?'.
+
+Optimize the app, 41k input tokens for a simple 'hi' is fully unacceptable, and it should be optimized to use way less. (it did use 3 tools but still unacceptable, and it should be optimized to use way less tokens for simple requests, and also for complex requests, it should be optimized to use way less tokens too.)

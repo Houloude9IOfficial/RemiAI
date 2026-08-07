@@ -35,6 +35,14 @@ import {
   shouldSummarize,
   SUMMARIZE_RECENT_KEEP,
 } from "@/lib/chat/summarizer";
+import {
+  buildLoadToolGroupsTool,
+  buildToolAvailabilityNote,
+  computeActiveToolGroups,
+  filterTools,
+  parseStoredToolState,
+  persistActiveToolGroups,
+} from "@/lib/chat/tool-groups";
 import { persistUIMessage } from "@/lib/chat/persist";
 import { autoTitleConversation } from "@/lib/chat/title-generator";
 import { createMcpToolsManager } from "@/lib/mcp/tools";
@@ -402,6 +410,31 @@ You are currently in **Plan mode**. This means:
     ? `\n\n## Saved memories\nThings you have remembered about the user across conversations, ranked by relevance to the current request. Use them to personalize responses.\n${relevantMemories.map((m) => `- ${m.content}`).join("\n")}`
     : "";
 
+  // ── Intent-based dynamic tool loading ─────────────────────────────
+  // Simple chats register only the CORE tool subset (~2-3k tokens instead of
+  // ~7k); heavier groups (exec, scheduling, session files, integrations…)
+  // load on demand via deterministic intent classification, recent tool
+  // usage, and the conversation's stored groups. The model can always enable
+  // more via load_tool_groups / list_available_tools.
+  const storedToolGroups = parseStoredToolState(conversation.toolGroups);
+  const activeToolGroups = computeActiveToolGroups({
+    userText: lastUserText,
+    // Keep groups alive that were used in the recent window (mid-project
+    // follow-ups like "make the button blue" must not lose session files).
+    recentMessages: uiMessages.slice(-10),
+    stored: storedToolGroups,
+  });
+  // `Record<string, any>` is how every other tool set in this app is typed
+  // (the AI SDK accepts these raw `{ description, parameters, execute }`
+  // objects, e.g. in lib/tools/*.ts) — it also keeps the load_tool_groups
+  // shape from breaking the ToolSet union.
+  const toolsForRequest: Record<string, any> = {
+    ...filterTools(tools, activeToolGroups),
+    // Escape hatch: lets the model enable an unloaded group for the NEXT
+    // message (tools are fixed for the current stream).
+    load_tool_groups: buildLoadToolGroupsTool(conversationId),
+  };
+
   // Inject recent file changes into the system prompt for freshness.
   // Capped to 5 — the model can call query_recent_changes for more.
   const recentChanges = await queryRecentChanges(5);
@@ -457,8 +490,13 @@ You are currently in **Plan mode**. This means:
       ? `\n\n## Earlier conversation (summarized)\nThe following summarizes the earlier part of this conversation. Use it for continuity — do not reference raw tool results you have not actually re-run.\n${conversationSummary}`
       : "";
 
+  // Note about which tool groups are loaded — only added when something was
+  // actually filtered out, so fully-loaded conversations pay zero overhead.
+  const toolAvailabilityNote = buildToolAvailabilityNote(tools, activeToolGroups);
+
   const dynamicSystemPrompt =
-    systemTip + profileTip + memoryTip + fileChangeTip + summarySection + planModePrompt;
+    systemTip + profileTip + memoryTip + fileChangeTip + summarySection +
+    planModePrompt + toolAvailabilityNote;
 
   const fullSystemPrompt = staticSystemPrompt + dynamicSystemPrompt;
 
@@ -560,8 +598,8 @@ You are currently in **Plan mode**. This means:
     ),
     messages: modelMessages,
     tools:
-      Object.keys(tools).length > 0
-        ? markLastToolForCache(provider, tools)
+      Object.keys(toolsForRequest).length > 0
+        ? markLastToolForCache(provider, toolsForRequest)
         : undefined,
     // Retry retryable provider failures (network, 5xx, rate limits) up to
     // 3 times with exponential backoff before surfacing the error.
@@ -669,6 +707,17 @@ You are currently in **Plan mode**. This means:
       } catch (err) {
         console.error("Failed to update token usage in onFinish:", err);
       }
+
+      // ── Persist active tool groups ────────────────────────────────
+      // Cheap, non-blocking UPDATE: explicit groups (load_tool_groups) stay
+      // forever; the request's own classifier∪recency set is stored as
+      // `recent` so short follow-ups ("yes", "do it") inherit the tools the
+      // conversation was using — and stale groups decay once a project ends.
+      void persistActiveToolGroups({
+        conversationId,
+        activeGroups: activeToolGroups,
+        stored: storedToolGroups,
+      });
 
       // ── Background rolling summary ─────────────────────────────────
       // When the conversation has grown far past the last summary, fire a

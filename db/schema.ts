@@ -99,6 +99,14 @@ export const conversations = sqliteTable("conversations", {
   summary: text("summary").notNull().default(""),
   // Number of leading messages (by orderIndex) the summary covers.
   summaryMessageCount: integer("summary_message_count").notNull().default(0),
+  // Active dynamic-tool-loading groups. `explicit` = groups enabled via the
+  // load_tool_groups tool (persistent); `recent` = the last request's own
+  // classifier+recency signal (self-decaying). Lets short follow-ups inherit
+  // the tools the conversation was just using.
+  toolGroups: text("tool_groups", { mode: "json" })
+    .$type<{ explicit: string[]; recent: string[] }>()
+    .notNull()
+    .default({ explicit: [], recent: [] }),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
