@@ -76,7 +76,7 @@ import { buildScheduleTool } from "@/lib/tools/schedule";
 import { buildToolHelpTool, buildListAvailableToolsTool } from "@/lib/tools/tool-help";
 import { userContextFromHeaders } from "@/lib/geo";
 import { queryRecentChanges } from "@/lib/fs/file-index";
-import { estimateTokenCount } from "@/lib/utils";
+import { estimateTokenCount, normaliseTool } from "@/lib/utils";
 import {
   extractImageAttachments,
   stripImageMarkdown,
@@ -481,7 +481,7 @@ You are currently in **Plan mode**. This means:
     stored: storedToolGroups,
   });
   // `Record<string, any>` is how every other tool set in this app is typed
-  // (the AI SDK accepts these raw `{ description, parameters, execute }`
+  // (the AI SDK accepts these raw `{ description, inputSchema, execute }`
   // objects, e.g. in lib/tools/*.ts) — it also keeps the load_tool_groups
   // shape from breaking the ToolSet union.
   const toolsForRequest: Record<string, any> = {
@@ -490,6 +490,17 @@ You are currently in **Plan mode**. This means:
     // message (tools are fixed for the current stream).
     load_tool_groups: buildLoadToolGroupsTool(conversationId),
   };
+
+  // AI SDK v7 requires `inputSchema` on every tool definition — some builders
+  // in this codebase still emit the legacy `parameters` key, which the SDK
+  // silently drops (the provider would get an EMPTY schema, so models guess
+  // parameter shapes and can pass e.g. a comma-separated string where an
+  // array is expected — the "groups.filter is not a function" crash — and
+  // tool call input would never be validated). Normalise once so every tool
+  // gets its real schema sent to the model and its input validated.
+  for (const [name, tool] of Object.entries(toolsForRequest)) {
+    toolsForRequest[name] = normaliseTool(tool);
+  }
 
   // Inject recent file changes into the system prompt for freshness.
   // Capped to 5 — the model can call query_recent_changes for more.

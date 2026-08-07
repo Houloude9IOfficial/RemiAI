@@ -114,6 +114,59 @@ const MAX_RESULT_CHARS = 50_000
  * Every truncated result gets `_truncated: true` and a `_note` field with a
  * human-readable explanation so the model understands data was omitted.
  */
+// ---------------------------------------------------------------------------
+// Tool argument normalisation
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalise a tool argument that is expected to be an array of strings into a
+ * clean, trimmed, deduped list.
+ *
+ * Models sometimes emit a comma-separated string (e.g. `"fs_write, fs_read"`)
+ * or omit the field instead of a proper array — and tool call input is not
+ * always validated before `execute` runs (raw tool objects bypass the SDK's
+ * inputSchema validation). Unknown shapes (numbers, objects, null) collapse to
+ * an empty list. Use this at the top of any `execute` that expects `string[]`
+ * so a malformed call can never crash the tool.
+ */
+export function asStringArray(value: unknown): string[] {
+  const raw: string[] =
+    typeof value === "string"
+      ? value.split(",")
+      : Array.isArray(value)
+        ? value
+        : [];
+  return [...new Set(raw.map((s) => s.trim()).filter(Boolean))];
+}
+
+// ---------------------------------------------------------------------------
+// Tool schema normalisation (AI SDK v7)
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalise a tool object so it always exposes the AI SDK v7 `inputSchema`
+ * property.
+ *
+ * Several tool builders in this codebase still emit the legacy `parameters`
+ * key. The AI SDK v7 silently IGNORES `parameters` — the provider receives
+ * an empty `{}` schema (so the model has to guess parameter shapes and may
+ * pass e.g. a comma-separated string where an array is expected) and tool
+ * call input is never validated before `execute` runs (malformed args can
+ * crash inside a tool, e.g. "groups.filter is not a function").
+ *
+ * Apply this to every tool set handed to `streamText` / `generateText` so
+ * each tool gets its real schema sent to the model AND input validation back.
+ */
+export function normaliseTool<T extends Record<string, unknown>>(tool: T): T {
+  if (tool.inputSchema) return tool;
+  if (tool.parameters) {
+    // Drop the legacy key so the object only carries the SDK v7 property.
+    const { parameters, ...rest } = tool;
+    return { ...rest, inputSchema: parameters } as unknown as T;
+  }
+  return tool;
+}
+
 export function truncateToolResult(
   data: unknown,
   maxChars: number = MAX_RESULT_CHARS,

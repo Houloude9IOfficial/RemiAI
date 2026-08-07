@@ -27,6 +27,7 @@ import {
   mergeDeltaMessages,
   MAX_DELTA_MESSAGES,
 } from "../lib/chat/history-reconstruction";
+import { asStringArray, normaliseTool } from "../lib/utils";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -375,6 +376,59 @@ async function main() {
     );
     assert.equal((await db.select().from(schema.messages).all()).length, 1);
   });
+
+  // ── Tool arg normalisation (load_tool_groups "groups.filter is not a
+  //    function" regression) ──────────────────────────────────────────
+
+  console.log("\nasStringArray (tool arg normalisation)");
+  {
+    ok("accepts a proper array and trims/dedupes", () => {
+      assert.deepEqual(
+        asStringArray([" fs_write ", "fs_read", "fs_write"]),
+        ["fs_write", "fs_read"],
+      );
+    });
+
+    // The exact failure from the wild: the model passed a comma-separated
+    // STRING, and `groups.filter(...)` in load_tool_groups' execute threw
+    // "groups.filter is not a function". A string must never reach execute
+    // as-is — it is split into a usable list.
+    ok("splits a comma-separated string (the reported crash input)", () => {
+      assert.deepEqual(
+        asStringArray("fs_write, fs_read"),
+        ["fs_write", "fs_read"],
+      );
+      assert.deepEqual(asStringArray("fs_write"), ["fs_write"]);
+      assert.deepEqual(asStringArray("  fs_write , , fs_read "), [
+        "fs_write",
+        "fs_read",
+      ]);
+    });
+
+    ok("missing / non-string, non-array input collapses to []", () => {
+      assert.deepEqual(asStringArray(undefined), []);
+      assert.deepEqual(asStringArray(null), []);
+      assert.deepEqual(asStringArray(42), []);
+      assert.deepEqual(asStringArray({ groups: "fs_write" }), []);
+    });
+  }
+
+  console.log("\nnormaliseTool (SDK v7 inputSchema)");
+  {
+    ok("maps the legacy `parameters` key to `inputSchema`", () => {
+      const schemaObj = { type: "object" };
+      const legacy = { description: "x", parameters: schemaObj, execute: () => "y" };
+      const upgraded = normaliseTool(legacy) as Record<string, unknown>;
+      assert.equal(upgraded.inputSchema, schemaObj);
+      assert.equal(upgraded.parameters, undefined);
+      assert.equal(upgraded.execute, legacy.execute);
+    });
+
+    ok("leaves SDK v7 tools (inputSchema) untouched", () => {
+      const v7 = { description: "x", inputSchema: { type: "object" }, execute: () => "y" };
+      assert.equal(normaliseTool(v7), v7);
+    });
+  }
 
   // ── Const sanity ─────────────────────────────────────────────────────
 

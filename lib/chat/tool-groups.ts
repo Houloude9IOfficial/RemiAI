@@ -2,6 +2,7 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { conversations } from "@/db/schema";
+import { asStringArray } from "@/lib/utils";
 
 /**
  * Intent-based dynamic tool loading.
@@ -470,22 +471,29 @@ export function buildToolAvailabilityNote(
  */
 export function buildLoadToolGroupsTool(conversationId: number): {
   description: string;
-  parameters: z.ZodType;
-  execute: (args: { groups: string[] }) => Promise<string>;
+  // AI SDK v7 property (the legacy `parameters` key is silently ignored —
+  // the model would get an empty schema and input would never be validated).
+  inputSchema: z.ZodType;
+  execute: (args: { groups?: string[] | string }) => Promise<string>;
 } {
   return {
     description:
       `Enable tool groups that are currently unloaded so they become available in the NEXT message. ` +
       `Valid groups: ${CONDITIONAL_GROUP_IDS.join(", ")}. ` +
       `Call list_available_tools first to confirm a tool exists, then call this, then tell the user to repeat their request.`,
-    parameters: z.object({
+    inputSchema: z.object({
       groups: z
         .array(z.string().min(1))
         .min(1)
         .describe(`Tool group ids to enable: ${CONDITIONAL_GROUP_IDS.join(", ")}`),
     }),
-    execute: async ({ groups }: { groups: string[] }) => {
-      const valid = groups.filter((g) => CONDITIONAL_GROUPS[g]);
+    execute: async ({ groups }: { groups?: string[] | string }) => {
+      // Defensive normalisation: tool args are not always validated before
+      // `execute` runs, and models sometimes pass a comma-separated string
+      // ("fs_write, fs_read") or omit the field instead of a proper array.
+      // Normalise any shape so this never throws (e.g. the old
+      // "groups.filter is not a function" crash).
+      const valid = asStringArray(groups).filter((g) => CONDITIONAL_GROUPS[g]);
       if (valid.length === 0) {
         return `No valid tool groups in request. Valid groups: ${CONDITIONAL_GROUP_IDS.join(", ")}.`;
       }

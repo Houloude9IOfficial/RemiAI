@@ -787,8 +787,11 @@ export function ChatInput({
                     onClick={toggleBashMode}
                     disabled={disabled || isStreaming}
                     className={cn(
-                      "ml-1 rounded-full border px-2 text-[11px] font-medium transition-colors",
-                      large ? "h-8" : "h-7",
+                      // Height matches the mode selector pill exactly: the plan
+                      // pill is button h-7/h-8 + p-0.5 (4px), so this needs
+                      // h-8/h-9 to line up at 32px / 36px.
+                      "ml-1 flex items-center rounded-full border px-2 font-medium transition-colors",
+                      large ? "h-9 text-xs" : "h-8 text-[11px]",
                       bashMode === "full" ? "border-status-warning/50 bg-status-warning/10 text-status-warning" : "border-border/50 text-muted-foreground hover:text-foreground",
                       (disabled || isStreaming) && "pointer-events-none opacity-40",
                     )}

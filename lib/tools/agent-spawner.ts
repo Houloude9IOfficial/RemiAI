@@ -13,7 +13,7 @@ import { buildDocumentReaderTools } from "@/lib/tools/document-reader";
 import { delayTool } from "@/lib/tools/delay";
 import { webFetchTool } from "@/lib/tools/web-fetch";
 import { buildTodoTools } from "@/lib/tools/todo";
-import { truncateToolResult, estimateTokenCount } from "@/lib/utils";
+import { truncateToolResult, estimateTokenCount, normaliseTool } from "@/lib/utils";
 import type { UserContext } from "@/lib/geo";
 
 // ---------------------------------------------------------------------------
@@ -212,21 +212,6 @@ You have access to filesystem tools (for reading files), web_fetch (for reading 
 // ---------------------------------------------------------------------------
 // Build tools for sub-agents
 // ---------------------------------------------------------------------------
-
-/**
- * Normalise a tool object so it always has an `inputSchema` property.
- * Some tools in the codebase use `parameters` instead of `inputSchema`
- * (the Vercel AI SDK v7 property). The main chat route works either way
- * because tools are spread into a loosely-typed Record, but in a nested
- * streamText context the SDK expects `inputSchema` to be present.
- */
-function normaliseTool(tool: any): any {
-  if (tool.inputSchema) return tool;
-  if (tool.parameters) {
-    return { ...tool, inputSchema: tool.parameters };
-  }
-  return tool;
-}
 
 async function buildAgentTools(
   userContext?: UserContext,

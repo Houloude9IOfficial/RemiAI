@@ -41,7 +41,7 @@ import { buildScheduleTool } from "@/lib/tools/schedule";
 import { buildToolHelpTool, buildListAvailableToolsTool } from "@/lib/tools/tool-help";
 import { createMcpToolsManager } from "@/lib/mcp/tools";
 import { queryRecentChanges } from "@/lib/fs/file-index";
-import { estimateTokenCount } from "@/lib/utils";
+import { estimateTokenCount, normaliseTool } from "@/lib/utils";
 import { computeNextCronTime } from "./cron";
 
 // ─── Types ──────────────────────────────────────────────────────────────
@@ -252,7 +252,7 @@ export async function executeTask(task: ScheduledTaskRow) {
         buildScheduleTool(task.conversationId),
       ]);
 
-    const tools = {
+    const rawTools = {
       ...mcpToolSet,
       ...fsToolSet,
       ...contextToolSet,
@@ -271,6 +271,11 @@ export async function executeTask(task: ScheduledTaskRow) {
       ...buildToolHelpTool(),
       ...buildListAvailableToolsTool(),
     };
+    // AI SDK v7 requires `inputSchema` — normalise the legacy `parameters`
+    // key so scheduled-task runs get real tool schemas + input validation.
+    const tools = Object.fromEntries(
+      Object.entries(rawTools).map(([name, tool]) => [name, normaliseTool(tool)]),
+    );
 
     const toolNames = Object.keys(tools);
     console.log(`[scheduler] Task #${task.id} has ${toolNames.length} tool(s): ${toolNames.join(", ")}`);
