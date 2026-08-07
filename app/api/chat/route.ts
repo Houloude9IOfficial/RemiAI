@@ -22,6 +22,10 @@ import {
 import { getLanguageModel } from "@/lib/providers/factory";
 import { SYSTEM_PROMPT_BASE, CREATE_VISUAL_SECTION, SESSION_FILES_SECTION } from "@/lib/chat/system-prompt";
 import { PERSISTENCE_GUIDANCE } from "@/lib/chat/persistence-guidance";
+import {
+  buildCachedInstructions,
+  markLastToolForCache,
+} from "@/lib/chat/prompt-cache";
 import { persistUIMessage } from "@/lib/chat/persist";
 import { autoTitleConversation } from "@/lib/chat/title-generator";
 import { createMcpToolsManager } from "@/lib/mcp/tools";
@@ -484,16 +488,22 @@ You are currently in **Plan mode**. This means:
   // Conditionally include create-visual instructions based on tool toggle
   const visualSection = createVisualEnabled ? CREATE_VISUAL_SECTION : '';
 
-  const fullSystemPrompt =
-    (isLowCapability
-      ? SYSTEM_PROMPT_BASE + visualSection + SESSION_FILES_SECTION + PERSISTENCE_GUIDANCE +
-        `\n\n**CRITICAL: Keep responses very short and focused.** Use the simplest tool for each task. If unsure about a tool, call \`get_tool_help\`. Avoid multi-step planning unless the task truly requires it.`
-      : SYSTEM_PROMPT_BASE + visualSection + SESSION_FILES_SECTION + PERSISTENCE_GUIDANCE) +
-    systemTip +
-    profileTip +
-    memoryTip +
-    fileChangeTip +
-    planModePrompt;
+  // ── System prompt split for provider prompt caching ──────────────────
+  // The STATIC part (base prompt + tool guidance) is byte-identical on every
+  // request and every agentic step, so Anthropic marks it with a
+  // cache_control breakpoint and reads it from cache instead of re-billing
+  // it. The DYNAMIC part (prefs, profile, memories, recent file changes,
+  // plan mode) changes between requests and is placed AFTER the breakpoint
+  // so it never invalidates the cached prefix. buildCachedInstructions
+  // returns a plain string for providers without explicit caching.
+  const staticSystemPrompt = isLowCapability
+    ? SYSTEM_PROMPT_BASE + visualSection + SESSION_FILES_SECTION + PERSISTENCE_GUIDANCE +
+      `\n\n**CRITICAL: Keep responses very short and focused.** Use the simplest tool for each task. If unsure about a tool, call \`get_tool_help\`. Avoid multi-step planning unless the task truly requires it.`
+    : SYSTEM_PROMPT_BASE + visualSection + SESSION_FILES_SECTION + PERSISTENCE_GUIDANCE;
+  const dynamicSystemPrompt =
+    systemTip + profileTip + memoryTip + fileChangeTip + planModePrompt;
+
+  const fullSystemPrompt = staticSystemPrompt + dynamicSystemPrompt;
 
   // Compress the message history before sending it to the model.
   // Tool outputs from OLD turns (e.g. a read_file that returned 50k chars)
@@ -584,9 +594,16 @@ You are currently in **Plan mode**. This means:
 
   const result = streamText({
     model,
-    system: fullSystemPrompt,
+    instructions: buildCachedInstructions(
+      provider,
+      staticSystemPrompt,
+      dynamicSystemPrompt,
+    ),
     messages: modelMessages,
-    tools: Object.keys(tools).length > 0 ? tools : undefined,
+    tools:
+      Object.keys(tools).length > 0
+        ? markLastToolForCache(provider, tools)
+        : undefined,
     // Retry retryable provider failures (network, 5xx, rate limits) up to
     // 3 times with exponential backoff before surfacing the error.
     maxRetries: 3,

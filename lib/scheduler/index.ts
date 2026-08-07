@@ -19,6 +19,10 @@ import {
 } from "@/db/schema";
 import { getLanguageModel } from "@/lib/providers/factory";
 import { SYSTEM_PROMPT } from "@/lib/chat/system-prompt";
+import {
+  buildCachedInstructions,
+  markLastToolForCache,
+} from "@/lib/chat/prompt-cache";
 import { persistUIMessage } from "@/lib/chat/persist";
 import { buildFilesystemTools } from "@/lib/fs/tools";
 import { buildContextTools } from "@/lib/tools/context";
@@ -323,25 +327,37 @@ You have FULL access to all the same tools as a normal conversation. Use them to
 
 After completing the task, the user will receive a desktop notification with your response. Make sure your answer is complete, well-formatted, and includes all relevant information.`;
 
-    const fullSystemPrompt =
-      SYSTEM_PROMPT +
+    // Split the system prompt into a STATIC part (cached via provider prompt
+    // caching — identical on every run) and a DYNAMIC part (prefs, profile,
+    // memories, file changes, the task itself) that changes per task and must
+    // sit AFTER the cache breakpoint so it never invalidates the prefix.
+    const staticSystemPrompt = SYSTEM_PROMPT;
+    const dynamicSystemPrompt =
       (prefParts.length > 0 ? `\n\n## User preferences\n${prefParts.join("\n")}` : "") +
       (profileParts.length > 0 ? `\n\n## User profile\n${profileParts.map((p) => `- ${p}`).join("\n")}` : "") +
       memoryTip +
       fileChangeTip +
       scheduledTaskPrefix;
+    const fullSystemPrompt = staticSystemPrompt + dynamicSystemPrompt;
 
     // ── Generate AI response ──
     const result = await generateText({
       model,
-      system: fullSystemPrompt,
+      instructions: buildCachedInstructions(
+        provider,
+        staticSystemPrompt,
+        dynamicSystemPrompt,
+      ),
       messages: [
         {
           role: "user",
           content: `⏰ Scheduled task due: ${task.task}`,
         },
       ],
-      tools: Object.keys(tools).length > 0 ? tools : undefined,
+      tools:
+        Object.keys(tools).length > 0
+          ? markLastToolForCache(provider, tools)
+          : undefined,
       stopWhen: stepCountIs(50), // Allow multi-step tool-calling chains
       // Retry retryable provider failures up to 3 times before erroring out.
       maxRetries: 3,

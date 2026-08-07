@@ -4,6 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { providers, agentTasks, conversations } from "@/db/schema";
 import { getLanguageModel } from "@/lib/providers/factory";
+import { markLastToolForCache } from "@/lib/chat/prompt-cache";
 import { buildFilesystemTools } from "@/lib/fs/tools";
 import { buildMemoryTools } from "@/lib/tools/memories";
 import { buildIntegrationTools } from "@/lib/tools/integrations";
@@ -316,7 +317,10 @@ async function runAgent(
     model,
     system: systemPrompt,
     messages: [{ role: "user", content: task }],
-    tools: agentTools,
+    // Mark the last tool with an Anthropic cache_control breakpoint so the
+    // full tool-definitions prefix is cached across steps (sub-agent system
+    // prompts are short, so only the tools are worth caching here).
+    tools: markLastToolForCache(chainContext?.provider, agentTools),
     // Retry retryable provider failures up to 3 times before erroring out.
     maxRetries: 3,
   });
