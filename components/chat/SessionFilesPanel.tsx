@@ -308,7 +308,7 @@ export function SessionFilesPanel({
 
 const PANEL_MIN_WIDTH = 280;
 const PANEL_MAX_WIDTH = 640;
-const PANEL_DEFAULT_WIDTH = 384;
+const PANEL_DEFAULT_WIDTH = 450;
 const PANEL_WIDTH_KEY = "session-files-panel-width";
 const PANEL_RESIZE_STEP = 16;
 

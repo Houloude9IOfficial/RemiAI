@@ -570,8 +570,8 @@ function buildTimeoutNote(timeoutMs: number): string {
 export function buildBashExecuteTool(mode: "sandboxed" | "full") {
   return {
     description: mode === "sandboxed"
-      ? "Run a Bash command in the session's permitted project directory (relative paths only; commands leaving the project tree are rejected). Default timeout: 30s, max: 120s. On timeout the command is terminated and partial output is returned."
-      : "Run a Bash command with full device access (explicitly enabled by the user for this session). Use only for work the user requested. Default timeout: 30s, max: 120s. On timeout the command is terminated and partial output is returned.",
+      ? "Run a shell COMMAND (e.g. build, test, start a server, check a process, install a package) in the session's permitted project directory (relative paths only; commands leaving the project tree are rejected). ⚠️ Commands ONLY — do NOT create, edit, or delete files/folders with this tool; use write_file/edit_file/session_file_write for that. Default timeout: 30s, max: 120s. On timeout the command is terminated and partial output is returned."
+      : "Run a shell COMMAND with full device access (e.g. build, test, start a server, check a process, install a package; explicitly enabled by the user for this session). ⚠️ Commands ONLY — do NOT create, edit, or delete files/folders with this tool; use write_file/edit_file/session_file_write for that. Use only for work the user requested. Default timeout: 30s, max: 120s. On timeout the command is terminated and partial output is returned.",
     parameters: z.object({
       command: z.string().min(1).describe("Bash command to execute"),
       timeout: z

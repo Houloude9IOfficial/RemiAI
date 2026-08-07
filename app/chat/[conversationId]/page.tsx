@@ -28,6 +28,7 @@ import { useStreamingContext } from "@/lib/chat/streaming-context";
 import { useSidebar } from "@/components/sidebar/SidebarContext";
 import {
   SESSION_FILES_PRESENT_EVENT,
+  dispatchSessionFilesPresent,
   type SessionFilesPresentDetail,
 } from "@/lib/api/session-files";
 import { cn } from "@/lib/utils";
@@ -37,6 +38,67 @@ import { userContextHeaders } from "@/lib/chat/user-context";
 // If the conversation fetch takes longer than this, abort it and surface an
 // error instead of leaving the user staring at an endless loading skeleton.
 const FETCH_TIMEOUT_MS = 12_000;
+
+// ── Session-file auto-present helpers ───────────────────────────────
+// The AI is instructed to present files it creates (session_present_file /
+// session_present_files), but smaller models occasionally forget. These
+// helpers provide a client-side fallback: when a finished assistant message
+// created/edited exactly ONE session file and never presented it, we open
+// the panel straight to that file so the user always sees the result.
+
+/**
+ * Extract session-file activity from an assistant message's tool parts:
+ * the distinct file paths touched by `session_file_write`/`session_file_edit`,
+ * and whether the AI already presented files (`session_present_*`).
+ * Handles both AI SDK v7 parts (`tool-<name>`) and legacy tool-invocation
+ * parts, and never throws on malformed shapes.
+ */
+function sessionFilesTouchedByMessage(message: { parts: unknown[] }): {
+  paths: Set<string>;
+  presented: boolean;
+} {
+  const paths = new Set<string>();
+  let presented = false;
+
+  const absorbOutput = (toolName: unknown, output: unknown) => {
+    if (toolName === "session_present_file" || toolName === "session_present_files") {
+      presented = true;
+      return;
+    }
+    if (
+      (toolName === "session_file_write" || toolName === "session_file_edit") &&
+      output &&
+      typeof output === "object"
+    ) {
+      const p = (output as Record<string, unknown>).path;
+      if (typeof p === "string" && p) paths.add(p);
+    }
+  };
+
+  for (const rawPart of message.parts ?? []) {
+    // Defensive: skip null/primitive parts — never throw on malformed shapes.
+    if (!rawPart || typeof rawPart !== "object") continue;
+    const part = rawPart as Record<string, unknown>;
+    // AI SDK v7: type is `tool-<name>`
+    if (
+      typeof part.type === "string" &&
+      part.type.startsWith("tool-") &&
+      part.type !== "tool-invocation" &&
+      part.toolCallId !== undefined
+    ) {
+      absorbOutput(part.type.slice("tool-".length), part.output);
+      continue;
+    }
+    // Legacy: `tool-invocation` with `toolInvocation`
+    if (part.type === "tool-invocation") {
+      const inv = (part.toolInvocation ?? {}) as Record<string, unknown>;
+      const output = inv.output ?? inv.result;
+      absorbOutput(inv.toolName, output);
+    }
+  }
+
+  return { paths, presented };
+}
 
 // ── Reconnecting Banner ─────────────────────────────────────────────
 
@@ -370,7 +432,20 @@ function ConversationChat({
         },
       }),
     }),
-    onFinish: () => {
+    onFinish: ({
+      messages: finishedMessages,
+      isAbort,
+      isError,
+      isDisconnect,
+    }) => {
+      // Fallback presentation: the AI is instructed to present session files
+      // it creates (session_present_file / session_present_files), but if a
+      // finished message created/edited exactly ONE session file and never
+      // presented it, open the panel straight to that file so the user always
+      // sees the result. Skip aborted/failed runs.
+      if (!isAbort && !isError && !isDisconnect) {
+        maybeAutoPresentSingleSessionFile(finishedMessages);
+      }
       // Small delay to ensure server-side token update completes
       // before the sidebar refetches the conversation list.
       setTimeout(() => onConversationChanged(), 500);
@@ -627,6 +702,38 @@ function ConversationChat({
     setPanelOpen(false);
     setPanelFocusPath(null);
   }, []);
+
+  // Fallback auto-present: when a finished assistant message created/edited
+  // exactly ONE session file and the AI never called session_present_file /
+  // session_present_files, open the panel straight to that file. This backs
+  // up the prompt guidance (which asks the model to present) for models that
+  // occasionally forget. Tracked by message id so it only fires once per
+  // message and never re-opens the panel for an already-presented one.
+  const autoPresentedMessageRef = useRef<string | null>(null);
+  const maybeAutoPresentSingleSessionFile = useCallback(
+    (finishedMessages: Array<{ id?: string; role?: string; parts: unknown[] }>) => {
+      const lastAssistant = [...finishedMessages]
+        .reverse()
+        .find((m) => m.role === "assistant");
+      if (!lastAssistant) return;
+      if (lastAssistant.id && autoPresentedMessageRef.current === lastAssistant.id) {
+        return;
+      }
+      const { paths, presented } = sessionFilesTouchedByMessage(lastAssistant);
+      // Only the single-file case: the user asked for the panel to open when
+      // exactly one file was created. Multi-file runs rely on the AI calling
+      // session_present_files (or the user opening the panel manually).
+      if (presented || paths.size !== 1) return;
+      const onlyPath = [...paths][0];
+      if (!onlyPath) return;
+      if (lastAssistant.id) autoPresentedMessageRef.current = lastAssistant.id;
+      // Small delay so the streaming UI settles before the panel opens.
+      setTimeout(() => {
+        dispatchSessionFilesPresent({ focusPath: onlyPath });
+      }, 450);
+    },
+    [],
+  );
 
   const filesToggle = (
     <button

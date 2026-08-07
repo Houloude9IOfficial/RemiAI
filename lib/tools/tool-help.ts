@@ -398,6 +398,13 @@ context7_get_docs({ library: "react", query: "useActionState" })
 | \`js_exec\` | \`code\`, \`timeout\` (optional, default 15s, max 60s) | Execute JavaScript in a sandboxed Node.js VM. Supports console.log, await. No fs/network/timers access. |
 | \`bash_execute\` | \`command\`, \`timeout\` (optional, default 30s, max 120s) | Run a Bash command in the session's permitted project directory (sandboxed) or with full device access (full mode). Returns stdout, stderr, exit code. |
 
+### ⚠️ bash_execute is for COMMANDS ONLY
+Never use \`bash_execute\` to create, edit, or delete files or folders. Use the dedicated file tools instead:
+- **Session files** (\`session_file_write\`, \`session_file_edit\`, \`session_file_delete\`) for drafts and chat-scoped deliverables.
+- **Permitted-directory tools** (\`write_file\`, \`edit_file\`, \`create_directory\`, \`delete_directory\`, \`rename_item\`) for real projects.
+
+Use \`bash_execute\` only for actual commands: running/testing code, starting servers or builds, checking processes, installing packages, inspecting the system.
+
 ### Timeouts
 All three tools accept a \`timeout\` parameter (ms). If a command exceeds it, the process tree is terminated and the partial console output captured up to that point is returned with \`timedOut: true\`.
 
@@ -647,6 +654,9 @@ Every sandbox file has a canonical URL: **\`/api/chat/{conversationId}/session-f
 1. \`session_file_write({ path: "index.html", content: "..." })\` — repeat for each file (styles.css, app.js, ...).
 2. \`session_present_files({ message: "Your website is ready!" })\` — opens the panel with a Download .zip button.
 
+### ⚠️ Always present files you create
+After writing or editing session files, **always** call \`session_present_file\` (single file — opens the panel straight to it) or \`session_present_files\` (multiple). Never finish a reply that created files without presenting them.
+
 ### Rules
 - Always use **forward slashes** (/) in paths.
 - **User uploads**: Files the user attaches to chat messages are stored here under an \`uploads/\` folder \u2014 list/read them like any other session file.
@@ -723,6 +733,8 @@ const KEYWORD_SYNONYMS: Record<string, string> = {
   javascript: "code-execution",
   js: "code-execution",
   pytest: "code-execution",
+  bash: "code-execution",
+  shell: "code-execution",
   pdf: "document-reader",
   docx: "document-reader",
   document: "document-reader",

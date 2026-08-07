@@ -234,7 +234,7 @@ export function buildSessionFileTools(
       },
     },
     session_file_write: {
-      description: `Write content to a file in the session sandbox (e.g. building a website, writing scripts, drafting documents). Creates parent folders automatically. Use forward slashes (/) in 'path'. Overwrites by default; use mode='append' to append. After writing files, call session_present_files so the user can see/download them.`,
+      description: `Write content to a file in the session sandbox (e.g. building a website, writing scripts, drafting documents). Creates parent folders automatically. Use forward slashes (/) in 'path'. Overwrites by default; use mode='append' to append. ⚠️ After you finish writing files, you MUST present them: call session_present_file for a single file, or session_present_files for multiple — otherwise the user never sees them.`,
       parameters: sessionFileWriteSchema,
       execute: async ({
         path: relPath,
@@ -261,7 +261,7 @@ export function buildSessionFileTools(
       },
     },
     session_file_edit: {
-      description: `Edit a session file without rewriting it. old_str must match exactly once; if it matches 0 or multiple times the result returns current content to retry with a more specific anchor. Empty new_str deletes text.`,
+      description: `Edit a session file without rewriting it. old_str must match exactly once; if it matches 0 or multiple times the result returns current content to retry with a more specific anchor. Empty new_str deletes text. ⚠️ After your edits are final, present the file: session_present_file for a single file, or session_present_files for multiple.`,
       parameters: sessionFileEditSchema,
       execute: async ({ path: relPath, old_str, new_str }: { path: string; old_str: string; new_str: string }) => {
         const result = await editSessionFile(conversationId, relPath, old_str, new_str);
