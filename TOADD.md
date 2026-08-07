@@ -117,17 +117,17 @@ Make file manager render media too, audio, video, images, etc... -->
 
 searching should use if possible user's location/region to get more relevant results. -->
 
-when writing a file in a non existent folder, it should create the folder and then write the file (but note in result that it created new folder). Fix this.
+<!-- when writing a file in a non existent folder, it should create the folder and then write the file (but note in result that it created new folder). Fix this. -->
 
-tell the ai for big projects to use permitted dirs if possible and avoid session files, and if it needs to use session files, to use them only for temporary stuff and not for important files.
+<!-- tell the ai for big projects to use permitted dirs if possible and avoid session files, and if it needs to use session files, to use them only for temporary stuff and not for important files. -->
 
-after answering questions in plan mode, set mode to goal.
+<!-- after answering questions in plan mode, set mode to goal.
 
-add checkboxes to question tools and allow more flexibility in the questions, such as allowing multiple answers, and allow to add more than 7 questions.
+add checkboxes to question tools and allow more flexibility in the questions, such as allowing multiple answers, and allow to add more than 7 questions. -->
 
-allow editing session files & permitted dirs files with changing lines, no need to rewrite the whole file, and allow to add new lines, and also allow to delete lines.
+<!-- allow editing session files & permitted dirs files with changing lines, no need to rewrite the whole file, and allow to add new lines, and also allow to delete lines. -->
 
-allow running bash cmds fully, add in code execution tool.
+<!-- allow running bash cmds fully, add in code execution tool.
 
 when activelly having todo tasks, when managing files/folders (CRUD) combine the tools in one group as thinking, so it wont show hundreds of tools in a row. example of bad: 
 `Created directory
@@ -198,12 +198,12 @@ Worked for 100ms
 1 file
 1 file changed
 src/app
-`
+` -->
 
-make writing files/folders to permitted dirs easier, AI models often have issues with selecting parent folders, and it should be easier to select the parent folder, and also allow to create new folders if needed.
+<!-- make writing files/folders to permitted dirs easier, AI models often have issues with selecting parent folders, and it should be easier to select the parent folder, and also allow to create new folders if needed. -->
 
-Make questions tool more modern, asthetically pleasing and show in bottom of message
+<!-- Make questions tool more modern, asthetically pleasing and show in bottom of message -->
 
-make simply all tool calls with no text between them, to be grouped altogether, and show as one tool call, instead of showing each tool call as a separate one and bloating the UI.
+<!-- make simply all tool calls with no text between them, to be grouped altogether, and show as one tool call, instead of showing each tool call as a separate one and bloating the UI. -->
 
 sometimes ai may return many followup tool runs, show only 1. and specify to not ask questions in followups e.g 'What do you want to do next?' or 'What should I do next?'.

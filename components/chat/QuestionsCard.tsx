@@ -205,13 +205,13 @@ function QuestionsForm({ data }: { data: QuestionsData }) {
               return (
                 <div
                   key={q.id}
-                  className="rounded-lg border border-border/30 bg-muted/20 p-3.5 transition-all duration-200"
+                  className="rounded-lg p-3.5 transition-all duration-200"
                 >
                   {/* Question text */}
                   <div className="mb-2.5 flex items-start gap-2">
-                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted-foreground/10 text-[10px] font-bold text-muted-foreground">
+                    {/* <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[12px] font-bold text-muted-foreground">
                       {idx + 1}
-                    </span>
+                    </span> */}
                     <p className="text-sm font-medium leading-snug">
                       {q.question}
                     </p>

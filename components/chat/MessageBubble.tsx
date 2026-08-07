@@ -316,7 +316,7 @@ type Segment =
  * render between the groups.
  */
 const SHORT_FILLER_MAX_CHARS = 150;
-const SHORT_FILLER_MAX_WORDS = 14;
+const SHORT_FILLER_MAX_WORDS = 24;
 
 function isShortFiller(text: string): boolean {
   const trimmed = text.trim();
