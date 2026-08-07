@@ -57,23 +57,19 @@ async function readUpload(url: string, maxChars: number) {
  */
 export const webFetchTool = {
   description:
-    "Fetch a specific URL and return its content as text. Use this to read web pages, REST APIs, raw text files, or any publicly accessible URL directly. Also supports local chat file URLs — `/api/chat/uploads/123/filename.txt` (user uploads) and `/api/chat/{conversationId}/session-files/{path}` (session sandbox files) — these are read directly from disk. Returns the status code, content type, and body content.",
+    "Fetch a URL (web page, REST API, raw text) and return its content as text. Also reads local chat/session file URLs directly from disk. Returns status code, content type, and body.",
   inputSchema: z.object({
     url: z
       .string()
       .min(1)
-      .describe(
-        "The URL to fetch. Can be a full URL (https://...), a chat upload URL (/api/chat/uploads/...), or a session-file URL (/api/chat/{conversationId}/session-files/{path}).",
-      ),
+      .describe("Full URL (https://...), chat upload URL, or session-file URL"),
     maxChars: z
       .number()
       .int()
       .positive()
       .max(100_000)
       .default(20_000)
-      .describe(
-        "Maximum characters of body content to return (default: 20,000, max: 100,000). Content beyond this limit is truncated.",
-      ),
+      .describe("Max chars of body to return (default: 20,000, max: 100,000); beyond this is truncated"),
   }),
   execute: async ({
     url,

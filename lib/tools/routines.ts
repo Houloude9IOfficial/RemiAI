@@ -57,15 +57,7 @@ async function getLastLog(
  * (manually by the AI or from the settings panel).
  */
 export const createRoutineTool = {
-  description: `Create a new routine — a named JavaScript script that can be saved to the routine library and run later. Routines persist across conversations and can be run on demand.
-
-The code runs in an isolated sandbox with console.log() for output and top-level await support.
-
-Use this to:
-- Create reusable automation scripts (e.g. "check_uptime" that fetches a URL)
-- Save useful scripts for later use
-
-After creating a routine, the user can view and run it in Settings > Routines.`,
+  description: `Create a named JavaScript routine saved to the routine library for later on-demand runs (persists across conversations). Runs in an isolated sandbox with console.log() output and top-level await. The user can also view/run it in Settings > Routines.`,
 
   parameters: z.object({
     name: z
@@ -73,21 +65,17 @@ After creating a routine, the user can view and run it in Settings > Routines.`,
       .min(1)
       .max(100)
       .regex(/^[a-z0-9_-]+$/, "Name must be kebab-case (lowercase, numbers, hyphens, underscores)")
-      .describe(
-        "Unique name for the routine in kebab-case (e.g. 'check_uptime', 'deploy_staging').",
-      ),
+      .describe("Unique kebab-case name (e.g. 'check_uptime', 'deploy_staging')"),
     description: z
       .string()
       .max(500)
       .optional()
       .default("")
-      .describe("Human-readable description of what this routine does."),
+      .describe("Human-readable description of what the routine does"),
     code: z
       .string()
       .min(1)
-      .describe(
-        "JavaScript code to execute. Use console.log() for output. Top-level await is supported.",
-      ),
+      .describe("JavaScript code; console.log() for output; top-level await supported"),
   }),
 
   execute: async ({
@@ -144,15 +132,13 @@ After creating a routine, the user can view and run it in Settings > Routines.`,
  * Run a routine by name immediately and get its output.
  */
 export const runRoutineTool = {
-  description: `Execute a saved routine by its name and return the result. Use this to run automation scripts that were previously created with create_routine.
-
-The routine runs in an isolated sandbox. Returns stdout, stderr, exit code, and duration.`,
+  description: `Execute a saved routine by name and return its result (stdout, stderr, exit code, duration).`,
 
   parameters: z.object({
     name: z
       .string()
       .min(1)
-      .describe("The name of the routine to run (e.g. 'check_uptime')."),
+      .describe("Name of the routine to run (e.g. 'check_uptime')"),
     timeout: z
       .number()
       .int()
@@ -160,7 +146,7 @@ The routine runs in an isolated sandbox. Returns stdout, stderr, exit code, and 
       .max(120_000)
       .optional()
       .default(30_000)
-      .describe("Timeout in milliseconds (default: 30s, max: 120s)."),
+      .describe("Timeout in ms (default: 30s, max: 120s)"),
   }),
 
   execute: async ({
@@ -201,9 +187,9 @@ The routine runs in an isolated sandbox. Returns stdout, stderr, exit code, and 
  * List all saved routines with their status.
  */
 export const listRoutinesTool = {
-  description: `List all saved routines with their descriptions and last run status. Use this to discover what routines are available and their current state.`,
+  description: `List all saved routines with descriptions and last run status.`,
 
-  parameters: z.object({}).describe("List all saved routines."),
+  parameters: z.object({}).describe("List all saved routines"),
 
   execute: async () => {
     const allRoutines = await db
@@ -241,35 +227,33 @@ export const listRoutinesTool = {
  * Update an existing routine's code, description, or name.
  */
 export const updateRoutineTool = {
-  description: `Update an existing routine's code, description, or name. Use this to modify a routine after creation — for example, to fix a bug in the script or rename it.
-
-All fields are optional — only provided fields will be updated.`,
+  description: `Update an existing routine's code, description, name, or enabled state. All fields optional — only provided fields are updated.`,
 
   parameters: z.object({
     name: z
       .string()
       .min(1)
-      .describe("The name of the routine to update."),
+      .describe("Name of the routine to update"),
     newName: z
       .string()
       .max(100)
       .regex(/^[a-z0-9_-]+$/, "Name must be kebab-case (lowercase, numbers, hyphens, underscores)")
       .optional()
-      .describe("Optionally rename the routine."),
+      .describe("Optionally rename the routine"),
     description: z
       .string()
       .max(500)
       .optional()
-      .describe("New description for the routine."),
+      .describe("New description"),
     code: z
       .string()
       .min(1)
       .optional()
-      .describe("New JavaScript code for the routine."),
+      .describe("New JavaScript code"),
     enabled: z
       .boolean()
       .optional()
-      .describe("Whether the routine is enabled."),
+      .describe("Whether the routine is enabled"),
   }),
 
   execute: async ({
@@ -335,15 +319,13 @@ All fields are optional — only provided fields will be updated.`,
  * Delete a routine from the library.
  */
 export const deleteRoutineTool = {
-  description: `Delete a routine and all its run logs from the library. This cannot be undone.
-
-Use this to remove outdated or unused routines.`,
+  description: `Permanently delete a routine and all its run logs. Cannot be undone.`,
 
   parameters: z.object({
     name: z
       .string()
       .min(1)
-      .describe("The name of the routine to delete."),
+      .describe("Name of the routine to delete"),
   }),
 
   execute: async ({ name }: { name: string }) => {
@@ -377,15 +359,13 @@ Use this to remove outdated or unused routines.`,
  * Get the run history for a routine.
  */
 export const getRoutineLogsTool = {
-  description: `Get the recent run history for a routine. Shows the last 25 runs with status, output, and timestamps.
-
-Use this to check past runs, debug failures, or review results.`,
+  description: `Get recent run history for a routine (last 25 runs with status, output, timestamps). Use to check past runs or debug failures.`,
 
   parameters: z.object({
     name: z
       .string()
       .min(1)
-      .describe("The name of the routine to get logs for."),
+      .describe("Name of the routine to get logs for"),
     limit: z
       .number()
       .int()
@@ -393,7 +373,7 @@ Use this to check past runs, debug failures, or review results.`,
       .max(100)
       .optional()
       .default(25)
-      .describe("Number of recent logs to return (max 100, default 25)."),
+      .describe("Number of recent logs to return (max 100, default 25)"),
   }),
 
   execute: async ({

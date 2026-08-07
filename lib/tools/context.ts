@@ -24,7 +24,7 @@ export function buildContextTools(
   // -----------------------------------------------------------------------
   tools.get_time_details = {
     description:
-      "Get the current date, time, timezone, and related temporal information in the USER'S local timezone. Use this when you need to know what time it is, what day/date it is, the timezone, or daylight saving status.",
+      "Get the current date, time, timezone, and daylight-saving info in the USER'S local timezone.",
     parameters: z.object({}),
     execute: async () => getTimeDetails(timezone),
   };
@@ -34,7 +34,7 @@ export function buildContextTools(
   // -----------------------------------------------------------------------
   tools.get_device_details = {
     description:
-      "Get details about the user's device and browser, including operating system, browser name/version, device type, language, and timezone. Use this when you need to know what platform the user is on.",
+      "Get details about the user's device and browser (OS, browser name/version, device type, language, timezone).",
     parameters: z.object({}),
     execute: async () => {
       const info = parseUserAgent(userAgent ?? "");

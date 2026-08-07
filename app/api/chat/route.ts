@@ -71,6 +71,79 @@ import {
 const DANGLING_ACTION_TAIL_RE =
   /\b(let me|i'?ll|i'?m (going|about) to|gonna)\s+(also|just|first|now|then|quickly)?\s*(dig|check|look|search|fetch|find|crawl|scrape|read|pull|grab|dive|verify|confirm|explore|review|investigate|take a look|look into|see if|see what|find out|get|open|run|try|test|examine|inspect|gather|compile)\b/i;
 
+/**
+ * If a tool output is large, return a short summary placeholder string;
+ * otherwise return `null` to leave the output untouched.
+ */
+function compactOutput(output: unknown): string | null {
+  let json: string;
+  try {
+    json = JSON.stringify(output);
+  } catch {
+    return "[Tool result could not be serialised]";
+  }
+  if (json.length <= 600) return null;
+  return `[Tool result compacted — ${json.slice(0, 600)}… [+${(json.length - 600).toLocaleString()} chars omitted]]`;
+}
+
+/**
+ * Replace large tool outputs in message history with compact placeholders.
+ *
+ * The last {@link KEEP_RECENT_MESSAGES} messages keep their full tool
+ * outputs (so the model can answer follow-ups immediately). Older turns get
+ * their tool outputs collapsed to a short summary — the model can always
+ * re-run the tool to re-fetch content. This caps the input-token growth of
+ * long conversations without losing conversational context.
+ */
+function compactToolOutputs(
+  uiMessages: UIMessage[],
+  keepRecent: number = 8,
+): UIMessage[] {
+  if (uiMessages.length <= keepRecent) return uiMessages;
+  const cutoff = uiMessages.length - keepRecent;
+
+  return uiMessages.map((msg, i) => {
+    if (i >= cutoff) return msg; // keep recent turns intact
+
+    const parts = msg.parts.map((part: any) => {
+      // AI SDK v7 tool-result parts (typed as `tool-${string}`)
+      if (
+        typeof part.type === "string" &&
+        part.type.startsWith("tool") &&
+        part.type !== "tool-invocation" &&
+        part.output !== undefined
+      ) {
+        const compacted = compactOutput(part.output);
+        if (compacted !== null) {
+          return { ...part, output: compacted };
+        }
+      }
+      // Legacy tool-invocation parts (persisted by older SDK versions)
+      if (
+        part.type === "tool-invocation" &&
+        part.toolInvocation?.output !== undefined &&
+        part.toolInvocation.state === "result"
+      ) {
+        const compacted = compactOutput(part.toolInvocation.output);
+        if (compacted !== null) {
+          return {
+            ...part,
+            toolInvocation: {
+              ...part.toolInvocation,
+              output: compacted,
+            },
+          };
+        }
+      }
+      return part;
+    });
+
+    // Only clone the message if something actually changed
+    const changed = parts.some((p, idx) => p !== msg.parts[idx]);
+    return changed ? { ...msg, parts } : msg;
+  });
+}
+
 function titleFromMessage(message: UIMessage): string {
   const text = message.parts
     .filter((p): p is { type: "text"; text: string } => p.type === "text")
@@ -371,16 +444,25 @@ You are currently in **Plan mode**. This means:
     ? `\n\n## User preferences\n${prefParts.join("\n")}`
     : "";
 
-  // Inject saved memories into the system prompt for context
-  const memoryRows = await db.select().from(memories).orderBy(memories.createdAt).all();
+  // Inject saved memories into the system prompt for context.
+  // Capped to the 10 most recent so the prompt doesn't grow unboundedly as
+  // memories accumulate (search_memories / get_recent_memories cover the rest).
+  const memoryRows = await db
+    .select()
+    .from(memories)
+    .orderBy(sql`${memories.createdAt} DESC`)
+    .limit(10)
+    .all();
+  memoryRows.reverse(); // chronological order in the prompt
   const memoryTip = memoryRows.length > 0
-    ? `\n\n## Saved memories\nThe following are things you have remembered about the user across conversations. Use them to provide personalized and contextually relevant responses.\n${memoryRows.map((m) => `- ${m.content}`).join("\n")}`
+    ? `\n\n## Saved memories\nThings you have remembered about the user across conversations. Use them to personalize responses.\n${memoryRows.map((m) => `- ${m.content}`).join("\n")}`
     : "";
 
-  // Inject recent file changes into the system prompt for freshness
-  const recentChanges = await queryRecentChanges(10);
+  // Inject recent file changes into the system prompt for freshness.
+  // Capped to 5 — the model can call query_recent_changes for more.
+  const recentChanges = await queryRecentChanges(5);
   const fileChangeTip = recentChanges.length > 0
-    ? `\n\n## Recent file changes\nThe following files were recently modified in your watched directories. Use \`query_recent_changes\` for a fuller list, or these are the 10 most recent:\n${recentChanges.map((c) => `- [${c.changeType}] ${c.directoryLabel}/${c.relativePath} (${c.changedAt})`).join("\n")}`
+    ? `\n\n## Recent file changes\nRecently modified in your watched directories (most recent first):\n${recentChanges.map((c) => `- [${c.changeType}] ${c.directoryLabel}/${c.relativePath}`).join("\n")}`
     : "";
 
   // Adaptive system prompt: detect lower-end models and give them a shorter prompt
@@ -412,7 +494,16 @@ You are currently in **Plan mode**. This means:
     memoryTip +
     fileChangeTip +
     planModePrompt;
-  const modelMessages = await convertToModelMessages(uiMessages);
+
+  // Compress the message history before sending it to the model.
+  // Tool outputs from OLD turns (e.g. a read_file that returned 50k chars)
+  // would otherwise be re-sent verbatim on every subsequent request, which
+  // makes long conversations balloon in input tokens. We keep the most
+  // recent turns fully intact and replace older tool outputs with a short
+  // placeholder — the model can re-run the tool if it needs the content.
+  const modelMessages = await convertToModelMessages(
+    compactToolOutputs(uiMessages),
+  );
 
   // ── Native image processing ───────────────────────────────────
   // Scan user messages for image markdown references of attached files

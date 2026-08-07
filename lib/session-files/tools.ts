@@ -47,17 +47,13 @@ const sessionFileListSchema = z.object({
   path: z
     .string()
     .optional()
-    .describe(
-      "Optional subdirectory to list (relative to the sandbox root, forward slashes). Leave empty to list everything.",
-    ),
+    .describe("Optional subdirectory to list (forward slashes); empty lists everything"),
 });
 
 const sessionFileReadSchema = z.object({
   path: z
     .string()
-    .describe(
-      "Relative path to the file within the session sandbox (forward slashes), e.g. 'index.html' or 'src/app.js'.",
-    ),
+    .describe("Path to the file in the session sandbox (forward slashes)"),
   offset: z
     .number()
     .int()
@@ -70,104 +66,72 @@ const sessionFileReadSchema = z.object({
     .min(1)
     .max(1_000_000)
     .optional()
-    .describe("Maximum number of bytes to read (max 1,000,000, default: 100,000)"),
+    .describe("Max bytes to read (max 1,000,000, default: 100,000)"),
 });
 
 const sessionFileReadMediaSchema = z.object({
-  path: z
-    .string()
-    .describe(
-      "Relative path to an image or video in the session sandbox (forward slashes), e.g. 'assets/earth.jpg'.",
-    ),
+  path: z.string().describe("Path to an image/video in the session sandbox (forward slashes)"),
 });
 
 const sessionFileDownloadSchema = z.object({
-  path: z
-    .string()
-    .describe(
-      "Relative path to the file the user should download (forward slashes), e.g. 'output/report.pdf'.",
-    ),
+  path: z.string().describe("Path to the file the user should download (forward slashes)"),
 });
 
 const sessionFileWriteSchema = z.object({
   path: z
     .string()
-    .describe(
-      "Relative path to the file within the session sandbox (forward slashes), e.g. 'index.html' or 'src/app.js'. Parent directories are created automatically.",
-    ),
-  content: z.string().describe("Text content to write to the file"),
+    .describe("Path to the file in the session sandbox (forward slashes); creates parent folders automatically"),
+  content: z.string().describe("Text content to write"),
   mode: z
     .enum(["overwrite", "append"])
     .optional()
-    .describe(
-      "Write mode: 'overwrite' replaces the file (default), 'append' appends to it.",
-    ),
+    .describe("'overwrite' replaces (default), 'append' appends"),
 });
 
 const sessionFileEditSchema = z.object({
-  path: z.string().describe("Relative path within the session sandbox, using forward slashes."),
-  old_str: z.string().describe("Exact text that occurs exactly once in the file."),
-  new_str: z.string().describe("Replacement text; use an empty string to delete the match."),
+  path: z.string().describe("Path within the session sandbox (forward slashes)"),
+  old_str: z.string().describe("Exact text that occurs exactly once in the file"),
+  new_str: z.string().describe("Replacement text; empty string deletes the match"),
 });
 
 const sessionFileDeleteSchema = z.object({
   path: z
     .string()
-    .describe(
-      "Relative path of the file or directory to delete within the session sandbox (forward slashes). Deleting a directory removes everything inside it.",
-    ),
+    .describe("Path of the file or directory to delete in the session sandbox (forward slashes); deleting a directory removes everything inside it"),
 });
 
 const sessionFileMoveSchema = z.object({
-  from: z
-    .string()
-    .describe(
-      "Current relative path of the file or folder in the session sandbox (forward slashes), e.g. 'notes.txt'.",
-    ),
+  from: z.string().describe("Current path of the file/folder (forward slashes)"),
   to: z
     .string()
-    .describe(
-      "New relative path for the file or folder (forward slashes), e.g. 'archive/notes.txt'. Parent directories are created automatically. Fails if the destination already exists.",
-    ),
+    .describe("New path (forward slashes); creates parent folders; fails if destination exists"),
 });
 
 const sessionFileMkdirSchema = z.object({
-  path: z
-    .string()
-    .describe(
-      "Relative path of the folder to create in the session sandbox (forward slashes). Creates any missing parent folders too.",
-    ),
+  path: z.string().describe("Path of the folder to create (forward slashes); creates missing parents"),
 });
 
 const sessionPresentFilesSchema = z.object({
   paths: z
     .array(z.string())
     .optional()
-    .describe(
-      "Optional list of relative file paths to highlight (e.g. ['index.html', 'styles.css']). Defaults to all files.",
-    ),
+    .describe("Optional paths to highlight (defaults to all files)"),
   message: z
     .string()
     .max(500)
     .optional()
-    .describe(
-      "Optional short note shown with the file panel, e.g. 'Your website is ready to download!'.",
-    ),
+    .describe("Optional short note shown with the file panel"),
 });
 
 const sessionPresentFileSchema = z.object({
   path: z
     .string()
-    .describe(
-      "Relative path of the file to open in the side panel viewer (forward slashes), e.g. 'output/report.md'.",
-    ),
+    .describe("Path of the file to open in the side panel viewer (forward slashes)"),
   message: z
     .string()
     .max(500)
     .optional()
-    .describe(
-      "Optional short note shown with the file panel, e.g. 'Here is the updated index.html'.",
-    ),
+    .describe("Optional short note shown with the file panel"),
 });
 
 // ---------------------------------------------------------------------------
@@ -200,13 +164,7 @@ export function buildSessionFileTools(
 
   return {
     session_file_list: {
-      description: `List files in this conversation's private session sandbox — files that you or the user have created for this chat (e.g. a generated website). Returns paths, sizes, and whether each entry is a file or directory.
-
-Files the user uploads in chat are stored here under an "uploads/" folder — use session_file_list({ path: "uploads" }) to see them.
-
-Call this whenever you need to know what files exist in the session before reading, writing, or presenting them. Pass an optional 'path' to list only a subdirectory.
-
-Each file entry includes a 'url' like '/api/chat/${conversationId}/session-files/{path}' — use that to embed the file in your reply (e.g. '![earth.jpg](/api/chat/${conversationId}/session-files/earth.jpg)') or to hand to URL-based tools.`,
+      description: `List files in this conversation's private session sandbox (files you or the user created for this chat). Returns paths, sizes, and file/directory flags. User uploads live under an "uploads/" folder. Each entry includes a 'url' (/api/chat/${conversationId}/session-files/{path}) you can embed in your reply or pass to URL-based tools. Pass an optional 'path' to list a subdirectory.`,
       parameters: sessionFileListSchema,
       execute: async ({ path: relPath }: { path?: string | null }) => {
         const entries = await sandbox.list(
@@ -220,9 +178,7 @@ Each file entry includes a 'url' like '/api/chat/${conversationId}/session-files
       },
     },
     session_file_read: {
-      description: `Read the text content of a file in this conversation's session sandbox (files you or the user created for this chat). Supports optional byte offset/limit pagination for large files.
-
-**Workflow:** Use 'session_file_list' first to discover file paths, then read the one you need. For images/videos use 'session_file_read_media' instead — this tool only returns text.`,
+      description: `Read the text content of a file in this conversation's session sandbox. Supports byte offset/limit pagination for large files. For images/videos use session_file_read_media — this returns text only.`,
       parameters: sessionFileReadSchema,
       execute: async ({
         path: relPath,
@@ -238,11 +194,7 @@ Each file entry includes a 'url' like '/api/chat/${conversationId}/session-files
       },
     },
     session_file_read_media: {
-      description: `Read an image or video from this conversation's session sandbox so you can see it. For images, returns a base64 data URL of the actual pixels (plus the canonical 'url') — use this whenever you need to inspect a picture, screenshot, diagram, or other visual file the user or you placed in the sandbox.
-
-**Workflow:** 'session_file_list' → find the image → 'session_file_read_media({ path })'. You can also embed the returned 'url' in your reply as '![name](url)' so the user sees the image in the chat.
-
-Supported: images (.jpg, .png, .gif, .webp, .svg, .avif) and videos (.mp4, .webm, .mov, .avi, .mkv). Max 20 MB.`,
+      description: `Read an image/video from the session sandbox so you can see it. Returns a base64 data URL of the pixels (plus the canonical 'url'). Supported: images (.jpg, .png, .gif, .webp, .svg, .avif), videos (.mp4, .webm, .mov, .avi, .mkv). Max 20MB.`,
       parameters: sessionFileReadMediaSchema,
       execute: async ({ path: relPath }: { path: string }) => {
         const result = await sandbox.readMedia(relPath);
@@ -260,9 +212,7 @@ Supported: images (.jpg, .png, .gif, .webp, .svg, .avif) and videos (.mp4, .webm
       },
     },
     session_file_download: {
-      description: `Get a download link for a file in this conversation's session sandbox. Returns a URL the user can click to download the file directly (e.g. '[download report.pdf](/api/chat/${conversationId}/session-files/output/report.pdf?download=1)').
-
-**When to use:** When the user wants to grab a single file out of the sandbox (the whole sandbox can be downloaded as a .zip via 'session_present_files'). Present the returned 'url' as a markdown link in your reply.`,
+      description: `Get a download link for a single file in the session sandbox. Present the returned 'url' as a markdown link in your reply. (The whole sandbox can be downloaded as a .zip via session_present_files.)`,
       parameters: sessionFileDownloadSchema,
       execute: async ({ path: relPath }: { path: string }) => {
         // Verify the file exists before handing out the link
@@ -284,20 +234,7 @@ Supported: images (.jpg, .png, .gif, .webp, .svg, .avif) and videos (.mp4, .webm
       },
     },
     session_file_write: {
-      description: `Write content to a file in this conversation's private session sandbox. Use this to create and modify files for the user (e.g. building a website, writing scripts, drafting documents). Creates parent directories automatically — no separate mkdir step needed.
-
-**Rules:**
-- Always use forward slashes (/) in 'path', e.g. "src/styles.css".
-- By default overwrites the file; use mode='append' to append instead.
-- After writing files, call 'session_present_files' so the user can see them in the panel and download them.
-
-**Example — building a small website:**
-\`\`\`
-session_file_write({ path: "index.html", content: "<!DOCTYPE html>..." })
-session_file_write({ path: "styles.css", content: "body { ... }" })
-session_file_write({ path: "app.js", content: "console.log('hi');" })
-session_present_files()
-\`\`\``,
+      description: `Write content to a file in the session sandbox (e.g. building a website, writing scripts, drafting documents). Creates parent folders automatically. Use forward slashes (/) in 'path'. Overwrites by default; use mode='append' to append. After writing files, call session_present_files so the user can see/download them.`,
       parameters: sessionFileWriteSchema,
       execute: async ({
         path: relPath,
@@ -324,7 +261,7 @@ session_present_files()
       },
     },
     session_file_edit: {
-      description: `Edit a session file without rewriting its full contents. old_str must match exactly once. If it matches zero or multiple times, the result returns the current file content so you can retry with a more specific anchor. Use an empty new_str to delete text.`,
+      description: `Edit a session file without rewriting it. old_str must match exactly once; if it matches 0 or multiple times the result returns current content to retry with a more specific anchor. Empty new_str deletes text.`,
       parameters: sessionFileEditSchema,
       execute: async ({ path: relPath, old_str, new_str }: { path: string; old_str: string; new_str: string }) => {
         const result = await editSessionFile(conversationId, relPath, old_str, new_str);
@@ -340,9 +277,7 @@ session_present_files()
       },
     },
     session_file_mkdir: {
-      description: `Create a folder inside this conversation's session sandbox. Creates any missing parent folders too.
-
-**Note:** Usually you don't need this — 'session_file_write' already creates parent folders automatically. Use it only when you want an empty folder the user can see in the panel.`,
+      description: `Create a folder in the session sandbox (creates missing parents). Usually unnecessary — session_file_write creates folders automatically. Use only for empty folders.`,
       parameters: sessionFileMkdirSchema,
       execute: async ({ path: relPath }: { path: string }) => {
         const entry = await sandbox.mkdir(relPath);
@@ -354,9 +289,7 @@ session_present_files()
       },
     },
     session_file_move: {
-      description: `Rename or move a file or folder within this conversation's session sandbox. Creates the destination's parent folders automatically. Fails if a file already exists at the destination, or if you try to move a folder into its own subfolder.
-
-**Example:** moving a draft into a subfolder — 'session_file_move({ from: "notes.md", to: "drafts/notes.md" })'.`,
+      description: `Rename or move a file/folder within the session sandbox. Creates destination parent folders; fails if the destination exists or moving a folder into its own subfolder.`,
       parameters: sessionFileMoveSchema,
       execute: async ({ from, to }: { from: string; to: string }) => {
         const entry = await sandbox.move(from, to);
@@ -370,9 +303,7 @@ session_present_files()
       },
     },
     session_file_delete: {
-      description: `⚠️ Permanently delete a file (or directory and its contents) from this conversation's session sandbox. This CANNOT be undone.
-
-Only delete when the user asks to remove a file, or when you are certain a file is no longer needed (e.g. replacing a generated file entirely). If in doubt, keep the file and tell the user it's still there.`,
+      description: `⚠️ Permanently delete a file (or directory and contents) from the session sandbox. Cannot be undone. Only delete when the user asks or the file is clearly obsolete; if in doubt, keep it.`,
       parameters: sessionFileDeleteSchema,
       execute: async ({ path: relPath }: { path: string }) => {
         const result = await sandbox.delete(relPath);
@@ -383,9 +314,7 @@ Only delete when the user asks to remove a file, or when you are certain a file 
       },
     },
     session_present_file: {
-      description: `Open the session files side panel directly on a specific file, with that file's content shown in the built-in viewer (text/code/markdown content or the image itself).
-
-**When to use:** When you want to draw the user's attention to one particular file you created or modified (e.g. 'Here's the updated index.html'). The panel opens straight to that file — no clicking through the tree. Use 'session_present_files' instead when you want to present the whole set of files.`,
+      description: `Open the session files panel straight to one file, shown in the built-in viewer. Use to highlight a single file you created/modified (e.g. 'Here's the updated index.html'). Use session_present_files for the whole set.`,
       parameters: sessionPresentFileSchema,
       execute: async ({
         path: relPath,
@@ -413,11 +342,7 @@ Only delete when the user asks to remove a file, or when you are certain a file 
       },
     },
     session_present_files: {
-      description: `Present this conversation's session files to the user — opens a side panel in the chat showing the file list, with a viewer and a "Download .zip" button.
-
-**When to use:** After you've written files the user should see or download (a generated website, scripts, documents, etc.). Call it once you've finished writing all the files.
-
-Optionally pass 'paths' to highlight specific files (e.g. the main entry point). If omitted, all session files are shown. To open the panel straight to one file, use 'session_present_file' instead.`,
+      description: `Present the session files to the user — opens a side panel with the file list, a viewer, and a "Download .zip" button. Call after you've finished writing files the user should see (e.g. a whole website). Pass optional 'paths' to highlight specific files; defaults to all. For one file use session_present_file.`,
       parameters: sessionPresentFilesSchema,
       execute: async ({
         paths,

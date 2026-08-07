@@ -372,21 +372,12 @@ ${code}
  * NOTE: absolute paths still work — this is NOT a security boundary.
  */
 export const pythonExecTool = {
-  description: `Execute Python code and return its console output (stdout, stderr, exit code).
-
-${SANDBOX_WARNING}
-
-Use this to:
-- Run calculations, data processing, algorithms
-- Test Python code snippets
-- Use Python libraries installed on the system
-
-Print output with print() to see results. Default timeout: 30s, max: 120s.`,
+  description: `Execute Python code and return its console output (stdout, stderr, exit code). ${SANDBOX_WARNING} Print output with print(). Default timeout: 30s, max: 120s.`,
   parameters: z.object({
     code: z
       .string()
       .min(1)
-      .describe("Python code to execute. Use print() to produce output."),
+      .describe("Python code to execute; use print() to produce output"),
     timeout: z
       .number()
       .int()
@@ -394,7 +385,7 @@ Print output with print() to see results. Default timeout: 30s, max: 120s.`,
       .max(120_000)
       .optional()
       .default(30_000)
-      .describe("Timeout in milliseconds (default: 30s, max: 120s)"),
+      .describe("Timeout in ms (default: 30s, max: 120s)"),
   }),
   execute: async ({
     code,
@@ -421,24 +412,12 @@ Print output with print() to see results. Default timeout: 30s, max: 120s.`,
  * a security boundary, just accident prevention.
  */
 export const javaScriptExecTool = {
-  description: `Execute JavaScript code and return the console output.
-
-${SANDBOX_WARNING}
-
-Use this to:
-- Run calculations, data transformations, algorithms
-- Test code snippets before writing to files
-- Process data or run logic
-
-Use console.log() to print output. You can use await at the top level.
-Default timeout: 15s, max: 60s.`,
+  description: `Execute JavaScript code and return its console output. ${SANDBOX_WARNING} Use console.log() for output; top-level await supported. Default timeout: 15s, max: 60s.`,
   parameters: z.object({
     code: z
       .string()
       .min(1)
-      .describe(
-        "JavaScript code to execute. Use console.log() for output. await is supported.",
-      ),
+      .describe("JavaScript code to execute; console.log() for output; await supported"),
     timeout: z
       .number()
       .int()
@@ -446,7 +425,7 @@ Default timeout: 15s, max: 60s.`,
       .max(60_000)
       .optional()
       .default(15_000)
-      .describe("Timeout in milliseconds (default: 15s, max: 60s)"),
+      .describe("Timeout in ms (default: 15s, max: 60s)"),
   }),
   execute: async ({
     code,
@@ -542,8 +521,8 @@ async function resolveBashCwd(
 function buildBashExecuteTool(mode: "sandboxed" | "full") {
   return {
     description: mode === "sandboxed"
-      ? "Run a Bash command in the session's permitted project directory. Sandbox mode is selected by the user and does not accept a runtime mode override. Use relative paths only; commands that attempt to leave the project tree are rejected."
-      : "Run a Bash command with the full-access mode explicitly enabled by the user for this session. This has real device access; use it only for work the user requested.",
+      ? "Run a Bash command in the session's permitted project directory (relative paths only; commands leaving the project tree are rejected)."
+      : "Run a Bash command with full device access (explicitly enabled by the user for this session). Use only for work the user requested.",
     parameters: z.object({
       command: z.string().min(1).describe("Bash command to execute"),
       timeout: z.number().int().positive().max(120_000).optional().default(30_000),

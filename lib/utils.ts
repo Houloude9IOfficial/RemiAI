@@ -91,15 +91,19 @@ export function normalizeDate(dateStr: string): string {
 
 /**
  * Maximum serialised JSON size for any single tool result.
- * ~50 000 chars ≈ ~12 500 tokens, leaving the model plenty of room for
- * reasoning and response generation.
+ * 50 000 chars ≈ ~12 500 tokens — generous for a single result while
+ * preventing large reads (e.g. a 100KB file) from flooding the model's
+ * context AND from bloating the persisted message history that is re-sent
+ * on every subsequent request. The model can paginate via offset/limit
+ * (read_file, session_file_read) or self-truncate (web_fetch).
  */
-const MAX_RESULT_CHARS = 1_000_000
+const MAX_RESULT_CHARS = 50_000
 
 /**
  * Walk an unknown value and truncate any strings or arrays that would cause
- * its JSON serialisation to exceed {@link MAX_RESULT_CHARS}. Returns the
- * original value unchanged if it is already under the limit.
+ * its JSON serialisation to exceed the limit (default
+ * {@link MAX_RESULT_CHARS}). Returns the original value unchanged if it is
+ * already under the limit.
  *
  * - **Strings** are clipped to fit within the remaining budget.
  * - **Arrays** are limited to 200 items; excess items are replaced with a
@@ -110,11 +114,14 @@ const MAX_RESULT_CHARS = 1_000_000
  * Every truncated result gets `_truncated: true` and a `_note` field with a
  * human-readable explanation so the model understands data was omitted.
  */
-export function truncateToolResult(data: unknown): unknown {
+export function truncateToolResult(
+  data: unknown,
+  maxChars: number = MAX_RESULT_CHARS,
+): unknown {
   // Quick size check — if serialised JSON already fits, return as-is
   try {
     const raw = JSON.stringify(data)
-    if (raw.length <= MAX_RESULT_CHARS) return data
+    if (raw.length <= maxChars) return data
   } catch {
     // JSON.stringify can fail on circular references — return a safe fallback
     return {
@@ -124,7 +131,7 @@ export function truncateToolResult(data: unknown): unknown {
     }
   }
 
-  return truncateValue(data, MAX_RESULT_CHARS)
+  return truncateValue(data, maxChars)
 }
 
 // ---------------------------------------------------------------------------

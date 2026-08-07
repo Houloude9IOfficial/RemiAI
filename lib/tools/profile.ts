@@ -60,7 +60,7 @@ export function buildProfileTools(): Record<string, any> {
   // -----------------------------------------------------------------------
   tools.get_profile = {
     description:
-      "Get the user's complete profile information including their preferred name, avatar, bio, location, occupation, interests, skills, pronouns, birthday, social links, preferences, and AI personality settings. Use this when you need to personalise your responses based on who the user is, or when the user asks what you know about them.",
+      "Get the user's complete profile (name, bio, location, occupation, interests, skills, pronouns, birthday, links, preferences, personality). Use to personalise responses or when the user asks what you know about them.",
     parameters: z.object({}),
     execute: async () => {
       const prefs = await db.select().from(userPreferences).get();
@@ -97,62 +97,62 @@ export function buildProfileTools(): Record<string, any> {
   // -----------------------------------------------------------------------
   tools.update_profile = {
     description:
-      "Update one or more fields in the user's profile. You can update any combination of fields at once. Only the fields you provide will be changed — all other fields remain as they are. Use this when the user tells you something about themselves that should be saved to their permanent profile (e.g. their name, where they live, what they do, their interests, their social links, etc.).",
+      "Update one or more fields in the user's profile. Only provided fields change; others stay. Use when the user shares permanent info about themselves (name, location, job, interests, links, etc.).",
     parameters: z.object({
       preferredName: z
         .string()
         .max(100)
         .optional()
-        .describe("The name the user wants to be called by."),
+        .describe("Name the user wants to be called"),
       bio: z
         .string()
         .max(1000)
         .optional()
-        .describe("A short description about the user."),
+        .describe("Short description about the user"),
       location: z
         .string()
         .max(200)
         .optional()
-        .describe("Where the user is located (city, country, etc.)."),
+        .describe("Where the user is located (city, country)"),
       occupation: z
         .string()
         .max(200)
         .optional()
-        .describe("The user's job title, role, or profession."),
+        .describe("The user's job title, role, or profession"),
       interests: z
         .string()
         .max(1000)
         .optional()
-        .describe("The user's hobbies, passions, and interests."),
+        .describe("The user's hobbies, passions, and interests"),
       skills: z
         .string()
         .max(1000)
         .optional()
-        .describe("The user's professional skills and expertise."),
+        .describe("The user's professional skills and expertise"),
       pronouns: z
         .string()
         .max(50)
         .optional()
-        .describe("The user's pronouns (e.g. they/them, she/her, he/him)."),
+        .describe("The user's pronouns (e.g. they/them, she/her, he/him)"),
       birthday: z
         .string()
         .max(20)
         .optional()
-        .describe("The user's birthday (ISO date format YYYY-MM-DD)."),
+        .describe("The user's birthday (ISO format YYYY-MM-DD)"),
       links: z
         .record(z.string(), z.string())
         .optional()
-        .describe("Social links / URLs as key-value pairs (e.g. { github: '...', twitter: '...', website: '...' })."),
+        .describe("Social links as key-value pairs (e.g. { github: '...', twitter: '...' })"),
       preferences: z
         .string()
         .max(2000)
         .optional()
-        .describe("The user's preferences and context the AI should know."),
+        .describe("The user's preferences and context the AI should know"),
       personality: z
         .string()
         .max(2000)
         .optional()
-        .describe("How the AI should behave — tone, style, formality, etc."),
+        .describe("How the AI should behave — tone, style, formality"),
     }),
     execute: async (data: UpdateProfileParams) => {
       const existing = await db.select().from(userPreferences).get();

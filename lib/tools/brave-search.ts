@@ -15,13 +15,13 @@ export function buildBraveSearchTool(apiKey: string, userContext?: UserContext) 
   return {
     brave_web_search: {
       description:
-        "Search the web using Brave Search. Use this to find current information, news, documentation, and answers from the internet. Returns relevant web results with titles, URLs, and descriptions. Results are automatically localized to the user's country/region and language when known.",
+        "Search the web using Brave Search for current information, news, docs, and answers. Returns results with titles, URLs, and descriptions, localized to the user's region when known.",
       parameters: z.object({
         query: z
           .string()
           .min(1)
           .max(500)
-          .describe("The search query. Be specific for best results."),
+          .describe("The search query; be specific for best results"),
         count: z
           .number()
           .int()

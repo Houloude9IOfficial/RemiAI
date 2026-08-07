@@ -563,57 +563,39 @@ export function buildSpawnAgentTool(chainContext: ChainContext | null = null) {
   // But we need provider, modelId, conversationId always — so we use a fallback
   // that will be patched by runAgent for sub-agents.
   return {
-    description: `Spawn a sub-agent to handle a specific task independently. Use this when you need to offload work to a specialised agent — for example, doing deep research while you continue the main conversation.
+    description: `Spawn a sub-agent to handle a task independently (deep research, data analysis, code writing, summarization) while you continue.
 
 ## Agent types
-- **researcher** — Researches topics thoroughly and returns a concise summary with sources.
-- **coder** — Writes, analyzes, debugs, and refactors code with working solutions.
-- **analyst** — Analyzes data and provides actionable insights with supporting numbers.
-- **summarizer** — Condenses long content into concise, well-structured summaries.
-- **custom** — A custom agent with a system prompt you define via system_prompt_override.
+- **researcher** — researches topics and returns a concise summary with sources.
+- **coder** — writes/analyzes/debugs/refactors code.
+- **analyst** — analyzes data and provides actionable insights.
+- **summarizer** — condenses long content into a concise summary.
+- **custom** — agent with a system prompt you define via system_prompt_override.
 
 ## Execution modes
-- **wait_for_completion: true** (default) — Blocks until the agent finishes and returns the result immediately.
-- **wait_for_completion: false** — Starts the agent in the background and returns a task_id. Check later with get_agent_result.
+- **wait_for_completion: true** (default) — blocks until the agent finishes and returns the result.
+- **wait_for_completion: false** — starts in the background and returns a task_id; check later with get_agent_result.
 
-## Agent chaining
-Sub-agents can themselves spawn agents up to a chain depth of ${MAX_CHAIN_DEPTH}.
-This creates a tree of collaborating agents — e.g. a researcher spawns a summarizer to condense findings.
-
-## When to use
-- Offload deep research that would need many tool calls
-- Analyze large amounts of data
-- Write, debug, or refactor code
-- Summarize long documents
-- Decompose a complex problem: spawn specialists for each sub-task, then synthesize their results`,
+Sub-agents can spawn their own agents up to a chain depth of ${MAX_CHAIN_DEPTH}. Use sub-agents to offload heavy work and avoid token bloat — get just the summary.`,
 
     inputSchema: z.object({
       agent_type: z
         .enum(["researcher", "coder", "analyst", "summarizer", "custom"])
-        .describe(
-          "The type of agent to spawn. Each type has a specialised system prompt and toolset.",
-        ),
+        .describe("The type of agent to spawn (each has a specialised prompt/toolset)"),
       task: z
         .string()
         .min(1)
         .max(10_000)
-        .describe(
-          "The specific task for the agent to complete. Be clear and specific about what you want the agent to do and what output format you expect.",
-        ),
+        .describe("The specific task for the agent. Be clear about what to do and the expected output format."),
       system_prompt_override: z
         .string()
         .max(5_000)
         .optional()
-        .describe(
-          "Custom system prompt for the 'custom' agent type. Ignored for other types.",
-        ),
+        .describe("Custom system prompt for the 'custom' agent type; ignored otherwise"),
       wait_for_completion: z
         .boolean()
         .default(true)
-        .describe(
-          "If true (default), wait for the agent to complete and return the result. " +
-          "If false, start the agent in the background and return a task_id for later retrieval with get_agent_result.",
-        ),
+        .describe("true (default): wait and return the result. false: start in background and return a task_id to poll with get_agent_result."),
     }),
 
     execute: async ({
@@ -822,19 +804,14 @@ export function buildMainSpawnAgentTool(
 
 export function buildGetAgentResultTool() {
   return {
-    description: `Check the result of a background agent task that was started with spawn_agent (with wait_for_completion: false).
-
-Use this to poll for results after spawning a background agent. Returns the current status: running, completed, or failed.
-Once completed, the result field contains the agent's full output.`,
+    description: `Check the result of a background agent started with spawn_agent (wait_for_completion: false). Returns the current status: running, completed, or failed. Once completed, the result field contains the agent's full output.`,
 
     inputSchema: z.object({
       task_id: z
         .number()
         .int()
         .positive()
-        .describe(
-          "The task ID returned by spawn_agent when starting a background agent.",
-        ),
+        .describe("The task ID returned by spawn_agent when starting a background agent"),
     }),
 
     execute: async ({ task_id }: { task_id: number }) => {

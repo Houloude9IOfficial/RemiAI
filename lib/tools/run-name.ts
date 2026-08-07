@@ -5,9 +5,9 @@ import { z } from "zod";
  * consumes this metadata and does not render it as a separate tool card.
  */
 export const setRunNameTool = {
-  description: "Set a short, user-facing name for the tool-call batch you are about to perform. Call this once immediately before a consecutive run of tools, without assistant text between calls. Use an active, specific phrase such as 'Creating the main README file' or 'Checking the authentication flow'.",
+  description: "Set a short, user-facing name for the tool-call batch you are about to perform. Call once immediately before a consecutive run of tools, with no assistant text between calls. E.g. 'Creating the main README file'.",
   inputSchema: z.object({
-    name: z.string().min(3).max(120).describe("Short, plain-language description of this batch of work."),
+    name: z.string().min(3).max(120).describe("Short, plain-language description of this batch of work"),
   }),
   execute: async ({ name }: { name: string }) => ({ type: "run_name", name }),
 };

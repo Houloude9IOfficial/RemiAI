@@ -7,16 +7,14 @@ import { truncateToolResult } from "@/lib/utils";
  */
 export const delayTool = {
   description:
-    "Wait for a specified number of milliseconds before continuing. Use this to add delays between consecutive tool calls or API requests when you need to rate-limit yourself, wait for external systems to process data, or respect service rate limits.",
+    "Wait a specified number of milliseconds before continuing. Use to rate-limit between tool calls or wait for external systems to process.",
   inputSchema: z.object({
     ms: z
       .number()
       .int()
       .positive()
       .max(300_000)
-      .describe(
-        "Number of milliseconds to wait (max 300,000 = 5 minutes). Use 1_000 for 1 second, 10_000 for 10 seconds, etc.",
-      ),
+      .describe("Milliseconds to wait (max 300,000 = 5 min). 1_000 = 1s, 10_000 = 10s"),
   }),
   execute: async ({ ms }: { ms: number }) => {
     const start = Date.now();

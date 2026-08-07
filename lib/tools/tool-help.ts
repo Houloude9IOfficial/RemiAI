@@ -908,18 +908,12 @@ const TOOL_GROUPS = buildToolGroups();
 export function buildToolHelpTool(): Record<string, any> {
   return {
     get_tool_help: {
-      description: `Get detailed usage guidance and examples for any tool or feature. Call this whenever you're unsure how to use a specific tool or want workflow examples.
-
-Available topics: ${SHORT_TOPIC_LIST}
-
-Try broad topics first and narrow down if needed.`,
+      description: `Get detailed usage guidance and examples for a tool or feature. Call when unsure how to use a tool or want workflow examples. Topics: ${SHORT_TOPIC_LIST}.`,
       parameters: z.object({
         topic: z
           .string()
           .min(1)
-          .describe(
-            `The topic or tool you want help with. Examples: "filesystem", "memory", "scaffolding", "scheduled-tasks". Available topics: ${SHORT_TOPIC_LIST}`,
-          ),
+          .describe(`The topic or tool you want help with. Examples: "filesystem", "memory", "scaffolding". Topics: ${SHORT_TOPIC_LIST}`),
       }),
       execute: async ({ topic }: { topic: string }) => {
         const normalizedTopic = topic.toLowerCase().trim();
@@ -1006,24 +1000,16 @@ Try broad topics first and narrow down if needed.`,
 export function buildListAvailableToolsTool(): Record<string, any> {
   return {
     list_available_tools: {
-      description: `List all available tools grouped by category, with names and brief descriptions. Use this to discover what tools you have and find the right one for a specific task.
-
-Filter by keyword (e.g. "search", "file", "web", "code") to narrow results, or filter by category (builtin, integration, memory) to see a specific tool group.
-
-Each result includes a \`helpTopic\` field you can pass to \`get_tool_help\` for detailed usage guidance and workflow examples.`,
+      description: `List available tools grouped by category, with names and brief descriptions. Filter by keyword (e.g. "search", "file", "web") or category (builtin, integration, memory). Each result includes a \`helpTopic\` for get_tool_help.`,
       parameters: z.object({
         query: z
           .string()
           .optional()
-          .describe(
-            "Optional keyword to filter tools by. Matches against tool names, group names, and descriptions. Examples: 'search', 'file', 'web', 'code', 'news', 'memory', 'schedule'.",
-          ),
+          .describe("Optional keyword to filter tools (matches names, groups, descriptions). Examples: 'search', 'file', 'web', 'news'."),
         category: z
           .enum(["builtin", "integration", "memory"])
           .optional()
-          .describe(
-            "Optional category filter. 'builtin' = always-available tools. 'integration' = tools that need an API key. 'memory' = memory-specific tools.",
-          ),
+          .describe("'builtin' = always-available; 'integration' = needs an API key; 'memory' = memory tools"),
       }),
       execute: async ({
         query,
