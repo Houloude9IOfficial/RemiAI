@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { spawn } from "node:child_process";
+import fs from "node:fs/promises";
 import { eq } from "drizzle-orm";
 import { truncateToolResult } from "@/lib/utils";
 import {
@@ -10,6 +11,7 @@ import {
 } from "./exec-sandbox";
 import { db } from "@/db";
 import { toolConfigs } from "@/db/schema";
+import { getPermittedRoots } from "@/lib/fs/access";
 
 // ---------------------------------------------------------------------------
 // Shared types
@@ -28,8 +30,18 @@ export type ExecResult = SandboxResult;
  * so the subprocess can't easily discover user directories.
  */
 function getSafeEnv(): NodeJS.ProcessEnv {
+  // GUI-launched apps (e.g. the packaged Electron app) can start with an
+  // empty PATH, which makes every spawn fail with ENOENT. Fall back to a
+  // minimal standard PATH so shells and common tools remain findable.
+  const fallbackPath =
+    process.platform === "win32"
+      ? "C:\\Windows\\System32;C:\\Windows"
+      : "/usr/bin:/bin:/usr/sbin:/sbin";
   const env: Record<string, string> = {
-    PATH: process.env.PATH ?? "",
+    PATH:
+      process.env.PATH && process.env.PATH.trim().length > 0
+        ? process.env.PATH
+        : fallbackPath,
   };
   if (process.platform === "win32") {
     env.SYSTEMROOT = process.env.SYSTEMROOT ?? "";
@@ -454,6 +466,143 @@ Default timeout: 15s, max: 60s.`,
   },
 };
 
+function sandboxCommandIsSafe(command: string): boolean {
+  // This is a deliberate guardrail rather than an OS security boundary. It
+  // rejects the path forms that can leave the selected project tree while the
+  // process itself is pinned to that tree as its cwd.
+  return !/(^|[\s;|&])\.\.([/\\]|\s|$)|(^|[\s;|&])[/\\]/.test(command);
+}
+
+/**
+ * Candidates for the system shell, in order of preference. `bash` covers
+ * Linux/macOS and Git Bash on Windows; `sh` (POSIX) is a fallback for
+ * minimal environments (e.g. Alpine containers, Windows without Git Bash)
+ * that ship no `bash`.
+ */
+const SHELL_CANDIDATES = ["bash", "sh"];
+
+/**
+ * Run a command through the first available system shell. When a shell
+ * binary is missing (ENOENT), falls back to the next candidate so the tool
+ * keeps working in minimal environments; only when no shell exists at all
+ * returns a clear error instead of the raw "Cannot run: spawn bash ENOENT".
+ */
+async function runShellCommand(
+  command: string,
+  opts: { cwd: string; timeoutMs: number; start: number },
+): Promise<SandboxResult> {
+  for (const shell of SHELL_CANDIDATES) {
+    const result = await spawnSubprocess(shell, ["-lc", command], opts);
+    // spawnSubprocess reports a missing binary as exitCode -1 with a
+    // "Cannot run: spawn <name> …" message. Only fall through in that case.
+    if (result.exitCode === -1 && result.stderr.startsWith(`Cannot run: spawn ${shell} `)) {
+      continue; // shell not present — try the next candidate
+    }
+    return result;
+  }
+  return {
+    stdout: "",
+    stderr:
+      "No shell is available on this machine (tried: bash, sh). " +
+      "Install bash or a POSIX shell to use Bash commands.",
+    exitCode: -1,
+    timedOut: false,
+    durationMs: Date.now() - opts.start,
+  };
+}
+
+/**
+ * Resolve the working directory for a bash invocation.
+ * In sandboxed mode the cwd is the first permitted root. If that root no
+ * longer exists on this machine (configured elsewhere, or a host path inside
+ * a container), fall back to a throwaway temp dir and surface a clear
+ * warning — otherwise every command would die with a misleading
+ * `spawn bash ENOENT` even though the shell exists.
+ */
+async function resolveBashCwd(
+  rootPath: string | null,
+): Promise<{ cwd: string; warning?: string; tempDir?: string }> {
+  if (!rootPath) return { cwd: process.cwd() };
+  try {
+    const st = await fs.stat(rootPath);
+    if (st.isDirectory()) return { cwd: rootPath };
+  } catch {
+    // Root missing or unreadable — fall through to the temp fallback
+  }
+  const tempDir = await createSandboxDir();
+  return {
+    cwd: tempDir,
+    tempDir,
+    warning:
+      `WARNING: configured root "${rootPath}" does not exist on this machine ` +
+      `(check Settings > Directories). Bash ran in a temporary directory instead.`,
+  };
+}
+
+function buildBashExecuteTool(mode: "sandboxed" | "full") {
+  return {
+    description: mode === "sandboxed"
+      ? "Run a Bash command in the session's permitted project directory. Sandbox mode is selected by the user and does not accept a runtime mode override. Use relative paths only; commands that attempt to leave the project tree are rejected."
+      : "Run a Bash command with the full-access mode explicitly enabled by the user for this session. This has real device access; use it only for work the user requested.",
+    parameters: z.object({
+      command: z.string().min(1).describe("Bash command to execute"),
+      timeout: z.number().int().positive().max(120_000).optional().default(30_000),
+    }),
+    execute: async ({ command, timeout }: { command: string; timeout?: number }) => {
+      if (mode === "sandboxed" && !sandboxCommandIsSafe(command)) {
+        return {
+          stdout: "",
+          stderr: "Sandboxed Bash accepts relative project paths only; absolute paths and parent-directory traversal are blocked.",
+          exitCode: -1,
+          timedOut: false,
+          duration: "0ms",
+          mode,
+        };
+      }
+      const roots = await getPermittedRoots();
+      const writableRoot = roots.find((root) => root.canWrite) ?? roots.find((root) => root.canRead);
+      if (mode === "sandboxed" && !writableRoot) {
+        return { stdout: "", stderr: "No permitted directory is configured for sandboxed Bash.", exitCode: -1, timedOut: false, duration: "0ms", mode };
+      }
+
+      const start = Date.now();
+      let tempDir: string | undefined;
+      try {
+        // Sandboxed cwd = the permitted root (falls back to a temp dir when
+        // the configured root doesn't exist on this machine). Full mode runs
+        // in the server's own working directory.
+        const { cwd, warning, tempDir: fallbackDir } =
+          mode === "sandboxed"
+            ? await resolveBashCwd(writableRoot!.path)
+            : { cwd: process.cwd(), warning: undefined, tempDir: undefined };
+        tempDir = fallbackDir;
+
+        const result = await runShellCommand(command, {
+          cwd,
+          timeoutMs: timeout ?? 30_000,
+          start,
+        });
+
+        const stderr = [warning, result.stderr].filter(Boolean).join("\n");
+
+        return truncateToolResult({
+          stdout: result.stdout,
+          stderr,
+          exitCode: result.exitCode,
+          timedOut: result.timedOut,
+          duration: `${result.durationMs}ms`,
+          mode,
+          // When the configured root was missing and bash ran in a temp dir,
+          // omit the label — the warning on stderr explains the fallback.
+          ...(mode === "sandboxed" && !tempDir ? { root: writableRoot!.label } : {}),
+        });
+      } finally {
+        if (tempDir) await cleanupSandboxDir(tempDir);
+      }
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Builder function for the chat route
 // ---------------------------------------------------------------------------
@@ -463,7 +612,9 @@ Default timeout: 15s, max: 60s.`,
  * the "code_execution" tool config in settings. Disabled by default for
  * security reasons (not a secure sandbox).
  */
-export async function buildExecutionTools(): Promise<Record<string, any>> {
+export async function buildExecutionTools(
+  bashMode: "sandboxed" | "full" = "sandboxed",
+): Promise<Record<string, any>> {
   const config = await db
     .select()
     .from(toolConfigs)
@@ -477,5 +628,6 @@ export async function buildExecutionTools(): Promise<Record<string, any>> {
   return {
     python_exec: pythonExecTool,
     js_exec: javaScriptExecTool,
+    bash_execute: buildBashExecuteTool(bashMode),
   };
 }

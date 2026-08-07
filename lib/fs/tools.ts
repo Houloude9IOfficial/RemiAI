@@ -12,6 +12,7 @@ import {
   searchFiles,
   globFiles,
   writeFile,
+  editFile,
   createDirectory,
   deleteDirectory,
   renameItem,
@@ -480,17 +481,47 @@ export const writeFileTool = {
     indexFile(rootId, relativePath, result.path).catch((err) =>
       console.error("[fs-tools] Failed to index written file:", err),
     );
-    // Prefer relativePath for UI digests; keep absolute path for debugging.
+    // Keep result deliberately compact. The model can call read_file when it
+    // actually needs content; echoing it here wastes context on every write.
     return {
-      wrote: result.wrote,
+      bytesChanged: result.wrote,
       path: result.relativePath,
-      absolutePath: result.path,
-      mode: result.mode,
       created: result.created,
-      linesWritten: result.linesWritten,
       linesAdded: result.linesAdded,
       linesRemoved: result.linesRemoved,
+      createdDirectories: result.createdDirectories,
     };
+  },
+};
+
+/** Make a targeted, uniquely anchored edit to a permitted-root file. */
+export const editFileTool = {
+  description:
+    "Edit a file without rewriting it. `old_str` must appear exactly once in the current file; if it appears zero or multiple times, the result includes the current content so you can retry with a more specific anchor. Set `new_str` to an empty string to delete the matched text. Use this for changes to existing files; use write_file to create a new file.",
+  parameters: z.object({
+    rootId: z.coerce.number().int().positive().describe("ID of the permitted writable root"),
+    relativePath: z.string().describe("Path within the root, using forward slashes"),
+    old_str: z.string().describe("Exact, uniquely occurring text to replace"),
+    new_str: z.string().describe("Replacement text; empty string deletes the match"),
+  }),
+  execute: async ({ rootId, relativePath, old_str, new_str }: {
+    rootId: number; relativePath: string; old_str: string; new_str: string;
+  }) => {
+    await ensureRoots();
+    const root = await getRootById(rootId);
+    const result = await editFile(root, relativePath, old_str, new_str);
+    if ("relativePath" in result) {
+      indexFile(rootId, relativePath, result.path).catch((err) =>
+        console.error("[fs-tools] Failed to index edited file:", err),
+      );
+      return {
+        path: result.relativePath,
+        bytesChanged: result.bytesChanged,
+        linesAdded: result.linesAdded,
+        linesRemoved: result.linesRemoved,
+      };
+    }
+    return result;
   },
 };
 
@@ -548,6 +579,7 @@ export async function buildFilesystemTools(): Promise<Record<string, any>> {
     tools.search_files = withTruncation(searchFilesTool);
     tools.glob_files = withTruncation(globFilesTool);
     tools.write_file = withTruncation(writeFileTool);
+    tools.edit_file = withTruncation(editFileTool);
     tools.create_directory = withTruncation(createDirectoryTool);
     tools.delete_directory = withTruncation(deleteDirectoryTool);
     tools.rename_item = withTruncation(renameItemTool);

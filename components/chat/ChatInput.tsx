@@ -24,6 +24,7 @@ import { dispatchSessionFilesChanged } from "@/lib/api/session-files";
 import { toast } from "sonner";
 import { FileAttachmentPreview, type AttachedFile } from "./FileAttachmentPreview";
 import { formatFileSize } from "@/lib/file-types";
+import { conversationsApi } from "@/lib/api/conversations";
 import type { ChatStatus } from "ai";
 import packagejson from "../../package.json";
 
@@ -103,6 +104,7 @@ export function ChatInput({
   const [isDragging, setIsDragging] = useState(false);
   const dragCounterRef = useRef(0);
   const [appVersion, setAppVersion] = useState(packageJson.version);
+  const [bashMode, setBashMode] = useState<"sandboxed" | "full">("sandboxed");
 
   const isStreaming = status === "streaming" || status === "submitted";
 
@@ -127,6 +129,21 @@ export function ChatInput({
       // ignore
     }
   }, []);
+
+  useEffect(() => {
+    conversationsApi.get(conversationId)
+      .then(({ conversation }) => setBashMode(conversation.bashMode ?? "sandboxed"))
+      .catch(() => {});
+  }, [conversationId]);
+
+  const toggleBashMode = useCallback(() => {
+    const next = bashMode === "sandboxed" ? "full" : "sandboxed";
+    setBashMode(next);
+    conversationsApi.update(conversationId, { bashMode: next }).catch(() => {
+      setBashMode(bashMode);
+      toast.error("Couldn't update Bash access mode");
+    });
+  }, [bashMode, conversationId]);
 
   // Focus input when not disabled
   useEffect(() => {
@@ -761,6 +778,28 @@ export function ChatInput({
                 ))}
               </div>
             )}
+
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    onClick={toggleBashMode}
+                    disabled={disabled || isStreaming}
+                    className={cn(
+                      "ml-1 rounded-full border px-2 text-[11px] font-medium transition-colors",
+                      large ? "h-8" : "h-7",
+                      bashMode === "full" ? "border-status-warning/50 bg-status-warning/10 text-status-warning" : "border-border/50 text-muted-foreground hover:text-foreground",
+                      (disabled || isStreaming) && "pointer-events-none opacity-40",
+                    )}
+                    aria-label={`Bash access: ${bashMode}`}
+                  />
+                }
+              >
+                Bash: {bashMode === "full" ? "Full" : "Safe"}
+              </TooltipTrigger>
+              <TooltipContent side="top">{bashMode === "full" ? "Full device access enabled. Click to return to sandboxed." : "Sandboxed to permitted directories. Click to enable full device access."}</TooltipContent>
+            </Tooltip>
 
             <div className="flex-1" />
 

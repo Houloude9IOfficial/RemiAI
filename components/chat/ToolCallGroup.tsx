@@ -6,6 +6,7 @@ import { getToolName } from "ai";
 import { cn } from "@/lib/utils";
 import { ToolCallCard } from "./ToolCallCard";
 import {
+  CheckCircle2,
   ChevronDown,
   Loader2,
   Sparkles,
@@ -31,6 +32,7 @@ import {
   FileMinus2,
   FileDiff,
   Wrench,
+  XCircle,
   Download,
 } from "lucide-react";
 
@@ -79,6 +81,25 @@ function isQuestionsPart(part: AnyToolPart): boolean {
     typeof output === "object" &&
     (output as Record<string, unknown>).type === "questions"
   );
+}
+
+function isRunNamePart(part: AnyToolPart): boolean {
+  try {
+    return bareToolName(getToolName(part)) === "set_run_name";
+  } catch {
+    return false;
+  }
+}
+
+function getRunName(parts: AnyToolPart[]): string | null {
+  for (const part of parts) {
+    if (!isRunNamePart(part)) continue;
+    const output = asRecord(getOutput(part));
+    const input = asRecord(getInput(part));
+    const name = output?.name ?? input?.name;
+    if (typeof name === "string" && name.trim()) return name.trim();
+  }
+  return null;
 }
 
 function bareToolName(name: string): string {
@@ -135,6 +156,11 @@ const TOOL_LABELS: Record<string, ToolLabel> = {
   write_file: {
     present: "Writing file",
     past: "Wrote file",
+    icon: Pencil,
+  },
+  edit_file: {
+    present: "Editing file",
+    past: "Edited file",
     icon: Pencil,
   },
   get_time_details: {
@@ -271,6 +297,16 @@ const TOOL_LABELS: Record<string, ToolLabel> = {
     present: "Writing session file",
     past: "Wrote session file",
     icon: Pencil,
+  },
+  session_file_edit: {
+    present: "Editing session file",
+    past: "Edited session file",
+    icon: Pencil,
+  },
+  set_run_name: {
+    present: "Starting work",
+    past: "Completed work",
+    icon: Sparkles,
   },
   session_file_download: {
     present: "Downloading session files",
@@ -414,7 +450,7 @@ function extractFileChanges(parts: AnyToolPart[]): FileChangeSummary[] {
     const input = asRecord(getInput(part));
     const output = asRecord(getOutput(part));
 
-    if (name === "write_file" || name === "session_file_write") {
+    if (name === "write_file" || name === "session_file_write" || name === "edit_file" || name === "session_file_edit") {
       const path =
         pickPath(
           output?.relativePath,
@@ -433,6 +469,7 @@ function extractFileChanges(parts: AnyToolPart[]): FileChangeSummary[] {
           ? output.linesRemoved
           : undefined;
       const bytes =
+        typeof output?.bytesChanged === "number" ? output.bytesChanged :
         typeof output?.wrote === "number" ? output.wrote : undefined;
 
       // Fallback: estimate lines from input content when metadata missing
@@ -498,8 +535,8 @@ function FileChangeDigest({ changes }: { changes: FileChangeSummary[] }) {
   const hidden = changes.length - visible.length;
 
   return (
-    <div className="px-3.5 pb-2.5">
-      <div className="mt-2 rounded-lg border border-border/20 bg-surface-2/60 px-2.5 py-2">
+    <div className="px-2 pb-1.5">
+      <div className="mt-1 rounded-md border border-border/20 bg-surface-2/60 px-2.5 py-2">
         <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">
           {changes.length === 1
             ? "1 file changed"
@@ -581,19 +618,23 @@ export function ToolCallGroup({
 }: {
   parts: AnyToolPart[];
 }) {
-  const { present, past, icon: ActionIcon } = getGroupLabel(parts);
-  const mcpServer = getMcpServerName(parts);
-  const hasQuestions = parts.some(isQuestionsPart);
+  const visibleParts = parts.filter((part) => !isRunNamePart(part));
+  const runName = getRunName(parts);
+  const groupParts = visibleParts.length > 0 ? visibleParts : parts;
+  const { present, past } = getGroupLabel(groupParts);
+  const mcpServer = getMcpServerName(groupParts);
+  const hasQuestions = groupParts.some(isQuestionsPart);
   const keepOpen = hasQuestions;
+  const isBatch = groupParts.length > 1;
 
   const [isOpen, setIsOpen] = useState(keepOpen);
   const userToggledRef = useRef(false);
 
-  const running = parts.some(isPartRunning);
-  const completed = parts.every(isPartComplete) && parts.length > 0;
-  const hasError = parts.some(isPartError);
+  const running = groupParts.some(isPartRunning);
+  const completed = groupParts.every(isPartComplete) && groupParts.length > 0;
+  const hasError = false // DO NOT SHOW FOR NOW groupParts.some(isPartError);
 
-  const fileChanges = useMemo(() => extractFileChanges(parts), [parts]);
+  const fileChanges = useMemo(() => extractFileChanges(groupParts), [groupParts]);
 
   // Client-side elapsed timer (live while running; frozen when done)
   const startRef = useRef<number | null>(null);
@@ -636,82 +677,54 @@ export function ToolCallGroup({
   const displayElapsed =
     finalElapsedMs ?? (running && startRef.current !== null ? elapsedMs : null);
 
-  const summaryLabel = running ? present : past;
+  const summaryLabel = runName ?? (running ? present : past);
+
+  if (!isBatch && !runName) {
+    return <ToolCallCard part={groupParts[0]} compact />;
+  }
 
   return (
-    <div
-      className={cn(
-        "overflow-hidden border border-border/55 bg-surface-1/40 animate-tool-slide-up",
-        isOpen ? "rounded-xl" : "rounded-xl",
-      )}
-    >
-      {/* Header — always visible, clickable to toggle */}
+    <div className="animate-tool-slide-up">
+      {/* Header — styled exactly like a compact ToolCallCard, with the call
+          count appended so a group is still distinguishable from one call */}
       <button
         type="button"
         onClick={toggle}
-        className={cn(
-          "flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left transition-colors hover:bg-muted/35",
-        )}
+        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/35"
       >
-        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md">
-          {running ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-          ) : ActionIcon ? (
-            <ActionIcon
-              className={cn(
-                "h-4.5 w-4.5",
-                hasError ? "text-status-danger" : "text-muted-foreground",
-              )}
-            />
-          ) : null}
+        <div
+          className={cn(
+            "flex h-3 w-3 shrink-0 items-center justify-center",
+            hasError ? "text-status-danger" : "text-muted-foreground",
+          )}
+        >
+          {hasError ? (
+            <XCircle className="h-3 w-3" />
+          ) : running ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : (
+            <CheckCircle2 className="h-3 w-3" />
+          )}
         </div>
 
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            <span className="text-sm font-medium text-foreground">
-              {summaryLabel}
+        <span className="min-w-0 flex-1 truncate text-[12px] text-foreground/85">
+          {summaryLabel}
+          {groupParts.length > 1 && (
+            <span className="text-muted-foreground">
+              {" "}· {groupParts.length} calls
             </span>
-            {mcpServer && (
-              <span className="shrink-0 rounded-md bg-primary/8 px-1.5 py-px text-[10px] font-medium text-primary">
-                MCP · {mcpServer}
-              </span>
-            )}
-          </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
-            {displayElapsed !== null && (
-              <span className="tabular-nums">
-                {running
-                  ? `Working · ${formatElapsed(displayElapsed)}`
-                  : `Worked for ${formatElapsed(displayElapsed)}`}
-              </span>
-            )}
-            {displayElapsed === null && running && (
-              <span>Working…</span>
-            )}
-            {fileChanges.length > 0 && !running && (
-              <>
-                {displayElapsed !== null && <span aria-hidden>·</span>}
-                <span>
-                  {fileChanges.length === 1
-                    ? "1 file"
-                    : `${fileChanges.length} files`}
-                </span>
-              </>
-            )}
-            {parts.length > 1 && (
-              <>
-                {(displayElapsed !== null || fileChanges.length > 0) && (
-                  <span aria-hidden>·</span>
-                )}
-                <span className="tabular-nums">{parts.length} calls</span>
-              </>
-            )}
-          </div>
-        </div>
+          )}
+        </span>
+
+        {mcpServer && (
+          <span className="shrink-0 rounded bg-muted px-1 py-0.5 text-[9px] text-muted-foreground">
+            {mcpServer}
+          </span>
+        )}
 
         <ChevronDown
           className={cn(
-            "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ease-out",
+            "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200",
             isOpen && "rotate-180",
           )}
         />
@@ -719,7 +732,7 @@ export function ToolCallGroup({
 
       {/* File digest — rendered once in a stable spot below the header so it
           never pops or remounts when the tool calls expand/collapse beneath it */}
-      {fileChanges.length > 0 && !running && (
+      {isOpen && fileChanges.length > 0 && !running && (
         <FileChangeDigest changes={fileChanges} />
       )}
 
@@ -732,7 +745,7 @@ export function ToolCallGroup({
       >
         <div className="overflow-hidden">
           <div className="flex flex-col gap-1 p-1.5 pt-0">
-            {parts.map((part, idx) => (
+            {groupParts.map((part, idx) => (
               <div key={(part as any).toolCallId ?? idx}>
                 <ToolCallCard part={part} compact />
               </div>

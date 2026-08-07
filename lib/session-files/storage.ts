@@ -291,6 +291,7 @@ export type WriteSessionFileResult = {
   /** Line-count delta (mixed precision — not a true hunk diff). */
   linesAdded: number;
   linesRemoved: number;
+  createdDirectories: string[];
 };
 
 export async function writeSessionFile(
@@ -313,7 +314,16 @@ export async function writeSessionFile(
     // File does not exist yet
   }
 
-  await fs.mkdir(path.dirname(targetPath), { recursive: true });
+  const parentPath = path.dirname(targetPath);
+  const firstCreatedDirectory = await fs.mkdir(parentPath, { recursive: true });
+  const createdDirectories: string[] = [];
+  if (firstCreatedDirectory) {
+    const sandbox = getSessionDir(conversationId);
+    const first = normalizeSessionPath(path.relative(sandbox, firstCreatedDirectory));
+    const parent = normalizeSessionPath(path.relative(sandbox, parentPath));
+    if (first) createdDirectories.push(first);
+    if (parent && parent !== first) createdDirectories.push(parent);
+  }
   const flag = writeMode === "append" ? "a" : "w";
   await fs.writeFile(targetPath, content, { encoding: "utf-8", flag });
 
@@ -338,6 +348,50 @@ export async function writeSessionFile(
     linesWritten,
     linesAdded,
     linesRemoved,
+    createdDirectories,
+  };
+}
+
+export type EditSessionFileResult = {
+  path: string;
+  relativePath: string;
+  bytesChanged: number;
+  linesAdded: number;
+  linesRemoved: number;
+};
+
+/** Replace a uniquely matched string in a sandbox file. */
+export async function editSessionFile(
+  conversationId: number,
+  relativePath: string,
+  oldStr: string,
+  newStr: string,
+): Promise<EditSessionFileResult | { error: string; matches: number; content: string }> {
+  if (!oldStr) return { error: "old_str must not be empty.", matches: 0, content: "" };
+  const targetPath = await resolveSessionPath(conversationId, relativePath);
+  const content = await fs.readFile(targetPath, "utf-8");
+  let matches = 0;
+  let start = 0;
+  while (true) {
+    const found = content.indexOf(oldStr, start);
+    if (found === -1) break;
+    matches++;
+    start = found + oldStr.length;
+  }
+  if (matches !== 1) {
+    return {
+      error: matches === 0 ? "old_str was not found exactly in the file." : "old_str matched more than once; include more surrounding context.",
+      matches,
+      content,
+    };
+  }
+  await fs.writeFile(targetPath, content.replace(oldStr, newStr), "utf-8");
+  return {
+    path: targetPath,
+    relativePath: normalizeSessionPath(relativePath),
+    bytesChanged: Math.abs(Buffer.byteLength(newStr, "utf-8") - Buffer.byteLength(oldStr, "utf-8")),
+    linesAdded: Math.max(0, newStr.split("\n").length - oldStr.split("\n").length),
+    linesRemoved: Math.max(0, oldStr.split("\n").length - newStr.split("\n").length),
   };
 }
 
@@ -687,5 +741,4 @@ const MIME_BY_EXT: Record<string, string> = {
 export function getMimeType(filename: string): string {
   return MIME_BY_EXT[path.extname(filename).toLowerCase()] ?? "application/octet-stream";
 }
-
 

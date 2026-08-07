@@ -87,6 +87,9 @@ export const conversations = sqliteTable("conversations", {
   }),
   modelId: text("model_id"),
   mode: text("mode", { enum: ["chat", "goal", "plan"] }).notNull().default("chat"),
+  bashMode: text("bash_mode", { enum: ["sandboxed", "full"] })
+    .notNull()
+    .default("sandboxed"),
   totalInputTokens: integer("total_input_tokens").notNull().default(0),
   totalOutputTokens: integer("total_output_tokens").notNull().default(0),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),

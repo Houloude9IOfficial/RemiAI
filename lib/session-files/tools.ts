@@ -5,6 +5,7 @@ import {
   readSessionFile,
   readSessionFileMedia,
   writeSessionFile,
+  editSessionFile,
   deleteSessionFile,
   createSessionFolder,
   moveSessionFile,
@@ -101,6 +102,12 @@ const sessionFileWriteSchema = z.object({
     .describe(
       "Write mode: 'overwrite' replaces the file (default), 'append' appends to it.",
     ),
+});
+
+const sessionFileEditSchema = z.object({
+  path: z.string().describe("Relative path within the session sandbox, using forward slashes."),
+  old_str: z.string().describe("Exact text that occurs exactly once in the file."),
+  new_str: z.string().describe("Replacement text; use an empty string to delete the match."),
 });
 
 const sessionFileDeleteSchema = z.object({
@@ -306,16 +313,30 @@ session_present_files()
           content,
           mode ?? "overwrite",
         );
-        return truncateToolResult({
+        return {
           path: result.relativePath,
-          url: sandbox.url(result.relativePath),
-          wrote: result.wrote,
-          mode: result.mode,
+          bytesChanged: result.wrote,
           created: result.created,
-          linesWritten: result.linesWritten,
           linesAdded: result.linesAdded,
           linesRemoved: result.linesRemoved,
-        });
+          createdDirectories: result.createdDirectories,
+        };
+      },
+    },
+    session_file_edit: {
+      description: `Edit a session file without rewriting its full contents. old_str must match exactly once. If it matches zero or multiple times, the result returns the current file content so you can retry with a more specific anchor. Use an empty new_str to delete text.`,
+      parameters: sessionFileEditSchema,
+      execute: async ({ path: relPath, old_str, new_str }: { path: string; old_str: string; new_str: string }) => {
+        const result = await editSessionFile(conversationId, relPath, old_str, new_str);
+        if ("relativePath" in result) {
+          return {
+            path: result.relativePath,
+            bytesChanged: result.bytesChanged,
+            linesAdded: result.linesAdded,
+            linesRemoved: result.linesRemoved,
+          };
+        }
+        return truncateToolResult(result);
       },
     },
     session_file_mkdir: {

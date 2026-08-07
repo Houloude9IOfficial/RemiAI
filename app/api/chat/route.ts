@@ -21,6 +21,7 @@ import {
 } from "@/db/schema";
 import { getLanguageModel } from "@/lib/providers/factory";
 import { SYSTEM_PROMPT_BASE, CREATE_VISUAL_SECTION, SESSION_FILES_SECTION } from "@/lib/chat/system-prompt";
+import { PERSISTENCE_GUIDANCE } from "@/lib/chat/persistence-guidance";
 import { persistUIMessage } from "@/lib/chat/persist";
 import { autoTitleConversation } from "@/lib/chat/title-generator";
 import { createMcpToolsManager } from "@/lib/mcp/tools";
@@ -35,6 +36,7 @@ import { webFetchTool } from "@/lib/tools/web-fetch";
 import { buildCreateVisualTool } from "@/lib/tools/create-visual";
 import { askQuestionsTool } from "@/lib/tools/ask-questions";
 import { suggestFollowupsTool } from "@/lib/tools/suggest-followups";
+import { setRunNameTool } from "@/lib/tools/run-name";
 import {
   buildMainSpawnAgentTool,
   buildGetAgentResultTool,
@@ -105,7 +107,7 @@ export async function POST(req: Request) {
   const conversationModelId = conversation.modelId;
 
   // Read mode from the conversation in the database
-  const mode = (conversation as any).mode ?? "chat";
+  let mode = (conversation as any).mode ?? "chat";
 
   const provider = await db
     .select()
@@ -151,6 +153,18 @@ export async function POST(req: Request) {
         updatedAt: new Date().toISOString(),
       })
       .where(eq(conversations.id, conversationId));
+
+    const previousMessage = uiMessages[uiMessages.length - 2] as any;
+    const answeredPlanQuestions = mode === "plan" && previousMessage?.role === "assistant" &&
+      Array.isArray(previousMessage.parts) && previousMessage.parts.some((part: any) =>
+        part?.output?.type === "questions",
+      );
+    if (answeredPlanQuestions) {
+      mode = "goal";
+      await db.update(conversations)
+        .set({ mode: "goal", updatedAt: new Date().toISOString() })
+        .where(eq(conversations.id, conversationId));
+    }
   }
 
   const model = getLanguageModel(provider, conversation.modelId);
@@ -198,7 +212,9 @@ export async function POST(req: Request) {
   const integrationToolSet = await buildIntegrationTools(userContext);
 
   // Gather code execution tools (python_exec, js_exec)
-  const executionToolSet = await buildExecutionTools();
+  const executionToolSet = await buildExecutionTools(
+    (conversation as any).bashMode === "full" ? "full" : "sandboxed",
+  );
 
   // Gather document reader tools (read_document)
   const documentToolSet = await buildDocumentReaderTools();
@@ -213,6 +229,7 @@ export async function POST(req: Request) {
     web_fetch: webFetchTool,
     ask_questions: askQuestionsTool,
     suggest_followups: suggestFollowupsTool,
+    set_run_name: setRunNameTool,
     ...createVisualToolSet,
     ...buildToolHelpTool(),
     ...buildListAvailableToolsTool(),
@@ -250,10 +267,12 @@ export async function POST(req: Request) {
   // In plan mode, filter out write tools — AI can only read/plan, not modify files
   const writeBlocklist = [
     "write_file",
+    "edit_file",
     "create_directory",
     "delete_directory",
     "rename_item",
     "session_file_write",
+    "session_file_edit",
     "session_file_mkdir",
     "session_file_move",
     "session_file_delete",
@@ -385,9 +404,9 @@ You are currently in **Plan mode**. This means:
 
   const fullSystemPrompt =
     (isLowCapability
-      ? SYSTEM_PROMPT_BASE + visualSection + SESSION_FILES_SECTION +
+      ? SYSTEM_PROMPT_BASE + visualSection + SESSION_FILES_SECTION + PERSISTENCE_GUIDANCE +
         `\n\n**CRITICAL: Keep responses very short and focused.** Use the simplest tool for each task. If unsure about a tool, call \`get_tool_help\`. Avoid multi-step planning unless the task truly requires it.`
-      : SYSTEM_PROMPT_BASE + visualSection + SESSION_FILES_SECTION) +
+      : SYSTEM_PROMPT_BASE + visualSection + SESSION_FILES_SECTION + PERSISTENCE_GUIDANCE) +
     systemTip +
     profileTip +
     memoryTip +

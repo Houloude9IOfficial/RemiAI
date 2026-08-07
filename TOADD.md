@@ -205,3 +205,5 @@ make writing files/folders to permitted dirs easier, AI models often have issues
 Make questions tool more modern, asthetically pleasing and show in bottom of message
 
 make simply all tool calls with no text between them, to be grouped altogether, and show as one tool call, instead of showing each tool call as a separate one and bloating the UI.
+
+sometimes ai may return many followup tool runs, show only 1. and specify to not ask questions in followups e.g 'What do you want to do next?' or 'What should I do next?'.
