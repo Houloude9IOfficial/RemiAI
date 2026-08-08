@@ -13,7 +13,6 @@ if (process.env.VERCEL !== "1") {
 const appDir = process.cwd();
 const appNext = resolve(appDir, ".next");
 
-// Find the Git repository root.
 let repoRoot = appDir;
 
 while (!existsSync(join(repoRoot, ".git"))) {
@@ -35,15 +34,25 @@ if (!existsSync(appNext)) {
   throw new Error(`Next.js output does not exist: ${appNext}`);
 }
 
-// Vercel's deploy step incorrectly checks <repo>/.next.
-// Remove whatever is there so we can point it at the actual
-// website build output.
-if (existsSync(repoNext)) {
-  console.log("[vercel-fix-output] Removing existing repo-root .next");
+// Remove anything currently occupying the repo-root .next path.
+// lstatSync is used because existsSync() returns false for broken symlinks.
+try {
+  const stat = lstatSync(repoNext);
+
+  if (stat.isSymbolicLink()) {
+    console.log("[vercel-fix-output] Removing existing .next symlink");
+  } else {
+    console.log("[vercel-fix-output] Removing existing .next directory");
+  }
+
   rmSync(repoNext, {
     recursive: true,
     force: true,
   });
+} catch (error) {
+  if (error.code !== "ENOENT") {
+    throw error;
+  }
 }
 
 symlinkSync(appNext, repoNext, "dir");
