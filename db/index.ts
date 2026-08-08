@@ -9,33 +9,101 @@ import { DATA_DIR } from "@/lib/paths";
 import { startFileWatcher } from "@/lib/fs/watcher";
 
 /**
- * During `next build` (e.g. on GitHub Actions CI), Next.js collects page data
- * using parallel worker processes that import route modules — including this
- * one. Running write side effects (migrations, orphaned-task cleanup, file
- * watcher, scheduler) at module scope in every worker used to make two
- * processes write to the same SQLite file concurrently, crashing the build
- * with `SqliteError: database is locked` (SQLITE_BUSY) on macOS runners.
+ * SQLite connection, opened at module scope so route modules can import the
+ * `db` instance cleanly.
  *
- * The app only needs these side effects when it is actually serving requests
- * (dev / `next start` / Electron), so they are skipped during the production
- * build phase. The DB is still opened so route modules import cleanly.
+ * IMPORTANT: nothing at module scope may WRITE to the database. During
+ * `next build` (e.g. on GitHub Actions CI), Next.js collects page data using
+ * parallel worker processes that import route modules — including this one.
+ * Those workers run with a stripped-down environment (no `NEXT_PHASE`), so a
+ * guard based on `NEXT_PHASE === "phase-production-build"` does NOT hold in
+ * them. Running write side effects (migrations, orphaned-task cleanup, file
+ * watcher, scheduler) at module scope in every worker used to make several
+ * processes write to the same SQLite file concurrently, crashing the build
+ * with `SqliteError: database is locked` (SQLITE_BUSY).
+ *
+ * All startup side effects live in `initializeApp()`, which is called exactly
+ * once from the `register()` hook in `instrumentation.ts` — i.e. when the
+ * Next.js server actually boots (dev / `next start` / the standalone server
+ * used by Electron), never during `next build` or in its workers.
  */
-const IS_BUILD_PHASE = process.env.NEXT_PHASE === "phase-production-build";
-
 const dataDir = DATA_DIR;
 fs.mkdirSync(dataDir, { recursive: true });
 
-const sqlite = new Database(path.join(dataDir, "remiai.sqlite"));
-sqlite.pragma("journal_mode = WAL");
-// Wait for the write lock instead of failing immediately. WAL mode allows
-// concurrent readers but only one writer, and multiple processes (e.g. Next.js
-// build workers, or several app instances) can touch the same DB file.
-sqlite.pragma("busy_timeout = 5000");
-sqlite.pragma("foreign_keys = ON");
+const DB_PATH = path.join(dataDir, "remiai.sqlite");
+
+function sleepSync(ms: number): void {
+  // Atomics.wait is a synchronous sleep on the main thread (build workers are
+  // forked child processes). Falls back to a busy-wait where unavailable.
+  try {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  } catch {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      /* busy-wait */
+    }
+  }
+}
+
+/**
+ * Open the SQLite connection and put it in WAL mode.
+ *
+ * This runs at module scope, so it also runs inside `next build`'s parallel
+ * page-data worker processes (each worker imports the route modules). Opening
+ * the file is lock-free, but switching to WAL mode takes an exclusive lock
+ * and — unlike ordinary statements — does NOT honour the busy timeout, so
+ * several workers racing to convert a fresh database used to throw
+ * `SqliteError: database is locked` (SQLITE_BUSY) immediately, crashing the
+ * build on macOS CI runners. Retry with a short sleep until the other
+ * processes finish their millisecond-long conversion.
+ */
+function openDatabase(): Database.Database {
+  const retryable = (code: string | undefined) =>
+    code === "SQLITE_BUSY" ||
+    code === "SQLITE_LOCKED" ||
+    code === "SQLITE_CANTOPEN";
+
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const sqlite = new Database(DB_PATH, {
+        // Wait for the write lock instead of failing immediately. WAL mode
+        // allows concurrent readers but only one writer, and multiple
+        // processes (e.g. Next.js build workers, or several app instances)
+        // can touch the same file.
+        timeout: 30_000,
+      });
+      sqlite.pragma("journal_mode = WAL");
+      sqlite.pragma("foreign_keys = ON");
+      return sqlite;
+    } catch (err) {
+      const code = (err as { code?: string } | undefined)?.code;
+      // Give up quickly on non-transient failures (bad path, corrupt file).
+      if (!retryable(code) || attempt >= 200) throw err;
+      sleepSync(25);
+    }
+  }
+}
+
+const sqlite = openDatabase();
 
 const db = drizzle(sqlite, { schema });
 
-if (!IS_BUILD_PHASE) {
+let initialized = false;
+
+/**
+ * Run startup side effects exactly once, when the app server boots.
+ *
+ * Called from `instrumentation.ts` (`register()`). Idempotent — safe to call
+ * multiple times or from multiple entry points.
+ */
+export async function initializeApp(): Promise<void> {
+  if (initialized) return;
+  initialized = true;
+
+  // Defensive: Next.js already skips the instrumentation `register()` hook
+  // during `next build`, but never run these in a build context regardless.
+  if (process.env.NEXT_PHASE === "phase-production-build") return;
+
   // Auto-run migrations on startup so the app works out of the box
   // without requiring a separate `npm run db:migrate` step.
   try {
