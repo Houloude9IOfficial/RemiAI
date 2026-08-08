@@ -174,7 +174,7 @@ RemiAI is available as a **native desktop app** for macOS, Windows, and Linux:
 
 - **System tray** with minimize-to-tray behavior
 - **Native OS notifications**
-- **Automatic updates** — installers are published to GitHub Releases and the app updates itself
+- **Requires manual building**
 - Cross-platform installers via `npm run dist:*` (mac DMG, Windows NSIS, Linux AppImage)
 
 ### PWA & Mobile
