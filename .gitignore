@@ -24,8 +24,9 @@
 .DS_Store
 *.pem
 
-# scratch notes (PR drafts, changelog scratchpad — not for commit)
+# scratch notes (PR drafts, changelog scratchpad, release-check runbook — not for commit)
 /PR-CHANGELOG.md
+/CHECKS.md
 
 # debug
 npm-debug.log*

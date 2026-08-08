@@ -50,7 +50,7 @@ The app will be available at `http://127.0.0.1:3000`. The database auto-migrates
 
 ### Environment
 
-- **Node.js** >= 18 (v22 recommended — see `.nvmrc`)
+- **Node.js** >= 20 (v22 recommended — see `.nvmrc`)
 - **npm**
 - A code editor (VS Code recommended)
 
@@ -61,6 +61,15 @@ Some features require API keys. You can configure these through the Settings UI 
 1. Go to **Settings -> Providers** to add an AI provider (Anthropic, OpenAI, or Ollama)
 2. Go to **Settings -> Tools** to configure external integrations (Firecrawl, Brave Search, ElevenLabs, NewsAPI, etc.)
 3. Go to **Settings -> Tools -> ElevenLabs** for voice features (TTS/STT)
+
+### Browser Automation (Playwright)
+
+The Browser Automation tool uses Playwright's headless Chromium:
+
+- **Development**: `npm run playwright:install`
+- **Installers**: `npm run playwright:browsers` (run automatically by `npm run dist:*`)
+
+The tool is togglable in **Settings -> Tools -> Browser Automation**.
 
 ### Running the Website (Marketing Page)
 
@@ -126,8 +135,9 @@ Tools are registered in `lib/tools/catalog.ts` and implement a specific interfac
 
 1. Add the implementation in `lib/tools/`
 2. Register it in `lib/tools/catalog.ts`
-3. Add configuration fields in the tool catalog definition
-4. Handle API key management through the existing tool configuration database pattern
+3. **Register it in `lib/chat/tool-groups.ts`** — add it to `CORE_TOOLS` (always available) or a `CONDITIONAL_GROUPS` entry (loaded on demand via intent-based dynamic tool loading). A tool that isn't in any group is never filtered and always loads, so put it in a group to control when it's available.
+4. Add configuration fields in the tool catalog definition
+5. Handle API key management through the existing tool configuration database pattern
 
 ### Files & Session Files
 
@@ -181,14 +191,16 @@ All tables are defined in `db/schema.ts`. Key tables include:
 
 ## Testing
 
-Currently, the project does not have a dedicated test suite. When contributing:
+The project has a small automated test suite plus manual verification steps. When contributing:
 
-1. **Manual testing**: run `npm run dev` and verify your changes work end-to-end
-2. **Type checking**: ensure TypeScript compiles without errors
-3. **Linting**: `npm run lint` should pass
-4. **Edge cases**: test with empty states, error states, and boundary conditions
+1. **Automated tests**: `npm test` (chat history reconstruction tests)
+2. **Manual testing**: run `npm run dev` and verify your changes work end-to-end
+3. **Build**: `npm run build` should complete (Next.js production build + standalone pruning)
+4. **Electron type check**: `npm run build:electron`
+5. **Linting**: `npm run lint` should pass
+6. **Edge cases**: test with empty states, error states, and boundary conditions
 
-If you add significant new functionality, consider including basic verification steps in your pull request description.
+If you add significant new functionality, consider adding a test to `scripts/test-chat-reconstruction.ts` and including verification steps in your pull request description.
 
 ## Pull Requests
 

@@ -61,17 +61,32 @@ All backups are encrypted before leaving your machine:
 - Backups use **AES-256-GCM** (authenticated encryption) with a password-derived key and a random salt per backup
 - **Password required** — backups cannot be restored without the correct password
 - Each backup gets a fresh random salt and initialization vector, so identical data never produces identical ciphertext
+- The restore endpoint is authentication-protected and accepts payloads up to 10 GB
 
 ### Code Execution Sandbox
 
-RemiAI supports executing JavaScript and Python code through its tool system:
+RemiAI supports executing JavaScript, Python, and Bash through its tool system:
 
 - Code runs in **isolated temporary directories** that are cleaned up after execution
 - **Strict timeouts** prevent runaway processes
 - JavaScript execution uses Node.js's **vm module** with no `fs`, `network`, or `timer` access
 - Python execution uses a **minimal environment** with only PATH and SYSTEMROOT variables
+- **Bash execution** (`bash_execute`) has a per-conversation mode:
+  - **`sandboxed` (default)** — the working directory is pinned to a permitted root, the command is checked against a safety list, and writes are redirected to a temporary directory
+  - **`full`** — runs arbitrary shell commands with your full user permissions and normal filesystem access
 
-**Important caveat**: The code execution sandbox is designed to prevent accidents, not to provide true security isolation. It is **not** a hardened sandbox — it has full filesystem access and can run other executables. Do not enable code execution tools in environments where untrusted users can interact with the AI.
+**Important caveat**: The code execution sandbox is designed to prevent accidents, not to provide true security isolation. It is **not** a hardened sandbox — it has full filesystem access and can run other executables, and `bash_execute` in **full** mode is equivalent to running commands yourself in a terminal. Do not enable code execution tools in environments where untrusted users can interact with the AI.
+
+### Browser Automation
+
+RemiAI can drive a real headless Chromium browser through its Browser Automation tool (`browser_open`, `browser_click`, `browser_fill`, `browser_extract`, `browser_screenshot`, `browser_interact`):
+
+- **Opt-in** — disabled by default; tools are only registered when you enable it via **Settings -> Tools -> Browser Automation**
+- Each conversation gets **one browser session**, created lazily on first use; sessions idle out after 5 minutes and a global cap (4) protects low-memory machines
+- Chromium is bundled with the desktop installers and the Docker image; in dev it falls back to Playwright's cache or your system Chrome/Edge
+- The browser runs **on your machine/container** and can reach local and private-network services that ordinary `web_fetch` cannot — including `localhost` services on the host
+
+**Important caveat**: The browser is a real browser running with your network access. It can visit internal/local URLs, use any credentials already stored in its profile, and make requests from your machine's IP. Do not enable Browser Automation in environments where untrusted users can interact with the AI.
 
 ### MCP Servers
 
@@ -103,18 +118,20 @@ RemiAI uses a **local, single-account authentication layer**:
 - Existing pre-auth databases are preserved and claimed by the first account
 - Encrypted backups preserve account credentials when restoring to a fresh installation, but never include active sessions or bootstrap secrets
 
-The app should still run on `127.0.0.1` by default. Authentication protects the application but does not make arbitrary remote exposure safe: review MCP servers, code execution, directory permissions, and network access before exposing RemiAI beyond localhost.
+The app should still run on `127.0.0.1` by default. Authentication protects the application but does not make arbitrary remote exposure safe: review MCP servers, code execution, directory permissions, Browser Automation, and network access before exposing RemiAI beyond localhost.
 
 ### Docker and public deployment
 
 The included `Dockerfile` runs the production standalone server as the unprivileged `node` user. The only intended writable location is `/app/data`, which contains the SQLite database, uploads, provider credentials, and other user data. Keep that volume private and back it up securely.
+
+The image also bundles Playwright's headless Chromium for the Browser Automation tool (adds roughly 350 MB) plus its system dependencies. The browser runs inside the container with the container's network access — treat the tool as opt-in and keep the container behind the reverse proxy.
 
 For a public deployment:
 
 1. Put the container behind a TLS reverse proxy and forward only to `127.0.0.1:3000` (the included Compose file uses this binding).
 2. Do not publish port 3000 directly to the Internet or run the container with `--privileged`.
 3. Use a strong account password, restrict access to the one-time signup code, and remove/restrict server-console log access after first setup.
-4. Review MCP servers, external provider keys, watched directories, and code-execution tools before allowing any remote access.
+4. Review MCP servers, external provider keys, watched directories, code-execution tools, and Browser Automation before allowing any remote access.
 5. Preserve the named Docker volume and test encrypted backups; losing `/app/data` loses the account and stored credentials.
 
 ---
@@ -129,10 +146,11 @@ To keep your RemiAI installation secure:
 4. **Keep dependencies updated** — run `npm audit` periodically and update packages
 5. **Secure your API keys** — treat API keys stored in RemiAI with the same care as any other credential store
 6. **Review MCP servers** — only add MCP servers from trusted sources
-7. **Be cautious with code execution** — the exec tools (`python_exec`, `js_exec`) have full filesystem access
+7. **Be cautious with code execution** — the exec tools (`python_exec`, `js_exec`, `bash_execute`) have full filesystem access; keep `bash_execute` in **sandboxed** mode unless you fully trust the conversation
 8. **Don't disable the file watcher security** — keep watched directories limited to what you need
 9. **Backup regularly** — use encrypted backups to protect your data and API keys
 10. **Monitor the data directory** — the SQLite database at `data/remiai.sqlite` contains all your data and API keys
+11. **Keep Browser Automation opt-in** — it runs a real browser with your network access; only enable it for conversations you trust
 
 ---
 
@@ -145,7 +163,8 @@ RemiAI is designed for a **single-user local environment**. The following are co
 | AI probes files outside permitted directories | Directory root system blocks access with path containment checks |
 | AI exfiltrates data via web_fetch | web_fetch can read public URLs; API keys grant access to external services |
 | Malicious MCP server exploits the system | Manual opt-in; review server before adding |
-| Code execution abused for malware | Isolated temp dirs, timeouts, no network in JS sandbox |
+| Code execution abused for malware | Isolated temp dirs, timeouts, no network in JS sandbox; `bash_execute` sandboxed mode by default |
+| AI uses the browser to reach local/private services | Browser Automation is opt-in and disabled by default; per-conversation sessions idle out after 5 minutes |
 | Unauthorized physical access to database | Data directory is local; backup encryption protects exports |
 | XSS in rendered chat output | React's default escaping; review any `dangerouslySetInnerHTML` usage |
 

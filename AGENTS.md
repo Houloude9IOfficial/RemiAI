@@ -1,3 +1,14 @@
+<!-- BEGIN:git-discipline -->
+# ⛔ NEVER commit or push
+
+This repository is managed by the owner's own version-control workflow. When
+working here, NEVER run `git commit`, `git push`, `git tag`, `git rebase`,
+`git reset`, `git add`, or anything else that mutates repository history or
+remote state — **unless the owner explicitly asks you to in the same message**.
+Produce changes and report results; the owner handles all version-control
+operations (including commits, pushes, tags, and releases).
+<!-- END:git-discipline -->
+
 <!-- BEGIN:nextjs-agent-rules -->
 # This is NOT the Next.js you know
 
@@ -98,25 +109,32 @@ This is already used in the project (e.g. `DialogClose` in
 </TooltipTrigger>
 ```
 
-## 4. Drizzle ORM — database migrations on fresh clones
+## 4. Drizzle ORM — migrations run at server boot, not at module scope
 
-SQLite databases tracked in Drizzle ORM (`better-sqlite3`) require running
-migrations to create tables. Running `npm run dev` without a prior `npm run db:migrate`
-produces `SqliteError: no such table: <name>`.
+SQLite databases tracked in Drizzle ORM (`better-sqlite3`) require migrations
+to create tables. Running `npm run dev` without them produces
+`SqliteError: no such table: <name>`.
 
-**Prevention — auto-migrate on startup in `db/index.ts`:**
+**Current approach — run startup side effects from `instrumentation.ts`, never
+at module scope in `db/index.ts`:**
+
 ```ts
-import { migrate } from "drizzle-orm/better-sqlite3/migrator";
-
-const db = drizzle(sqlite, { schema });
-
-// Auto-run migrations so the app works out of the box
-migrate(db, { migrationsFolder: path.join(process.cwd(), "db/migrations") });
-
-export { db };
+// instrumentation.ts — runs exactly once when the Next.js server boots
+// (dev / `next start` / the standalone server used by Electron)
+export async function register() {
+  if (process.env.NEXT_RUNTIME === "edge") return;
+  const { initializeApp } = await import("./db");
+  await initializeApp(); // migrations + orphaned-task cleanup + watcher + scheduler
+}
 ```
 
-Also add a `postinstall` script in `package.json`:
+`db/index.ts` must NOT run `migrate()` (or any DB write) at module scope:
+during `next build`, parallel worker processes import route modules — and thus
+`db` — so concurrent writers crash the build with `SqliteError: database is
+locked` (SQLITE_BUSY). Read the doc comments in `db/index.ts` and
+`instrumentation.ts` before touching this area.
+
+A `postinstall` script in `package.json` runs migrations early for fresh clones:
 ```json
 "postinstall": "drizzle-kit migrate || echo '(Migration skipped - it will run on app startup)'"
 ```
@@ -207,4 +225,45 @@ Tell the AI to:
 - Use numeric `rootId` values, never strings
 - Always use forward slashes (`/`) in `relativePath`
 - Never use backslashes in paths
+
+## 8. Dynamic tool loading — register new tools in `lib/chat/tool-groups.ts`
+
+RemiAI does NOT send every tool on every request (that would cost ~7k input
+tokens of static overhead per agentic step). `lib/chat/tool-groups.ts` splits
+tools into groups that are loaded on demand:
+
+- `CORE_TOOLS` — always available (time/device details, memory, file reads,
+  builtins like `web_fetch`, `ask_questions`, `suggest_followups`).
+- `CONDITIONAL_GROUPS` — loaded only when a deterministic intent classifier,
+  usage recency, or the model's own `load_tool_groups` request activates them.
+
+**When adding a tool:**
+1. Implement it in `lib/tools/` (export a builder).
+2. Register it in `lib/tools/catalog.ts` (Settings toggles, API-key storage).
+3. **Add it to `lib/chat/tool-groups.ts`** — `CORE_TOOLS` if it must always be
+   present, or a `CONDITIONAL_GROUPS` entry (including `keywords` for the
+   classifier) if it should load on demand.
+
+Note: a tool not in any group is **never filtered** — it always loads (like
+MCP tools), so to gate a tool behind intent/recency it must be in a
+`CONDITIONAL_GROUPS` entry. Verify with `npx tsx scripts/smoke-dynamic-tools.mjs`.
+
+## 9. Scripts, Node version, and native modules
+
+- Node.js >= 20 required (`engines`, `.nvmrc` = 22).
+- `npm run build` = `next build` **+** `node scripts/prune-standalone.mjs`
+  (whitelist-prunes `.next/standalone`; keep the whitelist in sync if the
+  standalone server needs new top-level files at runtime).
+- `npm test` = `scripts/test-chat-reconstruction.ts` (chat history logic).
+- `npm run build:electron` = type-check the Electron main process.
+- `npm run playwright:install` (dev Chromium) / `npm run playwright:browsers`
+  (stages Chromium into `build/playwright-browsers` for installers).
+- `better-sqlite3` is a native module — run `npm run rebuild:node` (or
+  `rebuild:electron`) after switching Node or Electron versions.
+
+## 10. Release checks
+
+Before a release, run the checks in [`CHECKS.md`](./CHECKS.md) (a local
+runbook) and report pass/fail. Never commit, push, or tag as part of that —
+see the notice at the top of this file.
 <!-- END:common-pitfalls -->
