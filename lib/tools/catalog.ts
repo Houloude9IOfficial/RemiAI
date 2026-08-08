@@ -78,13 +78,32 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     togglable: false,
     requiresApiKey: false,
   },
+  // ── Browser Automation — native Playwright (togglable, disabled by default) ──
+  {
+    id: "playwright",
+    name: "Browser Automation",
+    description:
+      "Drive a real headless Chromium browser natively (Playwright) right on this machine. Open pages rendered with JavaScript, click links/buttons, fill forms, extract page text, take screenshots into the chat, and run custom Playwright scripts. Works offline and in both the website and desktop app.",
+    toolNames: [
+      "browser_open",
+      "browser_click",
+      "browser_fill",
+      "browser_extract",
+      "browser_screenshot",
+      "browser_interact",
+      "browser_close",
+    ],
+    category: "builtin",
+    togglable: true,
+    requiresApiKey: false,
+  },
   // ── Code execution tools (togglable, disabled by default, security warning) ──
   {
     id: "code_execution",
     name: "Code Execution",
     description:
-      "Run Python or JavaScript code on your machine. Useful for executing code snippets, analysis, experimentation, and running CLI tools. Includes python_exec and js_exec with console output.",
-    toolNames: ["python_exec", "js_exec"],
+      "Run Python, JavaScript, or Bash commands on your machine. Useful for executing code snippets, analysis, experimentation, and running CLI tools. Includes python_exec, js_exec, and bash_execute with console output.",
+    toolNames: ["python_exec", "js_exec", "bash_execute"],
     category: "builtin",
     togglable: true,
     requiresApiKey: false,

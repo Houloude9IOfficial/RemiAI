@@ -73,104 +73,51 @@ function detectAndWrap(type: "svg" | "html", content: string): string {
 // ---------------------------------------------------------------------------
 
 export const createVisualTool = {
-  description: `Create a dynamic visual (SVG chart/diagram or HTML card/dashboard) and render it directly in the chat.
+  description: `Create a dynamic visual (SVG chart/diagram or HTML card/dashboard) and render it inline in the chat. Use whenever a visual helps the user understand faster than text: data charts (bar/line/pie), KPI metrics cards, timelines/process steps, comparison tables, flow diagrams.
 
-Use this tool whenever you want to show the user a visual representation of data, concepts, or comparisons — instead of plain text. This is great for:
-- **Data charts**: Bar charts, line charts, pie charts, bubble charts for numerical data
-- **Metrics cards**: Clean KPI cards with numbers, labels, and sparklines
-- **Timelines / Process steps**: Vertical or horizontal step-by-step visuals
-- **Comparison tables**: Side-by-side cards or comparison matrices
-- **Flow diagrams**: Process flows, decision trees, architecture diagrams
-- **Any other visual**: Dynamic, context-based visuals
-
-## CRITICAL: Design principles — NO AI SLOP
-
-You are the design lead for a small studio. The user has already rejected templated visuals. Every visual you create MUST feel intentional and distinctive — NOT like an AI default. Follow these rules strictly:
-
-### 1. No templated defaults
-AI-generated design currently clusters around three looks that you MUST avoid unless the brief explicitly calls for them:
-- A warm cream background (#F4F1EA) with serif display and terracotta accent
-- A near-black background with acid-green or vermilion accent
-- A broadsheet layout with hairline rules and dense columns
-
-### 2. No purple gradients
-Do NOT use purple/violet gradients. This is the most overused "AI slop" visual. If you need color, pick something specific to the data or context — not the default gradient palette.
-
-### 3. Ground it in the subject
-Before designing, think about what the data or concept is about. Let the subject inform your choices:
-- Financial data → greens, blues, clean sans-serif
-- Creative work → warmer tones, playful shapes
-- Technical content → structured layouts, monospace accents
-- Nature/environment → earth tones, organic shapes
-
-### 4. Use transparent backgrounds
-**Always use a TRANSPARENT background** by default so the visual blends into the chat theme. Do NOT add background rectangles, fills, or colors to the root SVG or HTML body unless the user explicitly asks for colored backgrounds.
-When you need theme-aware colors, use CSS variables injected by the chat UI: \`var(--chat-bg)\`, \`var(--chat-fg)\`, \`var(--chat-muted)\`, \`var(--chat-border)\`, \`var(--chat-primary)\`.
-
-### 5. Keep it clean and intentional
-- Use whitespace generously — don't cram elements
-- Pick 2-3 colors max (not counting grays) and use them deliberately
-- Typography: choose one display face (for titles/metrics) and one body face
-- Keep borders/subtle — use opacity, not heavy lines
-- If you use numbered markers (01, 02, 03), only do so if the content is actually a sequential process
-- Cut any decoration that does not serve the information
-
-### 6. Type-specific guidance
-- **SVG** (for charts/diagrams): use viewBox for scaling, include axis labels, pick distinct but harmonious bar/line colors
-- **HTML** (for cards/dashboards): use flexbox/grid, subtle box-shadows, rounded corners (8-12px), light borders
-- Font sizes: 14-16px body, 20-32px headings/metrics
-- Use responsive widths (100%) and auto height`,
+## Design rules — NO AI SLOP
+- **Never** use purple/violet gradients; avoid the overused AI looks (cream+serif+terracotta, near-black+acid green, broadsheet hairline columns) unless the brief demands them.
+- Ground colors in the subject: financial → greens/blues; technical → structured/monospace; nature → earth tones.
+- **Always transparent background** — no fills on the root SVG/HTML body. Use chat theme vars when needed: \`var(--chat-bg)\`, \`var(--chat-fg)\`, \`var(--chat-muted)\`, \`var(--chat-border)\`, \`var(--chat-primary)\`.
+- Clean and intentional: whitespace, 2-3 colors max, subtle borders, 8-12px radius.
+- SVG: use viewBox, include axis labels. HTML: flexbox/grid, subtle shadows. Fonts: 14-16px body, 20-32px headings. Responsive width 100%.`,
 
   inputSchema: z.object({
     type: z
       .enum(["svg", "html"])
-      .describe(
-        'The format of the visual content. Use "svg" for charts, diagrams, graphs, and 2D graphics. Use "html" for rich cards, dashboards, stats panels, and layout-heavy content.',
-      ),
+      .describe('Format: "svg" for charts/diagrams/2D graphics; "html" for cards/dashboards/stats panels'),
     title: z
       .string()
       .min(1)
       .max(120)
-      .describe(
-        "A short, descriptive title for the visual. This appears as a header above the rendered content.",
-      ),
+      .describe("Short title shown as a header above the visual"),
     content: z
       .string()
       .min(1)
       .max(50_000)
-      .describe(
-        "The SVG or HTML markup to render. For SVG: include the <svg> tag with a viewBox attribute. For HTML: can be a full document, a fragment, or standalone elements. Keep backgrounds transparent unless the user requests otherwise.",
-      ),
+      .describe("SVG or HTML markup to render. For SVG include the <svg> tag with viewBox. Keep backgrounds transparent unless the user requests otherwise."),
     options: z
       .object({
         width: z
           .string()
           .optional()
-          .describe(
-            "Optional CSS width value (e.g. '100%', '600px'). Defaults to '100%'.",
-          ),
+          .describe("CSS width (e.g. '100%', '600px'). Default '100%'"),
         height: z
           .string()
           .optional()
-          .describe(
-            "Optional CSS height value (e.g. 'auto', '400px'). Defaults to 'auto'.",
-          ),
+          .describe("CSS height (e.g. 'auto', '400px'). Default 'auto'"),
         caption: z
           .string()
           .max(300)
           .optional()
-          .describe(
-            "Optional caption or footnote displayed below the visual.",
-          ),
+          .describe("Optional caption displayed below the visual"),
         align: z
           .enum(["center", "left", "right"])
           .optional()
-          .describe(
-            "Optional alignment of the visual card within the chat: 'center' (default), 'left', or 'right'. Defaults to 'center'.",
-          ),
+          .describe("Alignment within the chat: 'center' (default), 'left', or 'right'"),
       })
       .optional()
-      .describe("Optional display options for the visual."),
+      .describe("Optional display options"),
   }),
 
   execute: async ({

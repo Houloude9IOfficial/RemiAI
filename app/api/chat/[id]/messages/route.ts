@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { and, eq, gte } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { messages } from "@/db/schema";
+import { conversations, messages } from "@/db/schema";
 import { jsonError } from "@/lib/validation/api";
 
 const bodySchema = z.object({
@@ -61,6 +61,16 @@ export async function DELETE(
       ),
     )
     .returning({ id: messages.id });
+
+  // The rolling conversation summary describes messages that were just
+  // deleted/regenerated — reset it so the next request keeps the rebuilt
+  // history verbatim instead of dropping messages the summary never covered.
+  if (deleted.length > 0) {
+    await db
+      .update(conversations)
+      .set({ summary: "", summaryMessageCount: 0 })
+      .where(eq(conversations.id, conversationId));
+  }
 
   return NextResponse.json({ ok: true, deleted: deleted.length });
 }

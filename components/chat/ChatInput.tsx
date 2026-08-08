@@ -24,6 +24,11 @@ import { dispatchSessionFilesChanged } from "@/lib/api/session-files";
 import { toast } from "sonner";
 import { FileAttachmentPreview, type AttachedFile } from "./FileAttachmentPreview";
 import { formatFileSize } from "@/lib/file-types";
+import { conversationsApi } from "@/lib/api/conversations";
+import {
+  registerChatInput,
+  unregisterChatInput,
+} from "@/lib/chat-input-registry";
 import type { ChatStatus } from "ai";
 import packagejson from "../../package.json";
 
@@ -67,11 +72,38 @@ function getClipboardFileName(file: File): string {
   return `Clipboard-${ts}`;
 }
 
+/**
+ * Extract File objects from clipboard items, giving them proper names if
+ * missing (e.g. screenshots).
+ */
+function getClipboardFiles(fileItems: DataTransferItem[]): File[] {
+  const files: File[] = [];
+  for (const item of fileItems) {
+    const rawFile = item.getAsFile();
+    if (!rawFile) continue;
+
+    const name = getClipboardFileName(rawFile);
+    // File objects from clipboard are immutable — create a new one with
+    // a proper name so the upload API and preview display correctly.
+    files.push(
+      name !== rawFile.name
+        ? new File([rawFile], name, { type: rawFile.type || "image/png" })
+        : rawFile,
+    );
+  }
+  return files;
+}
+
 const LINE_HEIGHT = 24;
 const MAX_LINES = 3;
 const MAX_HEIGHT = LINE_HEIGHT * MAX_LINES;
 const MAX_ATTACHMENTS = 10;
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
+/**
+ * Pasting plain text longer than this would balloon the composer (and the
+ * message payload) — instead it is attached automatically as a .txt file.
+ */
+const MAX_PASTE_TEXT_CHARS = 10_000;
 
 export type ChatMode = "chat" | "goal" | "plan";
 
@@ -103,6 +135,7 @@ export function ChatInput({
   const [isDragging, setIsDragging] = useState(false);
   const dragCounterRef = useRef(0);
   const [appVersion, setAppVersion] = useState(packageJson.version);
+  const [bashMode, setBashMode] = useState<"sandboxed" | "full">("sandboxed");
 
   const isStreaming = status === "streaming" || status === "submitted";
 
@@ -126,6 +159,31 @@ export function ChatInput({
     } catch {
       // ignore
     }
+  }, []);
+
+  useEffect(() => {
+    conversationsApi.get(conversationId)
+      .then(({ conversation }) => setBashMode(conversation.bashMode ?? "sandboxed"))
+      .catch(() => {});
+  }, [conversationId]);
+
+  const toggleBashMode = useCallback(() => {
+    const next = bashMode === "sandboxed" ? "full" : "sandboxed";
+    setBashMode(next);
+    conversationsApi.update(conversationId, { bashMode: next }).catch(() => {
+      setBashMode(bashMode);
+      toast.error("Couldn't update Bash access mode");
+    });
+  }, [bashMode, conversationId]);
+
+  // Register this textarea so the global "/" shortcut can focus it.
+  // Capture the element up front — React nulls refs before effect cleanups
+  // run, so `inputRef.current` would be null in the cleanup otherwise.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    registerChatInput(el);
+    return () => unregisterChatInput(el);
   }, []);
 
   // Focus input when not disabled
@@ -330,12 +388,16 @@ export function ChatInput({
     [conversationId],
   );
 
-  /** Add files to the attachment list and start uploading in a single batch */
+  /**
+   * Add files to the attachment list and start uploading in a single batch.
+   * Returns the attachments actually added (or undefined if none were), so
+   * callers can reference them (e.g. for an undo action).
+   */
   const addFiles = useCallback(
-    (newFiles: File[]) => {
+    (newFiles: File[]): AttachedFile[] | undefined => {
       // Validate count
       if (attachedFiles.length + newFiles.length > MAX_ATTACHMENTS) {
-        return;
+        return undefined;
       }
 
       // Validate each file — show a toast for oversized files
@@ -356,7 +418,7 @@ export function ChatInput({
         );
       }
 
-      if (valid.length === 0) return;
+      if (valid.length === 0) return undefined;
 
       const attached: AttachedFile[] = valid.map((f) => ({
         id: crypto.randomUUID(),
@@ -370,6 +432,8 @@ export function ChatInput({
 
       // Upload all files in a single batch request
       uploadBatch(attached);
+
+      return attached;
     },
     [attachedFiles.length, uploadBatch],
   );
@@ -390,6 +454,30 @@ export function ChatInput({
   const removeFile = useCallback((id: string) => {
     setAttachedFiles((prev) => prev.filter((f) => f.id !== id));
   }, []);
+
+  /**
+   * Insert text at the current cursor position, restoring focus and the
+   * cursor afterwards. Used for non-file clipboard text.
+   */
+  const insertAtCursor = useCallback(
+    (textToInsert: string) => {
+      const el = inputRef.current;
+      if (!el) return;
+      const start = el.selectionStart ?? text.length;
+      const end = el.selectionEnd ?? text.length;
+      const before = text.slice(0, start);
+      const after = text.slice(end);
+      const newText = before + textToInsert + after;
+      setText(newText);
+      requestAnimationFrame(() => {
+        el.focus();
+        const newCursor = start + textToInsert.length;
+        el.setSelectionRange(newCursor, newCursor);
+        resize();
+      });
+    },
+    [text],
+  );
 
   // -----------------------------------------------------------------------
   // Drag & drop handlers
@@ -442,22 +530,52 @@ export function ChatInput({
       const fileItems = items.filter((item) => item.kind === "file");
       const pastedText = e.clipboardData.getData("text");
 
-      if (fileItems.length > 0) {
-        // Extract files from clipboard, giving them proper names if missing
-        const files: File[] = [];
-        for (const item of fileItems) {
-          const rawFile = item.getAsFile();
-          if (!rawFile) continue;
+      // Oversized text would break the composer and bloat the message — attach
+      // it as a .txt file instead of inserting it into the textarea.
+      if (pastedText.length > MAX_PASTE_TEXT_CHARS) {
+        e.preventDefault();
 
-          const name = getClipboardFileName(rawFile);
-          // File objects from clipboard are immutable — create a new one with
-          // a proper name so the upload API and preview display correctly.
-          const file =
-            name !== rawFile.name
-              ? new File([rawFile], name, { type: rawFile.type || "image/png" })
-              : rawFile;
-          files.push(file);
+        const ts = new Date()
+          .toISOString()
+          .replace(/[:.]/g, "-")
+          .slice(0, 19);
+        const textFile = new File([pastedText], `Pasted-${ts}.txt`, {
+          type: "text/plain",
+        });
+
+        // Keep any clipboard files (e.g. images) that came along too.
+        const files = [textFile, ...getClipboardFiles(fileItems)];
+
+        const attached = addFiles(files);
+        const textAttached =
+          attached?.some((f) => f.file === textFile) ?? false;
+
+        // If the text file couldn't be attached (e.g. the 10-attachment limit
+        // is reached), fall back to inserting it inline rather than silently
+        // dropping the user's paste.
+        if (!textAttached) {
+          insertAtCursor(pastedText);
         }
+
+        toast(
+          `Pasted text was too long (${pastedText.length.toLocaleString()} chars) — attached as a file instead.`,
+          {
+            duration: 6000,
+            action: textAttached && attached
+              ? {
+                  label: "Undo",
+                  onClick: () => {
+                    for (const f of attached) removeFile(f.id);
+                  },
+                }
+              : undefined,
+          },
+        );
+        return;
+      }
+
+      if (fileItems.length > 0) {
+        const files = getClipboardFiles(fileItems);
 
         if (files.length > 0) {
           e.preventDefault(); // prevent binary garbage in textarea
@@ -472,21 +590,7 @@ export function ChatInput({
 
           // If there's also text content, insert it manually
           if (pastedText) {
-            const el = inputRef.current;
-            if (el) {
-              const start = el.selectionStart ?? text.length;
-              const end = el.selectionEnd ?? text.length;
-              const before = text.slice(0, start);
-              const after = text.slice(end);
-              const newText = before + pastedText + after;
-              setText(newText);
-              requestAnimationFrame(() => {
-                el.focus();
-                const newCursor = start + pastedText.length;
-                el.setSelectionRange(newCursor, newCursor);
-                resize();
-              });
-            }
+            insertAtCursor(pastedText);
           }
 
           // Add files to attachments
@@ -494,7 +598,7 @@ export function ChatInput({
         }
       }
     },
-    [addFiles, text],
+    [addFiles, insertAtCursor, removeFile],
   );
 
   // -----------------------------------------------------------------------
@@ -761,6 +865,31 @@ export function ChatInput({
                 ))}
               </div>
             )}
+
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    onClick={toggleBashMode}
+                    disabled={disabled || isStreaming}
+                    className={cn(
+                      // Height matches the mode selector pill exactly: the plan
+                      // pill is button h-7/h-8 + p-0.5 (4px), so this needs
+                      // h-8/h-9 to line up at 32px / 36px.
+                      "ml-1 flex items-center rounded-full border px-2 font-medium transition-colors",
+                      large ? "h-9 text-xs" : "h-8 text-[11px]",
+                      bashMode === "full" ? "border-status-warning/50 bg-status-warning/10 text-status-warning" : "border-border/50 text-muted-foreground hover:text-foreground",
+                      (disabled || isStreaming) && "pointer-events-none opacity-40",
+                    )}
+                    aria-label={`Bash access: ${bashMode}`}
+                  />
+                }
+              >
+                Bash: {bashMode === "full" ? "Full" : "Safe"}
+              </TooltipTrigger>
+              <TooltipContent side="top">{bashMode === "full" ? "Full device access enabled. Click to return to sandboxed." : "Sandboxed to permitted directories. Click to enable full device access."}</TooltipContent>
+            </Tooltip>
 
             <div className="flex-1" />
 

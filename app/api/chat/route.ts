@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
+import { jsonError } from "@/lib/validation/api";
 import {
   convertToModelMessages,
   streamText,
@@ -16,12 +18,37 @@ import {
   providers,
   mcpServers,
   userPreferences,
-  memories,
   messages,
 } from "@/db/schema";
 import { getLanguageModel } from "@/lib/providers/factory";
 import { SYSTEM_PROMPT_BASE, CREATE_VISUAL_SECTION, SESSION_FILES_SECTION } from "@/lib/chat/system-prompt";
-import { persistUIMessage } from "@/lib/chat/persist";
+import { PERSISTENCE_GUIDANCE } from "@/lib/chat/persistence-guidance";
+import {
+  buildCachedInstructions,
+  markLastToolForCache,
+} from "@/lib/chat/prompt-cache";
+import {
+  optimizeMessageHistory,
+  RECENT_MESSAGES_KEPT,
+} from "@/lib/chat/history-optimizer";
+import { retrieveRelevantMemories } from "@/lib/chat/memories";
+import {
+  summarizeConversationBackground,
+  shouldSummarize,
+  SUMMARIZE_RECENT_KEEP,
+} from "@/lib/chat/summarizer";
+import {
+  activeToolNames,
+  buildLoadToolGroupsTool,
+  buildToolAvailabilityNote,
+  computeActiveToolGroups,
+  parseStoredToolState,
+  persistActiveToolGroups,
+} from "@/lib/chat/tool-groups";
+import {
+  reconstructConversationHistory,
+  MAX_DELTA_MESSAGES,
+} from "@/lib/chat/history-reconstruction";
 import { autoTitleConversation } from "@/lib/chat/title-generator";
 import { createMcpToolsManager } from "@/lib/mcp/tools";
 import { buildFilesystemTools } from "@/lib/fs/tools";
@@ -29,12 +56,14 @@ import { buildContextTools } from "@/lib/tools/context";
 import { buildMemoryTools } from "@/lib/tools/memories";
 import { buildIntegrationTools } from "@/lib/tools/integrations";
 import { buildExecutionTools } from "@/lib/tools/exec";
+import { buildPlaywrightTools } from "@/lib/tools/playwright";
 import { buildDocumentReaderTools } from "@/lib/tools/document-reader";
 import { delayTool } from "@/lib/tools/delay";
 import { webFetchTool } from "@/lib/tools/web-fetch";
 import { buildCreateVisualTool } from "@/lib/tools/create-visual";
 import { askQuestionsTool } from "@/lib/tools/ask-questions";
 import { suggestFollowupsTool } from "@/lib/tools/suggest-followups";
+import { setRunNameTool } from "@/lib/tools/run-name";
 import {
   buildMainSpawnAgentTool,
   buildGetAgentResultTool,
@@ -48,7 +77,7 @@ import { buildScheduleTool } from "@/lib/tools/schedule";
 import { buildToolHelpTool, buildListAvailableToolsTool } from "@/lib/tools/tool-help";
 import { userContextFromHeaders } from "@/lib/geo";
 import { queryRecentChanges } from "@/lib/fs/file-index";
-import { estimateTokenCount } from "@/lib/utils";
+import { estimateTokenCount, normaliseTool } from "@/lib/utils";
 import {
   extractImageAttachments,
   stripImageMarkdown,
@@ -79,11 +108,50 @@ function titleFromMessage(message: UIMessage): string {
   return text.length > 60 ? `${text.slice(0, 60)}…` : text;
 }
 
+// ── Request validation ────────────────────────────────────────────────
+// ChatGPT-style chat requests: the client ships only the NEW message(s) plus
+// the conversation id — never the full history (that caused 413s on long
+// chats). The server rebuilds the full conversation from the `messages`
+// table and merges this delta in.
+const chatRequestSchema = z.object({
+  conversationId: z.coerce.number().int().positive(),
+  messages: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        role: z.enum(["user", "assistant", "system"]),
+        parts: z.array(z.unknown()).default([]),
+      }),
+    )
+    .min(1, "A chat request must include at least one message")
+    .max(
+      MAX_DELTA_MESSAGES,
+      `A chat request can carry at most ${MAX_DELTA_MESSAGES} messages — new clients only send the delta; the server reconstructs the full history`,
+    ),
+  trigger: z.enum(["submit-message", "regenerate-message"]).optional(),
+  messageId: z.string().optional(),
+});
+
 export async function POST(req: Request) {
-  const { conversationId, messages: uiMessages = [] } = (await req.json()) as {
-    conversationId: number;
-    messages?: UIMessage[];
-  };
+  // Validate the request body server-side so a malformed payload is rejected
+  // with a clear 400 instead of silently corrupting conversation state.
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json(
+      { error: "Invalid JSON body" },
+      { status: 400 },
+    );
+  }
+  const parsed = chatRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return jsonError(parsed.error);
+  }
+  const { conversationId, trigger, messageId } = parsed.data;
+  // The delta's `parts` are a JSON round-trip of UI parts — validated as a
+  // generic array above, narrowed to the SDK's UIMessage shape here.
+  const deltaMessages = parsed.data.messages as UIMessage[];
 
   const conversation = await db
     .select()
@@ -105,7 +173,7 @@ export async function POST(req: Request) {
   const conversationModelId = conversation.modelId;
 
   // Read mode from the conversation in the database
-  const mode = (conversation as any).mode ?? "chat";
+  let mode = (conversation as any).mode ?? "chat";
 
   const provider = await db
     .select()
@@ -116,7 +184,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Provider not found" }, { status: 404 });
   }
 
-  if (uiMessages.length === 0) {
+  if (deltaMessages.length === 0) {
     return NextResponse.json(
       { error: "No messages to process" },
       { status: 400 },
@@ -139,9 +207,21 @@ export async function POST(req: Request) {
   const isFirstExchange =
     existingMessageCount === 0 && conversation.title === "New chat";
 
+  // ── Reconstruct the full conversation server-side (ChatGPT-style) ───
+  // The client only sent the newest message(s). Load everything already
+  // persisted for this conversation, apply regenerate truncation, merge the
+  // delta (deduped by uiId), and persist any NEW user messages. Everything
+  // downstream (`uiMessages`) now sees the complete, ordered history — the
+  // exact same shape the client used to upload on every message.
+  const uiMessages = await reconstructConversationHistory(db, {
+    conversationId,
+    deltaMessages,
+    trigger,
+    messageId,
+  });
+
   const lastMessage = uiMessages[uiMessages.length - 1];
   if (lastMessage?.role === "user") {
-    await persistUIMessage(conversationId, lastMessage);
     await db
       .update(conversations)
       .set({
@@ -151,6 +231,18 @@ export async function POST(req: Request) {
         updatedAt: new Date().toISOString(),
       })
       .where(eq(conversations.id, conversationId));
+
+    const previousMessage = uiMessages[uiMessages.length - 2] as any;
+    const answeredPlanQuestions = mode === "plan" && previousMessage?.role === "assistant" &&
+      Array.isArray(previousMessage.parts) && previousMessage.parts.some((part: any) =>
+        part?.output?.type === "questions",
+      );
+    if (answeredPlanQuestions) {
+      mode = "goal";
+      await db.update(conversations)
+        .set({ mode: "goal", updatedAt: new Date().toISOString() })
+        .where(eq(conversations.id, conversationId));
+    }
   }
 
   const model = getLanguageModel(provider, conversation.modelId);
@@ -198,7 +290,12 @@ export async function POST(req: Request) {
   const integrationToolSet = await buildIntegrationTools(userContext);
 
   // Gather code execution tools (python_exec, js_exec)
-  const executionToolSet = await buildExecutionTools();
+  const executionToolSet = await buildExecutionTools(
+    (conversation as any).bashMode === "full" ? "full" : "sandboxed",
+  );
+
+  // Gather native Playwright browser automation tools (browser_open, ...)
+  const playwrightToolSet = await buildPlaywrightTools(conversationId);
 
   // Gather document reader tools (read_document)
   const documentToolSet = await buildDocumentReaderTools();
@@ -213,6 +310,7 @@ export async function POST(req: Request) {
     web_fetch: webFetchTool,
     ask_questions: askQuestionsTool,
     suggest_followups: suggestFollowupsTool,
+    set_run_name: setRunNameTool,
     ...createVisualToolSet,
     ...buildToolHelpTool(),
     ...buildListAvailableToolsTool(),
@@ -250,10 +348,12 @@ export async function POST(req: Request) {
   // In plan mode, filter out write tools — AI can only read/plan, not modify files
   const writeBlocklist = [
     "write_file",
+    "edit_file",
     "create_directory",
     "delete_directory",
     "rename_item",
     "session_file_write",
+    "session_file_edit",
     "session_file_mkdir",
     "session_file_move",
     "session_file_delete",
@@ -299,6 +399,7 @@ You are currently in **Plan mode**. This means:
     ...memoryToolSet,
     ...integrationToolSet,
     ...executionToolSet,
+    ...playwrightToolSet,
     ...documentToolSet,
     ...builtinToolSet,
     ...agentToolSet,
@@ -352,16 +453,81 @@ You are currently in **Plan mode**. This means:
     ? `\n\n## User preferences\n${prefParts.join("\n")}`
     : "";
 
-  // Inject saved memories into the system prompt for context
-  const memoryRows = await db.select().from(memories).orderBy(memories.createdAt).all();
-  const memoryTip = memoryRows.length > 0
-    ? `\n\n## Saved memories\nThe following are things you have remembered about the user across conversations. Use them to provide personalized and contextually relevant responses.\n${memoryRows.map((m) => `- ${m.content}`).join("\n")}`
+  // Inject memories relevant to the CURRENT request, capped to a hard token
+  // budget (relevance + recency scoring, deduped). Irrelevant memories are
+  // still reachable via search_memories / get_recent_memories tools, so this
+  // only trims what the model sees — never what it can recall on demand.
+  const lastUserText =
+    [...uiMessages]
+      .reverse()
+      .find((m) => m.role === "user")
+      ?.parts.filter(
+        (p): p is { type: "text"; text: string } => p.type === "text",
+      )
+      .map((p) => p.text)
+      .join(" ") ?? "";
+  const relevantMemories = await retrieveRelevantMemories(lastUserText);
+  const memoryTip = relevantMemories.length > 0
+    ? `\n\n## Saved memories\nThings you have remembered about the user across conversations, ranked by relevance to the current request. Use them to personalize responses.\n${relevantMemories.map((m) => `- ${m.content}`).join("\n")}`
     : "";
 
-  // Inject recent file changes into the system prompt for freshness
-  const recentChanges = await queryRecentChanges(10);
+  // ── Intent-based dynamic tool loading ─────────────────────────────
+  // Simple chats register only the CORE tool subset (~2-3k tokens instead of
+  // ~7k); heavier groups (exec, scheduling, session files, integrations…)
+  // load on demand via deterministic intent classification, recent tool
+  // usage, and the conversation's stored groups. The model can always enable
+  // more via load_tool_groups / list_available_tools.
+  const storedToolGroups = parseStoredToolState(conversation.toolGroups);
+  // `let`: prepareStep below updates it when load_tool_groups enables a group
+  // mid-stream, so onFinish's persist uses the freshest active set.
+  let activeToolGroups = computeActiveToolGroups({
+    userText: lastUserText,
+    // Keep groups alive that were used in the recent window (mid-project
+    // follow-ups like "make the button blue" must not lose session files).
+    recentMessages: uiMessages.slice(-10),
+    stored: storedToolGroups,
+  });
+  // Every registered tool lives in the BASE set; the SDK `activeTools` filter
+  // (initial value below, re-evaluated every step by prepareStep) decides
+  // which definitions actually reach the provider. Simple chats therefore
+  // still send only the core subset (~1-2k tokens), while load_tool_groups
+  // can add an unloaded group MID-STREAM — the model uses it in the very
+  // next step of the same response, no "repeat your request" round-trip.
+  //
+  // `Record<string, any>` is how every other tool set in this app is typed
+  // (the AI SDK accepts these raw `{ description, inputSchema, execute }`
+  // objects, e.g. in lib/tools/*.ts) — it also keeps the load_tool_groups
+  // shape from breaking the ToolSet union.
+  const baseTools: Record<string, any> = {
+    ...tools,
+    // Appended LAST on purpose: markLastToolForCache puts the Anthropic
+    // cache breakpoint on it, and since load_tool_groups is always active
+    // and always last in the per-step filtered set, the tool-definitions
+    // prefix stays cacheable on every step of the loop.
+    load_tool_groups: buildLoadToolGroupsTool(conversationId, tools),
+  };
+
+  // AI SDK v7 requires `inputSchema` on every tool definition — some builders
+  // in this codebase still emit the legacy `parameters` key, which the SDK
+  // silently drops (the provider would get an EMPTY schema, so models guess
+  // parameter shapes and can pass e.g. a comma-separated string where an
+  // array is expected — the "groups.filter is not a function" crash — and
+  // tool call input would never be validated). Normalise once so every tool
+  // gets its real schema sent to the model and its input validated.
+  for (const [name, tool] of Object.entries(baseTools)) {
+    baseTools[name] = normaliseTool(tool);
+  }
+  const cachedBaseTools = markLastToolForCache(provider, baseTools);
+
+  // The initial active set = core + classified + stored groups (identical to
+  // the old filtered set). prepareStep re-derives it before every step.
+  const initialActiveToolNames = activeToolNames(tools, activeToolGroups);
+
+  // Inject recent file changes into the system prompt for freshness.
+  // Capped to 5 — the model can call query_recent_changes for more.
+  const recentChanges = await queryRecentChanges(5);
   const fileChangeTip = recentChanges.length > 0
-    ? `\n\n## Recent file changes\nThe following files were recently modified in your watched directories. Use \`query_recent_changes\` for a fuller list, or these are the 10 most recent:\n${recentChanges.map((c) => `- [${c.changeType}] ${c.directoryLabel}/${c.relativePath} (${c.changedAt})`).join("\n")}`
+    ? `\n\n## Recent file changes\nRecently modified in your watched directories (most recent first):\n${recentChanges.map((c) => `- [${c.changeType}] ${c.directoryLabel}/${c.relativePath}`).join("\n")}`
     : "";
 
   // Adaptive system prompt: detect lower-end models and give them a shorter prompt
@@ -383,17 +549,62 @@ You are currently in **Plan mode**. This means:
   // Conditionally include create-visual instructions based on tool toggle
   const visualSection = createVisualEnabled ? CREATE_VISUAL_SECTION : '';
 
-  const fullSystemPrompt =
-    (isLowCapability
-      ? SYSTEM_PROMPT_BASE + visualSection + SESSION_FILES_SECTION +
-        `\n\n**CRITICAL: Keep responses very short and focused.** Use the simplest tool for each task. If unsure about a tool, call \`get_tool_help\`. Avoid multi-step planning unless the task truly requires it.`
-      : SYSTEM_PROMPT_BASE + visualSection + SESSION_FILES_SECTION) +
-    systemTip +
-    profileTip +
-    memoryTip +
-    fileChangeTip +
+  // ── System prompt split for provider prompt caching ──────────────────
+  // The STATIC part (base prompt + tool guidance) is byte-identical on every
+  // request and every agentic step, so Anthropic marks it with a
+  // cache_control breakpoint and reads it from cache instead of re-billing
+  // it. The DYNAMIC part (prefs, profile, memories, recent file changes,
+  // plan mode) changes between requests and is placed AFTER the breakpoint
+  // so it never invalidates the cached prefix. buildCachedInstructions
+  // returns a plain string for providers without explicit caching.
+  const staticSystemPrompt = isLowCapability
+    ? SYSTEM_PROMPT_BASE + visualSection + SESSION_FILES_SECTION + PERSISTENCE_GUIDANCE +
+      `\n\n**CRITICAL: Keep responses very short and focused.** Use the simplest tool for each task. If unsure about a tool, call \`get_tool_help\`. Avoid multi-step planning unless the task truly requires it.`
+    : SYSTEM_PROMPT_BASE + visualSection + SESSION_FILES_SECTION + PERSISTENCE_GUIDANCE;
+  // Rolling-conversation summary: the earliest messages (covered by a
+  // background summary) are replaced in the model payload by a compact prose
+  // recap injected into the dynamic prompt below. The full messages stay in
+  // the DB for the UI and future edits — this only trims what reaches the LLM.
+  const conversationSummary = conversation.summary ?? "";
+  const summaryCovered = conversation.summaryMessageCount ?? 0;
+  // Never drop the recent verbatim window, even if the stored summary covers
+  // more than the client currently has (e.g. after a regenerate trimmed rows).
+  const historyDrop = Math.min(
+    summaryCovered,
+    Math.max(0, uiMessages.length - RECENT_MESSAGES_KEPT),
+  );
+  const summarySection =
+    conversationSummary && historyDrop > 0
+      ? `\n\n## Earlier conversation (summarized)\nThe following summarizes the earlier part of this conversation. Use it for continuity — do not reference raw tool results you have not actually re-run.\n${conversationSummary}`
+      : "";
+
+  // Note about which tool groups are loaded — only added when something was
+  // actually filtered out, so fully-loaded conversations pay zero overhead.
+  const toolAvailabilityNote = buildToolAvailabilityNote(tools, activeToolGroups);
+
+  // Split off the availability note so prepareStep can rebuild the
+  // instructions with a FRESH note once load_tool_groups enables a group
+  // mid-stream (the note is the only part of the dynamic prompt that can
+  // change mid-request).
+  const dynamicSystemPromptBase =
+    systemTip + profileTip + memoryTip + fileChangeTip + summarySection +
     planModePrompt;
-  const modelMessages = await convertToModelMessages(uiMessages);
+
+  const dynamicSystemPrompt = dynamicSystemPromptBase + toolAvailabilityNote;
+
+  const fullSystemPrompt = staticSystemPrompt + dynamicSystemPrompt;
+
+  // Optimize the message history before sending it to the model:
+  // - UI-only parts (step-start markers, reasoning) are dropped.
+  // - Old tool rounds collapse into compact natural-language traces
+  //   (inputs with file contents/code and oversized outputs are replaced by
+  //   short references — the model can re-run the tool to re-fetch).
+  // - Messages covered by the rolling summary are dropped from the payload.
+  const modelMessages = await convertToModelMessages(
+    optimizeMessageHistory(
+      historyDrop > 0 ? uiMessages.slice(historyDrop) : uiMessages,
+    ),
+  );
 
   // ── Native image processing ───────────────────────────────────
   // Scan user messages for image markdown references of attached files
@@ -472,11 +683,75 @@ You are currently in **Plan mode**. This means:
   // provider stack or a generic "An error occurred").
   let capturedErrorPayload: StreamErrorPayload | null = null;
 
+  // Cached prepareStep result. Reused verbatim on every step unless
+  // load_tool_groups ran in the previous step (only then can the active tool
+  // set have changed) — avoids a DB read + prompt rebuild on ordinary steps.
+  // Returning the SAME object (not undefined) is important: prepareStep
+  // returning undefined would fall back to the OUTER activeTools, reverting
+  // any mid-stream group additions.
+  let lastStepComputed:
+    | {
+        activeTools: string[];
+        instructions: ReturnType<typeof buildCachedInstructions>;
+      }
+    | undefined;
+
   const result = streamText({
     model,
-    system: fullSystemPrompt,
+    instructions: buildCachedInstructions(
+      provider,
+      staticSystemPrompt,
+      dynamicSystemPrompt,
+    ),
     messages: modelMessages,
-    tools: Object.keys(tools).length > 0 ? tools : undefined,
+    tools: cachedBaseTools,
+    // Initial active set (core + classified + stored groups). prepareStep
+    // re-evaluates it before every step, so load_tool_groups can add groups
+    // mid-stream.
+    activeTools: initialActiveToolNames,
+    // Re-evaluate the active tool set before every step. When load_tool_groups
+    // ran in the previous step, the newly enabled group's tools become
+    // registered for THIS step — the model can use them in the same response
+    // instead of asking the user to repeat their request. Also refreshes the
+    // tool-availability note so the model stops treating the group as
+    // unloaded. (The per-step set is a subset of the base set, so unloaded
+    // definitions never reach the provider and token savings are preserved.)
+    prepareStep: async ({ steps }) => {
+      // Fast path: unless load_tool_groups ran in the previous step, the
+      // active tool set cannot have changed — reuse the cached result so
+      // ordinary multi-step runs pay zero extra DB reads / prompt rebuilds.
+      const prevStep = steps.at(-1);
+      const enabledGroupsThisRound =
+        prevStep?.toolCalls?.some(
+          (tc) => tc.toolName === "load_tool_groups",
+        ) ?? false;
+      if (!enabledGroupsThisRound && lastStepComputed) {
+        return lastStepComputed;
+      }
+
+      const currentRow = await db
+        .select({ toolGroups: conversations.toolGroups })
+        .from(conversations)
+        .where(eq(conversations.id, conversationId))
+        .get();
+      const freshStored = parseStoredToolState(currentRow?.toolGroups);
+      const freshActive = computeActiveToolGroups({
+        userText: lastUserText,
+        recentMessages: uiMessages.slice(-10),
+        stored: freshStored,
+      });
+      activeToolGroups = freshActive;
+      lastStepComputed = {
+        activeTools: activeToolNames(tools, freshActive),
+        instructions: buildCachedInstructions(
+          provider,
+          staticSystemPrompt,
+          dynamicSystemPromptBase +
+            buildToolAvailabilityNote(tools, freshActive),
+        ),
+      };
+      return lastStepComputed;
+    },
     // Retry retryable provider failures (network, 5xx, rate limits) up to
     // 3 times with exponential backoff before surfacing the error.
     maxRetries: 3,
@@ -582,6 +857,37 @@ You are currently in **Plan mode**. This means:
         tokensApplied = true;
       } catch (err) {
         console.error("Failed to update token usage in onFinish:", err);
+      }
+
+      // ── Persist active tool groups ────────────────────────────────
+      // Cheap, non-blocking UPDATE: explicit groups (load_tool_groups) stay
+      // forever; the request's own classifier∪recency set is stored as
+      // `recent` so short follow-ups ("yes", "do it") inherit the tools the
+      // conversation was using — and stale groups decay once a project ends.
+      void persistActiveToolGroups({
+        conversationId,
+        activeGroups: activeToolGroups,
+      });
+
+      // ── Background rolling summary ─────────────────────────────────
+      // When the conversation has grown far past the last summary, fire a
+      // cheap background completion that compresses the earliest segment
+      // (everything before the recent verbatim window) into a compact prose
+      // recap. Future requests inject it into the system prompt and drop the
+      // summarized messages from the model payload, capping input-token
+      // growth on long conversations. Fire-and-forget — never blocks the
+      // stream and swallows all errors.
+      if (!capturedErrorPayload) {
+        const covered = conversation.summaryMessageCount ?? 0;
+        if (shouldSummarize({ totalMessages: uiMessages.length, coveredMessages: covered })) {
+          const untilCount = Math.max(0, uiMessages.length - SUMMARIZE_RECENT_KEEP);
+          void summarizeConversationBackground({
+            conversationId,
+            provider,
+            modelId: conversationModelId,
+            untilCount,
+          });
+        }
       }
 
       // ── Background auto-title ─────────────────────────────────────

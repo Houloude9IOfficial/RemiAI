@@ -8,6 +8,7 @@ import {
   X,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────
@@ -103,7 +104,7 @@ export function TodoProgressBar({ conversationId }: { conversationId: number }) 
             className="flex h-5 w-5 shrink-0 items-center justify-center rounded hover:bg-muted transition-colors"
             title={expanded ? "Hide details" : "Show details"}
           >
-            {expanded ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+            {expanded ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
           </button>
 
           {/* Dismiss */}

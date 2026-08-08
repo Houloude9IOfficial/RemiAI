@@ -87,8 +87,26 @@ export const conversations = sqliteTable("conversations", {
   }),
   modelId: text("model_id"),
   mode: text("mode", { enum: ["chat", "goal", "plan"] }).notNull().default("chat"),
+  bashMode: text("bash_mode", { enum: ["sandboxed", "full"] })
+    .notNull()
+    .default("sandboxed"),
   totalInputTokens: integer("total_input_tokens").notNull().default(0),
   totalOutputTokens: integer("total_output_tokens").notNull().default(0),
+  // Rolling-conversation summary: a compact prose recap of the EARLIEST part
+  // of the conversation, generated in the background. Requests inject it into
+  // the system prompt and drop the summarized messages from the model payload
+  // (they still exist in the `messages` table for the UI and future edits).
+  summary: text("summary").notNull().default(""),
+  // Number of leading messages (by orderIndex) the summary covers.
+  summaryMessageCount: integer("summary_message_count").notNull().default(0),
+  // Active dynamic-tool-loading groups. `explicit` = groups enabled via the
+  // load_tool_groups tool (persistent); `recent` = the last request's own
+  // classifier+recency signal (self-decaying). Lets short follow-ups inherit
+  // the tools the conversation was just using.
+  toolGroups: text("tool_groups", { mode: "json" })
+    .$type<{ explicit: string[]; recent: string[] }>()
+    .notNull()
+    .default({ explicit: [], recent: [] }),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });

@@ -92,44 +92,31 @@ function validateCron(schedule: string): string | null {
  */
 export function buildScheduleTaskTool(conversationId: number) {
   return {
-    description: `Schedule a task for future execution. When the trigger time arrives, the AI will automatically execute the task in this same conversation — with full conversation history and all available tools — and report the results. A native desktop notification will be sent when the result is ready.
+    description: `Schedule a task to run at a future time. When the trigger arrives, the AI executes the task in this conversation (with full history and tools) and sends a desktop notification with results.
 
-Use this for:
-- "Check tomorrow at 9am if the package has shipped" — one-off task
-- "Remind me at midnight to check the FIFA World Cup results" — one-off task
-- "At 3pm, fetch the latest stock prices and summarize them" — one-off task
-- "Every hour, check if the CI build passed" — recurring task (add a schedule/cron)
-- "Check weather daily at 7am" — recurring task
+Use for reminders, time-sensitive lookups ("check tomorrow at 9am if the package shipped"), or recurring tasks (add a cron schedule).
 
-The task will be executed in this conversation using the same model and tools that are available now. A native notification will appear on your desktop when the result is ready.
-
-IMPORTANT: Always use get_time_details() first to check the current time and timezone. Then pass the triggerAt in the USER'S local time and include the timezone parameter so the system correctly converts to UTC.`,
+IMPORTANT: Call get_time_details() first, then pass triggerAt in the USER'S local time plus the timezone parameter — the system converts to UTC.`,
 
     parameters: z.object({
       triggerAt: z
         .string()
         .describe(
-          "ISO 8601 date/time in the USER'S local timezone (e.g. '2026-07-20T23:59'). Do NOT convert to UTC yourself — just use the local time the user asked for. The system will convert using the timezone parameter you provide. Use get_time_details() first to get the correct timezone offset.",
+          "ISO 8601 date/time in the USER'S local timezone (e.g. '2026-07-20T23:59'). Do NOT convert to UTC. Use get_time_details() first for the timezone offset.",
         ),
       task: z
         .string()
         .min(1)
         .max(2000)
-        .describe(
-          "Clear description of what the AI should do at the scheduled time. Be specific about what to check, what tools to use, and what to report.",
-        ),
+        .describe("What the AI should do at the scheduled time — be specific about what to check and report."),
       timezone: z
         .string()
         .optional()
-        .describe(
-          "The user's timezone offset from get_time_details().utcOffset. Pass the ENTIRE value as returned (e.g. 'UTC+03:00', 'UTC-04:00'). The system will normalize it. If not provided, UTC is assumed. ALWAYS pass this from get_time_details to ensure the trigger time is in the user's local timezone.",
-        ),
+        .describe("User's timezone offset from get_time_details().utcOffset, e.g. 'UTC+03:00' (entire value). If omitted, UTC assumed."),
       schedule: z
         .string()
         .optional()
-        .describe(
-          "Optional cron expression for recurring execution. Leave empty for one-off tasks. Standard 5-field cron format: minute hour day-of-month month day-of-week.\\n\\nExamples:\\n- \\\"0 * * * *\\\" — every hour at minute 0\\n- \\\"*/5 * * * *\\\" — every 5 minutes\\n- \\\"0 9 * * *\\\" — daily at 9:00 AM\\n- \\\"0 9 * * 1-5\\\" — weekdays at 9:00 AM\\n- \\\"0 0 * * 1\\\" — every Monday at midnight\\n- \\\"0 0 1 * *\\\" — monthly on the 1st at midnight\\n\\nWhen a schedule is provided, the task will re-schedule itself after each execution using the cron expression.",
-        ),
+        .describe("Optional cron expression for recurring execution (5-field: minute hour day-of-month month day-of-week). Examples: '0 * * * *' hourly, '0 9 * * *' daily 9am, '0 9 * * 1-5' weekdays 9am. Re-schedules itself after each run."),
     }),
 
     execute: async ({
@@ -214,14 +201,14 @@ IMPORTANT: Always use get_time_details() first to check the current time and tim
  */
 function buildListScheduledTasksTool(conversationId: number) {
   return {
-    description: `List all pending and recently completed scheduled tasks in this conversation. Use this to check what tasks are scheduled, see their status, and get their IDs for use with update_scheduled_task or cancel_scheduled_task.`,
+    description: `List scheduled tasks in this conversation and their status. Get IDs for update_scheduled_task / cancel_scheduled_task.`,
 
     parameters: z.object({
       includeCompleted: z
         .boolean()
         .optional()
         .default(false)
-        .describe("Whether to include completed/failed/cancelled tasks. Default: false (pending only)."),
+        .describe("Include completed/failed/cancelled tasks. Default: false (pending only)"),
       limit: z
         .number()
         .int()
@@ -229,7 +216,7 @@ function buildListScheduledTasksTool(conversationId: number) {
         .max(50)
         .optional()
         .default(20)
-        .describe("Maximum number of tasks to return (max 50, default 20)."),
+        .describe("Max tasks to return (max 50, default 20)"),
     }),
 
     execute: async ({
@@ -281,48 +268,33 @@ function buildListScheduledTasksTool(conversationId: number) {
 
 function buildUpdateScheduledTaskTool(conversationId: number) {
   return {
-    description: `Update an existing scheduled task's trigger time, task description, or cron schedule. Use this to change when a task runs, what it does, or how often it repeats.
-
-Use this for:
-- "Change the reminder to 2pm instead of 11:59"
-- "Update the task to check a different website"
-- "Make this daily task run at 7am instead of 9am"
-- "Turn this one-off task into a recurring one"
-- "Stop this from repeating (remove the schedule)"
-
-IMPORTANT: The task must be in 'pending' status. Use list_scheduled_tasks first to find the task ID.`,
+    description: `Update a pending scheduled task's trigger time, description, or cron schedule. Use list_scheduled_tasks first to find the task ID.`,
 
     parameters: z.object({
       taskId: z
         .number()
         .int()
         .positive()
-        .describe("The ID of the task to update. Use list_scheduled_tasks to find task IDs."),
+        .describe("ID of the task to update (from list_scheduled_tasks)"),
       triggerAt: z
         .string()
         .optional()
-        .describe(
-          "New ISO 8601 date/time in the USER'S local timezone (e.g. '2026-07-20T23:59'). Do NOT convert to UTC yourself. The system will convert using the timezone parameter.",
-        ),
+        .describe("New ISO 8601 date/time in the USER'S local timezone (e.g. '2026-07-20T23:59'). Do NOT convert to UTC."),
       task: z
         .string()
         .min(1)
         .max(2000)
         .optional()
-        .describe("New description of what the AI should do."),
+        .describe("New description of what the AI should do"),
       timezone: z
         .string()
         .optional()
-        .describe(
-          "The user's timezone offset from get_time_details().utcOffset (e.g. 'UTC+03:00', 'UTC-04:00'). Required if you're updating triggerAt. Pass the ENTIRE value as returned.",
-        ),
+        .describe("User's timezone offset from get_time_details().utcOffset. Required when updating triggerAt."),
       schedule: z
         .string()
         .optional()
         .nullable()
-        .describe(
-          "New cron expression for recurring execution, or null to make the task one-off. Same format as schedule_task. Pass explicit null to remove an existing schedule.",
-        ),
+        .describe("New cron expression, or null to remove the schedule (one-off)"),
     }),
 
     execute: async ({
@@ -448,18 +420,14 @@ IMPORTANT: The task must be in 'pending' status. Use list_scheduled_tasks first 
 
 function buildCancelScheduledTaskTool(conversationId: number) {
   return {
-    description: `Cancel a pending scheduled task so it won't execute. Use list_scheduled_tasks first to find the task ID.
-
-Use this for:
-- "Cancel that reminder I set earlier"
-- "Never mind, don't check the weather tomorrow"`,
+    description: `Cancel a pending scheduled task so it won't execute. Use list_scheduled_tasks first to find the task ID.`,
 
     parameters: z.object({
       taskId: z
         .number()
         .int()
         .positive()
-        .describe("The ID of the task to cancel. Use list_scheduled_tasks to find task IDs."),
+        .describe("ID of the task to cancel (from list_scheduled_tasks)"),
     }),
 
     execute: async ({ taskId }: { taskId: number }) => {

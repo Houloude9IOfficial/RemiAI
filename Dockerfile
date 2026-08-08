@@ -4,7 +4,18 @@ FROM node:22-bookworm-slim AS build
 WORKDIR /app
 
 COPY package.json package-lock.json ./
+# Skip Playwright's postinstall browser download — Chromium is installed
+# explicitly below (into /ms-playwright) so `npm ci` stays fast and cannot
+# fail on restricted networks.
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 RUN npm ci
+
+# Bundle Chromium for the Browser Automation tool (native Playwright).
+# Installed here (same playwright version as the app) and copied into the
+# runtime image below, so the server finds it via PLAYWRIGHT_BROWSERS_PATH.
+# --only-shell: the tool is headless-only, and the headless shell is ~5×
+# smaller than the full Chromium build.
+RUN PLAYWRIGHT_BROWSERS_PATH=/ms-playwright node node_modules/playwright/cli.js install chromium --only-shell
 
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -22,6 +33,15 @@ COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
 COPY --from=build /app/public ./public
 COPY --from=build /app/db/migrations ./db/migrations
+
+# Chromium for the Browser Automation tool (installed in the build stage
+# with the same playwright version the app uses).
+COPY --from=build /ms-playwright /ms-playwright
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+# Playwright system dependencies (Chromium's shared libraries) — must be
+# installed in the runtime image, which is a fresh slim base.
+RUN node node_modules/playwright/cli.js install-deps chromium
 
 # Keep the database and user uploads in the named /app/data volume.
 RUN mkdir -p /app/data && chown -R node:node /app

@@ -24,7 +24,7 @@ export function buildContextTools(
   // -----------------------------------------------------------------------
   tools.get_time_details = {
     description:
-      "Get the current date, time, timezone, and related temporal information in the USER'S local timezone. Use this when you need to know what time it is, what day/date it is, the timezone, or daylight saving status.",
+      "Get the current date, time, timezone, and daylight-saving info in the USER'S local timezone.",
     parameters: z.object({}),
     execute: async () => getTimeDetails(timezone),
   };
@@ -34,7 +34,7 @@ export function buildContextTools(
   // -----------------------------------------------------------------------
   tools.get_device_details = {
     description:
-      "Get details about the user's device and browser, including operating system, browser name/version, device type, language, and timezone. Use this when you need to know what platform the user is on.",
+      "Get details about the user's device and browser (OS, browser name/version, device type, language, timezone).",
     parameters: z.object({}),
     execute: async () => {
       const info = parseUserAgent(userAgent ?? "");
@@ -51,6 +51,7 @@ export function buildContextTools(
         timezone:
           timezone ??
           (Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"),
+        note: "The timezone is provided by the browser and may not be accurate if the user has manually changed their system timezone. Also, you may or may not be running on user's device, so the timezone may not be accurate. Use this information as a hint, but do not rely on it for critical decisions, if you have access you may use Bash to get timezone/hardware info, or use the get_time_details tool to get the timezone and time in the user's timezone.",
       };
     },
   };

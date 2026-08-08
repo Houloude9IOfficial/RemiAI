@@ -12,6 +12,7 @@ import {
   searchFiles,
   globFiles,
   writeFile,
+  editFile,
   createDirectory,
   deleteDirectory,
   renameItem,
@@ -46,7 +47,7 @@ async function ensureRoots(): Promise<PermittedRoot[]> {
  */
 export const listPermittedRootsTool = {
   description:
-    "List all directory roots you can access, with read/write permissions for each. Only roots you have at least read or write access to are returned — roots you have NO access to are intentionally omitted, so never guess or attempt to use a rootId that is not listed here. Use this first to discover available roots before accessing files.",
+    "List directory roots you can access (read/write per root). Roots you have no access to are omitted — never guess a rootId that isn't listed here. Call this first before accessing files.",
   parameters: z.object({}),
   execute: async () => {
     const roots = await getPermittedRoots();
@@ -69,19 +70,17 @@ export const listPermittedRootsTool = {
  */
 export const listDirectoryTool = {
   description:
-    "List files and directories inside a permitted root directory (or subdirectory). Returns entries sorted with directories first, then alphabetically, with file sizes and types.\n\n**Workflow:** Call `list_permitted_roots` first to discover available rootIds, then pass the numeric rootId here to browse its contents. Leave relativePath empty to list the root itself. Pass a relativePath to browse a subdirectory.\n\n**Only use rootIds returned by `list_permitted_roots`** — roots you have no access to are not listed there, and attempting them will fail with an access-denied error.",
+    "List files/directories inside a permitted root (or subdirectory), with sizes and types. Pass the numeric rootId from list_permitted_roots; leave relativePath empty to list the root itself.",
   parameters: z.object({
     rootId: z
       .coerce.number()
       .int()
       .positive()
-      .describe("ID of the permitted root directory (use list_permitted_roots to discover)"),
+      .describe("Permitted root ID (from list_permitted_roots)"),
     relativePath: z
       .string()
       .optional()
-      .describe(
-        "Optional relative path within the root. Leave empty to list the root itself. Use forward slashes (/) even on Windows.",
-      ),
+      .describe("Optional subdirectory to browse; empty lists the root. Use forward slashes (/)."),
   }),
   execute: async ({
     rootId,
@@ -108,7 +107,7 @@ export const listDirectoryTool = {
  */
 export const readFileTool = {
   description:
-    "Read the text content of a file. Supports a chat file URL or a root file path. Max 100KB per read.\n\n**Calling conventions:**\n1. Pass `url` for chat file URLs — user uploads (e.g. /api/chat/uploads/123/notes.txt) or session sandbox files (e.g. /api/chat/5/session-files/src/app.js) — no directory root needed.\n2. Pass `rootId` + `relativePath` for files in configured directories.",
+    "Read a file's text content (max 100KB per read). Pass `url` for chat/session files, or `rootId` + `relativePath` for directory files. Supports byte offset/limit pagination.",
   parameters: z
     .object({
       rootId: z
@@ -116,19 +115,15 @@ export const readFileTool = {
         .int()
         .positive()
         .optional()
-        .describe("ID of the permitted root directory (leave empty if using `url`)"),
+        .describe("Permitted root ID (omit if using `url`)"),
       relativePath: z
         .string()
         .optional()
-        .describe(
-          "Relative path to the file within the root (leave empty if using `url`)",
-        ),
+        .describe("Path within the root (omit if using `url`)"),
       url: z
         .string()
         .optional()
-        .describe(
-          "Chat file URL — a user upload (e.g. `/api/chat/uploads/123/notes.txt`) or a session sandbox file (e.g. `/api/chat/5/session-files/notes.txt`). Use this instead of rootId + relativePath for files tied to the chat.",
-        ),
+        .describe("Chat file URL (upload or session sandbox file). Use instead of rootId+relativePath for chat files."),
       offset: z
         .number()
         .int()
@@ -141,9 +136,7 @@ export const readFileTool = {
         .min(1)
         .max(102400)
         .optional()
-        .describe(
-          "Maximum number of bytes to read (max 102400, default: entire file)",
-        ),
+        .describe("Max bytes to read (max 102400, default: entire file)"),
     })
     .refine(
       (data) => {
@@ -217,20 +210,18 @@ export const readFileTool = {
  */
 export const searchFilesTool = {
   description:
-    "Search for a text string inside files within a permitted root. Uses ripgrep if available (much faster), otherwise falls back to a Node.js line-by-line search. Optionally filter by glob pattern.\n\n**Workflow:** Call `list_permitted_roots` first for the rootId, then search with your query. Use the pattern parameter to narrow by file extension (e.g. \"*.ts\", \"*.md\").",
+    "Search for text inside files within a permitted root (ripgrep when available). Optionally filter by glob pattern (e.g. '*.ts').",
   parameters: z.object({
     rootId: z
       .coerce.number()
       .int()
       .positive()
-      .describe("ID of the permitted root directory"),
+      .describe("Permitted root ID"),
     query: z.string().min(1).describe("Text to search for (case-insensitive)"),
     pattern: z
       .string()
       .optional()
-      .describe(
-        "Optional glob pattern to filter files (e.g. '*.ts', '*.md'). Defaults to all files.",
-      ),
+      .describe("Optional glob filter (e.g. '*.ts', '*.md'); defaults to all files"),
   }),
   execute: async ({
     rootId,
@@ -252,17 +243,17 @@ export const searchFilesTool = {
  */
 export const globFilesTool = {
   description:
-    "Find files matching a glob pattern inside a permitted root. Use this to discover files by name or extension (e.g. '**/*.ts', '*.md', 'docs/**/*').",
+    "Find files matching a glob pattern inside a permitted root (e.g. '**/*.ts', 'src/**/*').",
   parameters: z.object({
     rootId: z
       .coerce.number()
       .int()
       .positive()
-      .describe("ID of the permitted root directory"),
+      .describe("Permitted root ID"),
     pattern: z
       .string()
       .min(1)
-      .describe("Glob pattern to match files against (e.g. '**/*.ts', '*.json', 'src/**/*')"),
+      .describe("Glob pattern (e.g. '**/*.ts', '*.json', 'src/**/*')"),
   }),
   execute: async ({ rootId, pattern }: { rootId: number; pattern: string }) => {
     await ensureRoots();
@@ -278,7 +269,7 @@ export const globFilesTool = {
  */
 export const readMediaTool = {
   description:
-    "Read a media file and return a `dataUrl` (base64 pixels) you can examine. **NOTE: Chat-uploaded images are ALREADY visible to you natively via your vision encoder — do NOT use this tool for those.** Use this tool for: media in configured directory roots (`rootId` + `relativePath`), session sandbox files via URL (e.g. `/api/chat/5/session-files/assets/earth.jpg`), or video metadata from chat uploads. For sandbox images, `session_file_read_media` is the more direct option. Supported formats: images (.jpg, .png, .gif, .webp, .svg, .avif) and videos (.mp4, .webm, .mov, .avi, .mkv). Max file size: 20 MB.",
+    "Read a media file (image/video) and return a `dataUrl` (base64 pixels) you can examine. NOTE: chat-uploaded images are already visible to you natively — do NOT use this for those. Use for media in directory roots (rootId+relativePath); for sandbox images use session_file_read_media instead. Images: .jpg/.png/.gif/.webp/.svg/.avif; videos: .mp4/.webm/.mov/.avi/.mkv. Max 20MB.",
   parameters: z
     .object({
       rootId: z
@@ -286,19 +277,15 @@ export const readMediaTool = {
         .int()
         .positive()
         .optional()
-        .describe("ID of the permitted root directory (leave empty if using `url`)"),
+        .describe("Permitted root ID (omit if using `url`)"),
       relativePath: z
         .string()
         .optional()
-        .describe(
-          "Relative path to the media file within the root (leave empty if using `url`)",
-        ),
+        .describe("Path to the media file within the root (omit if using `url`)"),
       url: z
         .string()
         .optional()
-        .describe(
-          "Chat file URL — a user upload (e.g. `/api/chat/uploads/123/filename.png`) or a session sandbox file (e.g. `/api/chat/5/session-files/assets/earth.jpg`). Use this instead of rootId + relativePath for files tied to the chat. For sandbox images you can also use `session_file_read_media`.",
-        ),
+        .describe("Chat file URL (upload or session sandbox file). Use instead of rootId+relativePath for chat files."),
     })
     .refine(
       (data) => {
@@ -340,18 +327,16 @@ export const readMediaTool = {
  */
 export const createDirectoryTool = {
   description:
-    "Create one or more directories (folders) at the specified path within a permitted root. Creates parent directories automatically if they don't exist. Requires write permission on the root.\n\n**Note:** Most of the time you don't need this — `write_file` already creates parent directories automatically. Only use `create_directory` when the user explicitly asks for an empty folder that won't have files written to it yet.",
+    "Create a directory within a permitted root (parent directories are created automatically). Rarely needed — write_file already creates parent dirs. Use only for empty folders the user explicitly wants.",
   parameters: z.object({
     rootId: z
       .coerce.number()
       .int()
       .positive()
-      .describe("ID of the permitted root directory (must have write permission)"),
+      .describe("Permitted root ID (must have write permission)"),
     relativePath: z
       .string()
-      .describe(
-        "Relative path for the new directory within the root (use forward slashes even on Windows). Creates any missing parent directories automatically.",
-      ),
+      .describe("Path for the new directory within the root (forward slashes); creates missing parents"),
   }),
   execute: async ({
     rootId,
@@ -371,23 +356,19 @@ export const createDirectoryTool = {
  */
 export const renameItemTool = {
   description:
-    "Rename or move a file or directory to a new location within the same permitted root. Works for both files and directories. For example, you can rename a file, move a file into a subfolder, or rename a directory. Requires write permission on the root. The destination parent directory is created automatically if it doesn't exist. This operation is reversible (you can rename it back).",
+    "Rename or move a file/directory within the same permitted root. Destination parent directories are created automatically. Requires write permission.",
   parameters: z.object({
     rootId: z
       .coerce.number()
       .int()
       .positive()
-      .describe("ID of the permitted root directory (must have write permission)"),
+      .describe("Permitted root ID (must have write permission)"),
     sourceRelativePath: z
       .string()
-      .describe(
-        "Current relative path of the file or directory within the root (use forward slashes even on Windows)",
-      ),
+      .describe("Current relative path (forward slashes)"),
     destRelativePath: z
       .string()
-      .describe(
-        "New relative path for the file or directory within the root (use forward slashes even on Windows). Parent directories are created automatically.",
-      ),
+      .describe("New relative path (forward slashes); creates parent directories"),
   }),
   execute: async ({
     rootId,
@@ -415,18 +396,16 @@ export const renameItemTool = {
  */
 export const deleteDirectoryTool = {
   description:
-    "⚠️ WARNING: This permanently deletes a directory and ALL of its contents (files, subdirectories, everything) within a permitted root. This action CANNOT be undone — the data is gone forever. Requires write permission on the root. ONLY proceed if you are absolutely certain the user wants to delete this directory and everything inside it. If you have ANY doubt, ask the user to confirm first before proceeding.",
+    "⚠️ PERMANENTLY deletes a directory and ALL its contents (cannot be undone). Requires write permission. Only proceed if you are certain the user wants this — if in doubt, ask to confirm first.",
   parameters: z.object({
     rootId: z
       .coerce.number()
       .int()
       .positive()
-      .describe("ID of the permitted root directory (must have write permission)"),
+      .describe("Permitted root ID (must have write permission)"),
     relativePath: z
       .string()
-      .describe(
-        "Relative path to the directory to delete within the root (use forward slashes even on Windows). This deletes the directory and everything inside it permanently.",
-      ),
+      .describe("Directory path to delete within the root (forward slashes); deletes everything inside it"),
   }),
   execute: async ({
     rootId,
@@ -446,21 +425,19 @@ export const deleteDirectoryTool = {
  */
 export const writeFileTool = {
   description:
-    "Write content to a file within a permitted root. **Creates parent directories automatically** — no need to call create_directory first. By default overwrites the file; use mode='append' to append instead.\n\n**Workflow:** Call `list_permitted_roots` to get the rootId, then write files directly. write_file handles all directory creation automatically.",
+    "Write content to a file within a permitted root. Creates parent directories automatically. Overwrites by default; use mode='append' to append.",
   parameters: z.object({
     rootId: z
       .coerce.number()
       .int()
       .positive()
-      .describe("ID of the permitted root directory (must have write permission)"),
-    relativePath: z.string().describe("Relative path to the file within the root (use forward slashes even on Windows)"),
-    content: z.string().describe("Text content to write to the file"),
+      .describe("Permitted root ID (must have write permission)"),
+    relativePath: z.string().describe("File path within the root (forward slashes)"),
+    content: z.string().describe("Text content to write"),
     mode: z
       .enum(["overwrite", "append"])
       .optional()
-      .describe(
-        "Write mode: 'overwrite' replaces the file (default), 'append' appends to it.",
-      ),
+      .describe("'overwrite' replaces (default), 'append' appends"),
   }),
   execute: async ({
     rootId,
@@ -480,17 +457,47 @@ export const writeFileTool = {
     indexFile(rootId, relativePath, result.path).catch((err) =>
       console.error("[fs-tools] Failed to index written file:", err),
     );
-    // Prefer relativePath for UI digests; keep absolute path for debugging.
+    // Keep result deliberately compact. The model can call read_file when it
+    // actually needs content; echoing it here wastes context on every write.
     return {
-      wrote: result.wrote,
+      bytesChanged: result.wrote,
       path: result.relativePath,
-      absolutePath: result.path,
-      mode: result.mode,
       created: result.created,
-      linesWritten: result.linesWritten,
       linesAdded: result.linesAdded,
       linesRemoved: result.linesRemoved,
+      createdDirectories: result.createdDirectories,
     };
+  },
+};
+
+/** Make a targeted, uniquely anchored edit to a permitted-root file. */
+export const editFileTool = {
+  description:
+    "Edit a file without rewriting it. `old_str` must appear exactly once in the file; if it appears 0 or multiple times the result includes current content to retry with a more specific anchor. Empty `new_str` deletes the match. Use for existing files (write_file for new ones).",
+  parameters: z.object({
+    rootId: z.coerce.number().int().positive().describe("Permitted writable root ID"),
+    relativePath: z.string().describe("Path within the root (forward slashes)"),
+    old_str: z.string().describe("Exact, uniquely occurring text to replace"),
+    new_str: z.string().describe("Replacement text; empty string deletes the match"),
+  }),
+  execute: async ({ rootId, relativePath, old_str, new_str }: {
+    rootId: number; relativePath: string; old_str: string; new_str: string;
+  }) => {
+    await ensureRoots();
+    const root = await getRootById(rootId);
+    const result = await editFile(root, relativePath, old_str, new_str);
+    if ("relativePath" in result) {
+      indexFile(rootId, relativePath, result.path).catch((err) =>
+        console.error("[fs-tools] Failed to index edited file:", err),
+      );
+      return {
+        path: result.relativePath,
+        bytesChanged: result.bytesChanged,
+        linesAdded: result.linesAdded,
+        linesRemoved: result.linesRemoved,
+      };
+    }
+    return result;
   },
 };
 
@@ -548,6 +555,7 @@ export async function buildFilesystemTools(): Promise<Record<string, any>> {
     tools.search_files = withTruncation(searchFilesTool);
     tools.glob_files = withTruncation(globFilesTool);
     tools.write_file = withTruncation(writeFileTool);
+    tools.edit_file = withTruncation(editFileTool);
     tools.create_directory = withTruncation(createDirectoryTool);
     tools.delete_directory = withTruncation(deleteDirectoryTool);
     tools.rename_item = withTruncation(renameItemTool);

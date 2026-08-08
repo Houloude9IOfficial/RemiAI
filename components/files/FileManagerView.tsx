@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -22,7 +22,11 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { sessionFilesApi, type SessionFileEntry } from "@/lib/api/session-files";
+import {
+  sessionFilesApi,
+  subscribeSessionFilesChanged,
+  type SessionFileEntry,
+} from "@/lib/api/session-files";
 import {
   buildTree,
   collectFolders,
@@ -118,13 +122,49 @@ export function FileManagerView({
   const totalSize = entries.reduce((sum, e) => sum + e.size, 0);
   const folders = useMemo(() => collectFolders(tree), [tree]);
 
-  const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ["session-files", conversationId] });
+  const invalidate = useCallback(
+    () =>
+      queryClient.invalidateQueries({
+        queryKey: ["session-files", conversationId],
+      }),
+    [queryClient, conversationId],
+  );
 
   const notifyChanged = () => {
     invalidate();
     onFilesChanged();
   };
+
+  // Debounce bursts of change events (the AI can write many files in quick
+  // succession during one tool run) so each burst triggers a single refetch.
+  const invalidateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refreshAfterChange = useCallback(() => {
+    if (invalidateTimerRef.current) clearTimeout(invalidateTimerRef.current);
+    invalidateTimerRef.current = setTimeout(() => {
+      invalidateTimerRef.current = null;
+      invalidate();
+    }, 300);
+  }, [invalidate]);
+
+  // Clear any pending debounce timer on unmount.
+  useEffect(
+    () => () => {
+      if (invalidateTimerRef.current) clearTimeout(invalidateTimerRef.current);
+    },
+    [],
+  );
+
+  // Live-update when files change elsewhere — e.g. the AI writes/edits/deletes
+  // session files during a chat, or the user uploads from the chat composer.
+  useEffect(() => {
+    const unsubscribe = subscribeSessionFilesChanged(
+      ({ conversationId: changedId }) => {
+        if (changedId !== conversationId) return;
+        refreshAfterChange();
+      },
+    );
+    return unsubscribe;
+  }, [conversationId, refreshAfterChange]);
 
   const textSelection =
     !!selectedEntry && selectedEntry.isFile && isTextFile(selectedEntry.name);

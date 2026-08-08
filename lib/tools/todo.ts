@@ -39,15 +39,7 @@ function formatTodoList(items: Array<{
 
 function buildTodosInitTool(conversationId: number) {
   return {
-    description: `Initialize or replace the todo list for the current conversation. Use this at the start of a complex multi-step task to create a plan. Each item should have a unique ID and a clear task description.
-
-You can use this to:
-- Break down a complex request into manageable steps
-- Create a plan before executing
-- Track progress as you work through steps
-- Show the user what you're planning to do
-
-After creating the list, call todos_update to mark items as in_progress, completed, etc. as you work through them.`,
+    description: `Initialize or replace the todo list for the current conversation. Use at the start of a complex multi-step task to create a plan. Each item needs a unique ID and a clear task. After creating, call todos_update as you work through items.`,
 
     inputSchema: z.object({
       items: z
@@ -57,19 +49,17 @@ After creating the list, call todos_update to mark items as in_progress, complet
               .string()
               .min(1)
               .max(50)
-              .describe(
-                "Unique ID for this todo item (e.g. 'step-1', 'research', 'implement'). Use kebab-case.",
-              ),
+              .describe("Unique ID (kebab-case, e.g. 'step-1', 'research')"),
             task: z
               .string()
               .min(1)
               .max(500)
-              .describe("Clear description of the task to complete."),
+              .describe("Clear description of the task to complete"),
           }),
         )
         .min(1)
         .max(25)
-        .describe("List of todo items to create (max 25)."),
+        .describe("Todo items to create (max 25)"),
     }),
 
     execute: async ({
@@ -131,16 +121,7 @@ After creating the list, call todos_update to mark items as in_progress, complet
 
 function buildTodosUpdateTool(conversationId: number) {
   return {
-    description: `Update the status of one or more todo items. Use this after completing, starting, or changing the status of any todo item.
-
-Statuses:
-- **pending** — Not started yet (default)
-- **in_progress** — Currently working on this item
-- **completed** — Finished successfully
-- **failed** — Could not complete
-- **skipped** — Decided not to do this
-
-You can also add a brief note to provide context about the update.`,
+    description: `Update the status of one or more todo items (pending, in_progress, completed, failed, skipped). Optionally add a brief note for context.`,
 
     inputSchema: z.object({
       updates: z
@@ -150,22 +131,20 @@ You can also add a brief note to provide context about the update.`,
               .string()
               .min(1)
               .max(50)
-              .describe("The ID of the todo item to update."),
+              .describe("ID of the todo item to update"),
             status: z
               .enum(["pending", "in_progress", "completed", "failed", "skipped"])
-              .describe("New status for this todo item."),
+              .describe("New status"),
             note: z
               .string()
               .max(500)
               .optional()
-              .describe(
-                "Optional brief note providing context about the update (e.g. what was done, why it was skipped, what went wrong).",
-              ),
+              .describe("Optional brief context note"),
           }),
         )
         .min(1)
         .max(25)
-        .describe("List of todo item updates to apply."),
+        .describe("Todo item updates to apply"),
     }),
 
     execute: async ({
@@ -283,11 +262,9 @@ You can also add a brief note to provide context about the update.`,
 
 function buildTodosViewTool(conversationId: number) {
   return {
-    description: `View the current todo list with all items and their statuses. Use this to check your progress on a multi-step task.
+    description: `View the current todo list with all items and statuses (stored per-conversation). Use to check progress on a multi-step task.`,
 
-The todo list is stored per-conversation and persists across messages.`,
-
-    inputSchema: z.object({}).describe("View the current todo list."),
+    inputSchema: z.object({}).describe("View the current todo list"),
 
     execute: async () => {
       const items = await db

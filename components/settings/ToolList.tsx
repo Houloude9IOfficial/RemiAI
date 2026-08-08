@@ -113,8 +113,11 @@ export function ToolList() {
       return;
     }
 
-    // Show security warning for code execution
-    if (newEnabled && tool.id === "code_execution") {
+    // Show security warning for tools that run native code / a real browser
+    if (
+      newEnabled &&
+      (tool.id === "code_execution" || tool.id === "playwright")
+    ) {
       setConfirmTool(tool);
       return;
     }
@@ -486,28 +489,51 @@ export function ToolList() {
         </div>
       ))}
 
-      {/* Security warning dialog for code execution */}
+      {/* Security warning dialog for native tools (code execution, browser automation) */}
       <Dialog open={confirmTool !== null} onOpenChange={(open) => !open && setConfirmTool(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
               <AlertTriangle className="h-5 w-5" />
-              Enable Code Execution?
+              {confirmTool?.id === "playwright"
+                ? "Enable Browser Automation?"
+                : "Enable Code Execution?"}
             </DialogTitle>
             <DialogDescription className="pt-2 space-y-3" render={<div />}>
-              <p className="text-sm font-medium text-foreground">
-                This is <strong>NOT a secure sandbox</strong>.
-              </p>
-              <ul className="text-xs space-y-1.5 text-muted-foreground list-disc pl-4">
-                <li>The code runs as a subprocess on <strong>your machine</strong> with <strong>full filesystem access</strong></li>
-                <li>It can read, write, and delete <strong>any file</strong> on your system</li>
-                <li>It can make network connections</li>
-                <li>Environment variables (PATH, HOME, etc.) are stripped to prevent easy file discovery</li>
-                <li>But <strong>absolute paths still work</strong> — this is <strong>not</strong> a security boundary</li>
-              </ul>
-              <p className="text-xs text-muted-foreground">
-                Only enable if you understand these risks. True sandboxing requires Docker containers.
-              </p>
+              {confirmTool?.id === "playwright" ? (
+                <>
+                  <p className="text-sm font-medium text-foreground">
+                    This runs a <strong>real Chromium browser</strong> on your machine.
+                  </p>
+                  <ul className="text-xs space-y-1.5 text-muted-foreground list-disc pl-4">
+                    <li>It can visit <strong>any website</strong> and click, fill forms, and submit actions <strong>as you</strong></li>
+                    <li>It uses your network and can log in to sites with your saved sessions</li>
+                    <li>It can take screenshots and extract page content into the chat</li>
+                    <li>It can execute custom Playwright scripts (<code>browser_interact</code>) with <strong>full access</strong> on this server</li>
+                    <li>It runs headless (no visible window) in a per-conversation session</li>
+                    <li>Chromium is bundled with the desktop app and Docker image; in local dev install it once with <code>npm run playwright:install</code></li>
+                  </ul>
+                  <p className="text-xs text-muted-foreground">
+                    Only enable if you understand these risks and trust the requests the assistant makes.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-medium text-foreground">
+                    This is <strong>NOT a secure sandbox</strong>.
+                  </p>
+                  <ul className="text-xs space-y-1.5 text-muted-foreground list-disc pl-4">
+                    <li>The code runs as a subprocess on <strong>your machine</strong> with <strong>full filesystem access</strong></li>
+                    <li>It can read, write, and delete <strong>any file</strong> on your system</li>
+                    <li>It can make network connections</li>
+                    <li>Environment variables (PATH, HOME, etc.) are stripped to prevent easy file discovery</li>
+                    <li>But <strong>absolute paths still work</strong> — this is <strong>not</strong> a security boundary</li>
+                  </ul>
+                  <p className="text-xs text-muted-foreground">
+                    Only enable if you understand these risks. True sandboxing requires Docker containers.
+                  </p>
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0">

@@ -43,19 +43,24 @@ export function FollowupSuggestions({ data }: { data: unknown }) {
 // ---------------------------------------------------------------------------
 
 function SuggestionsForm({ data }: { data: SuggestionsData }) {
-  const { sendMessage } = useChatMessage();
+  const { sendMessage, status } = useChatMessage();
   const [clickedIndex, setClickedIndex] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const { suggestions } = data;
 
+  // Same guard as the questions card: clicking a chip while a stream is
+  // active would start a concurrent second request that duplicates messages
+  // (see ChatMessageContext docs).
+  const isBusy = status === "submitted" || status === "streaming";
+
   const handleClick = useCallback(
     (index: number, text: string) => {
-      if (clickedIndex !== null) return; // Already clicked one
+      if (clickedIndex !== null || isBusy) return; // Already clicked / stream busy
       setClickedIndex(index);
       sendMessage(text);
     },
-    [clickedIndex, sendMessage],
+    [clickedIndex, sendMessage, isBusy],
   );
 
   // Auto-scroll into view when the card appears
@@ -99,7 +104,7 @@ function SuggestionsForm({ data }: { data: SuggestionsData }) {
               key={idx}
               type="button"
               onClick={() => handleClick(idx, suggestion.text)}
-              disabled={isDisabled}
+              disabled={isDisabled || isBusy}
               className={cn(
                 "group relative flex items-start gap-2.5 rounded-lg border px-3 py-2.5 text-left text-xs leading-relaxed transition-all duration-200",
                 isClicked

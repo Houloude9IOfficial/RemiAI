@@ -14,10 +14,10 @@ import {
   AlertCircle,
   Terminal,
   Image,
+  ChevronRight,
 } from "lucide-react";
 import { MediaDisplay } from "./MediaDisplay";
 import { QuestionsCard } from "./QuestionsCard";
-import { TodoBoard } from "./TodoBoard";
 import { VisualCard } from "./VisualCard";
 
 type AnyToolPart = ToolUIPart<any> | DynamicToolUIPart;
@@ -36,6 +36,8 @@ const MINOR_TOOLS = new Set([
   "list_available_tools",
   "get_tool_details",
   "todos_view",
+  "todos_init",
+  "todos_update",
   "list_permitted_roots",
   "get_agent_result",
 ]);
@@ -112,6 +114,8 @@ function minorSummary(name: string, output: unknown, running: boolean): string {
       list_available_tools: "Listing tools…",
       get_tool_details: "Checking tool…",
       todos_view: "Viewing tasks…",
+      todos_init: "Planning tasks…",
+      todos_update: "Updating tasks…",
       list_permitted_roots: "Listing directories…",
       get_agent_result: "Checking agent…",
     };
@@ -146,12 +150,54 @@ function minorSummary(name: string, output: unknown, running: boolean): string {
   }
   if (name === "get_profile") return "Checked profile";
   if (name === "update_profile") return "Updated profile";
+  if (name === "todos_init" || name === "todos_update" || name === "todos_view") {
+    const itemsCount = Array.isArray(out?.items) ? out.items.length : null;
+    const updatedCount = Array.isArray(out?.updated)
+      ? out.updated.length
+      : null;
+    if (out?.action === "initialized") {
+      return itemsCount !== null
+        ? `Created todo list · ${itemsCount} item${itemsCount === 1 ? "" : "s"}`
+        : "Created todo list";
+    }
+    if (out?.action === "updated") {
+      return updatedCount !== null
+        ? `Updated ${updatedCount} todo${updatedCount === 1 ? "" : "s"}`
+        : "Updated todos";
+    }
+    if (out?.action === "viewed") {
+      if (typeof out?.progress === "string" && out.progress) {
+        return `Todo list · ${out.progress}`;
+      }
+      return itemsCount !== null
+        ? `Viewed todo list · ${itemsCount} item${itemsCount === 1 ? "" : "s"}`
+        : "Viewed todo list";
+    }
+    return `Todo list${itemsCount !== null ? ` · ${itemsCount} items` : ""}`;
+  }
   if (name === "get_device_details") return "Checked device";
   if (name === "list_permitted_roots") {
     const n = Array.isArray(out?.roots) ? out.roots.length : null;
     return n !== null ? `Directories · ${n}` : "Listed directories";
   }
   return name.replace(/_/g, " ");
+}
+
+function operationSummary(name: string, running: boolean): string {
+  if (running) return `Working on ${name.replace(/_/g, " ")}`;
+  const labels: Record<string, string> = {
+    js_exec: "Ran JavaScript",
+    python_exec: "Ran Python",
+    bash_execute: "Ran Bash command",
+    read_file: "Read file",
+    read_media: "Read media",
+    search_files: "Searched files",
+    glob_files: "Found files",
+    list_directory: "Listed directory",
+    web_fetch: "Fetched page",
+    web_search: "Searched web",
+  };
+  return labels[name] ?? name.replace(/_/g, " ");
 }
 
 export function ToolCallCard({
@@ -231,12 +277,6 @@ export function ToolCallCard({
 
   const isReadMedia = toolName.endsWith("read_media");
 
-  const isTodoList =
-    output !== undefined &&
-    output !== null &&
-    typeof output === "object" &&
-    (output as Record<string, unknown>).type === "todo_list";
-
   const isVisualResult =
     output !== undefined &&
     output !== null &&
@@ -267,9 +307,6 @@ export function ToolCallCard({
     if (isQuestionsResult && output && isComplete) {
       return <QuestionsCard data={output} />;
     }
-    if (isTodoList && output && isComplete) {
-      return <TodoBoard data={output} />;
-    }
     if (isVisualResult && output && isComplete) {
       return <VisualCard data={output} />;
     }
@@ -280,11 +317,11 @@ export function ToolCallCard({
     // ── Minor tools: single line, expand on click ─────────────────────
     if (isMinor) {
       return (
-        <div className="overflow-hidden rounded-lg">
+        <div className="rounded-md">
           <button
             type="button"
             onClick={() => setMinorOpen((o) => !o)}
-            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-muted/40"
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/35"
           >
             {isRunning ? (
               <Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" />
@@ -293,7 +330,7 @@ export function ToolCallCard({
             ) : (
               <CheckCircle2 className="h-3 w-3 shrink-0 text-muted-foreground/70" />
             )}
-            <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">
+            <span className="min-w-0 flex-1 truncate text-[12px] text-foreground/85">
               {minorSummary(toolBare, output, isRunning)}
             </span>
             {(output !== undefined || errorText) && (
@@ -306,7 +343,7 @@ export function ToolCallCard({
             )}
           </button>
           {minorOpen && (
-            <div className="mt-2 mb-1 ml-5 mr-1 rounded-md border border-border/40 bg-surface-2/50 px-2.5 py-2">
+            <div className="mx-2 mb-1 rounded-md border border-border/40 bg-surface-2/50 px-2.5 py-2">
               {errorText ? (
                 <p className="text-[11px] text-status-danger">{errorText}</p>
               ) : (
@@ -323,40 +360,65 @@ export function ToolCallCard({
       );
     }
 
+    const isFileOperation = new Set([
+      "write_file", "edit_file", "create_directory", "rename_item",
+      "delete_directory", "session_file_write", "session_file_edit",
+      "session_file_mkdir", "session_file_move", "session_file_delete",
+    ]).has(toolBare);
+    if (isFileOperation) {
+      const inRecord = input && typeof input === "object" ? input as Record<string, unknown> : {};
+      const outRecord = output && typeof output === "object" ? output as Record<string, unknown> : {};
+      const path = String(outRecord.path ?? inRecord.relativePath ?? inRecord.path ?? inRecord.to ?? "file").split("/").pop();
+      const created = outRecord.created === true || toolBare.includes("mkdir");
+      const added = typeof outRecord.linesAdded === "number" ? outRecord.linesAdded : 0;
+      const removed = typeof outRecord.linesRemoved === "number" ? outRecord.linesRemoved : 0;
+      const verb = isRunning ? "Working on" : created ? "Created" : toolBare.includes("edit") ? "Edited" : toolBare.includes("delete") ? "Deleted" : "Updated";
+      return (
+        <div className="rounded-md">
+          <button type="button" onClick={() => setOutputOpen((o) => !o)} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-muted/35">
+            {isRunning ? <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" /> : <CheckCircle2 className="h-3 w-3 text-muted-foreground" />}
+            <span className="min-w-0 flex-1 truncate text-[12px] text-foreground/85">{verb} <span className="font-mono">{path}</span></span>
+            {!isRunning && <span className="shrink-0 text-[11px] tabular-nums"><span className="text-status-success">+{added}</span> <span className="text-status-danger">-{removed}</span></span>}
+            <ChevronDown className={cn("h-3 w-3 text-muted-foreground transition-transform", outputOpen && "rotate-180")} />
+          </button>
+          {outputOpen && (
+            <div className="mx-2 mb-1 rounded border border-border/35 bg-surface-2/40 p-2">
+              {!isEmptyObject(input) && <JsonBlock data={input} />}
+              {output !== undefined && <div className="mt-2"><ResultBody output={output} isExecResult={false} isAgentResult={false} isMediaResult={false} /></div>}
+              {errorText && <p className="text-[11px] text-status-danger">{errorText}</p>}
+            </div>
+          )}
+        </div>
+      );
+    }
+
     // ── Standard compact card ─────────────────────────────────────────
     return (
-      <div
-        className={cn(
-          "overflow-hidden rounded-xl border text-sm transition-colors",
-          isError
-            ? "border-status-danger/25 bg-status-danger/[0.03]"
-            : "border-border/45 bg-surface-2/25",
-        )}
-      >
+      <div className="rounded-md">
         <button
           type="button"
           onClick={() => setOutputOpen((o) => !o)}
-          className="flex w-full items-center gap-2 px-2.5 py-2 text-left transition-colors hover:bg-muted/30"
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/35 cursor-pointer"
         >
           <div
             className={cn(
-              "flex h-5 w-5 shrink-0 items-center justify-center",
+              "flex h-3 w-3 shrink-0 items-center justify-center",
               isError && "text-status-danger",
-              isComplete && "text-status-success",
+              isComplete && "text-muted-foreground",
               isRunning && "text-muted-foreground",
             )}
           >
             {isError ? (
-              <XCircle className="h-3.5 w-3.5" />
+              <XCircle className="h-3 w-3" />
             ) : isComplete ? (
-              <CheckCircle2 className="h-3.5 w-3.5" />
+              <CheckCircle2 className="h-3 w-3" />
             ) : (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <Loader2 className="h-3 w-3 animate-spin" />
             )}
           </div>
 
-          <span className="truncate font-mono text-[12px] font-medium text-foreground/90">
-            {displayName}
+          <span className="min-w-0 flex-1 truncate text-[12px] text-foreground/85">
+            {operationSummary(toolBare, isRunning)}
           </span>
 
           {serverName && (
@@ -365,15 +427,12 @@ export function ToolCallCard({
             </span>
           )}
 
-          <span className="ml-auto text-[10px] tabular-nums text-muted-foreground">
-            {isError ? "Error" : isComplete ? "Done" : "Running"}
-          </span>
-          <ChevronDown
+          {/* <ChevronDown
             className={cn(
               "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200",
               outputOpen && "rotate-180",
             )}
-          />
+          /> */}
         </button>
 
         {!isComplete && !isError && isReadMedia && (
@@ -700,7 +759,7 @@ function DetailSection({
         {open ? (
           <ChevronDown className="h-3 w-3" />
         ) : (
-          <ChevronUp className="h-3 w-3" />
+          <ChevronRight className="h-3 w-3" />
         )}
         {label}
       </button>
@@ -741,7 +800,7 @@ function JsonBlock({ data }: { data: unknown }) {
             </>
           ) : (
             <>
-              <ChevronUp className="h-3 w-3" /> Collapse
+              <ChevronRight className="h-3 w-3" /> Collapse
             </>
           )}
         </button>
@@ -837,11 +896,11 @@ function ExecOutput({ data }: { data: Record<string, unknown> }) {
         >
           {collapsed ? (
             <>
-              <ChevronDown className="h-3 w-3" /> Show all
+              <ChevronRight className="h-3 w-3" /> Show all
             </>
           ) : (
             <>
-              <ChevronUp className="h-3 w-3" /> Collapse
+              <ChevronDown className="h-3 w-3" /> Collapse
             </>
           )}
         </button>

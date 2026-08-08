@@ -14,7 +14,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { db } from "../db";
+import { db, initializeApp } from "../db";
 import { directories } from "../db/schema";
 import { eq } from "drizzle-orm";
 import { indexFile, removeFromIndex, clearDirectoryIndex } from "../lib/fs/file-index";
@@ -290,6 +290,9 @@ async function main(): Promise<void> {
   console.log("[file-watcher] Starting file watcher worker...");
   console.log(`[file-watcher] Config poll interval: ${CONFIG_POLL_INTERVAL}ms`);
   console.log(`[file-watcher] Debounce delay: ${DEBOUNCE_DELAY}ms`);
+
+  // Ensure migrations have been applied (previously done at db import time).
+  await initializeApp();
 
   // Initial sync of watches
   await syncWatches();

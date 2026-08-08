@@ -22,12 +22,6 @@
 
 ---
 
-## Release Notes
-
-What's new in the latest release? Check the **[RemiAI v2.0.0 release notes](./v2.md)**. Release notes for each major version live in the repo root as `vX.md` (e.g. `v2.md`, `v3.md`).
-
----
-
 ## Overview
 
 RemiAI is a **self-hosted AI assistant** that lives on your machine. It combines a conversational AI interface with deep local file system access, persistent memory, an extensible tool system, and support for the Model Context Protocol (MCP). You can think of it as a private, customizable AI that understands your files, remembers your preferences, and connects to external services — all without sending your data to third parties.
@@ -126,6 +120,7 @@ Spawn specialized sub-agents for complex tasks, keeping the main conversation fo
 - `ask_questions` — gather structured information from the user
 - `get_time_details` — current date/time/timezone
 - `get_device_details` — browser, OS, and device info
+- `browser_open` / `browser_click` / `browser_fill` / `browser_extract` / `browser_screenshot` / `browser_interact` — native Playwright browser automation (headless Chromium; toggle in Settings > Tools > Browser Automation)
 
 **Optional external integrations (toggle on/off with API key management):**
 
@@ -174,7 +169,7 @@ RemiAI is available as a **native desktop app** for macOS, Windows, and Linux:
 
 - **System tray** with minimize-to-tray behavior
 - **Native OS notifications**
-- **Automatic updates** — installers are published to GitHub Releases and the app updates itself
+- **Requires manual building**
 - Cross-platform installers via `npm run dist:*` (mac DMG, Windows NSIS, Linux AppImage)
 
 ### PWA & Mobile
@@ -257,7 +252,7 @@ Each test run file includes the exact prompts used, expected vs. actual results,
 
 ### Prerequisites
 
-- **Node.js** >= 18 (v22 recommended — see `.nvmrc`)
+- **Node.js** >= 20 (v22 recommended — see `.nvmrc`)
 - **npm**
 - **nvm** or **fnm** (optional) — to auto-select the Node version via `.nvmrc`
 
@@ -313,7 +308,7 @@ PORT=3001 npm start
 
 ### Docker deployment
 
-Docker is the recommended way to run the web application on a server. The image runs Next.js in standalone production mode as a non-root user and persists application data in `/app/data`.
+Docker is the recommended way to run the web application on a server. The image runs Next.js in standalone production mode as a non-root user and persists application data in `/app/data`. (The image bundles headless Chromium for the Browser Automation tool — it adds roughly 350 MB to the image.)
 
 With Docker Compose:
 
@@ -580,6 +575,17 @@ curl http://localhost:11434/api/tags
 ```
 
 Ollama must be running on `http://localhost:11434` (or your configured endpoint) before starting RemiAI.
+
+### Browser Automation tool says Chromium is not installed
+
+The `browser_open`/`browser_*` tools need Playwright's headless Chromium:
+
+```bash
+# Download Chromium for the web/server build
+npm run playwright:install
+```
+
+The **desktop app bundles Chromium automatically** in its installers (`npm run dist:*` stages it via `npm run playwright:browsers`), so no extra step is needed there. The tool also falls back to your system Chrome/Edge if the bundled browser is unavailable.
 
 ### Missing Python for `python_exec` tool
 

@@ -13,6 +13,7 @@ const updateSchema = z.object({
   providerId: z.number().int().optional().nullable(),
   modelId: z.string().optional().nullable(),
   mode: z.enum(["chat", "goal", "plan"]).optional(),
+  bashMode: z.enum(["sandboxed", "full"]).optional(),
 });
 
 export async function GET(

@@ -14,11 +14,15 @@ import {
   conversations,
   providers,
   mcpServers,
-  memories,
   userPreferences,
 } from "@/db/schema";
 import { getLanguageModel } from "@/lib/providers/factory";
 import { SYSTEM_PROMPT } from "@/lib/chat/system-prompt";
+import {
+  buildCachedInstructions,
+  markLastToolForCache,
+} from "@/lib/chat/prompt-cache";
+import { retrieveRelevantMemories } from "@/lib/chat/memories";
 import { persistUIMessage } from "@/lib/chat/persist";
 import { buildFilesystemTools } from "@/lib/fs/tools";
 import { buildContextTools } from "@/lib/tools/context";
@@ -37,7 +41,7 @@ import { buildScheduleTool } from "@/lib/tools/schedule";
 import { buildToolHelpTool, buildListAvailableToolsTool } from "@/lib/tools/tool-help";
 import { createMcpToolsManager } from "@/lib/mcp/tools";
 import { queryRecentChanges } from "@/lib/fs/file-index";
-import { estimateTokenCount } from "@/lib/utils";
+import { estimateTokenCount, normaliseTool } from "@/lib/utils";
 import { computeNextCronTime } from "./cron";
 
 // ─── Types ──────────────────────────────────────────────────────────────
@@ -248,7 +252,7 @@ export async function executeTask(task: ScheduledTaskRow) {
         buildScheduleTool(task.conversationId),
       ]);
 
-    const tools = {
+    const rawTools = {
       ...mcpToolSet,
       ...fsToolSet,
       ...contextToolSet,
@@ -267,6 +271,11 @@ export async function executeTask(task: ScheduledTaskRow) {
       ...buildToolHelpTool(),
       ...buildListAvailableToolsTool(),
     };
+    // AI SDK v7 requires `inputSchema` — normalise the legacy `parameters`
+    // key so scheduled-task runs get real tool schemas + input validation.
+    const tools = Object.fromEntries(
+      Object.entries(rawTools).map(([name, tool]) => [name, normaliseTool(tool)]),
+    );
 
     const toolNames = Object.keys(tools);
     console.log(`[scheduler] Task #${task.id} has ${toolNames.length} tool(s): ${toolNames.join(", ")}`);
@@ -291,13 +300,11 @@ export async function executeTask(task: ScheduledTaskRow) {
     if (prefs?.interests) profileParts.push(`Interests: ${prefs.interests}`);
     if (prefs?.skills) profileParts.push(`Skills: ${prefs.skills}`);
 
-    const memoryRows = await db
-      .select()
-      .from(memories)
-      .orderBy(memories.createdAt)
-      .all();
-    const memoryTip = memoryRows.length > 0
-      ? `\n\nSaved memories:\n${memoryRows.map((m) => `- ${m.content}`).join("\n")}`
+    // Inject only the memories relevant to THIS task, capped to a hard token
+    // budget — the model can still search_memories for anything else.
+    const relevantMemories = await retrieveRelevantMemories(task.task);
+    const memoryTip = relevantMemories.length > 0
+      ? `\n\nSaved memories:\n${relevantMemories.map((m) => `- ${m.content}`).join("\n")}`
       : "";
 
     const recentChanges = await queryRecentChanges(10);
@@ -323,25 +330,37 @@ You have FULL access to all the same tools as a normal conversation. Use them to
 
 After completing the task, the user will receive a desktop notification with your response. Make sure your answer is complete, well-formatted, and includes all relevant information.`;
 
-    const fullSystemPrompt =
-      SYSTEM_PROMPT +
+    // Split the system prompt into a STATIC part (cached via provider prompt
+    // caching — identical on every run) and a DYNAMIC part (prefs, profile,
+    // memories, file changes, the task itself) that changes per task and must
+    // sit AFTER the cache breakpoint so it never invalidates the prefix.
+    const staticSystemPrompt = SYSTEM_PROMPT;
+    const dynamicSystemPrompt =
       (prefParts.length > 0 ? `\n\n## User preferences\n${prefParts.join("\n")}` : "") +
       (profileParts.length > 0 ? `\n\n## User profile\n${profileParts.map((p) => `- ${p}`).join("\n")}` : "") +
       memoryTip +
       fileChangeTip +
       scheduledTaskPrefix;
+    const fullSystemPrompt = staticSystemPrompt + dynamicSystemPrompt;
 
     // ── Generate AI response ──
     const result = await generateText({
       model,
-      system: fullSystemPrompt,
+      instructions: buildCachedInstructions(
+        provider,
+        staticSystemPrompt,
+        dynamicSystemPrompt,
+      ),
       messages: [
         {
           role: "user",
           content: `⏰ Scheduled task due: ${task.task}`,
         },
       ],
-      tools: Object.keys(tools).length > 0 ? tools : undefined,
+      tools:
+        Object.keys(tools).length > 0
+          ? markLastToolForCache(provider, tools)
+          : undefined,
       stopWhen: stepCountIs(50), // Allow multi-step tool-calling chains
       // Retry retryable provider failures up to 3 times before erroring out.
       maxRetries: 3,

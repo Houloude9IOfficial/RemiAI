@@ -1,6 +1,12 @@
 "use client";
 
-import { MessageSquarePlus, PanelLeft, Keyboard, Command } from "lucide-react";
+import {
+  MessageSquarePlus,
+  MessageCircle,
+  PanelLeft,
+  Keyboard,
+  Command,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -57,6 +63,15 @@ export function ShortcutsDialog() {
         : "Linux";
 
   const shortcuts = [
+    {
+      icon: MessageCircle,
+      label: "Focus chat input",
+      keys: (
+        <>
+          <Kbd>/</Kbd>
+        </>
+      ),
+    },
     {
       icon: MessageSquarePlus,
       label: "New chat",

@@ -44,6 +44,73 @@ export function dispatchSessionFilesChanged() {
   window.dispatchEvent(new CustomEvent(SESSION_FILES_CHANGED_EVENT));
 }
 
+// ---------------------------------------------------------------------------
+// Real-time change stream (SSE)
+// ---------------------------------------------------------------------------
+
+/** Detail received from /api/session-files/stream for a sandbox change. */
+export type SessionFilesChangedDetail = {
+  conversationId: number;
+  operation?: "write" | "edit" | "delete" | "mkdir" | "move" | "upload";
+  path?: string;
+  timestamp?: string;
+};
+
+/**
+ * Shared EventSource + subscriber set for the session-files SSE stream.
+ * One connection is shared by all open panels; it's opened on first
+ * subscriber and closed when the last one unsubscribes.
+ */
+let sessionFilesSource: EventSource | null = null;
+const sessionFilesSubscribers = new Set<
+  (detail: SessionFilesChangedDetail) => void
+>();
+
+function ensureSessionFilesStreamOpen() {
+  if (sessionFilesSource) return;
+  const es = new EventSource("/api/session-files/stream");
+  sessionFilesSource = es;
+
+  es.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data) as Partial<SessionFilesChangedDetail>;
+      if (data && typeof data.conversationId === "number") {
+        const detail = data as SessionFilesChangedDetail;
+        for (const handler of sessionFilesSubscribers) {
+          try {
+            handler(detail);
+          } catch {
+            // A broken subscriber must not break the stream for others
+          }
+        }
+      }
+    } catch {
+      // Ignore malformed / non-change frames (e.g. the initial ping)
+    }
+  };
+  // EventSource auto-reconnects on error; nothing to do here.
+  es.onerror = () => {};
+}
+
+/**
+ * Subscribe to real-time session-file changes for any conversation.
+ * The callback receives each change (filter by `conversationId` inside).
+ * Returns an unsubscribe function. Safe to call from multiple components.
+ */
+export function subscribeSessionFilesChanged(
+  handler: (detail: SessionFilesChangedDetail) => void,
+): () => void {
+  sessionFilesSubscribers.add(handler);
+  ensureSessionFilesStreamOpen();
+  return () => {
+    sessionFilesSubscribers.delete(handler);
+    if (sessionFilesSubscribers.size === 0 && sessionFilesSource) {
+      sessionFilesSource.close();
+      sessionFilesSource = null;
+    }
+  };
+}
+
 export type SessionFilesPresentDetail = {
   /** File paths to highlight in the panel tree (used by session_present_files). */
   paths?: string[];

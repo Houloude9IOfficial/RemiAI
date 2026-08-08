@@ -6,6 +6,7 @@ import {
   type MediaResult,
 } from "@/lib/fs/access";
 import { SESSION_FILES_DIR } from "@/lib/paths";
+import { emitSessionFilesChanged } from "./events";
 
 // ---------------------------------------------------------------------------
 // Session file sandbox storage
@@ -291,6 +292,7 @@ export type WriteSessionFileResult = {
   /** Line-count delta (mixed precision — not a true hunk diff). */
   linesAdded: number;
   linesRemoved: number;
+  createdDirectories: string[];
 };
 
 export async function writeSessionFile(
@@ -313,9 +315,22 @@ export async function writeSessionFile(
     // File does not exist yet
   }
 
-  await fs.mkdir(path.dirname(targetPath), { recursive: true });
+  const parentPath = path.dirname(targetPath);
+  const firstCreatedDirectory = await fs.mkdir(parentPath, { recursive: true });
+  const createdDirectories: string[] = [];
+  if (firstCreatedDirectory) {
+    const sandbox = getSessionDir(conversationId);
+    const first = normalizeSessionPath(path.relative(sandbox, firstCreatedDirectory));
+    const parent = normalizeSessionPath(path.relative(sandbox, parentPath));
+    if (first) createdDirectories.push(first);
+    if (parent && parent !== first) createdDirectories.push(parent);
+  }
   const flag = writeMode === "append" ? "a" : "w";
   await fs.writeFile(targetPath, content, { encoding: "utf-8", flag });
+  emitSessionFilesChanged(conversationId, {
+    operation: "write",
+    path: normalizedRel,
+  });
 
   const linesWritten = content.length === 0 ? 0 : content.split("\n").length;
   let linesAdded = 0;
@@ -338,6 +353,54 @@ export async function writeSessionFile(
     linesWritten,
     linesAdded,
     linesRemoved,
+    createdDirectories,
+  };
+}
+
+export type EditSessionFileResult = {
+  path: string;
+  relativePath: string;
+  bytesChanged: number;
+  linesAdded: number;
+  linesRemoved: number;
+};
+
+/** Replace a uniquely matched string in a sandbox file. */
+export async function editSessionFile(
+  conversationId: number,
+  relativePath: string,
+  oldStr: string,
+  newStr: string,
+): Promise<EditSessionFileResult | { error: string; matches: number; content: string }> {
+  if (!oldStr) return { error: "old_str must not be empty.", matches: 0, content: "" };
+  const targetPath = await resolveSessionPath(conversationId, relativePath);
+  const content = await fs.readFile(targetPath, "utf-8");
+  let matches = 0;
+  let start = 0;
+  while (true) {
+    const found = content.indexOf(oldStr, start);
+    if (found === -1) break;
+    matches++;
+    start = found + oldStr.length;
+  }
+  if (matches !== 1) {
+    return {
+      error: matches === 0 ? "old_str was not found exactly in the file." : "old_str matched more than once; include more surrounding context.",
+      matches,
+      content,
+    };
+  }
+  await fs.writeFile(targetPath, content.replace(oldStr, newStr), "utf-8");
+  emitSessionFilesChanged(conversationId, {
+    operation: "edit",
+    path: normalizeSessionPath(relativePath),
+  });
+  return {
+    path: targetPath,
+    relativePath: normalizeSessionPath(relativePath),
+    bytesChanged: Math.abs(Buffer.byteLength(newStr, "utf-8") - Buffer.byteLength(oldStr, "utf-8")),
+    linesAdded: Math.max(0, newStr.split("\n").length - oldStr.split("\n").length),
+    linesRemoved: Math.max(0, oldStr.split("\n").length - newStr.split("\n").length),
   };
 }
 
@@ -366,6 +429,10 @@ export async function deleteSessionFile(
     throw err;
   }
   await fs.rm(targetPath, { recursive: stats.isDirectory(), force: false });
+  emitSessionFilesChanged(conversationId, {
+    operation: "delete",
+    path: normalizeSessionPath(relativePath),
+  });
   return { path: targetPath, deleted: true };
 }
 
@@ -381,6 +448,10 @@ export async function createSessionFolder(
   const targetPath = await resolveSessionPath(conversationId, normalized);
   await fs.mkdir(targetPath, { recursive: true });
   const st = await fs.stat(targetPath);
+  emitSessionFilesChanged(conversationId, {
+    operation: "mkdir",
+    path: normalized,
+  });
   return {
     path: normalized,
     name: path.basename(targetPath),
@@ -477,6 +548,10 @@ export async function moveSessionFile(
   }
 
   const st = await fs.stat(toPath);
+  emitSessionFilesChanged(conversationId, {
+    operation: "move",
+    path: toNormalized,
+  });
   return {
     path: toNormalized,
     name: path.basename(toPath),
@@ -522,6 +597,10 @@ export async function uploadSessionFile(
   const targetPath = await resolveSessionPath(conversationId, relTarget);
   await fs.mkdir(path.dirname(targetPath), { recursive: true });
   await fs.writeFile(targetPath, data);
+  emitSessionFilesChanged(conversationId, {
+    operation: "upload",
+    path: relTarget,
+  });
   const st = await fs.stat(targetPath);
   return {
     path: relTarget,
@@ -687,5 +766,4 @@ const MIME_BY_EXT: Record<string, string> = {
 export function getMimeType(filename: string): string {
   return MIME_BY_EXT[path.extname(filename).toLowerCase()] ?? "application/octet-stream";
 }
-
 

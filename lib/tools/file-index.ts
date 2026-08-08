@@ -14,7 +14,7 @@ export function buildFileIndexTools(): Record<string, any> {
   // -----------------------------------------------------------------------
   tools.query_recent_changes = {
     description:
-      "Get recently changed files across all watched directories. Returns files that have been modified, added, or deleted, sorted by most recent first. Use this to discover what files the user has been working on recently, or to check for new files that were created outside the chat session. Limit the result count for a quick overview.",
+      "Get recently changed files (modified/added/deleted) across watched directories, most recent first. Use to see what the user has been working on.",
     parameters: z.object({
       limit: z
         .number()
@@ -23,7 +23,7 @@ export function buildFileIndexTools(): Record<string, any> {
         .max(100)
         .optional()
         .default(20)
-        .describe("Maximum number of recent changes to return (default 20, max 100)."),
+        .describe("Max recent changes to return (default 20, max 100)"),
     }),
     execute: async ({ limit }: { limit?: number | null }) => {
       const changes = await queryRecentChanges(limit ?? 20);
@@ -45,12 +45,12 @@ export function buildFileIndexTools(): Record<string, any> {
   // -----------------------------------------------------------------------
   tools.query_file_index = {
     description:
-      "Search the file index by path pattern. Finds indexed files whose relative path contains the given search term. Use this to quickly locate files by name or path fragment without needing to know which directory root they're in.",
+      "Search the file index by path fragment to locate files by name without knowing their directory root.",
     parameters: z.object({
       pattern: z
         .string()
         .min(1)
-        .describe("Search pattern to match against file paths (case-sensitive, partial match)."),
+        .describe("Search pattern against file paths (case-sensitive, partial match)"),
       limit: z
         .number()
         .int()
@@ -58,7 +58,7 @@ export function buildFileIndexTools(): Record<string, any> {
         .max(200)
         .optional()
         .default(50)
-        .describe("Maximum results to return (default 50, max 200)."),
+        .describe("Max results (default 50, max 200)"),
     }),
     execute: async ({ pattern, limit }: { pattern: string; limit?: number | null }) => {
       const results = await queryFileIndex(undefined, pattern, limit ?? 50);

@@ -16,14 +16,12 @@ export function buildNotionTools(token: string) {
     // ── Search pages ─────────────────────────────────────────────
     notion_search_pages: {
       description:
-        "Search for pages in your Notion workspace. Returns matching pages with their titles, IDs, and URLs. IMPORTANT: each page result has an \`id\` field (a UUID like \`359eed26-0bc3-8148-bb31-cb5b182a3219\`). You MUST pass this \`id\` value as the \`pageId\` parameter to \`notion_get_page\` to read the page content. Do NOT make up or guess the ID — always use the one returned by this search tool.",
+        "Search pages in your Notion workspace. Returns matching pages with titles, IDs, and URLs. Pass a result's \`id\` (UUID) as the \`pageId\` to notion_get_page — never make up or guess an ID.",
       parameters: z.object({
         query: z
           .string()
           .min(1)
-          .describe(
-            "Search query to find pages. Be specific for best results.",
-          ),
+          .describe("Search query to find pages; be specific for best results"),
       }),
       execute: async ({ query }: { query: string }) => {
         const res = await fetch("https://api.notion.com/v1/search", {
@@ -81,7 +79,7 @@ export function buildNotionTools(token: string) {
     // ── Get page content ─────────────────────────────────────────
     notion_get_page: {
       description:
-        "Get the full content of a Notion page by its ID. Returns the page's content as text blocks (headings, paragraphs, lists, code, etc.). CRITICAL: the \`pageId\` MUST be a real UUID string you got from \`notion_search_pages\`. Do NOT pass placeholder values, empty strings, or the word 'undefined'. If you don't have a valid page ID, call \`notion_search_pages\` first to get one.",
+        "Get the full content of a Notion page by its ID (returns text blocks). The \`pageId\` MUST be a real UUID from notion_search_pages — never pass placeholders or made-up IDs.",
       parameters: z.object({
         pageId: z
           .string()
@@ -90,9 +88,7 @@ export function buildNotionTools(token: string) {
             message:
               "pageId must be a valid Notion page UUID (32-36 hex characters with optional hyphens), e.g. 359eed26-0bc3-8148-bb31-cb5b182a3219",
           })
-          .describe(
-            "The UUID of the Notion page to read. Get this from the \`id\` field of \`notion_search_pages\` results. Example: 359eed26-0bc3-8148-bb31-cb5b182a3219",
-          ),
+          .describe("The Notion page UUID (from notion_search_pages results)"),
       }),
       execute: async ({ pageId }: { pageId: string }) => {
         // Normalize: remove hyphens for the API call (Notion accepts both)

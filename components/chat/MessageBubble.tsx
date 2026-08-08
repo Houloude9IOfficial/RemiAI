@@ -206,8 +206,11 @@ function RegenerateButton({
 }
 
 /**
- * Action bar shown under a message. Always visible with quiet styling so it
- * never reserves invisible space under tool-call-heavy messages.
+ * Action bar shown under a message. On desktop the buttons stay hidden until
+ * the message is hovered (or a button is focused via keyboard) for a cleaner
+ * look; on mobile — where hover doesn't exist — they're always visible.
+ * Opacity (not `hidden`) is used so the row keeps its layout space and the
+ * reveal fades in smoothly.
  */
 function MessageActionsRow({
   children,
@@ -221,6 +224,7 @@ function MessageActionsRow({
       className={cn(
         "flex items-center gap-0.5",
         align === "right" ? "justify-end" : "justify-start",
+        "md:opacity-0 md:transition-opacity md:duration-200 md:group-hover:opacity-100 md:focus-within:opacity-100",
       )}
     >
       {children}
@@ -310,9 +314,75 @@ type Segment =
   | { type: "suggestions"; data: unknown };
 
 /**
+ * Text this short between two tool calls is transitional filler (e.g.
+ * "Hmm," or "Let me retry") — it gets absorbed so the calls read as one
+ * back-to-back row. Anything longer is treated as real content that must
+ * render between the groups.
+ */
+const SHORT_FILLER_MAX_CHARS = 150;
+const SHORT_FILLER_MAX_WORDS = 24;
+
+function isShortFiller(text: string): boolean {
+  const trimmed = text.trim();
+  if (trimmed.length === 0) return true;
+  const wordCount = trimmed.split(/\s+/).length;
+  return trimmed.length <= SHORT_FILLER_MAX_CHARS && wordCount <= SHORT_FILLER_MAX_WORDS;
+}
+
+/**
+ * Second pass over the raw segments: tool groups separated ONLY by short
+ * filler text are merged into a single group (the filler is absorbed, so
+ * the calls appear back-to-back). Text at the start or end of a message is
+ * always preserved — only filler sitting *between* two tool groups is
+ * dropped. Adjacent tool segments (e.g. after a real-text flush) merge too.
+ */
+function mergeInRowToolSegments(segments: Segment[]): Segment[] {
+  const merged: Segment[] = [];
+  let filler: Extract<Segment, { type: "text" }> | null = null;
+
+  for (const seg of segments) {
+    if (seg.type === "text") {
+      if (filler) {
+        // Consecutive text segments can't occur (first pass merges them),
+        // but be defensive rather than silently dropping content.
+        filler.text += seg.text;
+      } else {
+        filler = seg;
+      }
+      continue;
+    }
+
+    const last = merged[merged.length - 1];
+    if (filler) {
+      if (
+        last?.type === "tool" &&
+        seg.type === "tool" &&
+        isShortFiller(filler.text)
+      ) {
+        // Filler sits between two tool groups — absorb it and merge them.
+        // (Adjacent tool segments can't otherwise occur: pass 1 already
+        // merges consecutive tool parts into one segment.)
+        last.parts.push(...seg.parts);
+      } else {
+        merged.push(filler);
+        merged.push(seg);
+      }
+      filler = null;
+    } else {
+      merged.push(seg);
+    }
+  }
+
+  if (filler) merged.push(filler);
+  return merged;
+}
+
+/**
  * Walk through `parts` in order and produce interleaved segments.
  * Consecutive text parts are merged into one text segment.
- * Consecutive tool parts are merged into one tool segment.
+ * Consecutive tool parts are merged into one tool segment, and tool groups
+ * separated only by short filler text are merged as well (see
+ * `mergeInRowToolSegments`).
  * All other part types (step-start, source, file) are skipped.
  */
 function buildSegments(parts: UIMessage["parts"]): Segment[] {
@@ -324,6 +394,12 @@ function buildSegments(parts: UIMessage["parts"]): Segment[] {
       if (last?.type === "text") {
         // Append to ongoing text segment (streaming appends text-deltas)
         last.text += part.text;
+      } else if (part.text.trim().length === 0) {
+        // Empty/whitespace-only text — the model frequently emits empty
+        // text deltas around tool calls. It renders nothing visible, so drop
+        // it instead of letting it split consecutive in-row tool calls into
+        // separate cards. They merge into one group in real time.
+        continue;
       } else {
         segments.push({ type: "text", text: part.text });
       }
@@ -379,7 +455,7 @@ function buildSegments(parts: UIMessage["parts"]): Segment[] {
     // Skip step-start, source, file parts
   }
 
-  return segments;
+  return mergeInRowToolSegments(segments);
 }
 
 export function MessageBubble({
@@ -481,6 +557,16 @@ export function MessageBubble({
     .map((p) => p.text)
     .join("\n\n");
 
+  // The AI can call suggest_followups multiple times per response — only the
+  // LAST completed set is shown so duplicate followup cards never stack.
+  const suggestionSegments = segments.filter(
+    (s): s is Segment & { type: "suggestions" } => s.type === "suggestions",
+  );
+  const lastSuggestion =
+    suggestionSegments.length > 0
+      ? suggestionSegments[suggestionSegments.length - 1]
+      : undefined;
+
   return (
     <div className="group flex justify-start">
       <div className="w-full text-[15px] leading-relaxed text-foreground">
@@ -512,14 +598,14 @@ export function MessageBubble({
               ),
             )}
 
-          {/* Suggestions always rendered at the bottom, cleanly separated */}
-          {segments
-            .filter((s): s is Segment & { type: "suggestions" } => s.type === "suggestions")
-            .map((segment, idx) => (
-              <div key={`suggestions-${idx}`} className="mt-0.5">
-                <FollowupSuggestions data={segment.data} />
-              </div>
-            ))}
+          {/* Suggestions always rendered at the bottom, cleanly separated.
+              The AI can call suggest_followups multiple times per response —
+              only the LAST set is shown so duplicate cards never stack. */}
+          {lastSuggestion && (
+            <div key="suggestions-last" className="mt-0.5">
+              <FollowupSuggestions data={lastSuggestion.data} />
+            </div>
+          )}
         </div>
 
         {/* Thinking indicator — shown under content while AI is still processing */}

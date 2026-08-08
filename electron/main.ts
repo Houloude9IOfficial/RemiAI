@@ -183,6 +183,19 @@ function startNextServer(): Promise<void> {
         ...(!isDev
           ? { REMI_DATA_DIR: path.join(app.getPath("userData"), "data") }
           : {}),
+        // Point Playwright at the Chromium bundled into the installer
+        // (electron-builder extraResources: build/playwright-browsers →
+        // resources/playwright-browsers, staged by npm run playwright:browsers).
+        // In dev the default cache (~/Library/Caches/ms-playwright, ...) is
+        // used, populated by `npm run playwright:install`.
+        ...(app.isPackaged
+          ? {
+              PLAYWRIGHT_BROWSERS_PATH: path.join(
+                process.resourcesPath,
+                "playwright-browsers",
+              ),
+            }
+          : {}),
       },
     });
 

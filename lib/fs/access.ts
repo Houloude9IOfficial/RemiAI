@@ -144,21 +144,38 @@ export async function resolvePath(
     // realpath fails if the path doesn't exist -> this could be a new file.
     // Resolve the parent to check containment, then re-append basename.
     if (err.code === "ENOENT") {
-      const parentDir = path.dirname(candidate);
+      // A write may target several not-yet-created parent folders. Walk up to
+      // the nearest existing ancestor, resolve that one, then rebuild the
+      // missing suffix. This preserves the symlink-containment guarantee while
+      // allowing write_file to create nested parents in one operation.
+      let existingParent = path.dirname(candidate);
+      const missingSegments: string[] = [path.basename(candidate)];
       try {
-        const resolvedParent = await fs.realpath(parentDir);
-        if (!isWithinRoot(resolvedParent, root.path)) {
-          throw new FilesystemError(
-            `Parent of "${relativePath}" is outside the permitted root`,
-            "ACCESS_DENIED",
-          );
+        while (true) {
+          try {
+            const resolvedParent = await fs.realpath(existingParent);
+            if (!isWithinRoot(resolvedParent, root.path)) {
+              throw new FilesystemError(
+                `Parent of "${relativePath}" is outside the permitted root`,
+                "ACCESS_DENIED",
+              );
+            }
+            return path.join(resolvedParent, ...missingSegments.reverse());
+          } catch (parentErr: any) {
+            if (parentErr instanceof FilesystemError) throw parentErr;
+            if (parentErr?.code !== "ENOENT") throw parentErr;
+            const nextParent = path.dirname(existingParent);
+            if (nextParent === existingParent || !isWithinRoot(nextParent, root.path)) {
+              throw parentErr;
+            }
+            missingSegments.push(path.basename(existingParent));
+            existingParent = nextParent;
+          }
         }
-        // Return the resolved parent + original basename
-        return path.join(resolvedParent, path.basename(candidate));
       } catch (innerErr) {
         if (innerErr instanceof FilesystemError) throw innerErr;
         throw new FilesystemError(
-          `Parent directory does not exist: ${parentDir}`,
+          `Parent directory does not exist: ${path.dirname(candidate)}`,
           "NOT_FOUND",
         );
       }
@@ -1033,6 +1050,7 @@ export type WriteFileResult = {
   /** Line-count delta (mixed precision — not a true hunk diff). */
   linesAdded: number;
   linesRemoved: number;
+  createdDirectories: string[];
 };
 
 /**
@@ -1061,8 +1079,19 @@ export async function writeFile(
     // File does not exist yet — treat as create
   }
 
-  // Ensure parent directory exists
-  await fs.mkdir(path.dirname(targetPath), { recursive: true });
+  // Ensure parent directory exists and surface newly-created folders to the
+  // model/UI instead of silently changing the project structure.
+  const parentPath = path.dirname(targetPath);
+  const firstCreatedDirectory = await fs.mkdir(parentPath, { recursive: true });
+  const createdDirectories: string[] = [];
+  if (firstCreatedDirectory) {
+    const relativeFirst = normalizePath(path.relative(root.path, firstCreatedDirectory));
+    const relativeParent = normalizePath(path.relative(root.path, parentPath));
+    if (relativeFirst && relativeFirst !== ".") createdDirectories.push(relativeFirst);
+    if (relativeParent && relativeParent !== "." && relativeParent !== relativeFirst) {
+      createdDirectories.push(relativeParent);
+    }
+  }
 
   const flag = writeMode === "append" ? "a" : "w";
   await fs.writeFile(targetPath, content, { encoding: "utf-8", flag });
@@ -1088,6 +1117,54 @@ export async function writeFile(
     linesWritten,
     linesAdded,
     linesRemoved,
+    createdDirectories,
+  };
+}
+
+export type EditFileResult = {
+  path: string;
+  relativePath: string;
+  bytesChanged: number;
+  linesAdded: number;
+  linesRemoved: number;
+};
+
+/** Replace one uniquely-matching string without retransmitting the file. */
+export async function editFile(
+  root: PermittedRoot,
+  relativePath: string,
+  oldStr: string,
+  newStr: string,
+): Promise<EditFileResult | { error: string; matches: number; content: string }> {
+  assertCanWrite(root);
+  if (!oldStr) {
+    return { error: "old_str must not be empty.", matches: 0, content: "" };
+  }
+  const targetPath = await resolvePath(root, relativePath);
+  const content = await fs.readFile(targetPath, "utf-8");
+  let matches = 0;
+  let start = 0;
+  while (true) {
+    const found = content.indexOf(oldStr, start);
+    if (found === -1) break;
+    matches++;
+    start = found + oldStr.length;
+  }
+  if (matches !== 1) {
+    return {
+      error: matches === 0 ? "old_str was not found exactly in the file." : "old_str matched more than once; include more surrounding context.",
+      matches,
+      content,
+    };
+  }
+  const updated = content.replace(oldStr, newStr);
+  await fs.writeFile(targetPath, updated, "utf-8");
+  return {
+    path: targetPath,
+    relativePath: normalizePath(relativePath),
+    bytesChanged: Math.abs(Buffer.byteLength(newStr, "utf-8") - Buffer.byteLength(oldStr, "utf-8")),
+    linesAdded: Math.max(0, newStr.split("\n").length - oldStr.split("\n").length),
+    linesRemoved: Math.max(0, oldStr.split("\n").length - newStr.split("\n").length),
   };
 }
 

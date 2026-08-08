@@ -6,7 +6,7 @@ import {
 } from "ai";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { conversations, providers, userPreferences, memories } from "@/db/schema";
+import { conversations, providers, userPreferences } from "@/db/schema";
 import { getLanguageModel } from "@/lib/providers/factory";
 import { SYSTEM_PROMPT } from "@/lib/chat/system-prompt";
 import { delayTool } from "@/lib/tools/delay";
@@ -15,6 +15,7 @@ import { queryRecentChanges } from "@/lib/fs/file-index";
 import { periodicallyPersistMessages } from "@/lib/chat/persist-interval";
 import { streamRegistry } from "@/lib/chat/stream-registry";
 import { estimateTokenCount } from "@/lib/utils";
+import { retrieveRelevantMemories } from "@/lib/chat/memories";
 import { getTimeDetails } from "@/lib/time";
 
 export async function POST(req: Request) {
@@ -114,14 +115,10 @@ export async function POST(req: Request) {
     ? `\n\n## User profile\nThe following is what you know about the user from their profile:\n${profileParts.map((p) => `- ${p}`).join("\n")}`
     : "";
 
-  // 3. Saved memories
-  const memoryRows = await db
-    .select()
-    .from(memories)
-    .orderBy(memories.createdAt)
-    .all();
-  const memoryContext = memoryRows.length > 0
-    ? `\n\n## Saved memories about the user\n${memoryRows.map((m) => `- ${m.content}`).join("\n")}`
+  // 3. Saved memories — budget-capped (most recent, since there's no query yet)
+  const relevantMemories = await retrieveRelevantMemories("");
+  const memoryContext = relevantMemories.length > 0
+    ? `\n\n## Saved memories about the user\n${relevantMemories.map((m) => `- ${m.content}`).join("\n")}`
     : "";
 
   // 4. Recent file changes

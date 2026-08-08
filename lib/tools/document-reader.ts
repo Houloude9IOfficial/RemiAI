@@ -134,22 +134,9 @@ export async function readDocumentFromUrl(uploadUrl: string): Promise<{
  * Works with either a chat upload URL or within permitted directory roots.
  */
 export const readDocumentTool = {
-  description: `Extract text content from a document file (PDF, DOCX, DOC, ODT, RTF, EPUB). Use this when the user asks you to read a document that isn't a plain text file (.md, .txt, .csv, etc.).
+  description: `Extract text from a document (PDF, DOCX, DOC, ODT, RTF, EPUB). Use instead of read_file for non-plain-text documents. Max 50MB. No OCR for scanned PDFs.
 
-Supported formats:
-- .pdf — Portable Document Format (extracts text content with pdf-parse)
-- .docx / .doc — Microsoft Word documents (extracts raw text with mammoth)
-- .odt — OpenDocument Text (read as plain text if possible)
-- .rtf — Rich Text Format (read as plain text if possible)
-- .epub — Electronic Publication (read as plain text if possible)
-
-Max file size: 50 MB.
-
-For images within documents (scanned PDFs), this tool extracts any embedded text but cannot perform OCR. If the document is scanned images, the user will need OCR software.
-
-**Calling conventions:**
-1. Pass \`url\` for chat file URLs — user uploads (e.g. /api/chat/uploads/123/report.pdf) or session sandbox files (e.g. /api/chat/5/session-files/output/report.pdf) — no directory root needed.
-2. Pass \`rootId\` + \`relativePath\` for files in configured directories.`,
+Pass \`url\` for chat/session file URLs, or \`rootId\` + \`relativePath\` for files in configured directories. Long documents are truncated at ~100k chars (≈25k tokens); ask the user to split the file or cite the section you need if more is required.`,
   parameters: z
     .object({
       rootId: z
@@ -157,21 +144,15 @@ For images within documents (scanned PDFs), this tool extracts any embedded text
         .int()
         .positive()
         .optional()
-        .describe(
-          "ID of the permitted root directory (leave empty if using `url`)",
-        ),
+        .describe("Permitted root ID (omit if using `url`)"),
       relativePath: z
         .string()
         .optional()
-        .describe(
-          "Relative path to the document file within the root (leave empty if using `url`)",
-        ),
+        .describe("Path to the document within the root (omit if using `url`)"),
       url: z
         .string()
         .optional()
-        .describe(
-          "Chat file URL — a user upload (e.g. `/api/chat/uploads/123/report.pdf`) or a session sandbox file (e.g. `/api/chat/5/session-files/report.pdf`). Use this instead of rootId + relativePath for files tied to the chat.",
-        ),
+        .describe("Chat file URL (upload or session sandbox file). Use instead of rootId+relativePath for chat files."),
     })
     .refine(
       (data) => {
@@ -194,9 +175,10 @@ For images within documents (scanned PDFs), this tool extracts any embedded text
     url?: string;
   }) => {
     if (url) {
-      // Read from chat upload URL
+      // Read from chat upload URL. Documents have no pagination, so use a
+      // larger cap (100k chars ≈ 25k tokens) than the default 50k.
       const result = await readDocumentFromUrl(url);
-      return truncateToolResult(result);
+      return truncateToolResult(result, 100_000);
     }
 
     if (!rootId || !relativePath) {
@@ -238,13 +220,16 @@ For images within documents (scanned PDFs), this tool extracts any embedded text
     // Normalize filename: handle Windows backslashes if the AI sends them
     const filename = path.basename(relativePath.replace(/\\/g, "/"));
 
-    return truncateToolResult({
-      filename,
-      format,
-      size: stats.size,
-      text,
-      characters: text.length,
-    });
+    return truncateToolResult(
+      {
+        filename,
+        format,
+        size: stats.size,
+        text,
+        characters: text.length,
+      },
+      100_000,
+    );
   },
 };
 

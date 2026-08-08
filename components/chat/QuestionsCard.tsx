@@ -20,6 +20,7 @@ interface Question {
   question: string;
   options: string[];
   allowCustom: boolean;
+  type?: "single_select" | "multi_select" | "free_text";
 }
 
 interface QuestionsData {
@@ -53,8 +54,8 @@ export function QuestionsCard({ data }: { data: unknown }) {
 // ---------------------------------------------------------------------------
 
 function QuestionsForm({ data }: { data: QuestionsData }) {
-  const { sendMessage } = useChatMessage();
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const { sendMessage, status } = useChatMessage();
+  const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
   const [customTexts, setCustomTexts] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
   const [expanded, setExpanded] = useState(true);
@@ -65,7 +66,8 @@ function QuestionsForm({ data }: { data: QuestionsData }) {
   // Track which questions have been answered
   const answeredCount = questions.filter((q) => {
     const answer = answers[q.id];
-    if (!answer) return false;
+    if (q.type === "free_text") return Boolean(customTexts[q.id]?.trim());
+    if (!answer || (Array.isArray(answer) && answer.length === 0)) return false;
     if (answer === "__custom__") {
       const custom = customTexts[q.id]?.trim();
       return custom && custom.length > 0;
@@ -74,6 +76,12 @@ function QuestionsForm({ data }: { data: QuestionsData }) {
   }).length;
 
   const allAnswered = answeredCount === questions.length;
+  // Never submit while a response is still streaming: sending starts a SECOND
+  // concurrent request whose stream interleaves with the first, which makes
+  // the SDK push a duplicate copy of the questions message (same id twice →
+  // React duplicate-key crash + duplicated UI). The button stays disabled
+  // until the current run finishes.
+  const isBusy = status === "submitted" || status === "streaming";
 
   const handleSelectOption = useCallback(
     (questionId: string, option: string) => {
@@ -81,6 +89,13 @@ function QuestionsForm({ data }: { data: QuestionsData }) {
     },
     [],
   );
+
+  const handleToggleOption = useCallback((questionId: string, option: string) => {
+    setAnswers((prev) => {
+      const current = Array.isArray(prev[questionId]) ? prev[questionId] : [];
+      return { ...prev, [questionId]: current.includes(option) ? current.filter((item) => item !== option) : [...current, option] };
+    });
+  }, []);
 
   const handleCustomChange = useCallback(
     (questionId: string, value: string) => {
@@ -99,7 +114,7 @@ function QuestionsForm({ data }: { data: QuestionsData }) {
   );
 
   const handleSubmit = useCallback(() => {
-    if (!allAnswered) return;
+    if (!allAnswered || isBusy) return;
 
     // Build a nicely formatted answer string
     const lines: string[] = [];
@@ -111,10 +126,10 @@ function QuestionsForm({ data }: { data: QuestionsData }) {
     for (const q of questions) {
       const answer = answers[q.id];
       let answerText = "";
-      if (answer === "__custom__") {
+      if (q.type === "free_text" || answer === "__custom__") {
         answerText = customTexts[q.id]?.trim() ?? "";
       } else {
-        answerText = answer;
+        answerText = Array.isArray(answer) ? answer.join(", ") : answer;
       }
       lines.push(`**${q.question}**`);
       lines.push(answerText);
@@ -124,7 +139,7 @@ function QuestionsForm({ data }: { data: QuestionsData }) {
     const message = lines.join("\n").trim();
     setSubmitted(true);
     sendMessage(message);
-  }, [answers, customTexts, questions, title, allAnswered, sendMessage]);
+  }, [answers, customTexts, questions, title, allAnswered, sendMessage, isBusy]);
 
   // Auto-scroll into view when the card appears
   useEffect(() => {
@@ -190,31 +205,42 @@ function QuestionsForm({ data }: { data: QuestionsData }) {
             {questions.map((q, idx) => {
               const selected = answers[q.id];
               const isCustom = selected === "__custom__";
+              const isMulti = q.type === "multi_select";
+              const isFreeText = q.type === "free_text";
 
               return (
                 <div
                   key={q.id}
-                  className="rounded-lg border border-border/30 bg-muted/20 p-3.5 transition-all duration-200"
+                  className="rounded-lg p-3.5 transition-all duration-200"
                 >
                   {/* Question text */}
                   <div className="mb-2.5 flex items-start gap-2">
-                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted-foreground/10 text-[10px] font-bold text-muted-foreground">
+                    {/* <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[12px] font-bold text-muted-foreground">
                       {idx + 1}
-                    </span>
+                    </span> */}
                     <p className="text-sm font-medium leading-snug">
                       {q.question}
                     </p>
                   </div>
 
-                  {/* Options */}
+                  {isFreeText ? (
+                    <textarea
+                      value={customTexts[q.id] ?? ""}
+                      onChange={(e) => handleCustomChange(q.id, e.target.value)}
+                      placeholder="Type your answer..."
+                      rows={3}
+                      className="w-full resize-none rounded-md border border-border/40 bg-background px-2.5 py-2 text-xs leading-relaxed focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/20"
+                    />
+                  ) : (
+                  /* Options */
                   <div className="flex flex-col gap-1.5">
                     {q.options.map((option) => {
-                      const isSelected = selected === option;
+                      const isSelected = isMulti ? Array.isArray(selected) && selected.includes(option) : selected === option;
                       return (
                         <button
                           key={option}
                           type="button"
-                          onClick={() => handleSelectOption(q.id, option)}
+                          onClick={() => isMulti ? handleToggleOption(q.id, option) : handleSelectOption(q.id, option)}
                           className={cn(
                             "group flex items-center gap-2.5 rounded-lg border px-3 py-2 text-left text-xs transition-all duration-150",
                             isSelected
@@ -225,7 +251,8 @@ function QuestionsForm({ data }: { data: QuestionsData }) {
                           {/* Radio indicator */}
                           <span
                             className={cn(
-                              "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors duration-150",
+                              "flex h-4 w-4 shrink-0 items-center justify-center border transition-colors duration-150",
+                              isMulti ? "rounded" : "rounded-full",
                               isSelected
                                 ? "border-primary bg-primary"
                                 : "border-muted-foreground/30 group-hover:border-muted-foreground/50",
@@ -298,6 +325,7 @@ function QuestionsForm({ data }: { data: QuestionsData }) {
                       </div>
                     )}
                   </div>
+                  )}
                 </div>
               );
             })}
@@ -308,18 +336,20 @@ function QuestionsForm({ data }: { data: QuestionsData }) {
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={!allAnswered}
+              disabled={!allAnswered || isBusy}
               className={cn(
                 "flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200",
-                allAnswered
+                allAnswered && !isBusy
                   ? "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 active:scale-[0.98]"
                   : "cursor-not-allowed bg-muted text-muted-foreground/50",
               )}
             >
               <Send className="h-3.5 w-3.5" />
-              {allAnswered
+              {allAnswered && !isBusy
                 ? "Send answers"
-                : `Answer all questions first (${answeredCount}/${questions.length})`}
+                : isBusy
+                  ? "Waiting for the assistant to finish…"
+                  : `Answer all questions first (${answeredCount}/${questions.length})`}
             </button>
           </div>
         </div>

@@ -27,6 +27,7 @@ import {
 import {
   sessionFilesApi,
   SESSION_FILES_CHANGED_EVENT,
+  subscribeSessionFilesChanged,
   type SessionFileEntry,
 } from "@/lib/api/session-files";
 import {
@@ -103,13 +104,50 @@ export function SessionFilesPanel({
     [queryClient, conversationId],
   );
 
-  // Refresh the listing when files change elsewhere in the app (e.g. the user
-  // uploads files through the chat composer, which saves them into the sandbox).
+  // Debounce bursts of change events (the AI can write many files in quick
+  // succession during one tool run) so each burst triggers a single refetch
+  // instead of one request per file.
+  const invalidateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refreshAfterChange = useCallback(() => {
+    if (invalidateTimerRef.current) clearTimeout(invalidateTimerRef.current);
+    invalidateTimerRef.current = setTimeout(() => {
+      invalidateTimerRef.current = null;
+      invalidate();
+      // Also refresh the content of a file currently open in the viewer
+      // (e.g. the AI edited the file the user is looking at).
+      queryClient.invalidateQueries({
+        queryKey: ["session-file-content", conversationId],
+      });
+    }, 300);
+  }, [invalidate, queryClient, conversationId]);
+
+  // Clear any pending debounce timer on unmount.
+  useEffect(
+    () => () => {
+      if (invalidateTimerRef.current) clearTimeout(invalidateTimerRef.current);
+    },
+    [],
+  );
+
+  // Refresh when files change elsewhere in the app — client-side events
+  // (e.g. the user uploads files through the chat composer)…
   useEffect(() => {
-    const handler = () => invalidate();
+    const handler = () => refreshAfterChange();
     window.addEventListener(SESSION_FILES_CHANGED_EVENT, handler);
     return () => window.removeEventListener(SESSION_FILES_CHANGED_EVENT, handler);
-  }, [invalidate]);
+  }, [refreshAfterChange]);
+
+  // …and server-side pushes (the AI writing/editing/deleting sandbox files
+  // during a chat, or files changed from any other source).
+  useEffect(() => {
+    const unsubscribe = subscribeSessionFilesChanged(
+      ({ conversationId: changedId }) => {
+        if (changedId !== conversationId) return;
+        refreshAfterChange();
+      },
+    );
+    return unsubscribe;
+  }, [conversationId, refreshAfterChange]);
 
   const handleUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -308,7 +346,7 @@ export function SessionFilesPanel({
 
 const PANEL_MIN_WIDTH = 280;
 const PANEL_MAX_WIDTH = 640;
-const PANEL_DEFAULT_WIDTH = 384;
+const PANEL_DEFAULT_WIDTH = 450;
 const PANEL_WIDTH_KEY = "session-files-panel-width";
 const PANEL_RESIZE_STEP = 16;
 

@@ -9,8 +9,17 @@ const nextConfig: NextConfig = {
   // output. db/index.ts runs migrations at runtime (process.cwd() is
   // .next/standalone in the packaged app) and skips them during `next build`,
   // so we can't rely on Turbopack's automatic file tracing alone.
+  // (scripts/prune-standalone.mjs — run by `npm run build` — also keeps
+  // db/migrations, so this is a belt-and-braces safety net.)
   outputFileTracingIncludes: {
-    "/**": ["./db/migrations/**"],
+    "/**": [
+      "./db/migrations/**",
+      // The Browser Automation tool imports `playwright` (traced), but its
+      // CLI entry (cli.js) is not imported by the app — the Docker image
+      // uses it to install Chromium + system deps for the exact same
+      // playwright version at build time.
+      "./node_modules/playwright/cli.js",
+    ],
   },
   devIndicators: false,
   serverExternalPackages: ["better-sqlite3"],
@@ -18,7 +27,7 @@ const nextConfig: NextConfig = {
   // 10 MB proxy body limit. The backup route still validates the encrypted
   // payload and requires authentication before restoring anything.
   experimental: {
-    proxyClientMaxBodySize: "200mb",
+    proxyClientMaxBodySize: "10000mb",
   },
   turbopack: {
     root: process.cwd(),
