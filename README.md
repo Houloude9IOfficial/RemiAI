@@ -22,12 +22,6 @@
 
 ---
 
-## Release Notes
-
-What's new in the latest release? Check the **[RemiAI v2.0.0 release notes](./v2.md)**. Release notes for each major version live in the repo root as `vX.md` (e.g. `v2.md`, `v3.md`).
-
----
-
 ## Overview
 
 RemiAI is a **self-hosted AI assistant** that lives on your machine. It combines a conversational AI interface with deep local file system access, persistent memory, an extensible tool system, and support for the Model Context Protocol (MCP). You can think of it as a private, customizable AI that understands your files, remembers your preferences, and connects to external services — all without sending your data to third parties.
