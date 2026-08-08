@@ -228,3 +228,5 @@ the ai users bash to write/edit/delete files, but it should use bash for command
 <!-- add focusing on chat on press of / -->
 
 add native support for Playwright, tool, togglable
+
+fix /website deploy
