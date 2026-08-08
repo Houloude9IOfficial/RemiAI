@@ -41,6 +41,14 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 # Playwright system dependencies (Chromium's shared libraries) — must be
 # installed in the runtime image, which is a fresh slim base.
+#
+# The standalone output only ships the files the server imports at runtime:
+# playwright/cli.js is traced (next.config.ts outputFileTracingIncludes) but
+# its lib/ (program.js) and playwright-core's browsers.json are not, so the
+# CLI can't run from the standalone copy. Pull the full packages from the
+# build stage so `install-deps` works with the exact playwright version.
+COPY --from=build /app/node_modules/playwright ./node_modules/playwright
+COPY --from=build /app/node_modules/playwright-core ./node_modules/playwright-core
 RUN node node_modules/playwright/cli.js install-deps chromium
 
 # Keep the database and user uploads in the named /app/data volume.
