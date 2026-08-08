@@ -18,7 +18,7 @@ const nextConfig: NextConfig = {
   // 10 MB proxy body limit. The backup route still validates the encrypted
   // payload and requires authentication before restoring anything.
   experimental: {
-    proxyClientMaxBodySize: "200mb",
+    proxyClientMaxBodySize: "10000mb",
   },
   turbopack: {
     root: process.cwd(),
