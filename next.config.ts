@@ -12,7 +12,14 @@ const nextConfig: NextConfig = {
   // (scripts/prune-standalone.mjs — run by `npm run build` — also keeps
   // db/migrations, so this is a belt-and-braces safety net.)
   outputFileTracingIncludes: {
-    "/**": ["./db/migrations/**"],
+    "/**": [
+      "./db/migrations/**",
+      // The Browser Automation tool imports `playwright` (traced), but its
+      // CLI entry (cli.js) is not imported by the app — the Docker image
+      // uses it to install Chromium + system deps for the exact same
+      // playwright version at build time.
+      "./node_modules/playwright/cli.js",
+    ],
   },
   devIndicators: false,
   serverExternalPackages: ["better-sqlite3"],

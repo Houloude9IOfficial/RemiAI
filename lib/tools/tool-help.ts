@@ -390,6 +390,34 @@ context7_get_docs({ library: "react", query: "useActionState" })
 - Use the \`query\` parameter to narrow down to exactly what the user needs.
 - Works well combined with web search — search for context first, then dig deeper with Context7.`,
 
+  "playwright": `## Browser Automation (native Playwright)
+
+You have a real headless Chromium browser running natively on the user's machine. It works in both the website and desktop app, and offline. A browser **session persists per conversation** — open once, then interact, screenshot, and close.
+
+| Tool | Parameters | Purpose |
+|---|---|---|
+| \`browser_open\` | \`url\`, \`waitFor\` (optional), \`timeout\` | Open a URL in Chromium; returns title, final URL, and rendered text (JavaScript included). |
+| \`browser_click\` | \`selector\`, \`timeout\` | Click the first element matching a CSS selector; returns the updated page. |
+| \`browser_fill\` | \`selector\`, \`value\`, \`timeout\` | Type into a text input/textarea. |
+| \`browser_extract\` | \`selector\` (optional), \`timeout\` | Extract readable text — the whole page or a CSS selector region. |
+| \`browser_screenshot\` | \`path\`, \`fullPage\`, \`width\`, \`timeout\` | Screenshot the page into the session files; embed the returned \`url\` in your reply as ![name](url). |
+| \`browser_interact\` | \`code\`, \`timeout\` | Escape hatch: run a custom async Playwright script with \`page\` and \`browser\` globals. |
+| \`browser_close\` | — | Close the session and free resources when done. |
+
+### Workflows
+- **Read a JS-rendered page**: \`browser_open({ url })\` → use the returned text. (\`web_fetch\` only gets raw HTML — use the browser for SPAs, dashboards, paywalled-by-JS content.)
+- **Login / form flow**: \`browser_open(url)\` → \`browser_fill(selector, value)\` for each field → \`browser_click('button[type=submit]')\` → \`browser_extract()\` to read the result.
+- **Show the user a page**: \`browser_open(url)\` → \`browser_screenshot()\` → reply with the image markdown.
+- **Anything custom**: \`browser_interact({ code: "await page.click('.item'); return await page.locator('.count').textContent();" })\`.
+
+### Rules
+- Only http(s) URLs.
+- The session belongs to this conversation; other chats can't see it.
+- Always call \`browser_close\` when the automation is done.
+- Timeouts: default 30–45s, max 120s. On timeout the session is closed — re-open.
+- The tool must be enabled in Settings > Tools > Browser Automation (off by default).
+- Trust model: the browser runs on the user's machine with their network — only automate what the user asked for.`,
+
   "code-execution": `## Code execution tools
 
 | Tool | Parameters | Purpose |
@@ -730,6 +758,22 @@ const KEYWORD_SYNONYMS: Record<string, string> = {
   "library docs": "context7",
   "code exec": "code-execution",
   python: "code-execution",
+  playwright: "playwright",
+  browser: "playwright",
+  "browser automation": "playwright",
+  "browser tool": "playwright",
+  "open website": "playwright",
+  "open url": "playwright",
+  "open page": "playwright",
+  navigate: "playwright",
+  screenshot: "playwright",
+  "take screenshot": "playwright",
+  "click button": "playwright",
+  "fill form": "playwright",
+  "web automation": "playwright",
+  "javascript rendered": "playwright",
+  "render the page": "playwright",
+  "spa": "playwright",
   javascript: "code-execution",
   js: "code-execution",
   pytest: "code-execution",
@@ -824,7 +868,7 @@ function getAvailableTopicsText(): string {
 // Use a shorter inline list for the tool description (the full list is in the
 // system prompt and is returned when the user asks for an invalid topic)
 const SHORT_TOPIC_LIST =
-  "filesystem, memory, profile, todo, file-index, ask-questions, suggest-followups, agent-spawner, scheduled-tasks, routines, delay, create-visual, session-files, newsapi, firecrawl, brave-search, notion, context7, elevenlabs, code-execution, document-reader, @FILE-references, scaffolding, absolute-paths, web-fetch, mcp-tools, file-attachments, start-of-conversation";
+  "filesystem, memory, profile, todo, file-index, ask-questions, suggest-followups, agent-spawner, scheduled-tasks, routines, delay, create-visual, session-files, newsapi, firecrawl, brave-search, notion, context7, elevenlabs, playwright, code-execution, document-reader, @FILE-references, scaffolding, absolute-paths, web-fetch, mcp-tools, file-attachments, start-of-conversation";
 
 // ---------------------------------------------------------------------------
 // Cached listing for list_available_tools — built once from TOOL_CATALOG
@@ -866,6 +910,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   create_visual: "Dynamic visuals (SVG / HTML)",
   session_files: "Session files (per-chat sandbox)",
   firecrawl: "Web scraping (Firecrawl)",
+  playwright: "Browser automation (Playwright)",
 };
 
 const HELP_TOPIC_MAP: Record<string, string | null> = {
@@ -891,6 +936,7 @@ const HELP_TOPIC_MAP: Record<string, string | null> = {
   create_visual: "create-visual",
   session_files: "session-files",
   firecrawl: "firecrawl",
+  playwright: "playwright",
 };
 
 function buildToolGroups(): ToolGroup[] {

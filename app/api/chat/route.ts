@@ -56,6 +56,7 @@ import { buildContextTools } from "@/lib/tools/context";
 import { buildMemoryTools } from "@/lib/tools/memories";
 import { buildIntegrationTools } from "@/lib/tools/integrations";
 import { buildExecutionTools } from "@/lib/tools/exec";
+import { buildPlaywrightTools } from "@/lib/tools/playwright";
 import { buildDocumentReaderTools } from "@/lib/tools/document-reader";
 import { delayTool } from "@/lib/tools/delay";
 import { webFetchTool } from "@/lib/tools/web-fetch";
@@ -293,6 +294,9 @@ export async function POST(req: Request) {
     (conversation as any).bashMode === "full" ? "full" : "sandboxed",
   );
 
+  // Gather native Playwright browser automation tools (browser_open, ...)
+  const playwrightToolSet = await buildPlaywrightTools(conversationId);
+
   // Gather document reader tools (read_document)
   const documentToolSet = await buildDocumentReaderTools();
 
@@ -395,6 +399,7 @@ You are currently in **Plan mode**. This means:
     ...memoryToolSet,
     ...integrationToolSet,
     ...executionToolSet,
+    ...playwrightToolSet,
     ...documentToolSet,
     ...builtinToolSet,
     ...agentToolSet,
