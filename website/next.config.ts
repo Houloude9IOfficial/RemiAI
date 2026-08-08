@@ -18,12 +18,17 @@ import type { NextConfig } from "next";
  *    Setting `outputFileTracingRoot` explicitly overrides the Vercel env var
  *    and keeps both roots pinned to this self-contained site.
  *
- * 2. The build script uses `next build --webpack` (NOT Turbopack) because
- *    Vercel's Next.js builder fails to package Turbopack builds of a
- *    subdirectory project: it looks for the build marker at
- *    `<repo root>/.next/package.json` (which never exists there) and aborts
- *    with `ENOENT ... lstat '/vercel/path0/.next/package.json'`. Webpack
- *    emits the marker where Vercel expects it.
+ * 2. Vercel's deploy step looks for the Next.js build markers at the *git
+ *    repo root* (`/vercel/path0/.next/package.json`) and aborts with
+ *    `ENOENT ... lstat` when they are not there, even though the build
+ *    succeeds. Because this app is in the `website/` subdirectory, the
+ *    markers are emitted at `website/.next/` regardless of bundler
+ *    (Turbopack OR webpack) — so switching bundlers does NOT fix it.
+ *
+ *    The build script therefore ends with `node scripts/vercel-fix-output.mjs`
+ *    (see that file), which symlinks the repo-root `.next` to this app's
+ *    real build output during Vercel builds so the deploy step finds the
+ *    markers it expects.
  */
 const nextConfig: NextConfig = {
   outputFileTracingRoot: process.cwd(),
