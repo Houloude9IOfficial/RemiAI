@@ -47,6 +47,40 @@
     "signing:secrets": "node scripts/setup-signing-secrets.mjs"
   },
   "main": "electron-dist/main.js",
+  "build": {
+    "appId": "com.crickdevs.remiai",
+    "productName": "RemiAI",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      ".next/**/*",
+      "electron-dist/**/*",
+      "public/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.productivity"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "msi"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb",
+        "rpm"
+      ],
+      "category": "Utility"
+    }
+  },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.12",
     "@ai-sdk/mcp": "^2.0.10",

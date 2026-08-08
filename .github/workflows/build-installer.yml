@@ -3,42 +3,44 @@
 # ──────────────────────────────────────────────────────────────────────────
 #
 # Triggered when a tag matching "v*" is pushed (e.g. v1.2.0, v2.0.0).
-# Builds cross-platform Electron installers and publishes them as a
-# GitHub Release with attached artifacts.
+# Also supports manual workflow dispatch.
 #
-# Prerequisites:
-#   1. Add repository secrets in GitHub Settings → Secrets and variables:
-#      - APPLE_ID              (macOS notarization — optional)
-#      - APPLE_APP_SPECIFIC_PASSWORD  (macOS notarization — optional)
-#      - APPLE_TEAM_ID         (macOS notarization — optional)
-#      - CSC_LINK              (macOS code-signing cert — optional)
-#      - CSC_KEY_PASSWORD      (macOS code-signing cert password — optional)
-#      - GH_TOKEN              (GitHub token with repo scope)
-#      - WIN_CSC_LINK          (Windows code-signing cert — optional)
-#      - WIN_CSC_KEY_PASSWORD  (Windows code-signing cert password — optional)
+# Builds:
+#   macOS  — x64 + arm64
+#   Windows — x64
+#   Linux  — AppImage + DEB + RPM
+#
+# All installers are written to ./release/
+# and attached to the GitHub Release when running from a tag.
+#
+# ──────────────────────────────────────────────────────────────────────────
 
 name: Build Installer
 
 on:
   push:
     tags:
-      - "v*"       # e.g. v1.2.0, v2.0.0-beta.1
-  workflow_dispatch:   # Allow manual trigger from Actions tab
+      - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  # ── macOS ──────────────────────────────────────────────────────────
+
+  # ────────────────────────────────────────────────────────────────────────
+  # macOS — x64 + arm64
+  # ────────────────────────────────────────────────────────────────────────
+
   build-mac:
-    name: Build macOS (x64 + arm64)
+    name: Build macOS (${{ matrix.arch }})
     runs-on: macos-latest
+
     strategy:
+      fail-fast: false
       matrix:
         arch: [x64, arm64]
-      # Don't cancel the other arch when one fails — the two jobs are
-      # independent and a failure in one should not abort the other.
-      fail-fast: false
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -65,32 +67,63 @@ jobs:
         run: npx electron-builder --mac --${{ matrix.arch }} --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # macOS code signing (optional — omit to skip signing)
+
+          # macOS code signing / notarization (optional)
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
+      # Show exactly what electron-builder generated.
+      # This makes future build/output problems much easier to diagnose.
+      - name: Verify macOS build output
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "macOS build output:"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+          if [ -d "release" ]; then
+            find release -maxdepth 2 -type f -print
+          else
+            echo "ERROR: release/ directory does not exist."
+            exit 1
+          fi
+
+          echo ""
+          echo "Installer files:"
+          find release -maxdepth 1 -type f \( \
+            -name "*.dmg" -o \
+            -name "*.zip" \
+          \) -print
+
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
           name: installer-mac-${{ matrix.arch }}
-          path: release/*.{dmg,zip}
-          if-no-files-found: warn
+          path: |
+            release/*.dmg
+            release/*.zip
+          if-no-files-found: error
 
-      - name: Upload to GitHub Release
+      - name: Upload macOS installers to GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: release/*
+          files: |
+            release/*.dmg
+            release/*.zip
           draft: true
           prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') }}
 
-  # ── Windows ────────────────────────────────────────────────────────
+  # ────────────────────────────────────────────────────────────────────────
+  # Windows — x64
+  # ────────────────────────────────────────────────────────────────────────
+
   build-win:
     name: Build Windows (x64)
     runs-on: windows-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -115,33 +148,63 @@ jobs:
         shell: bash
 
       - name: Build Windows installer
-        run: npx electron-builder --win --publish never
+        run: npx electron-builder --win --x64 --publish never
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
           # Windows code signing (optional)
           CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+
+      - name: Verify Windows build output
+        shell: bash
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Windows build output:"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+          if [ -d "release" ]; then
+            find release -maxdepth 2 -type f -print
+          else
+            echo "ERROR: release/ directory does not exist."
+            exit 1
+          fi
+
+          echo ""
+          echo "Installer files:"
+          find release -maxdepth 1 -type f \( \
+            -name "*.exe" -o \
+            -name "*.msi" \
+          \) -print
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: installer-win-x64
-          path: release/*.{exe,msi}
-          if-no-files-found: warn
+          path: |
+            release/*.exe
+            release/*.msi
+          if-no-files-found: error
 
-      - name: Upload to GitHub Release
+      - name: Upload Windows installers to GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: release/*
+          files: |
+            release/*.exe
+            release/*.msi
           draft: true
           prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') }}
 
-  # ── Linux ──────────────────────────────────────────────────────────
+  # ────────────────────────────────────────────────────────────────────────
+  # Linux — x64
+  # ────────────────────────────────────────────────────────────────────────
+
   build-linux:
-    name: Build Linux (AppImage)
+    name: Build Linux (x64)
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -152,8 +215,7 @@ jobs:
           node-version: 20
           cache: npm
 
-      # Install system dependencies required by electron-builder on Linux
-      - name: Install system deps
+      - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -179,21 +241,48 @@ jobs:
         run: npm run build:electron
 
       - name: Build Linux installer
-        run: npx electron-builder --linux --publish never
+        run: npx electron-builder --linux --x64 --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify Linux build output
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Linux build output:"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+          if [ -d "release" ]; then
+            find release -maxdepth 2 -type f -print
+          else
+            echo "ERROR: release/ directory does not exist."
+            exit 1
+          fi
+
+          echo ""
+          echo "Installer files:"
+          find release -maxdepth 1 -type f \( \
+            -name "*.AppImage" -o \
+            -name "*.deb" -o \
+            -name "*.rpm" \
+          \) -print
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
         with:
           name: installer-linux-x64
-          path: release/*.{AppImage,deb,rpm}
-          if-no-files-found: warn
+          path: |
+            release/*.AppImage
+            release/*.deb
+            release/*.rpm
+          if-no-files-found: error
 
-      - name: Upload to GitHub Release
+      - name: Upload Linux installers to GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: release/*
+          files: |
+            release/*.AppImage
+            release/*.deb
+            release/*.rpm
           draft: true
           prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') }}

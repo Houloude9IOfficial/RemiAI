@@ -25,6 +25,10 @@ import { toast } from "sonner";
 import { FileAttachmentPreview, type AttachedFile } from "./FileAttachmentPreview";
 import { formatFileSize } from "@/lib/file-types";
 import { conversationsApi } from "@/lib/api/conversations";
+import {
+  registerChatInput,
+  unregisterChatInput,
+} from "@/lib/chat-input-registry";
 import type { ChatStatus } from "ai";
 import packagejson from "../../package.json";
 
@@ -171,6 +175,16 @@ export function ChatInput({
       toast.error("Couldn't update Bash access mode");
     });
   }, [bashMode, conversationId]);
+
+  // Register this textarea so the global "/" shortcut can focus it.
+  // Capture the element up front — React nulls refs before effect cleanups
+  // run, so `inputRef.current` would be null in the cleanup otherwise.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    registerChatInput(el);
+    return () => unregisterChatInput(el);
+  }, []);
 
   // Focus input when not disabled
   useEffect(() => {

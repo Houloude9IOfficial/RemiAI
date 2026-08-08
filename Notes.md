@@ -1,0 +1,1 @@
+Launch multiple instances of freebuff: `HOME=$(mktemp -d) freebuff`

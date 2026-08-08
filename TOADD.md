@@ -113,6 +113,9 @@ Make file manager render media too, audio, video, images, etc... -->
 
 <!-- File manager editor is bad, not theme friendly, and on paste of text, it pastes all as one line getting outside the container, no formatting & more. Fix this. -->
 
+
+<!-- v2.1.0 -->
+
 <!-- get time for ai gets the timezone from the server, not the user, and it should get the timezone from the user instead. Fix this.
 
 searching should use if possible user's location/region to get more relevant results. -->
@@ -221,3 +224,7 @@ the ai users bash to write/edit/delete files, but it should use bash for command
 <!-- make session files panel update in real time when files are added/removed/edited, and also make it update when the AI creates/edits/deletes files/folders in permitted dirs. -->
 
 <!-- make copy/regenerate on messages to be shown on hover, and not always visible, to make the UI cleaner. On mobile always show it, since hover is not possible. -->
+
+<!-- add focusing on chat on press of / -->
+
+add native support for Playwright, tool, togglable
