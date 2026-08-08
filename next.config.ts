@@ -9,6 +9,8 @@ const nextConfig: NextConfig = {
   // output. db/index.ts runs migrations at runtime (process.cwd() is
   // .next/standalone in the packaged app) and skips them during `next build`,
   // so we can't rely on Turbopack's automatic file tracing alone.
+  // (scripts/prune-standalone.mjs — run by `npm run build` — also keeps
+  // db/migrations, so this is a belt-and-braces safety net.)
   outputFileTracingIncludes: {
     "/**": ["./db/migrations/**"],
   },

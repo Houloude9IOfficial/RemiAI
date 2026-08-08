@@ -25,7 +25,7 @@
     "rebuild:electron": "npx electron-rebuild -w better-sqlite3",
     "rebuild:node": "npm rebuild better-sqlite3",
     "dev:electron": "npx tsc -p electron/tsconfig.json && npx electron electron-dist/main.js",
-    "build": "next build",
+    "build": "next build && node scripts/prune-standalone.mjs",
     "build:electron": "npx tsc -p electron/tsconfig.json",
     "start": "npx tsx scripts/launcher.ts",
     "start:web": "next start -H 127.0.0.1",
@@ -47,40 +47,6 @@
     "signing:secrets": "node scripts/setup-signing-secrets.mjs"
   },
   "main": "electron-dist/main.js",
-  "build": {
-    "appId": "com.crickdevs.remiai",
-    "productName": "RemiAI",
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      ".next/**/*",
-      "electron-dist/**/*",
-      "public/**/*",
-      "package.json"
-    ],
-    "mac": {
-      "target": [
-        "dmg",
-        "zip"
-      ],
-      "category": "public.app-category.productivity"
-    },
-    "win": {
-      "target": [
-        "nsis",
-        "msi"
-      ]
-    },
-    "linux": {
-      "target": [
-        "AppImage",
-        "deb",
-        "rpm"
-      ],
-      "category": "Utility"
-    }
-  },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.12",
     "@ai-sdk/mcp": "^2.0.10",

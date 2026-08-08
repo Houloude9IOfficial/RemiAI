@@ -14,7 +14,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 exports.default = async function afterPack(context) {
-  const { appOutDir, electronPlatformName, packager } = context;
+  const { appOutDir, packager } = context;
   const projectDir = packager.projectDir || packager.appDir;
 
   const src = path.join(projectDir, "node_modules", "better-sqlite3");
@@ -27,11 +27,10 @@ exports.default = async function afterPack(context) {
 
   // App files are staged inside the asar (with asarUnpack files extracted to
   // app.asar.unpacked) under Contents/Resources on macOS and resources/ on
-  // Windows/Linux.
-  const resourcesDir =
-    electronPlatformName === "darwin"
-      ? path.join(appOutDir, "Contents", "Resources")
-      : path.join(appOutDir, "resources");
+  // Windows/Linux. On macOS the bundle lives at <appOutDir>/<ProductName>.app,
+  // so appOutDir itself is NOT the Resources dir — use the packager's helper,
+  // which knows the platform layout (mac: <appOutDir>/RemiAI.app/Contents/Resources).
+  const resourcesDir = packager.getResourcesDir(appOutDir);
 
   const candidates = [
     path.join(
@@ -68,4 +67,46 @@ exports.default = async function afterPack(context) {
   console.log(
     "[after-pack] Replaced standalone better-sqlite3 with the Electron-ABI build",
   );
+
+  // Turbopack externalizes serverExternalPackages under hashed IDs and emits
+  // symlinks in .next/standalone/.next/node_modules (e.g.
+  // better-sqlite3-<hash> -> ../../node_modules/better-sqlite3). electron-
+  // builder dereferences those symlinks into real directories when packing,
+  // so the alias holds a copy of the PRE-swap (system-Node-ABI) module. The
+  // standalone server requires the hashed name, so it would load the wrong
+  // binary — replace the alias with a symlink to the canonical build we just
+  // swapped above.
+  const aliasesDir = path.join(
+    resourcesDir,
+    "app.asar.unpacked",
+    ".next",
+    "standalone",
+    ".next",
+    "node_modules",
+  );
+  if (fs.existsSync(aliasesDir)) {
+    for (const entry of fs.readdirSync(aliasesDir)) {
+      if (!entry.startsWith("better-sqlite3")) continue;
+      const aliasPath = path.join(aliasesDir, entry);
+      fs.rmSync(aliasPath, { recursive: true, force: true });
+      try {
+        // On Windows directory symlinks require privileges/Developer Mode;
+        // junctions work without them and resolve identically for Node.
+        fs.symlinkSync(
+          "../../node_modules/better-sqlite3",
+          aliasPath,
+          process.platform === "win32" ? "junction" : undefined,
+        );
+      } catch (err) {
+        // Fall back to a plain copy of the (already Electron-ABI) module.
+        console.warn(
+          "[after-pack] symlink failed (" + err.code + "), copying instead",
+        );
+        fs.cpSync(src, aliasPath, { recursive: true });
+      }
+      console.log(
+        "[after-pack] Replaced Turbopack external alias " + entry,
+      );
+    }
+  }
 };
