@@ -237,7 +237,7 @@ export function WebhookForm({
           <Label htmlFor="webhook-name">Name</Label>
           <Input
             id="webhook-name"
-            placeholder="Instagram DMs"
+            placeholder="Messaging auto-reply"
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
@@ -279,7 +279,7 @@ export function WebhookForm({
         <Textarea
           id="webhook-prompt"
           placeholder={
-            "You are my Instagram auto-reply assistant. When a follower sends a message, answer it helpfully and naturally. If it's a question about my products, check my site first.\n\nSender: {{payload.entry.0.messaging.0.sender.id}}\nMessage: {{payload.entry.0.messaging.0.message.text}}"
+            "You are my message auto-reply assistant. When a follower sends a message, answer it helpfully and naturally. If it's a question about my products, check my site first.\n\nSender: {{payload.entry.0.messaging.0.sender.id}}\nMessage: {{payload.entry.0.messaging.0.message.text}}"
           }
           className="min-h-[110px] resize-y text-xs"
           value={systemPrompt}
@@ -467,7 +467,7 @@ export function WebhookForm({
             </code>{" "}
             or{" "}
             <code className="font-mono">Authorization: Bearer &lt;secret&gt;</code>
-            . For Meta platforms, use the secret as the verify token and point
+            . For other platforms, use the secret as the verify token and point
             your service at the delivery URL.
           </p>
         </div>
