@@ -51,7 +51,7 @@ export function MediaDisplay({ data }: MediaDisplayProps) {
     }
 
     return (
-      <div className="relative overflow-hidden rounded-md border border-border/50">
+      <div className="relative overflow-hidden rounded-md">
         <ImagePreview
           src={src}
           url={url}

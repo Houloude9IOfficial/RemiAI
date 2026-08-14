@@ -485,6 +485,10 @@ export function MessageBubble({
     const cleanText = stripAttachmentMarkdown(inlineText);
     const hasText = cleanText.length > 0;
 
+    // Images go in a side-by-side grid; other files stay stacked below.
+    const imageAttachments = attachments.filter((a) => a.isImage);
+    const fileAttachments = attachments.filter((a) => !a.isImage);
+
     return (
       <div className="group flex justify-end">
         <div className="flex max-w-[min(85%,36rem)] flex-col items-end gap-1">
@@ -499,15 +503,33 @@ export function MessageBubble({
             {/* Text content (if any) — plain text, only images render */}
             {hasText && <UserMessageText text={cleanText} />}
 
-            {/* File attachments as polished cards */}
-            {attachments.length > 0 && (
+            {/* Image attachments — side-by-side grid when multiple */}
+            {imageAttachments.length > 0 && (
               <div
                 className={cn(
-                  "flex flex-col gap-2",
-                  !hasText && "pt-0",
+                  "grid gap-2",
+                  imageAttachments.length > 1
+                    ? "grid-cols-2"
+                    : "grid-cols-1",
                 )}
               >
-                {attachments.map((att, idx) => (
+                {imageAttachments.map((att, idx) => (
+                  <AttachedFileCard
+                    key={`${att.url}-${idx}`}
+                    url={att.url}
+                    name={att.name}
+                    mimeType={att.mimeType}
+                    inUserMessage={hasText}
+                    thumbnail={imageAttachments.length > 1}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Other file attachments as cards */}
+            {fileAttachments.length > 0 && (
+              <div className="flex flex-col gap-2">
+                {fileAttachments.map((att, idx) => (
                   <AttachedFileCard
                     key={`${att.url}-${idx}`}
                     url={att.url}

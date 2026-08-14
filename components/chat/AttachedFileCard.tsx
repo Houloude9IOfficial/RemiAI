@@ -20,6 +20,9 @@ interface AttachedFileCardProps {
   size?: number;
   /** Whether the card is inside a user message bubble (affects styling) */
   inUserMessage?: boolean;
+  /** True when the image is a uniform thumbnail in a multi-image grid —
+   *  cropped to fill the cell. False (default) shows the whole image. */
+  thumbnail?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -32,30 +35,37 @@ export function AttachedFileCard({
   mimeType,
   size,
   inUserMessage,
+  thumbnail,
 }: AttachedFileCardProps) {
   const isImage = mimeType.startsWith("image/");
 
-  // Image card — large preview; click opens the lightbox with the filename
-  // and download / copy / open-in-new-tab controls.
+  // Image — no card chrome around it; the image itself is the preview.
+  // Clicking opens the lightbox with the filename and download/copy/open
+  // controls.
   if (isImage) {
-    return (
-      <div
-        className={cn(
-          "group relative overflow-hidden rounded-xl transition-all duration-200",
-          "hover:ring-2 hover:ring-primary/30",
-          inUserMessage
-            ? "border border-white/20"
-            : "border border-border/60 shadow-sm",
-        )}
-      >
+    // Multi-image grid — uniform cover thumbnail that fills the whole cell
+    // (no borders or empty space around the image).
+    if (thumbnail) {
+      return (
         <ImagePreview
           src={url}
           url={url}
           alt={name}
           filename={name}
-          imgClassName="max-h-80 w-full object-contain bg-black/5"
+          className="aspect-[4/3] w-full rounded-lg"
+          imgClassName="h-full w-full object-cover"
         />
-      </div>
+      );
+    }
+    // Single image — shown fully contained, no border around it.
+    return (
+      <ImagePreview
+        src={url}
+        url={url}
+        alt={name}
+        filename={name}
+        imgClassName="max-h-80 w-full object-contain rounded-lg"
+      />
     );
   }
 

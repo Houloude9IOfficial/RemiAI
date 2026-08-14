@@ -256,8 +256,14 @@ export function ImagePreview({
             </div>
           </div>
 
-          {/* Image stage */}
-          <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden px-6 pb-6">
+          {/* Image stage — clicking the background (outside the image)
+              closes the lightbox */}
+          <div
+            className="flex min-h-0 flex-1 cursor-default items-center justify-center overflow-hidden px-6 pb-6"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setOpen(false);
+            }}
+          >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={src}
