@@ -29,7 +29,7 @@ exports.default = async function afterPack(context) {
   // app.asar.unpacked) under Contents/Resources on macOS and resources/ on
   // Windows/Linux. On macOS the bundle lives at <appOutDir>/<ProductName>.app,
   // so appOutDir itself is NOT the Resources dir — use the packager's helper,
-  // which knows the platform layout (mac: <appOutDir>/RemiAI.app/Contents/Resources).
+  // which knows the platform layout (mac: <appOutDir>/remiai.crickdevs.com/Contents/Resources).
   const resourcesDir = packager.getResourcesDir(appOutDir);
 
   const candidates = [

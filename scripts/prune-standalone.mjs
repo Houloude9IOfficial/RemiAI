@@ -6,7 +6,7 @@
 // The app reads the filesystem at runtime (file indexing, session files,
 // backups, ...), so @vercel/nft's static tracing records the *whole project
 // directory* as dependencies — .git/, release/ (old installers + a nested
-// RemiAI.app that breaks codesign), data/ (the user's local DB, uploads and
+// remiai.crickdevs.com that breaks codesign), data/ (the user's local DB, uploads and
 // files — must never ship in an installer), website/, creations/, source
 // dirs, ... — and Turbopack copies all of it into .next/standalone
 // (measured at 2.3 GB in a repo with old release artifacts). config-level

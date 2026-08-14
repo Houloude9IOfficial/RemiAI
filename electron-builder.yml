@@ -7,7 +7,7 @@
 #   npm run dist:win       # Build Windows NSIS installer
 #   npm run dist:linux     # Build Linux AppImage
 
-appId: com.remiai.app
+appId: com.remiai.crickdevs.com
 productName: RemiAI
 copyright: Copyright © 2026 RemiAI
 
