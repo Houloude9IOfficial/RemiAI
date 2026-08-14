@@ -37,7 +37,7 @@ export function GeneratingIndicator({
       )}
     >
       {/* ── Icon: spinning gradient ring + soft glow ── */}
-      <span className="relative flex h-4 w-4 shrink-0 items-center justify-center">
+      <span className="relative flex h-4 w-4 shrink-0 items-center justify-center hidden">
         {/* Breathing glow */}
         <span className="absolute inset-0 rounded-full blur-[4px] animate-generating-glow" />
         {/* Spinning ring */}

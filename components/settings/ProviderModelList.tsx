@@ -94,7 +94,7 @@ export function ProviderModelList({ provider }: { provider: Provider }) {
             }
           />
           <span className="font-mono text-xs">{model.modelId}</span>
-          {model.isDefault ? (
+          {/* {model.isDefault ? (
             <Badge variant="secondary" className="text-[10px]">
               default
             </Badge>
@@ -106,7 +106,7 @@ export function ProviderModelList({ provider }: { provider: Provider }) {
             >
               set default
             </button>
-          )}
+          )} */}
           <Button
             size="icon"
             variant="ghost"
