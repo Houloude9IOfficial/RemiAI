@@ -286,3 +286,63 @@ export const authBootstrap = sqliteTable("auth_bootstrap", {
   consumedAt: text("consumed_at"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+/**
+ * A structured filter condition evaluated against an incoming webhook
+ * payload. All conditions on a webhook must pass (AND) for the AI run to
+ * trigger; an empty list means "always trigger".
+ */
+export type WebhookCondition = {
+  /** Dot path into the payload, e.g. "type" or "entry.0.messaging.0.message.text". */
+  field: string;
+  op: "eq" | "neq" | "contains" | "startsWith" | "endsWith" | "exists" | "matches";
+  /** Comparison value for all ops except `exists`. */
+  value?: string;
+};
+
+export const webhooks = sqliteTable("webhooks", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  // Secret the caller must present (X-Webhook-Secret header or
+  // Authorization: Bearer) for deliveries to be accepted.
+  secret: text("secret").notNull(),
+  // Trigger instructions given to the AI when this webhook fires.
+  // Supports {{payload.path}}, {{headers.name}}, {{query.name}} substitution.
+  systemPrompt: text("system_prompt").notNull().default(""),
+  // Structured filter conditions (AND). Empty array = always trigger.
+  conditions: text("conditions", { mode: "json" })
+    .$type<WebhookCondition[]>()
+    .notNull()
+    .default([]),
+  // Conversation the triggered AI run appears in (auto-created at setup by
+  // default, or any existing chat). Null if the conversation was deleted.
+  conversationId: integer("conversation_id").references(() => conversations.id, {
+    onDelete: "set null",
+  }),
+  // If true, the delivery request waits for the AI run and returns the
+  // response text to the caller (e.g. replying to a chat platform API).
+  respondSync: integer("respond_sync", { mode: "boolean" }).notNull().default(false),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  lastReceivedAt: text("last_received_at"),
+  lastStatus: text("last_status"),
+  lastEventId: integer("last_event_id"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const webhookEvents = sqliteTable("webhook_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  webhookId: integer("webhook_id")
+    .notNull()
+    .references(() => webhooks.id, { onDelete: "cascade" }),
+  status: text("status", {
+    enum: ["received", "processing", "completed", "skipped", "failed"],
+  })
+    .notNull()
+    .default("received"),
+  payload: text("payload", { mode: "json" }).$type<unknown>().notNull(),
+  result: text("result"),
+  error: text("error"),
+  receivedAt: text("received_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  completedAt: text("completed_at"),
+});

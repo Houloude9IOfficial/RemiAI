@@ -25,6 +25,7 @@ import {
   ChevronUp,
   Shield,
   Radio,
+  Webhook,
   X,
 } from "lucide-react";
 import { useNewChat } from "@/lib/hooks/use-new-chat";
@@ -49,6 +50,7 @@ const extraLinks = [
   { href: "/settings/memories", label: "Memories", icon: Brain },
   { href: "/settings/routines", label: "Routines", icon: Terminal },
   { href: "/settings/mcp", label: "MCP Servers", icon: Plug },
+  { href: "/settings/webhooks", label: "Webhooks", icon: Webhook },
   { href: "/settings/tasks", label: "Agent Tasks", icon: Bot },
   { href: "/settings/scheduled-tasks", label: "Scheduled Tasks", icon: Clock },
   { href: "/settings/watcher", label: "File Watcher", icon: Eye },
