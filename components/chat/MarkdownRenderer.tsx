@@ -173,7 +173,12 @@ export function MarkdownRenderer({ content, className, isStreaming }: MarkdownRe
             ),
 
             // -- Paragraphs
-            p: ({ children, ...props }: any) => (
+            // markdown-to-jsx passes `className: undefined` in props for plain
+            // paragraphs (and real classes for raw HTML <p class="...">).
+            // Destructure it OUT so the spread below cannot clobber our own
+            // className — previously the styling was silently dropped and the
+            // rendered element showed className={undefined}.
+            p: ({ children, className: _pClassName, ...props }: any) => (
               <p className="mb-3 last:mb-0 leading-relaxed" {...props}>{children}</p>
             ),
 

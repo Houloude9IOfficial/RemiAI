@@ -51,6 +51,14 @@ COPY --from=build /app/node_modules/playwright ./node_modules/playwright
 COPY --from=build /app/node_modules/playwright-core ./node_modules/playwright-core
 RUN node node_modules/playwright/cli.js install-deps chromium
 
+# ffmpeg/ffprobe for the Media Tools (get_media_metadata, convert_media,
+# extract_audio, extract_video_frames, transcribe_audio). Installed via apt so the runtime image
+# stays lean — the media-tool resolver prefers these system binaries over the
+# bundled ffmpeg-static/ffprobe-static copies that ship inside the standalone
+# output (system ffmpeg is a newer build with more encoders).
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
 # Keep the database and user uploads in the named /app/data volume.
 RUN mkdir -p /app/data && chown -R node:node /app
 USER node

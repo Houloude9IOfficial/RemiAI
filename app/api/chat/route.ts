@@ -58,6 +58,7 @@ import { buildIntegrationTools } from "@/lib/tools/integrations";
 import { buildExecutionTools } from "@/lib/tools/exec";
 import { buildPlaywrightTools } from "@/lib/tools/playwright";
 import { buildDocumentReaderTools } from "@/lib/tools/document-reader";
+import { buildMediaTools } from "@/lib/media/tools";
 import { delayTool } from "@/lib/tools/delay";
 import { webFetchTool } from "@/lib/tools/web-fetch";
 import { buildCreateVisualTool } from "@/lib/tools/create-visual";
@@ -300,6 +301,11 @@ export async function POST(req: Request) {
   // Gather document reader tools (read_document)
   const documentToolSet = await buildDocumentReaderTools();
 
+  // Gather media tools (get_media_metadata, convert_media, extract_audio,
+  // extract_video_frames, transcribe_audio, manage_transcription_models) —
+  // outputs default to this conversation's session sandbox
+  const mediaToolSet = buildMediaTools(conversationId);
+
   // Build create visual tool (conditionally based on user setting)
   const createVisualToolSet = await buildCreateVisualTool();
   const createVisualEnabled = "create_visual" in createVisualToolSet;
@@ -401,6 +407,7 @@ You are currently in **Plan mode**. This means:
     ...executionToolSet,
     ...playwrightToolSet,
     ...documentToolSet,
+    ...mediaToolSet,
     ...builtinToolSet,
     ...agentToolSet,
     ...fileIndexToolSet,

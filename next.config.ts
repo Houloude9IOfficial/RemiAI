@@ -19,10 +19,24 @@ const nextConfig: NextConfig = {
       // uses it to install Chromium + system deps for the exact same
       // playwright version at build time.
       "./node_modules/playwright/cli.js",
+      // The media tools spawn ffmpeg/ffprobe as subprocesses — the binaries
+      // (ffmpeg-static / ffprobe-static) are not traced by Turbopack, so they
+      // must be copied explicitly into the standalone output or the packaged
+      // app would ship without them.
+      "./node_modules/ffmpeg-static/**",
+      "./node_modules/ffprobe-static/**",
     ],
   },
   devIndicators: false,
-  serverExternalPackages: ["better-sqlite3"],
+  // Native/heavy modules that must stay require()-able at runtime instead of
+  // being bundled by Turbopack: better-sqlite3 (.node binary), and the
+  // transcription engine's @huggingface/transformers + onnxruntime-node
+  // (native .node binaries + ~200 MB of WASM/JS that would break bundling).
+  serverExternalPackages: [
+    "better-sqlite3",
+    "@huggingface/transformers",
+    "onnxruntime-node",
+  ],
   // Encrypted backups may contain uploaded files and exceed Next's default
   // 10 MB proxy body limit. The backup route still validates the encrypted
   // payload and requires authentication before restoring anything.

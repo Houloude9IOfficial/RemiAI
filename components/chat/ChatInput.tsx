@@ -758,7 +758,7 @@ export function ChatInput({
           ref={fileInputRef}
           type="file"
           multiple
-          accept="image/*,video/*,.pdf,.doc,.docx,.txt,.csv,.json,.js,.ts,.py,.html,.css,.md,.xml,.zip,.yaml,.yml,.toml,.log"
+          accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt,.csv,.json,.js,.ts,.py,.html,.css,.md,.xml,.zip,.yaml,.yml,.toml,.log"
           className="hidden"
           onChange={handleFileInputChange}
           aria-hidden="true"

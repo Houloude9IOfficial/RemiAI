@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { toolsApi } from "@/lib/api/tools";
+import { TranscriptionConfig } from "./TranscriptionConfig";
 import type { ToolWithConfig } from "@/app/api/tools/route";
 import { cn } from "@/lib/utils";
 import {
@@ -278,6 +279,9 @@ export function ToolList() {
                       )}
                     </div>
                   </CardHeader>
+
+                  {/* Transcription configuration panel (builtin, always on) */}
+                  {tool.id === "transcription" && <TranscriptionConfig />}
 
                   {/* API key section for integrations */}
                   {tool.requiresApiKey && (

@@ -43,6 +43,7 @@ import { buildMemoryTools } from "@/lib/tools/memories";
 import { buildIntegrationTools } from "@/lib/tools/integrations";
 import { buildExecutionTools } from "@/lib/tools/exec";
 import { buildDocumentReaderTools } from "@/lib/tools/document-reader";
+import { buildMediaTools } from "@/lib/media/tools";
 import { delayTool } from "@/lib/tools/delay";
 import { webFetchTool } from "@/lib/tools/web-fetch";
 import { askQuestionsTool } from "@/lib/tools/ask-questions";
@@ -176,7 +177,7 @@ export async function processWebhookEvent(opts: {
       closeMcpClients = manager.close;
     }
 
-    const [fsToolSet, contextToolSet, memoryToolSet, integrationToolSet, executionToolSet, docToolSet, fileIndexToolSet, todoToolSet, profileToolSet, routineToolSet, scheduleToolSet] =
+    const [fsToolSet, contextToolSet, memoryToolSet, integrationToolSet, executionToolSet, docToolSet, mediaToolSet, fileIndexToolSet, todoToolSet, profileToolSet, routineToolSet, scheduleToolSet] =
       await Promise.all([
         buildFilesystemTools(),
         Promise.resolve(buildContextTools()),
@@ -184,6 +185,7 @@ export async function processWebhookEvent(opts: {
         buildIntegrationTools(),
         buildExecutionTools(),
         buildDocumentReaderTools(),
+        Promise.resolve(buildMediaTools(conversation.id)),
         Promise.resolve(buildFileIndexTools()),
         Promise.resolve(buildTodoTools(conversation.id)),
         buildProfileTools(),
@@ -199,6 +201,7 @@ export async function processWebhookEvent(opts: {
       ...integrationToolSet,
       ...executionToolSet,
       ...docToolSet,
+      ...mediaToolSet,
       ...fileIndexToolSet,
       ...todoToolSet,
       ...profileToolSet,

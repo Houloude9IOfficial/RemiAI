@@ -162,8 +162,12 @@ export function ImagePreview({
 
   return (
     <>
-      {/* Inline preview — click opens the lightbox */}
-      <div
+      {/* Inline preview — click opens the lightbox.
+          NOTE: this wrapper is a <span>, not a <div>: markdown-to-jsx wraps
+          images in a <p>, and a <div> inside <p> is invalid HTML (React
+          hydration error). A span with inline-block display renders
+          identically and is legal inside <p>. */}
+      <span
         className={cn(
           "group relative inline-block max-w-full overflow-hidden",
           className,
@@ -187,7 +191,7 @@ export function ImagePreview({
           }}
           className={cn("block cursor-pointer", imgClassName)}
         />
-      </div>
+      </span>
 
       {/* Lightbox — fullscreen, ChatGPT-style: image centered on a dark
           stage with a slim toolbar (filename + download/copy/open/close). */}

@@ -460,6 +460,34 @@ Use \`read_document\` INSTEAD of \`read_file\` when the user asks you to read a 
 
 Max file size: 50 MB. Uses pdf-parse for PDFs and mammoth for DOCX files.`,
 
+  "media": `## Media tools — analyze & process video/audio (ffmpeg)
+
+Tools let you inspect, transform, and transcribe media files. ffmpeg is bundled with the app (a system ffmpeg is used when one is installed).
+
+| Tool | Purpose |
+|---|---|
+| \`get_media_metadata\` | Container, codecs, fps, duration, bitrate, resolution, pixel format, sample rate, channels, language tags. Call first when the user asks anything about a media file. |
+| \`extract_video_frames\` | Pull still frames from a video. The frames are attached to the tool result as images you can SEE — use this to visually analyze what's actually in a video (scenes, on-screen text, people, motion, etc.). |
+| \`convert_media\` | Convert to another format: video (mp4, webm, mkv, mov, avi, gif) or audio (mp3, wav, m4a, ogg, flac, opus, aac). Audio target formats strip the video track. |
+| \`extract_audio\` | Pull the audio track from a video (or re-encode an audio file). |
+| \`transcribe_audio\` | Transcribe speech to text ("what was said") from any video or audio file. Returns timestamped segments and saves a .txt transcript to this chat's session files. |
+| \`manage_transcription_models\` | List, download, delete, or switch between transcription engines/models (local Whisper vs. provider). Call \`list\` first. |
+
+**Sources** — pass \`url\` for chat-uploaded/session files (e.g. "/api/chat/5/session-files/uploads/video.mp4"), or \`rootId\` + \`relativePath\` for files in permitted directories.
+
+**Outputs** — by default outputs save to this chat's session files under \`media/\` and the result returns a \`url\`; embed it in your reply (\`[file.mp4](url)\`) so the user can open/download it. To save into a real directory instead, pass \`outputRootId\` + \`outputRelativePath\`.
+
+**Transcription** — two engines: **offline** (local Whisper via \`manage_transcription_models\`; private, free, no API key — models download once and cache locally) and **provider** (your configured OpenAI-compatible provider's whisper endpoint; fast, uses provider credits). Pass \`engine\` to override, or set a default with \`manage_transcription_models({ action: "set", engine })\`. Add \`language\` (ISO-639-1, e.g. \`"en"\`) to bias detection. Long recordings: offline is slow on CPU — prefer the provider engine or split the audio.
+
+**Typical workflows**
+- "What is this video about?" → \`get_media_metadata\` → \`extract_video_frames({ count: 4 })\` → describe the frames you see.
+- "Convert this to mp3" → \`convert_media({ format: "mp3" })\` (or \`extract_audio\`).
+- "Get the audio from this video" → \`extract_audio({ format: "wav" })\`.
+- "What are they saying / transcribe this" → \`transcribe_audio({ url })\` → summarize or quote the returned transcript.
+- "How long / what fps / what codec?" → \`get_media_metadata\`.
+
+**Notes** — conversions time out at 120s by default; for large files pass a larger \`timeout\` (max 600s) or process a shorter clip.`,
+
   "scaffolding": `## Writing files & project scaffolding
 
 ### Creating new projects or file structures
@@ -782,6 +810,35 @@ const KEYWORD_SYNONYMS: Record<string, string> = {
   pdf: "document-reader",
   docx: "document-reader",
   document: "document-reader",
+  media: "media",
+  "media file": "media",
+  "media files": "media",
+  video: "media",
+  audio: "media",
+  ffmpeg: "media",
+  convert: "media",
+  conversion: "media",
+  transcode: "media",
+  transcribe: "media",
+  transcription: "media",
+  transcript: "media",
+  captions: "media",
+  subtitles: "media",
+  whisper: "media",
+  extract: "media",
+  "extract audio": "media",
+  "extract frames": "media",
+  fps: "media",
+  codec: "media",
+  bitrate: "media",
+  metadata: "media",
+  frame: "media",
+  mp4: "media",
+  mp3: "media",
+  webm: "media",
+  wav: "media",
+  "video file": "media",
+  "audio file": "media",
   "spawn agent": "agent-spawner",
   "agent spawn": "agent-spawner",
   subagent: "agent-spawner",
@@ -868,7 +925,7 @@ function getAvailableTopicsText(): string {
 // Use a shorter inline list for the tool description (the full list is in the
 // system prompt and is returned when the user asks for an invalid topic)
 const SHORT_TOPIC_LIST =
-  "filesystem, memory, profile, todo, file-index, ask-questions, suggest-followups, agent-spawner, scheduled-tasks, routines, delay, create-visual, session-files, newsapi, firecrawl, brave-search, notion, context7, elevenlabs, playwright, code-execution, document-reader, @FILE-references, scaffolding, absolute-paths, web-fetch, mcp-tools, file-attachments, start-of-conversation";
+  "filesystem, memory, profile, todo, file-index, ask-questions, suggest-followups, agent-spawner, scheduled-tasks, routines, delay, create-visual, session-files, newsapi, firecrawl, brave-search, notion, context7, elevenlabs, playwright, code-execution, document-reader, media, @FILE-references, scaffolding, absolute-paths, web-fetch, mcp-tools, file-attachments, start-of-conversation";
 
 // ---------------------------------------------------------------------------
 // Cached listing for list_available_tools — built once from TOOL_CATALOG
@@ -911,6 +968,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   session_files: "Session files (per-chat sandbox)",
   firecrawl: "Web scraping (Firecrawl)",
   playwright: "Browser automation (Playwright)",
+  media_tools: "Media processing (ffmpeg)",
 };
 
 const HELP_TOPIC_MAP: Record<string, string | null> = {
@@ -937,6 +995,7 @@ const HELP_TOPIC_MAP: Record<string, string | null> = {
   session_files: "session-files",
   firecrawl: "firecrawl",
   playwright: "playwright",
+  media_tools: "media",
 };
 
 function buildToolGroups(): ToolGroup[] {

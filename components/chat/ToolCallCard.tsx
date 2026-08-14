@@ -191,6 +191,12 @@ function operationSummary(name: string, running: boolean): string {
     bash_execute: "Ran Bash command",
     read_file: "Read file",
     read_media: "Read media",
+    get_media_metadata: "Read media metadata",
+    convert_media: "Converted media",
+    extract_audio: "Extracted audio",
+    extract_video_frames: "Extracted frames",
+    transcribe_audio: "Transcribed audio",
+    manage_transcription_models: "Managed transcription models",
     search_files: "Searched files",
     glob_files: "Found files",
     list_directory: "Listed directory",
@@ -261,6 +267,16 @@ export function ToolCallCard({
     "type" in (output as Record<string, unknown>) &&
     ((output as Record<string, unknown>).type === "image" ||
       (output as Record<string, unknown>).type === "video");
+
+  // Tool results returned as AI SDK v7 "content" output (e.g. extracted video
+  // frames: a text summary + image file parts). Render the text and show the
+  // attached images inline instead of dumping raw base64 JSON.
+  const isContentResult =
+    output !== undefined &&
+    output !== null &&
+    typeof output === "object" &&
+    (output as Record<string, unknown>).type === "content" &&
+    Array.isArray((output as Record<string, unknown>).value);
 
   const isExecResult =
     output !== undefined &&
@@ -469,6 +485,10 @@ export function ToolCallCard({
                 <div className="px-2 py-2">
                   <MediaDisplay data={output as Record<string, unknown>} />
                 </div>
+              ) : isContentResult ? (
+                <div className="px-2.5 py-2">
+                  <ContentResult data={output as Record<string, unknown>} />
+                </div>
               ) : (
                 <div className="px-2.5 py-2">
                   <ResultBody
@@ -575,6 +595,10 @@ export function ToolCallCard({
         isMediaResult ? (
           <div className="border-t border-border/40">
             <MediaDisplay data={output as Record<string, unknown>} />
+          </div>
+        ) : isContentResult ? (
+          <div className="border-t border-border/40">
+            <ContentResult data={output as Record<string, unknown>} />
           </div>
         ) : (
           <DetailSection
@@ -734,6 +758,66 @@ function AgentResultCard({
   }
 
   return null;
+}
+
+/* ---- Content output (e.g. extracted video frames) ---- */
+
+function ContentResult({ data }: { data: Record<string, unknown> }) {
+  const value = Array.isArray(data.value) ? data.value : [];
+  const texts = value.filter(
+    (v): v is Record<string, unknown> =>
+      !!v && typeof v === "object" && (v as Record<string, unknown>).type === "text",
+  );
+  const files = value.filter(
+    (v): v is Record<string, unknown> =>
+      !!v && typeof v === "object" && (v as Record<string, unknown>).type === "file",
+  );
+
+  if (files.length === 0) {
+    return <JsonBlock data={data} />;
+  }
+
+  const images = files.filter(
+    (f) =>
+      typeof f.mediaType === "string" && f.mediaType.startsWith("image/"),
+  );
+
+  return (
+    <div className="flex flex-col gap-2">
+      {texts.map((t, i) => (
+        <pre
+          key={i}
+          className="m-0 whitespace-pre-wrap text-[11px] leading-relaxed text-foreground/85 font-sans"
+        >
+          {String(t.text ?? "")}
+        </pre>
+      ))}
+      {images.length > 0 && (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {images.map((f, i) => {
+            const dataObj = f.data as Record<string, unknown> | undefined;
+            const b64 =
+              dataObj &&
+              typeof dataObj.data === "string" &&
+              (dataObj as Record<string, unknown>).type === "data"
+                ? dataObj.data
+                : null;
+            if (!b64) return null;
+            return (
+              <div key={i} className="overflow-hidden rounded-md border border-border/40">
+                <img
+                  src={`data:${String(f.mediaType)};base64,${b64}`}
+                  alt={typeof f.filename === "string" ? f.filename : `frame ${i + 1}`}
+                  className="block h-auto w-full"
+                  loading="lazy"
+                />
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 /* ---- Sub-components ---- */

@@ -119,6 +119,33 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     togglable: false,
     requiresApiKey: false,
   },
+  // ── Media tools (builtin, always on, not togglable — ffmpeg-powered) ──
+  {
+    id: "media_tools",
+    name: "Media Tools",
+    description:
+      "Analyze and process video/audio files with ffmpeg. Get technical metadata (codec, fps, duration, bitrate, resolution, sample rate), convert between formats (mp4, webm, mkv, mov, avi, gif, mp3, wav, m4a, ogg, flac, opus, aac), extract audio from videos, extract still frames from videos that the AI can inspect visually, and transcribe speech to text (local Whisper offline or your configured provider). Outputs are saved to the chat's session files (downloadable) or to a permitted directory.",
+    toolNames: [
+      "get_media_metadata",
+      "convert_media",
+      "extract_audio",
+      "extract_video_frames",
+    ],
+    category: "builtin",
+    togglable: false,
+    requiresApiKey: false,
+  },
+  // ── Transcription tools (builtin, always on — configured in Settings > Tools) ──
+  {
+    id: "transcription",
+    name: "Transcription",
+    description:
+      "Transcribe speech in video/audio files to text. Choose a local Whisper model (offline, private, free — downloaded once and cached locally) or your configured OpenAI-compatible provider (fast, uses provider credits). The AI uses transcribe_audio automatically when you ask what was said in a recording.",
+    toolNames: ["transcribe_audio", "manage_transcription_models"],
+    category: "builtin",
+    togglable: false,
+    requiresApiKey: false,
+  },
   // ── Memory tools (builtin, always on, not togglable) ──
   {
     id: "memory",

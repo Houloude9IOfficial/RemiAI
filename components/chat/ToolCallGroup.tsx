@@ -34,6 +34,10 @@ import {
   Wrench,
   XCircle,
   Download,
+  Music,
+  Clapperboard,
+  AudioLines,
+  SlidersHorizontal,
 } from "lucide-react";
 
 type AnyToolPart = ToolUIPart<any> | DynamicToolUIPart;
@@ -187,6 +191,36 @@ const TOOL_LABELS: Record<string, ToolLabel> = {
     present: "Reading document",
     past: "Read document",
     icon: FileText,
+  },
+  get_media_metadata: {
+    present: "Reading media metadata",
+    past: "Read media metadata",
+    icon: FileSearch,
+  },
+  convert_media: {
+    present: "Converting media",
+    past: "Converted media",
+    icon: Clapperboard,
+  },
+  extract_audio: {
+    present: "Extracting audio",
+    past: "Extracted audio",
+    icon: Music,
+  },
+  extract_video_frames: {
+    present: "Extracting frames",
+    past: "Extracted frames",
+    icon: Image,
+  },
+  transcribe_audio: {
+    present: "Transcribing audio",
+    past: "Transcribed audio",
+    icon: AudioLines,
+  },
+  manage_transcription_models: {
+    present: "Managing transcription models",
+    past: "Managed transcription models",
+    icon: SlidersHorizontal,
   },
   ask_questions: {
     present: "Asking questions",

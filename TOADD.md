@@ -233,4 +233,8 @@ the ai users bash to write/edit/delete files, but it should use bash for command
 
 <!-- add image preview in chat and have controls to download, copy, open in new tab. (done in v2.2.0) -->
 
-add tools to get video/audio metadata (e.g fps, duration, codec, etc...) and also allow to convert video/audio files to other formats (e.g mp4, webm, mp3, wav, etc...) and also allow to extract audio from video files. then allow the AI to use these tools to analyze video/audio files and extract information from them, and also allow the AI to convert video/audio files to other formats and extract audio from video files. and also allow getting frames specifically from video files and allow the AI to analyze them and extract information from them.
+<!-- add tools to get video/audio metadata (e.g fps, duration, codec, etc...) and also allow to convert video/audio files to other formats (e.g mp4, webm, mp3, wav, etc...) and also allow to extract audio from video files. then allow the AI to use these tools to analyze video/audio files and extract information from them, and also allow the AI to convert video/audio files to other formats and extract audio from video files. and also allow getting frames specifically from video files and allow the AI to analyze them and extract information from them. (done in v2.2.0) -->
+
+<!-- add a transcribe_audio tool that converts speech in video/audio files to text for analysis, with offline Whisper models (downloadable/manageable via manage_transcription_models) or the user's configured provider (done in v2.2.0) -->
+
+redesign tools section to be more convenient and user friendly, and also allow to search for tools by name or description, and also allow to filter tools by category.

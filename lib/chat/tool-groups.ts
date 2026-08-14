@@ -288,6 +288,32 @@ export const CONDITIONAL_GROUPS: Record<string, ToolGroup> = {
       "scraping",
     ],
   },
+  media_tools: {
+    label: "media-tools",
+    tools: [
+      "get_media_metadata",
+      "convert_media",
+      "extract_audio",
+      "extract_video_frames",
+      "transcribe_audio",
+      "manage_transcription_models",
+    ],
+    keywords: [
+      "metadata", "fps", "frame rate", "frame-rate", "codec", "bitrate",
+      "bit rate", "resolution", "duration of", "video file", "audio file",
+      "convert video", "convert audio", "convert to", "transcode", "transcoding",
+      "convert this video", "convert this audio", "mp4", "webm", "mkv", "mov",
+      "avi", "mp3", "wav", "flac", "m4a", "ogg", "opus", "extract audio",
+      "extract the audio", "extract sound", "remove the video", "frames from",
+      "extract frames", "extract frame", "get a frame", "frame from the video",
+      "thumbnail", "analyze this video", "analyze the video", "analyze the audio",
+      "what's in the video", "what is in the video", "transcribe",
+      "transcription", "speech to text", "speech-to-text", "captions",
+      "subtitles", "transcript", "what did they say", "what was said",
+      "what does the audio say", "caption this", "trim the", "trim video",
+      "trim audio", "cut the video", "cut the audio",
+    ],
+  },
 };
 
 /** Derived map: tool name → owning conditional group id. */

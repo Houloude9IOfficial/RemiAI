@@ -10,6 +10,7 @@ import { buildMemoryTools } from "@/lib/tools/memories";
 import { buildIntegrationTools } from "@/lib/tools/integrations";
 import { buildExecutionTools } from "@/lib/tools/exec";
 import { buildDocumentReaderTools } from "@/lib/tools/document-reader";
+import { buildMediaTools } from "@/lib/media/tools";
 import { delayTool } from "@/lib/tools/delay";
 import { webFetchTool } from "@/lib/tools/web-fetch";
 import { buildTodoTools } from "@/lib/tools/todo";
@@ -215,14 +216,21 @@ You have access to filesystem tools (for reading files), web_fetch (for reading 
 
 async function buildAgentTools(
   userContext?: UserContext,
+  conversationId?: number,
 ): Promise<Record<string, any>> {
-  const [fsTools, memoryTools, integrationTools, executionTools, docTools] =
+  const [fsTools, memoryTools, integrationTools, executionTools, docTools, mediaTools] =
     await Promise.all([
       buildFilesystemTools(),
       buildMemoryTools(),
       buildIntegrationTools(userContext),
       buildExecutionTools(),
       buildDocumentReaderTools(),
+      // Sub-agents can analyze/process media too; outputs land in the parent
+      // conversation's session sandbox (conversationId is always present for
+      // spawned agents).
+      conversationId != null
+        ? Promise.resolve(buildMediaTools(conversationId))
+        : Promise.resolve({} as Record<string, any>),
     ]);
 
   // Normalise every tool to ensure inputSchema is present (SDK v7
@@ -235,6 +243,7 @@ async function buildAgentTools(
     ...integrationTools,
     ...executionTools,
     ...docTools,
+    ...mediaTools,
     delay: delayTool,
     web_fetch: webFetchTool,
   };
@@ -272,8 +281,12 @@ async function runAgent(
       ? systemPromptOverride
       : profile.systemPrompt;
 
-  // Build tools for the sub-agent (pass user context so search is localized)
-  const agentTools = await buildAgentTools(chainContext?.userContext);
+  // Build tools for the sub-agent (pass user context so search is localized
+  // and the conversation id so media outputs land in the right sandbox)
+  const agentTools = await buildAgentTools(
+    chainContext?.userContext,
+    chainContext?.conversationId,
+  );
 
   // Add spawn_agent and get_agent_result for agent chaining.
   // Only allow spawning if we are NOT at the max chain depth.
