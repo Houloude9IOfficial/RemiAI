@@ -628,7 +628,10 @@ You are currently in **Plan mode**. This means:
           parts.push({
             type: "image" as const,
             image: att.buffer,
-            mimeType: att.mimeType,
+            // AI SDK v7 reads `mediaType` on image parts — `mimeType` is
+            // ignored, which made the SDK fall back to magic-byte sniffing
+            // (fails for formats without a recognizable signature).
+            mediaType: att.mimeType,
           });
         }
         msg.content = parts;
@@ -659,7 +662,9 @@ You are currently in **Plan mode**. This means:
                 newParts.push({
                   type: "image" as const,
                   image: att.buffer,
-                  mimeType: att.mimeType,
+                  // AI SDK v7 reads `mediaType` on image parts — `mimeType`
+                  // is ignored (see the string-content branch above).
+                  mediaType: att.mimeType,
                 });
               }
             } else {

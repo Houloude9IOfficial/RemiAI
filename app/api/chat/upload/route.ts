@@ -9,7 +9,11 @@ import {
 import { emitSessionFilesChanged } from "@/lib/session-files/events";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
-const MAX_FILES_PER_REQUEST = 10;
+// Matches the client's MAX_ATTACHMENTS in components/chat/ChatInput.tsx.
+// Generous enough for a photo-roll pick of a dozen+ images while keeping the
+// in-memory multipart buffer (proxy + formData()) sane: 25 × 20 MB is the
+// absolute worst case, real mobile photo batches are far smaller.
+const MAX_FILES_PER_REQUEST = 25;
 
 /**
  * Pick a collision-free filename for a new upload inside the sandbox's

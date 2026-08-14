@@ -26,6 +26,10 @@ import { FileAttachmentPreview, type AttachedFile } from "./FileAttachmentPrevie
 import { formatFileSize } from "@/lib/file-types";
 import { conversationsApi } from "@/lib/api/conversations";
 import {
+  downscaleImageFile,
+  isDownscalableImage,
+} from "@/lib/image-utils";
+import {
   registerChatInput,
   unregisterChatInput,
 } from "@/lib/chat-input-registry";
@@ -97,7 +101,9 @@ function getClipboardFiles(fileItems: DataTransferItem[]): File[] {
 const LINE_HEIGHT = 24;
 const MAX_LINES = 3;
 const MAX_HEIGHT = LINE_HEIGHT * MAX_LINES;
-const MAX_ATTACHMENTS = 10;
+// Must stay in sync with the server's MAX_FILES_PER_REQUEST
+// (app/api/chat/upload/route.ts).
+const MAX_ATTACHMENTS = 25;
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
 /**
  * Pasting plain text longer than this would balloon the composer (and the
@@ -395,11 +401,6 @@ export function ChatInput({
    */
   const addFiles = useCallback(
     (newFiles: File[]): AttachedFile[] | undefined => {
-      // Validate count
-      if (attachedFiles.length + newFiles.length > MAX_ATTACHMENTS) {
-        return undefined;
-      }
-
       // Validate each file — show a toast for oversized files
       const oversized: File[] = [];
       const valid = newFiles.filter((f) => {
@@ -420,7 +421,28 @@ export function ChatInput({
 
       if (valid.length === 0) return undefined;
 
-      const attached: AttachedFile[] = valid.map((f) => ({
+      // Enforce the per-batch cap by ADDING what fits and telling the user
+      // what was dropped — a pick of 12+ photos must never fail silently or
+      // discard the whole selection.
+      const remaining = Math.max(0, MAX_ATTACHMENTS - attachedFiles.length);
+      const accepted = valid.slice(0, remaining);
+      const dropped = valid.length - accepted.length;
+
+      if (accepted.length === 0) {
+        toast.error(
+          `You can attach up to ${MAX_ATTACHMENTS} files per message.`,
+        );
+        return undefined;
+      }
+
+      if (dropped > 0) {
+        toast.warning(
+          `Added ${accepted.length} of ${valid.length} files — the limit is ${MAX_ATTACHMENTS} attachments per message.`,
+          { duration: 6000 },
+        );
+      }
+
+      const attached: AttachedFile[] = accepted.map((f) => ({
         id: crypto.randomUUID(),
         file: f,
         mimeType: f.type || "application/octet-stream",
@@ -430,8 +452,37 @@ export function ChatInput({
 
       setAttachedFiles((prev) => [...prev, ...attached]);
 
-      // Upload all files in a single batch request
-      uploadBatch(attached);
+      // Downscale images in the background (keeps upload bandwidth, sandbox
+      // storage, and the base64 model payload small), then upload the whole
+      // batch in one request. Cards show "Preparing…" meanwhile. Processed
+      // one at a time so a dozen large photos don't decode into memory all
+      // at once on a phone.
+      void (async () => {
+        const ready: AttachedFile[] = [];
+        for (const a of attached) {
+          if (!isDownscalableImage(a.mimeType)) {
+            ready.push(a);
+            continue;
+          }
+          const downscaled = await downscaleImageFile(a.file);
+          if (downscaled === a.file) {
+            ready.push(a);
+            continue;
+          }
+          const updated: AttachedFile = {
+            ...a,
+            file: downscaled,
+            mimeType: downscaled.type,
+            size: downscaled.size,
+          };
+          // Swap the preview/send source to the compressed file.
+          setAttachedFiles((prev) =>
+            prev.map((f) => (f.id === a.id ? updated : f)),
+          );
+          ready.push(updated);
+        }
+        uploadBatch(ready);
+      })();
 
       return attached;
     },
