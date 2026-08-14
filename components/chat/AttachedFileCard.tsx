@@ -1,12 +1,9 @@
 "use client";
 
-import {
-  ImageIcon,
-  Download,
-  ExternalLink,
-} from "lucide-react";
+import { Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getFileTypeInfo, formatFileSize, mimeTypeFromExtension } from "@/lib/file-types";
+import { ImagePreview } from "./ImagePreview";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -38,51 +35,27 @@ export function AttachedFileCard({
 }: AttachedFileCardProps) {
   const isImage = mimeType.startsWith("image/");
 
-  // Image card — large preview
+  // Image card — large preview; click opens the lightbox with the filename
+  // and download / copy / open-in-new-tab controls.
   if (isImage) {
     return (
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
+      <div
         className={cn(
-          "group relative block overflow-hidden rounded-xl transition-all duration-200",
+          "group relative overflow-hidden rounded-xl transition-all duration-200",
           "hover:ring-2 hover:ring-primary/30",
           inUserMessage
             ? "border border-white/20"
             : "border border-border/60 shadow-sm",
         )}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        <ImagePreview
           src={url}
+          url={url}
           alt={name}
-          className="max-h-80 w-full object-contain bg-black/5"
-          loading="lazy"
+          filename={name}
+          imgClassName="max-h-80 w-full object-contain bg-black/5"
         />
-        {/* Footer overlay */}
-        <div
-          className={cn(
-            "flex items-center gap-2 px-3 py-2 text-[11px]",
-            inUserMessage
-              ? "bg-primary-foreground/10 backdrop-blur-sm text-primary-foreground/90"
-              : "bg-muted/80 backdrop-blur-sm text-muted-foreground border-t border-border/30",
-          )}
-        >
-          <ImageIcon className="h-3.5 w-3.5 shrink-0" />
-          <span className="flex-1 truncate font-medium">{name}</span>
-          {size !== undefined && (
-            <span className="shrink-0 tabular-nums opacity-70">
-              {formatFileSize(size)}
-            </span>
-          )}
-          <ExternalLink
-            className={cn(
-              "h-3.5 w-3.5 shrink-0 opacity-0 transition-opacity group-hover:opacity-70",
-            )}
-          />
-        </div>
-      </a>
+      </div>
     );
   }
 

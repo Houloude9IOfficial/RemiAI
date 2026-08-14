@@ -2,6 +2,7 @@ import React from "react";
 import Markdown from "markdown-to-jsx";
 import hljs from "highlight.js";
 import { cn } from "@/lib/utils";
+import { ImagePreview } from "./ImagePreview";
 
 interface MarkdownRendererProps {
   content: string;
@@ -176,15 +177,13 @@ export function MarkdownRenderer({ content, className, isStreaming }: MarkdownRe
               <p className="mb-3 last:mb-0 leading-relaxed" {...props}>{children}</p>
             ),
 
-            // -- Images
-            img: ({ src, alt, ...props }: any) => (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+            // -- Images — rendered with download / copy / open-in-new-tab controls
+            img: ({ src, alt }: any) => (
+              <ImagePreview
                 src={src}
                 alt={alt ?? ""}
-                className="max-w-full rounded-lg border border-border/50 my-3"
-                loading="lazy"
-                {...props}
+                className="my-3"
+                imgClassName="max-w-full rounded-lg border border-border/50"
               />
             ),
 

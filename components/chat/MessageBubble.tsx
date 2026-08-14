@@ -10,6 +10,7 @@ import { VisualCard } from "./VisualCard";
 import { GeneratingIndicator } from "./GeneratingIndicator";
 import { FollowupSuggestions } from "./FollowupSuggestions";
 import { MarkdownRenderer } from "./MarkdownRenderer";
+import { ImagePreview } from "./ImagePreview";
 import {
   SessionFilesPresentCard,
   SessionFilesPresentLoading,
@@ -255,13 +256,13 @@ function UserMessageText({ text }: { text: string }) {
           const url = img[2].trim();
           const alt = img[1].trim();
           return (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <ImagePreview
               key={idx}
               src={url}
+              url={url}
               alt={alt || url}
-              loading="lazy"
-              className="my-1 block max-w-full rounded-md border border-white/20"
+              className="block max-w-full"
+              imgClassName="my-1 block max-w-full rounded-md border border-white/20"
             />
           );
         }

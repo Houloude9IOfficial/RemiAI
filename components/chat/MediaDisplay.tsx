@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { ImageIcon, Play, Film, FileWarning } from "lucide-react";
+import { ImagePreview } from "./ImagePreview";
 
 interface MediaDisplayProps {
   /** The tool output object — expected to have type, dataUrl, url, filename, mimeType, size */
@@ -50,12 +51,13 @@ export function MediaDisplay({ data }: MediaDisplayProps) {
     }
 
     return (
-      <div className="group relative overflow-hidden rounded-md border border-border/50">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+      <div className="relative overflow-hidden rounded-md border border-border/50">
+        <ImagePreview
           src={src}
+          url={url}
           alt={filename ?? "Image"}
-          className={cn(
+          filename={filename}
+          imgClassName={cn(
             "max-h-[75vh] w-full object-contain transition-opacity duration-300",
             isLoading && "opacity-0",
           )}
@@ -69,7 +71,6 @@ export function MediaDisplay({ data }: MediaDisplayProps) {
               setHasError(true);
             }
           }}
-          loading="lazy"
         />
         {isLoading && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-muted/30 backdrop-blur-[1px]">
@@ -85,23 +86,6 @@ export function MediaDisplay({ data }: MediaDisplayProps) {
             </div>
           </div>
         )}
-        {/* Footer overlay */}
-        <div className="flex items-center gap-2 border-t border-border/30 bg-muted/50 px-3 py-1.5 text-[10px] text-muted-foreground">
-          <ImageIcon className="h-3 w-3" />
-          <span className="font-medium">{filename}</span>
-          {size !== undefined && (
-            <>
-              <span className="text-muted-foreground/50">·</span>
-              <span>{formatSize(size)}</span>
-            </>
-          )}
-          {mimeType && (
-            <>
-              <span className="text-muted-foreground/50">·</span>
-              <span>{mimeType}</span>
-            </>
-          )}
-        </div>
       </div>
     );
   }

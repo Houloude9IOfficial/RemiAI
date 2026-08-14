@@ -231,4 +231,4 @@ the ai users bash to write/edit/delete files, but it should use bash for command
 
 <!-- fix /website deploy -->
 
-add image preview in chat and have controls to download, copy, open in new tab.
+<!-- add image preview in chat and have controls to download, copy, open in new tab. (done in v2.2.0) -->
