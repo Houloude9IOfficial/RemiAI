@@ -237,4 +237,4 @@ the ai users bash to write/edit/delete files, but it should use bash for command
 
 <!-- add a transcribe_audio tool that converts speech in video/audio files to text for analysis, with offline Whisper models (downloadable/manageable via manage_transcription_models) or the user's configured provider (done in v2.2.0) -->
 
-redesign tools section to be more convenient and user friendly, and also allow to search for tools by name or description, and also allow to filter tools by category.
+<!-- redesign tools section to be more convenient and user friendly, and also allow to search for tools by name or description, and also allow to filter tools by category. -->
