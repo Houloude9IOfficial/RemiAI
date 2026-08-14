@@ -740,18 +740,40 @@ export function ChatInput({
       )}
 
       {/* Compact context row */}
-      {attachedFiles.length == 0 && (
-        <div className="mb-1.5 hidden items-center gap-2 px-1 text-[11px] text-muted-foreground/70 md:flex">
-          {/* <FolderOpen className="h-3 w-3 shrink-0" />
-          <span className="truncate">Workspace</span>
-          <span className="text-border">·</span> */}
-          <Laptop className="ml-5 h-3 w-3 shrink-0" />
-          <span className="truncate">{modeLabel} mode</span>
-          <span className="text-border">·</span>
-          <GitCommitHorizontal className="h-3 w-3 shrink-0" />
-          <span className="tabular-nums">{appVersion}</span>
-        </div>
-      )}
+      <div className="mb-1.5 flex items-center gap-2 px-1 text-[11px] text-muted-foreground/70">
+        <Laptop className="ml-5 h-3 w-3 shrink-0" />
+        <span className="truncate">{modeLabel} mode</span>
+        <span className="text-border">·</span>
+        <GitCommitHorizontal className="h-3 w-3 shrink-0" />
+        <span className="tabular-nums">{appVersion}</span>
+        <span className="text-border">·</span>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <button
+                type="button"
+                onClick={toggleBashMode}
+                disabled={disabled || isStreaming}
+                className={cn(
+                  "inline-flex items-center gap-0.5 rounded font-medium transition-colors hover:text-foreground",
+                  bashMode === "full"
+                    ? "text-status-warning"
+                    : "text-muted-foreground/80 hover:text-foreground",
+                  (disabled || isStreaming) && "pointer-events-none opacity-40",
+                )}
+                aria-label={`Bash access: ${bashMode}`}
+              />
+            }
+          >
+            Bash: {bashMode === "full" ? "Full" : "Safe"}
+          </TooltipTrigger>
+          <TooltipContent side="top">
+            {bashMode === "full"
+              ? "Full device access enabled. Click to return to sandboxed."
+              : "Sandboxed to permitted directories. Click to enable full device access."}
+          </TooltipContent>
+        </Tooltip>
+      </div>
 
       <div className="relative" onDragEnter={handleDragEnter}>
         <input
@@ -916,31 +938,6 @@ export function ChatInput({
                 ))}
               </div>
             )}
-
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <button
-                    type="button"
-                    onClick={toggleBashMode}
-                    disabled={disabled || isStreaming}
-                    className={cn(
-                      // Height matches the mode selector pill exactly: the plan
-                      // pill is button h-7/h-8 + p-0.5 (4px), so this needs
-                      // h-8/h-9 to line up at 32px / 36px.
-                      "ml-1 flex items-center rounded-full border px-2 font-medium transition-colors",
-                      large ? "h-9 text-xs" : "h-8 text-[11px]",
-                      bashMode === "full" ? "border-status-warning/50 bg-status-warning/10 text-status-warning" : "border-border/50 text-muted-foreground hover:text-foreground",
-                      (disabled || isStreaming) && "pointer-events-none opacity-40",
-                    )}
-                    aria-label={`Bash access: ${bashMode}`}
-                  />
-                }
-              >
-                Bash: {bashMode === "full" ? "Full" : "Safe"}
-              </TooltipTrigger>
-              <TooltipContent side="top">{bashMode === "full" ? "Full device access enabled. Click to return to sandboxed." : "Sandboxed to permitted directories. Click to enable full device access."}</TooltipContent>
-            </Tooltip>
 
             <div className="flex-1" />
 
