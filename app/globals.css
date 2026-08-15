@@ -215,6 +215,26 @@
   background-attachment: fixed;
 }
 
+/* ------------------------------------------------------------------ */
+/* Floating-card app shell canvas                                     */
+/* ------------------------------------------------------------------ */
+/* The soft gradient the rounded app card floats on. Tinted with the
+   user's accent color (via --primary) so it adapts to every accent preset
+   and both theme variants — no hardcoded palette. */
+.shell-canvas {
+  background:
+    radial-gradient(900px 480px at 18% -10%, color-mix(in oklab, var(--primary) 7%, transparent), transparent 70%),
+    radial-gradient(1000px 620px at 85% 115%, color-mix(in oklab, var(--primary) 5%, transparent), transparent 70%),
+    var(--background);
+}
+
+.dark .shell-canvas {
+  background:
+    radial-gradient(1000px 560px at 50% -14%, color-mix(in oklab, var(--primary) 10%, transparent), transparent 72%),
+    radial-gradient(900px 700px at 90% 120%, color-mix(in oklab, var(--primary) 7%, transparent), transparent 68%),
+    var(--background);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

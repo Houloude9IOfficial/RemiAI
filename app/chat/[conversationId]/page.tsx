@@ -11,10 +11,10 @@ import { MessageList } from "@/components/chat/MessageList";
 import { EmptyChatState } from "@/components/chat/EmptyChatState";
 import { ChatInput, type ChatMode } from "@/components/chat/ChatInput";
 import { ChatSkeleton } from "@/components/chat/ChatSkeleton";
-import { ModelPicker } from "@/components/chat/ModelPicker";
 import { TodoProgressBar } from "@/components/chat/TodoProgressBar";
 import { ExportDialog } from "@/components/chat/ExportDialog";
-import { MobileChatHeader, DesktopChatHeader } from "@/components/chat/MobileChatHeader";
+import { MobileChatHeader } from "@/components/chat/MobileChatHeader";
+import { ChatHeader } from "@/components/chat/ChatHeader";
 import {
   SessionFilesPanel,
   ResizableSessionFilesPanel,
@@ -789,11 +789,17 @@ function ConversationChat({
         actions={filesToggle}
       />
 
-      {/* ── Desktop Header ── */}
-      <DesktopChatHeader
+      {/* ── Desktop Header (redesigned: model status + live usage meter) ── */}
+      <ChatHeader
+        conversationId={conversationId}
         title={initialConversation.title}
         providerId={providerId}
         modelId={modelId}
+        status={status}
+        initialTotalTokens={
+          (initialConversation.totalInputTokens ?? 0) +
+          (initialConversation.totalOutputTokens ?? 0)
+        }
         onModelChange={handleModelChange}
         actions={
           <>

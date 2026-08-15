@@ -134,7 +134,7 @@ export function MobileSidebar() {
             type="button"
             onClick={() => newChatMutation.mutate()}
             disabled={newChatMutation.isPending}
-            className="flex items-center gap-2 disabled:opacity-50"
+            className="flex items-center gap-2 disabled:opacity-50 cursor-pointer"
             title="New chat"
           >
             <img
@@ -153,7 +153,7 @@ export function MobileSidebar() {
             <Button
               size="icon"
               variant="ghost"
-              className="h-7 w-7"
+              className="h-7 w-7 cursor-pointer"
               disabled={newChatMutation.isPending}
               onClick={() => newChatMutation.mutate()}
             >

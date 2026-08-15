@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -10,21 +12,32 @@ import {
   Sparkles,
   ListChecks,
   Paperclip,
-  Upload,
-  MessageCircle,
+  Plus,
+  X,
+  Code2,
+  Terminal,
   FolderOpen,
-  Laptop,
-  CircleDot,
-  GitCommitHorizontal,
+  Check,
+  type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuLabel,
+  DropdownMenuItem,
+  DropdownMenuCheckboxItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { FilePickerDialog } from "./FilePickerDialog";
 import { dispatchSessionFilesChanged } from "@/lib/api/session-files";
 import { toast } from "sonner";
 import { FileAttachmentPreview, type AttachedFile } from "./FileAttachmentPreview";
 import { formatFileSize } from "@/lib/file-types";
 import { conversationsApi } from "@/lib/api/conversations";
+import { toolsApi } from "@/lib/api/tools";
 import {
   downscaleImageFile,
   isDownscalableImage,
@@ -34,18 +47,6 @@ import {
   unregisterChatInput,
 } from "@/lib/chat-input-registry";
 import type { ChatStatus } from "ai";
-import packagejson from "../../package.json";
-
-interface PackageJson {
-  name: string;
-  version: string;
-  author: string | { name?: string; email?: string };
-  license: string;
-  description?: string;
-  repository?: { url?: string };
-}
-
-const packageJson = packagejson as PackageJson;
 
 /** Generate a descriptive filename for clipboard items that lack one. */
 function getClipboardFileName(file: File): string {
@@ -98,6 +99,45 @@ function getClipboardFiles(fileItems: DataTransferItem[]): File[] {
   return files;
 }
 
+/**
+ * Small removable capability chip shown in the composer bar ("X to clear").
+ * Mode chips are real per-conversation toggles; the code chip reflects the
+ * real global tool configuration — clearing it only hides the chip, it never
+ * changes server-side settings.
+ */
+function CapabilityChip({
+  icon: Icon,
+  label,
+  title,
+  onClear,
+  disabled,
+}: {
+  icon: LucideIcon;
+  label: string;
+  title?: string;
+  onClear: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <span
+      title={title}
+      className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/40 py-0.5 pl-2 pr-1 text-[11px] font-medium text-foreground/80"
+    >
+      <Icon className="h-3 w-3 shrink-0 text-muted-foreground" />
+      {label}
+      <button
+        type="button"
+        onClick={onClear}
+        disabled={disabled}
+        aria-label={`Remove ${label}`}
+        className="flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+      >
+        <X className="h-3 w-3" />
+      </button>
+    </span>
+  );
+}
+
 const LINE_HEIGHT = 24;
 const MAX_LINES = 3;
 const MAX_HEIGHT = LINE_HEIGHT * MAX_LINES;
@@ -140,32 +180,49 @@ export function ChatInput({
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const dragCounterRef = useRef(0);
-  const [appVersion, setAppVersion] = useState(packageJson.version);
   const [bashMode, setBashMode] = useState<"sandboxed" | "full">("sandboxed");
+  // Status-capability chip (code execution) that the user has dismissed via
+  // its X. Persisted so the preference survives reloads; re-showing is one
+  // click in the "+" menu. Purely cosmetic — it never changes the server-side
+  // tool configuration.
+  const [hiddenChips, setHiddenChips] = useState<Set<string>>(new Set());
+  const router = useRouter();
 
   const isStreaming = status === "streaming" || status === "submitted";
 
+  // Real availability of the code-execution tool (enabled in Settings > Tools).
+  // Read-only here — enabling it happens in Settings.
+  const { data: toolConfigs } = useQuery({
+    queryKey: ["tool-configs"],
+    queryFn: toolsApi.list,
+    staleTime: 60_000,
+  });
+
+  const codeExecutionOn = !!toolConfigs?.find((t) => t.id === "code_execution")?.config.enabled;
+
+  // Hydrate dismissed-chip preferences after mount (avoids SSR mismatch).
   useEffect(() => {
     try {
-      const electronApi = (window as Window & {
-        electronAPI?: { getAppInfo?: () => Promise<{ version: string }> };
-      }).electronAPI;
-      if (electronApi?.getAppInfo) {
-        electronApi
-          .getAppInfo()
-          .then((info) => {
-            if (info?.version) {
-              setAppVersion(`v${info.version}`);
-            }
-          })
-          .catch(() => {
-            // ignore and keep default
-          });
+      const stored = localStorage.getItem("remi-hidden-chips");
+      if (stored) {
+        const parsed: unknown = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional post-hydration sync from localStorage (matches AppSidebar pattern)
+          setHiddenChips(new Set(parsed.filter((x) => typeof x === "string")));
+        }
       }
     } catch {
-      // ignore
+      // localStorage unavailable
     }
   }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("remi-hidden-chips", JSON.stringify([...hiddenChips]));
+    } catch {
+      // localStorage unavailable
+    }
+  }, [hiddenChips]);
 
   useEffect(() => {
     conversationsApi.get(conversationId)
@@ -173,14 +230,35 @@ export function ChatInput({
       .catch(() => {});
   }, [conversationId]);
 
-  const toggleBashMode = useCallback(() => {
-    const next = bashMode === "sandboxed" ? "full" : "sandboxed";
-    setBashMode(next);
-    conversationsApi.update(conversationId, { bashMode: next }).catch(() => {
-      setBashMode(bashMode);
-      toast.error("Couldn't update Bash access mode");
+  /** Set the per-conversation Bash tier (Safe = sandboxed, Full = device-wide). */
+  const setBashModeValue = useCallback(
+    (next: "sandboxed" | "full") => {
+      if (next === bashMode) return;
+      setBashMode(next);
+      conversationsApi.update(conversationId, { bashMode: next }).catch(() => {
+        setBashMode(bashMode);
+        toast.error("Couldn't update Bash access mode");
+      });
+    },
+    [bashMode, conversationId],
+  );
+
+  const hideChip = useCallback((id: string) => {
+    setHiddenChips((prev) => new Set(prev).add(id));
+  }, []);
+
+  const showChip = useCallback((id: string) => {
+    setHiddenChips((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
     });
-  }, [bashMode, conversationId]);
+  }, []);
+
+  // Active capability chips shown in the bar (mode toggle + code status).
+  const chipVisible = (id: string) => !hiddenChips.has(id);
+  const hasModeChip = !!onModeChange && mode !== "chat";
+  const hasChips = hasModeChip || (codeExecutionOn && chipVisible("code"));
 
   // Register this textarea so the global "/" shortcut can focus it.
   // Capture the element up front — React nulls refs before effect cleanups
@@ -713,13 +791,6 @@ export function ChatInput({
     [submit, isStreaming],
   );
 
-  const modeLabel =
-    mode === "goal"
-      ? "Goal"
-      : mode === "plan"
-        ? "Plan"
-        : "Chat";
-
   // -----------------------------------------------------------------------
   // Render — ChatGPT-style dock: same column width as messages, toolbar row
   // -----------------------------------------------------------------------
@@ -738,42 +809,6 @@ export function ChatInput({
       {!large && (
         <div className="pointer-events-none absolute inset-x-4 -top-5 z-10 h-5 bg-linear-to-b from-transparent to-background/90 md:inset-x-6" />
       )}
-
-      {/* Compact context row */}
-      <div className="mb-1.5 flex items-center gap-2 px-1 text-[11px] text-muted-foreground/70">
-        <Laptop className="ml-5 h-3 w-3 shrink-0" />
-        <span className="truncate">{modeLabel} mode</span>
-        <span className="text-border">·</span>
-        <GitCommitHorizontal className="h-3 w-3 shrink-0" />
-        <span className="tabular-nums">{appVersion}</span>
-        <span className="text-border">·</span>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <button
-                type="button"
-                onClick={toggleBashMode}
-                disabled={disabled || isStreaming}
-                className={cn(
-                  "inline-flex items-center gap-0.5 rounded font-medium transition-colors hover:text-foreground",
-                  bashMode === "full"
-                    ? "text-status-warning"
-                    : "text-muted-foreground/80 hover:text-foreground",
-                  (disabled || isStreaming) && "pointer-events-none opacity-40",
-                )}
-                aria-label={`Bash access: ${bashMode}`}
-              />
-            }
-          >
-            Bash: {bashMode === "full" ? "Full" : "Safe"}
-          </TooltipTrigger>
-          <TooltipContent side="top">
-            {bashMode === "full"
-              ? "Full device access enabled. Click to return to sandboxed."
-              : "Sandboxed to permitted directories. Click to enable full device access."}
-          </TooltipContent>
-        </Tooltip>
-      </div>
 
       <div className="relative" onDragEnter={handleDragEnter}>
         <input
@@ -828,7 +863,34 @@ export function ChatInput({
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
-          <div className={large ? "px-2 pt-4" : "px-3.5 pt-3"}>
+          {/* Active capability chips — removable inline "X to clear" pattern */}
+          {hasChips && (
+            <div className="flex flex-wrap items-center gap-1.5 px-3 pt-3">
+              {hasModeChip && (
+                <CapabilityChip
+                  icon={mode === "goal" ? Sparkles : ListChecks}
+                  label={mode === "goal" ? "Goal mode" : "Plan mode"}
+                  title={
+                    mode === "goal"
+                      ? "Goal mode — works until the task is complete"
+                      : "Plan mode — plans without writing files"
+                  }
+                  disabled={disabled || isStreaming}
+                  onClear={() => onModeChange?.("chat")}
+                />
+              )}
+              {codeExecutionOn && chipVisible("code") && (
+                <CapabilityChip
+                  icon={Code2}
+                  label="Code"
+                  title="Code execution is enabled — the access tier is set with the Safe/Full control"
+                  onClear={() => hideChip("code")}
+                />
+              )}
+            </div>
+          )}
+
+          <div className={hasChips ? (large ? "px-2 pt-2" : "px-3.5 pt-2") : large ? "px-2 pt-4" : "px-3.5 pt-3"}>
             <Textarea
               ref={inputRef}
               value={text}
@@ -844,100 +906,111 @@ export function ChatInput({
               }
               disabled={disabled}
               className={cn(
-                "max-h-18 resize-none border-none bg-transparent! py-0 leading-6 shadow-none focus-visible:ring-0 dark:bg-transparent!",
-                large ? "min-h-11 text-[17px]" : "min-h-[28px]",
+                "max-h-20 resize-none border-none bg-transparent! py-0 leading-6 shadow-none focus-visible:ring-0 dark:bg-transparent!",
+                large ? "min-h-5 text-[17px]" : "min-h-[1px]",
               )}
               rows={1}
             />
           </div>
 
-          {/* Toolbar — ChatGPT-style bottom control row */}
+          {/* Toolbar — capability menu, Bash permission, send */}
           <div
             className={cn(
               "flex items-center gap-1",
               large ? "px-3 pb-3 pt-2" : "px-2 pb-2 pt-1.5",
             )}
           >
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <button
-                    type="button"
-                    onClick={openFilePicker}
-                    disabled={disabled || isStreaming}
-                    className={cn(
-                      "flex items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-                      iconBtn,
-                      (disabled || isStreaming) && "pointer-events-none opacity-40",
-                    )}
-                    aria-label="Upload a file"
-                  />
-                }
+            {/* "+" — attach / mode / capability menu */}
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                type="button"
+                disabled={disabled || isStreaming}
+                className={cn(
+                  "flex items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                  iconBtn,
+                  (disabled || isStreaming) && "pointer-events-none opacity-40",
+                )}
+                aria-label="Add photos, files, or capabilities"
               >
-                <Upload className="h-4 w-4" />
-              </TooltipTrigger>
-              <TooltipContent side="top">Upload from computer</TooltipContent>
-            </Tooltip>
+                <Plus className="h-4 w-4" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" side="top" sideOffset={6} className="w-64">
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>Attach</DropdownMenuLabel>
+                  <DropdownMenuItem onClick={openFilePicker}>
+                    <Paperclip className="h-4 w-4" />
+                    Add photos &amp; files
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setFileDialogOpen(true)}>
+                    <FolderOpen className="h-4 w-4" />
+                    Directories / files context
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
 
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <button
-                    type="button"
-                    onClick={() => setFileDialogOpen(true)}
-                    disabled={disabled || isStreaming}
-                    className={cn(
-                      "flex items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-                      iconBtn,
-                      (disabled || isStreaming) && "pointer-events-none opacity-40",
-                    )}
-                    aria-label="Attach from directories"
-                  />
-                }
-              >
-                <Paperclip className="h-4 w-4" />
-              </TooltipTrigger>
-              <TooltipContent side="top">Attach from directories</TooltipContent>
-            </Tooltip>
+                {onModeChange && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuGroup>
+                      <DropdownMenuLabel>Mode</DropdownMenuLabel>
+                      <DropdownMenuCheckboxItem
+                        checked={mode === "goal"}
+                        onCheckedChange={(checked) => onModeChange(checked ? "goal" : "chat")}
+                      >
+                        <Sparkles className="h-4 w-4" />
+                        Goal mode
+                      </DropdownMenuCheckboxItem>
+                      <DropdownMenuCheckboxItem
+                        checked={mode === "plan"}
+                        onCheckedChange={(checked) => onModeChange(checked ? "plan" : "chat")}
+                      >
+                        <ListChecks className="h-4 w-4" />
+                        Plan mode
+                      </DropdownMenuCheckboxItem>
+                    </DropdownMenuGroup>
+                  </>
+                )}
 
-            {onModeChange && (
-              <div className="ml-0.5 flex items-center rounded-full border border-border/50 bg-muted/25 p-0.5">
-                {(
-                  [
-                    { id: "chat" as const, icon: MessageCircle, tip: "Chat" },
-                    { id: "goal" as const, icon: Sparkles, tip: "Goal" },
-                    { id: "plan" as const, icon: ListChecks, tip: "Plan" },
-                  ] as const
-                ).map(({ id, icon: Icon, tip }) => (
-                  <Tooltip key={id}>
-                    <TooltipTrigger
-                      render={
-                        <button
-                          type="button"
-                          onClick={() => onModeChange(id)}
-                          disabled={disabled || isStreaming}
-                          className={cn(
-                            "flex items-center gap-1 rounded-full font-medium transition-colors",
-                            large
-                              ? "h-8 px-2.5 text-xs"
-                              : "h-7 px-2 text-[11px]",
-                            mode === id
-                              ? "bg-accent text-foreground transition-colors hover:bg-accent/90"
-                              : "text-muted-foreground hover:text-foreground",
-                            (disabled || isStreaming) &&
-                              "pointer-events-none opacity-40",
-                          )}
-                        />
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>Capabilities</DropdownMenuLabel>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      if (codeExecutionOn) {
+                        if (chipVisible("code")) hideChip("code");
+                        else showChip("code");
+                      } else {
+                        router.push("/settings/tools");
                       }
-                    >
-                      <Icon className="h-3.5 w-3.5" />
-                      <span className="hidden sm:inline">{tip}</span>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">{tip} mode</TooltipContent>
-                  </Tooltip>
-                ))}
-              </div>
-            )}
+                    }}
+                  >
+                    <Code2 className="h-4 w-4" />
+                    Code
+                    <span className="ml-auto flex items-center">
+                      {codeExecutionOn ? (
+                        <Check className="h-3.5 w-3.5 text-primary" />
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground">Set up</span>
+                      )}
+                    </span>
+                  </DropdownMenuItem>
+                  {/* Bash access tier — one toggle between the two real
+                      permission levels (Safe = sandboxed to permitted
+                      directories, Full = device-wide). Shows the current
+                      tier; clicking switches to the other. */}
+                  <DropdownMenuItem
+                    onClick={() =>
+                      setBashModeValue(bashMode === "sandboxed" ? "full" : "sandboxed")
+                    }
+                  >
+                    <Terminal className="h-4 w-4" />
+                    Bash: {bashMode === "full" ? "Full" : "Safe"}
+                    <span className="ml-auto text-[10px] text-muted-foreground">
+                      {bashMode === "full" ? "Switch to Safe" : "Switch to Full"}
+                    </span>
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             <div className="flex-1" />
 

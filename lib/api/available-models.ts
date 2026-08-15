@@ -1,8 +1,16 @@
+export type AvailableModel = {
+  modelId: string;
+  modelLabel: string | null;
+  isDefault: boolean;
+  /** Approximate context-window size in tokens (for the header usage meter). */
+  contextWindow: number;
+};
+
 export type AvailableProvider = {
   providerId: number;
   label: string;
   kind: string;
-  models: { modelId: string; modelLabel: string | null; isDefault: boolean }[];
+  models: AvailableModel[];
 };
 
 export const availableModelsApi = {
