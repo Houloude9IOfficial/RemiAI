@@ -27,6 +27,7 @@ import {
   Radio,
   Webhook,
   X,
+  Sparkles,
 } from "lucide-react";
 import { useNewChat } from "@/lib/hooks/use-new-chat";
 import { ConversationList } from "./ConversationList";
@@ -55,6 +56,7 @@ const extraLinks = [
   { href: "/settings/scheduled-tasks", label: "Scheduled Tasks", icon: Clock },
   { href: "/settings/watcher", label: "File Watcher", icon: Eye },
   { href: "/settings/backup", label: "Backup", icon: Shield },
+  { href: "/settings/skills", label: "Skills", icon: Sparkles },
   { href: "/settings/usage", label: "Usage", icon: BarChart3 },
   { href: "/settings/profile", label: "Profile", icon: User },
 ];

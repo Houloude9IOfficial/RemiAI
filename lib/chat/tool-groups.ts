@@ -60,6 +60,9 @@ export const CORE_TOOLS: ReadonlySet<string> = new Set([
   "get_tool_help",
   "list_available_tools",
   "load_tool_groups",
+  // skills (cheap, always available)
+  "list_skills",
+  "load_skill",
 ]);
 
 interface ToolGroup {

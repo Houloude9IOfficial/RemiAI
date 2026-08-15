@@ -27,3 +27,6 @@ export const SESSION_FILES_DIR = path.join(DATA_DIR, "session-files");
 
 /** User profile avatars. */
 export const AVATAR_DIR = path.join(DATA_DIR, "avatars");
+
+/** Installed agent skills (markdown instruction packages). */
+export const SKILLS_DIR = path.join(DATA_DIR, "skills");

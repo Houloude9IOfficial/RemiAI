@@ -884,7 +884,7 @@ function JsonBlock({ data }: { data: unknown }) {
             </>
           ) : (
             <>
-              <ChevronRight className="h-3 w-3" /> Collapse
+              <ChevronUp className="h-3 w-3" /> Collapse
             </>
           )}
         </button>
@@ -984,7 +984,7 @@ function ExecOutput({ data }: { data: Record<string, unknown> }) {
             </>
           ) : (
             <>
-              <ChevronDown className="h-3 w-3" /> Collapse
+              <ChevronUp className="h-3 w-3" /> Collapse
             </>
           )}
         </button>

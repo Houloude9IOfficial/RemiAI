@@ -4,7 +4,7 @@ import path from "node:path";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { backupHistory } from "@/db/schema";
-import { UPLOAD_DIR, AVATAR_DIR, SESSION_FILES_DIR } from "@/lib/paths";
+import { UPLOAD_DIR, AVATAR_DIR, SESSION_FILES_DIR, SKILLS_DIR } from "@/lib/paths";
 import { encryptBackup } from "./crypto";
 import { getAllTables } from "./schema";
 import { BACKUP_VERSION, type BackupFiles } from "./types";
@@ -77,6 +77,7 @@ export interface ExportResult {
     uploads: number;
     avatars: number;
     sessionFiles: number;
+    skills: number;
   };
 }
 
@@ -103,14 +104,20 @@ export async function exportBackup(
   }
 
   // ── Collect files ──────────────────────────────────────────────────────
-  let files: BackupFiles = { uploads: {}, avatars: {}, sessionFiles: {} };
+  let files: BackupFiles = {
+    uploads: {},
+    avatars: {},
+    sessionFiles: {},
+    skills: {},
+  };
   if (includeFiles) {
-    const [uploads, avatars, sessionFiles] = await Promise.all([
+    const [uploads, avatars, sessionFiles, skills] = await Promise.all([
       collectFiles(UPLOAD_DIR, ""),
       collectFiles(AVATAR_DIR, ""),
       collectFiles(SESSION_FILES_DIR, ""),
+      collectFiles(SKILLS_DIR, "skills"),
     ]);
-    files = { uploads, avatars, sessionFiles };
+    files = { uploads, avatars, sessionFiles, skills };
   }
 
   // ── Build payload ──────────────────────────────────────────────────────
@@ -138,6 +145,7 @@ export async function exportBackup(
       tableStats,
       uploadCount: Object.keys(files.uploads).length,
       avatarCount: Object.keys(files.avatars).length,
+      skillCount: Object.keys(files.skills).length,
       appVersion: APP_VERSION,
     });
   } catch (err) {
@@ -151,6 +159,7 @@ export async function exportBackup(
       uploads: Object.keys(files.uploads).length,
       avatars: Object.keys(files.avatars).length,
       sessionFiles: Object.keys(files.sessionFiles).length,
+      skills: Object.keys(files.skills).length,
     },
   };
 }

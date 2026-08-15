@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Brain, BarChart3, Files, FolderOpen, Pen, Plug, Settings2, Wrench, Bot, Eye, Terminal, Gamepad2, Clock, ChevronUp, Shield, Radio, Webhook, PanelLeftClose, PanelLeftOpen, Plus } from "lucide-react";
+import { Brain, BarChart3, Files, FolderOpen, Pen, Plug, Settings2, Wrench, Bot, Eye, Terminal, Gamepad2, Clock, ChevronUp, Shield, Radio, Webhook, PanelLeftClose, PanelLeftOpen, Plus, Sparkles } from "lucide-react";
 import { useNewChat } from "@/lib/hooks/use-new-chat";
 import { ConversationList } from "./ConversationList";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -32,6 +32,7 @@ const moreLinks = [
   { href: "/games", label: "Games", icon: Gamepad2 },
   { href: "/talk", label: "Talk", icon: Radio },
   { href: "/settings/routines", label: "Routines", icon: Terminal },
+  { href: "/settings/skills", label: "Skills", icon: Sparkles },
   { href: "/settings/mcp", label: "MCP Servers", icon: Plug },
   { href: "/settings/webhooks", label: "Webhooks", icon: Webhook },
   { href: "/settings/scheduled-tasks", label: "Scheduled Tasks", icon: Clock },

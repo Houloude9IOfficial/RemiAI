@@ -61,7 +61,8 @@ function BackupHistoryRow({ entry }: { entry: HistoryEntry }) {
     (sum, n) => sum + (n as number),
     0,
   );
-  const fileCount = entry.uploadCount + entry.avatarCount;
+  const fileCount =
+    entry.uploadCount + entry.avatarCount + (entry.skillCount ?? 0);
 
   return (
     <div className="flex items-center justify-between gap-4 py-3 text-sm first:pt-0 last:pb-0">

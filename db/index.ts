@@ -143,6 +143,20 @@ export async function initializeApp(): Promise<void> {
       .then(({ startScheduler }) => startScheduler())
       .catch((err) => console.error("[scheduler] Failed to start:", err));
   }, 0);
+
+  // Seed the preloaded skill repos and auto-check for skill updates.
+  // Non-blocking background task (network + disk work must never gate boot).
+  setTimeout(() => {
+    import("@/lib/skills/manager")
+      .then(async ({ seedPreloadedRepos, checkAllReposForUpdates }) => {
+        await seedPreloadedRepos();
+        // Best-effort; failures log and are retried on the next boot.
+        await checkAllReposForUpdates().catch((err) =>
+          console.error("[skills] Background update check failed:", err),
+        );
+      })
+      .catch((err) => console.error("[skills] Failed to initialize:", err));
+  }, 0);
 }
 
 export { db };

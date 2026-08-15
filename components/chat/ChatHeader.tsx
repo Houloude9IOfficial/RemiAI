@@ -1,9 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import { Sparkles } from "lucide-react";
 import type { ChatStatus } from "ai";
 import { conversationsApi } from "@/lib/api/conversations";
 import { availableModelsApi } from "@/lib/api/available-models";
+import { skillsApi } from "@/lib/api/skills";
 import { DEFAULT_CONTEXT_WINDOW } from "@/lib/providers/catalog";
 import { ModelPicker } from "./ModelPicker";
 import { cn } from "@/lib/utils";
@@ -103,6 +106,14 @@ export function ChatHeader({
     queryFn: availableModelsApi.list,
   });
 
+  // Enabled skills count — small chip that links to the Skills settings.
+  const { data: installedSkills = [] } = useQuery({
+    queryKey: ["skills"],
+    queryFn: skillsApi.list,
+    staleTime: 30_000,
+  });
+  const enabledSkillCount = installedSkills.filter((s) => s.enabled).length;
+
   const conversation = conversations?.find((c) => c.id === conversationId);
   const usedTokens =
     (conversation?.totalInputTokens ?? 0) + (conversation?.totalOutputTokens ?? 0);
@@ -132,8 +143,18 @@ export function ChatHeader({
 
       <div className="flex-1" />
 
-      {/* Right — live usage meter, then page actions */}
+      {/* Right — skills chip, live usage meter, then page actions */}
       <div className="flex shrink-0 items-center gap-2">
+        {enabledSkillCount > 0 && (
+          <Link
+            href="/settings/skills"
+            title={`${enabledSkillCount} skill${enabledSkillCount === 1 ? "" : "s"} active`}
+            className="flex items-center gap-1 rounded-full border border-border/70 bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <Sparkles className="h-3 w-3 text-primary" />
+            {enabledSkillCount}
+          </Link>
+        )}
         <UsageMeter used={totalTokens} contextWindow={contextWindow} />
         <div className="mx-0.5 h-4 w-px shrink-0 bg-border/70" />
         <div className="flex items-center gap-1">{actions}</div>

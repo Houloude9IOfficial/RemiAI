@@ -231,6 +231,7 @@ export const backupHistory = sqliteTable("backup_history", {
   tableStats: text("table_stats", { mode: "json" }).$type<Record<string, number>>().notNull().default({}),
   uploadCount: integer("upload_count").notNull().default(0),
   avatarCount: integer("avatar_count").notNull().default(0),
+  skillCount: integer("skill_count").notNull().default(0),
   appVersion: text("app_version").notNull().default(""),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
@@ -329,6 +330,45 @@ export const webhooks = sqliteTable("webhooks", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const skillRepos = sqliteTable("skill_repos", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  // Normalised `owner/repo` or full URL string — the unique external address.
+  source: text("source").notNull().unique(),
+  // Display name (e.g. `vercel-labs/agent-skills`).
+  name: text("name").notNull(),
+  isPreloaded: integer("is_preloaded", { mode: "boolean" }).notNull().default(false),
+  lastCheckedAt: text("last_checked_at"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const skills = sqliteTable(
+  "skills",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    repoId: integer("repo_id")
+      .notNull()
+      .references(() => skillRepos.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description").notNull(),
+    // Relative path under DATA_DIR/skills/<repo-slug>/<skill-name>/
+    diskPath: text("disk_path").notNull(),
+    // The Library Active toggle: Active = listed in the chat system prompt
+    // AND load_skill can load it. Inactive = hidden from the model.
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+    // Hash of the installed content (files + SKILL.md) — update detection.
+    contentHash: text("content_hash"),
+    // Set by the background update check when upstream differs from what's
+    // installed; cleared when the user applies the update.
+    updateAvailable: integer("update_available", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    installedAt: text("installed_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (t) => [unique().on(t.repoId, t.name)],
+);
 
 export const webhookEvents = sqliteTable("webhook_events", {
   id: integer("id").primaryKey({ autoIncrement: true }),

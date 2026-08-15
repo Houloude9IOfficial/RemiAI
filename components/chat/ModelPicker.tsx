@@ -55,6 +55,7 @@ function prettyModelLabel(label: string | null | undefined): string {
   if (!label) return "Pick a model";
   const cleaned = label
     .replaceAll(/[_-]/g, " ")
+    .replaceAll(':', ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase());
   return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
 }

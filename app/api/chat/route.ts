@@ -76,6 +76,8 @@ import { buildProfileTools } from "@/lib/tools/profile";
 import { buildRoutinesTools } from "@/lib/tools/routines";
 import { buildScheduleTool } from "@/lib/tools/schedule";
 import { buildToolHelpTool, buildListAvailableToolsTool } from "@/lib/tools/tool-help";
+import { buildSkillsToolSet } from "@/lib/skills/tools";
+import { buildActiveSkillsSection } from "@/lib/skills/system-prompt";
 import { userContextFromHeaders } from "@/lib/geo";
 import { queryRecentChanges } from "@/lib/fs/file-index";
 import { estimateTokenCount, normaliseTool } from "@/lib/utils";
@@ -351,6 +353,9 @@ export async function POST(req: Request) {
   // Session files tools — per-conversation private file sandbox
   const sessionFileToolSet = buildSessionFileTools(conversationId);
 
+  // Skills tools (list_skills, load_skill) — always available (core)
+  const skillsToolSet = buildSkillsToolSet();
+
   // In plan mode, filter out write tools — AI can only read/plan, not modify files
   const writeBlocklist = [
     "write_file",
@@ -416,6 +421,7 @@ You are currently in **Plan mode**. This means:
     ...routineToolSet,
     ...scheduleToolSet,
     ...effectiveSessionFileToolSet,
+    ...skillsToolSet,
   };
 
   // Build combined system prompt with user preferences
@@ -589,13 +595,19 @@ You are currently in **Plan mode**. This means:
   // actually filtered out, so fully-loaded conversations pay zero overhead.
   const toolAvailabilityNote = buildToolAvailabilityNote(tools, activeToolGroups);
 
+  // Active skills section — enabled skills' name + description injected into
+  // the DYNAMIC prompt (after the static prompt / prompt-cache breakpoint) so
+  // toggling a skill never invalidates the cached prefix. Full instructions
+  // load on demand via the always-available load_skill tool.
+  const activeSkillsSection = await buildActiveSkillsSection(isLowCapability);
+
   // Split off the availability note so prepareStep can rebuild the
   // instructions with a FRESH note once load_tool_groups enables a group
   // mid-stream (the note is the only part of the dynamic prompt that can
   // change mid-request).
   const dynamicSystemPromptBase =
     systemTip + profileTip + memoryTip + fileChangeTip + summarySection +
-    planModePrompt;
+    planModePrompt + activeSkillsSection;
 
   const dynamicSystemPrompt = dynamicSystemPromptBase + toolAvailabilityNote;
 

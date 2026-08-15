@@ -169,6 +169,13 @@
       "when": 1786800000000,
       "tag": "0028_webhooks",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1786896000000,
+      "tag": "0029_skills",
+      "breakpoints": true
     }
   ]
 }

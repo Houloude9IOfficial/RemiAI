@@ -355,12 +355,12 @@ export function ToolList() {
           </TabsList>
         </Tabs>
 
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
+        {/* <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>
             {activeCount} of {tools.length} tools active
           </span>
           {isFiltering && <span>{filteredTools.length} shown</span>}
-        </div>
+        </div> */}
       </div>
 
       {/* ── Empty state ── */}
