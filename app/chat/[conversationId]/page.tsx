@@ -874,10 +874,13 @@ function ConversationChat({
               {/* ── Input ── */}
               <div className="sticky bottom-0 z-20 supports-[padding-bottom:env(safe-area-inset-bottom)]:pb-[env(safe-area-inset-bottom)]">
                 {/* Shared layoutId with the centered EmptyChatState composer —
-                    makes the input glide down to the dock when chat starts. */}
+                    makes the input glide down to the dock when chat starts.
+                    Ease-out tween (not a spring): a spring overshoots past the
+                    target, briefly pushing the flying composer beyond the
+                    viewport edge and flashing scrollbars in <main>. */}
                 <motion.div
                   layoutId="chat-input"
-                  transition={{ type: "spring", stiffness: 340, damping: 32 }}
+                  transition={{ type: "tween", duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
                   className="relative"
                 >
                   <ChatInput

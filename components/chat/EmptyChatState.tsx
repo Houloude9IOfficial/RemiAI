@@ -53,7 +53,10 @@ export function EmptyChatState({
   return (
     /* my-auto (not justify-center) keeps the top of the content reachable if
        it ever exceeds the viewport (e.g. with an error card visible). */
-    <div className="flex min-h-full w-full flex-col items-center px-6 pb-12 pt-2 animate-fade-in">
+    /* Opacity-only fade: this root fills the scroll container exactly, so a
+       translateY entrance would push it past the bottom edge and flash a
+       scrollbar. */
+    <div className="flex min-h-full w-full flex-col items-center px-6 pb-12 pt-2 animate-fade-in-opacity">
       <div className="my-auto flex w-full flex-col items-center gap-9">
         {/* Headline — outer element is a <div>, not a <p>, because it renders
             a nested <p dangerouslySetInnerHTML> (may contain an <a> link).
@@ -69,10 +72,12 @@ export function EmptyChatState({
         </div>
 
         {/* Big centered composer — shares layoutId with the docked input so
-            the transition between the two states animates smoothly. */}
+            the transition between the two states animates smoothly. Ease-out
+            tween (not a spring) so the flight never overshoots the dock and
+            flashes scrollbars. */}
         <motion.div
           layoutId="chat-input"
-          transition={{ type: "spring", stiffness: 340, damping: 32 }}
+          transition={{ type: "tween", duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
           className="w-full max-w-2xl"
         >
           <ChatInput

@@ -116,7 +116,7 @@ export default function RootLayout({
                   <div className="relative flex h-full w-full overflow-hidden rounded-none bg-background md:rounded-2xl md:border md:border-border/70 md:shadow-floating">
                     <AppSidebar />
                     <MobileSidebar />
-                    <main className="flex min-w-0 flex-1 flex-col overflow-auto">
+                    <main className="flex min-w-0 flex-1 flex-col overflow-y-auto overflow-x-clip">
                       <GlobalMobileHeader />
                       {children}
                     </main>

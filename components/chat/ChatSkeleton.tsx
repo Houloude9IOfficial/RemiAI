@@ -99,7 +99,10 @@ export function ChatSkeleton({
   }));
 
   return (
-    <div className={cn("flex flex-1 flex-col h-full animate-fade-in", className)}>
+    /* Opacity-only fade: this root fills the scroll container exactly, so a
+       translateY entrance would push it past the bottom edge and flash a
+       scrollbar. */
+    <div className={cn("flex flex-1 flex-col h-full animate-fade-in-opacity", className)}>
       {/* ── Header bar skeleton ── */}
       {/* Hidden on mobile — the chat page renders its own mobile header
           (with the sidebar hamburger) while loading. */}
