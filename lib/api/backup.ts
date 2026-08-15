@@ -34,6 +34,7 @@ export interface HistoryEntry {
   tableStats: Record<string, number>;
   uploadCount: number;
   avatarCount: number;
+  skillCount?: number;
   appVersion: string;
   createdAt: string;
 }

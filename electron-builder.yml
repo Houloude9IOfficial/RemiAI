@@ -7,7 +7,7 @@
 #   npm run dist:win       # Build Windows NSIS installer
 #   npm run dist:linux     # Build Linux AppImage
 
-appId: com.remiai.app
+appId: com.remiai.crickdevs.com
 productName: RemiAI
 copyright: Copyright © 2026 RemiAI
 
@@ -83,6 +83,18 @@ asarUnpack:
   # Native .node binaries
   - "**/*.node"
   - "**/better-sqlite3/**"
+
+  # ffmpeg/ffprobe are spawned as subprocesses — they must sit on the real
+  # filesystem, outside asar. (The copies under .next/standalone/**/* are
+  # already unpacked by the rule below.)
+  - "node_modules/ffmpeg-static/**"
+  - "node_modules/ffprobe-static/**"
+
+  # Offline transcription (@huggingface/transformers + onnxruntime-node): the
+  # native .node runtime must be on the real filesystem for dlopen, and the
+  # standalone copy is already covered by ".next/standalone/**/*".
+  - "node_modules/onnxruntime-node/**"
+  - "node_modules/@huggingface/transformers/**"
 
   # Only unpack production Next runtime files
   - ".next/standalone/**/*"

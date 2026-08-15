@@ -25,7 +25,9 @@ import {
   ChevronUp,
   Shield,
   Radio,
+  Webhook,
   X,
+  Sparkles,
 } from "lucide-react";
 import { useNewChat } from "@/lib/hooks/use-new-chat";
 import { ConversationList } from "./ConversationList";
@@ -49,10 +51,12 @@ const extraLinks = [
   { href: "/settings/memories", label: "Memories", icon: Brain },
   { href: "/settings/routines", label: "Routines", icon: Terminal },
   { href: "/settings/mcp", label: "MCP Servers", icon: Plug },
+  { href: "/settings/webhooks", label: "Webhooks", icon: Webhook },
   { href: "/settings/tasks", label: "Agent Tasks", icon: Bot },
   { href: "/settings/scheduled-tasks", label: "Scheduled Tasks", icon: Clock },
   { href: "/settings/watcher", label: "File Watcher", icon: Eye },
   { href: "/settings/backup", label: "Backup", icon: Shield },
+  { href: "/settings/skills", label: "Skills", icon: Sparkles },
   { href: "/settings/usage", label: "Usage", icon: BarChart3 },
   { href: "/settings/profile", label: "Profile", icon: User },
 ];
@@ -132,7 +136,7 @@ export function MobileSidebar() {
             type="button"
             onClick={() => newChatMutation.mutate()}
             disabled={newChatMutation.isPending}
-            className="flex items-center gap-2 disabled:opacity-50"
+            className="flex items-center gap-2 disabled:opacity-50 cursor-pointer"
             title="New chat"
           >
             <img
@@ -151,7 +155,7 @@ export function MobileSidebar() {
             <Button
               size="icon"
               variant="ghost"
-              className="h-7 w-7"
+              className="h-7 w-7 cursor-pointer"
               disabled={newChatMutation.isPending}
               onClick={() => newChatMutation.mutate()}
             >

@@ -1,12 +1,9 @@
 "use client";
 
-import {
-  ImageIcon,
-  Download,
-  ExternalLink,
-} from "lucide-react";
+import { Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getFileTypeInfo, formatFileSize, mimeTypeFromExtension } from "@/lib/file-types";
+import { ImagePreview } from "./ImagePreview";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -23,6 +20,9 @@ interface AttachedFileCardProps {
   size?: number;
   /** Whether the card is inside a user message bubble (affects styling) */
   inUserMessage?: boolean;
+  /** True when the image is a uniform thumbnail in a multi-image grid —
+   *  cropped to fill the cell. False (default) shows the whole image. */
+  thumbnail?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -35,54 +35,37 @@ export function AttachedFileCard({
   mimeType,
   size,
   inUserMessage,
+  thumbnail,
 }: AttachedFileCardProps) {
   const isImage = mimeType.startsWith("image/");
 
-  // Image card — large preview
+  // Image — no card chrome around it; the image itself is the preview.
+  // Clicking opens the lightbox with the filename and download/copy/open
+  // controls.
   if (isImage) {
-    return (
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={cn(
-          "group relative block overflow-hidden rounded-xl transition-all duration-200",
-          "hover:ring-2 hover:ring-primary/30",
-          inUserMessage
-            ? "border border-white/20"
-            : "border border-border/60 shadow-sm",
-        )}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+    // Multi-image grid — uniform cover thumbnail that fills the whole cell
+    // (no borders or empty space around the image).
+    if (thumbnail) {
+      return (
+        <ImagePreview
           src={url}
+          url={url}
           alt={name}
-          className="max-h-80 w-full object-contain bg-black/5"
-          loading="lazy"
+          filename={name}
+          className="aspect-[4/3] w-full rounded-lg"
+          imgClassName="h-full w-full object-cover"
         />
-        {/* Footer overlay */}
-        <div
-          className={cn(
-            "flex items-center gap-2 px-3 py-2 text-[11px]",
-            inUserMessage
-              ? "bg-primary-foreground/10 backdrop-blur-sm text-primary-foreground/90"
-              : "bg-muted/80 backdrop-blur-sm text-muted-foreground border-t border-border/30",
-          )}
-        >
-          <ImageIcon className="h-3.5 w-3.5 shrink-0" />
-          <span className="flex-1 truncate font-medium">{name}</span>
-          {size !== undefined && (
-            <span className="shrink-0 tabular-nums opacity-70">
-              {formatFileSize(size)}
-            </span>
-          )}
-          <ExternalLink
-            className={cn(
-              "h-3.5 w-3.5 shrink-0 opacity-0 transition-opacity group-hover:opacity-70",
-            )}
-          />
-        </div>
-      </a>
+      );
+    }
+    // Single image — shown fully contained, no border around it.
+    return (
+      <ImagePreview
+        src={url}
+        url={url}
+        alt={name}
+        filename={name}
+        imgClassName="max-h-80 w-full object-contain rounded-lg"
+      />
     );
   }
 

@@ -20,6 +20,10 @@ const IMAGE_MIME_TYPES: Record<string, string> = {
   ".avif": "image/avif",
   ".bmp": "image/bmp",
   ".svg": "image/svg+xml",
+  // iPhone's default camera format — high-quality photos from the photo
+  // library arrive as HEIC and were silently skipped here before.
+  ".heic": "image/heic",
+  ".heif": "image/heif",
 };
 
 export type ImageAttachment = {

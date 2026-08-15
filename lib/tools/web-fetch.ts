@@ -97,7 +97,7 @@ export const webFetchTool = {
           headers: {
             Accept: "text/html,application/xhtml+xml,application/xml,text/plain,*/*",
             "User-Agent":
-              "Mozilla/5.0 (compatible; RemiAI/1.0; +https://remiai.app)",
+              "Mozilla/5.0 (compatible; RemiAI/1.0; +https://remiai.crickdevs.com)",
           },
           signal: controller.signal,
         });

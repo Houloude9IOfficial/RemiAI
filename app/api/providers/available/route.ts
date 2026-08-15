@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { providers, providerModels } from "@/db/schema";
+import { contextWindowFor } from "@/lib/providers/catalog";
 
 export async function GET() {
   const rows = await db
@@ -20,9 +21,10 @@ export async function GET() {
     )
     .where(eq(providers.enabled, true));
 
+  type AvailableModelRow = (typeof rows)[number] & { contextWindow: number };
   const grouped = new Map<
     number,
-    { providerId: number; label: string; kind: string; models: typeof rows }
+    { providerId: number; label: string; kind: string; models: AvailableModelRow[] }
   >();
   for (const row of rows) {
     if (!grouped.has(row.providerId)) {
@@ -33,7 +35,11 @@ export async function GET() {
         models: [],
       });
     }
-    grouped.get(row.providerId)!.models.push(row);
+    grouped.get(row.providerId)!.models.push({
+      ...row,
+      // Approximate context-window size for the header usage meter.
+      contextWindow: contextWindowFor(row.modelId),
+    });
   }
 
   return NextResponse.json(Array.from(grouped.values()));

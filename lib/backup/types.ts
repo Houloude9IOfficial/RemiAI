@@ -70,6 +70,8 @@ export interface BackupFiles {
    * backed up here.
    */
   sessionFiles: Record<string, string>;
+  /** Map of `skills/{repo-slug}/{skill}/…` → base64 content. */
+  skills: Record<string, string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -84,6 +86,7 @@ export interface RestoreResult {
     uploads: number;
     avatars: number;
     sessionFiles: number;
+    skills: number;
   };
   exportedAt: string;
   appVersion: string;

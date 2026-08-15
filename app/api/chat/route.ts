@@ -58,6 +58,7 @@ import { buildIntegrationTools } from "@/lib/tools/integrations";
 import { buildExecutionTools } from "@/lib/tools/exec";
 import { buildPlaywrightTools } from "@/lib/tools/playwright";
 import { buildDocumentReaderTools } from "@/lib/tools/document-reader";
+import { buildMediaTools } from "@/lib/media/tools";
 import { delayTool } from "@/lib/tools/delay";
 import { webFetchTool } from "@/lib/tools/web-fetch";
 import { buildCreateVisualTool } from "@/lib/tools/create-visual";
@@ -75,6 +76,8 @@ import { buildProfileTools } from "@/lib/tools/profile";
 import { buildRoutinesTools } from "@/lib/tools/routines";
 import { buildScheduleTool } from "@/lib/tools/schedule";
 import { buildToolHelpTool, buildListAvailableToolsTool } from "@/lib/tools/tool-help";
+import { buildSkillsToolSet } from "@/lib/skills/tools";
+import { buildActiveSkillsSection } from "@/lib/skills/system-prompt";
 import { userContextFromHeaders } from "@/lib/geo";
 import { queryRecentChanges } from "@/lib/fs/file-index";
 import { estimateTokenCount, normaliseTool } from "@/lib/utils";
@@ -300,6 +303,11 @@ export async function POST(req: Request) {
   // Gather document reader tools (read_document)
   const documentToolSet = await buildDocumentReaderTools();
 
+  // Gather media tools (get_media_metadata, convert_media, extract_audio,
+  // extract_video_frames, transcribe_audio, manage_transcription_models) —
+  // outputs default to this conversation's session sandbox
+  const mediaToolSet = buildMediaTools(conversationId);
+
   // Build create visual tool (conditionally based on user setting)
   const createVisualToolSet = await buildCreateVisualTool();
   const createVisualEnabled = "create_visual" in createVisualToolSet;
@@ -344,6 +352,9 @@ export async function POST(req: Request) {
 
   // Session files tools — per-conversation private file sandbox
   const sessionFileToolSet = buildSessionFileTools(conversationId);
+
+  // Skills tools (list_skills, load_skill) — always available (core)
+  const skillsToolSet = buildSkillsToolSet();
 
   // In plan mode, filter out write tools — AI can only read/plan, not modify files
   const writeBlocklist = [
@@ -401,6 +412,7 @@ You are currently in **Plan mode**. This means:
     ...executionToolSet,
     ...playwrightToolSet,
     ...documentToolSet,
+    ...mediaToolSet,
     ...builtinToolSet,
     ...agentToolSet,
     ...fileIndexToolSet,
@@ -409,6 +421,7 @@ You are currently in **Plan mode**. This means:
     ...routineToolSet,
     ...scheduleToolSet,
     ...effectiveSessionFileToolSet,
+    ...skillsToolSet,
   };
 
   // Build combined system prompt with user preferences
@@ -582,13 +595,19 @@ You are currently in **Plan mode**. This means:
   // actually filtered out, so fully-loaded conversations pay zero overhead.
   const toolAvailabilityNote = buildToolAvailabilityNote(tools, activeToolGroups);
 
+  // Active skills section — enabled skills' name + description injected into
+  // the DYNAMIC prompt (after the static prompt / prompt-cache breakpoint) so
+  // toggling a skill never invalidates the cached prefix. Full instructions
+  // load on demand via the always-available load_skill tool.
+  const activeSkillsSection = await buildActiveSkillsSection(isLowCapability);
+
   // Split off the availability note so prepareStep can rebuild the
   // instructions with a FRESH note once load_tool_groups enables a group
   // mid-stream (the note is the only part of the dynamic prompt that can
   // change mid-request).
   const dynamicSystemPromptBase =
     systemTip + profileTip + memoryTip + fileChangeTip + summarySection +
-    planModePrompt;
+    planModePrompt + activeSkillsSection;
 
   const dynamicSystemPrompt = dynamicSystemPromptBase + toolAvailabilityNote;
 
@@ -628,7 +647,10 @@ You are currently in **Plan mode**. This means:
           parts.push({
             type: "image" as const,
             image: att.buffer,
-            mimeType: att.mimeType,
+            // AI SDK v7 reads `mediaType` on image parts — `mimeType` is
+            // ignored, which made the SDK fall back to magic-byte sniffing
+            // (fails for formats without a recognizable signature).
+            mediaType: att.mimeType,
           });
         }
         msg.content = parts;
@@ -659,7 +681,9 @@ You are currently in **Plan mode**. This means:
                 newParts.push({
                   type: "image" as const,
                   image: att.buffer,
-                  mimeType: att.mimeType,
+                  // AI SDK v7 reads `mediaType` on image parts — `mimeType`
+                  // is ignored (see the string-content branch above).
+                  mediaType: att.mimeType,
                 });
               }
             } else {

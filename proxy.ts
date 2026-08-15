@@ -7,8 +7,27 @@ const PUBLIC_AUTH_PATHS = new Set([
   "/api/auth/logout",
 ]);
 
+// Webhook delivery (POST /api/webhooks/:id) and verification ping
+// (GET /api/webhooks/:id, incl. the Meta-style hub.challenge echo) are
+// authenticated by the per-webhook secret — NOT the session cookie — and are
+// called by external services, which are cross-site by nature. Bypass the
+// session wall AND the cross-site checks for exactly these two shapes; the
+// admin routes (/api/webhooks, /api/webhooks/:id/events, /api/webhooks/:id/test)
+// stay behind authentication.
+const WEBHOOK_DELIVERY_PATH_RE = /^\/api\/webhooks\/\d+$/;
+
+function isWebhookDeliveryOrVerification(pathname: string, method: string): boolean {
+  return (
+    (method === "POST" || method === "GET") &&
+    WEBHOOK_DELIVERY_PATH_RE.test(pathname)
+  );
+}
+
 export async function proxy(request: NextRequest) {
   if (!request.nextUrl.pathname.startsWith("/api/")) return NextResponse.next();
+  if (isWebhookDeliveryOrVerification(request.nextUrl.pathname, request.method)) {
+    return NextResponse.next();
+  }
   if (["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) {
     const origin = request.headers.get("origin");
     const host = request.headers.get("host");

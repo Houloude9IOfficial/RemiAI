@@ -10,6 +10,7 @@ import { buildMemoryTools } from "../lib/tools/memories";
 import { buildIntegrationTools } from "../lib/tools/integrations";
 import { buildExecutionTools } from "../lib/tools/exec";
 import { buildDocumentReaderTools } from "../lib/tools/document-reader";
+import { buildMediaTools } from "../lib/media/tools";
 import { delayTool } from "../lib/tools/delay";
 import { webFetchTool } from "../lib/tools/web-fetch";
 import { buildCreateVisualTool } from "../lib/tools/create-visual";
@@ -51,6 +52,7 @@ async function main() {
     ...((await safe("integrations", () => buildIntegrationTools(userContext))) ?? {}),
     ...((await safe("exec", () => buildExecutionTools("sandboxed"))) ?? {}),
     ...((await safe("docreader", () => buildDocumentReaderTools())) ?? {}),
+    ...((safe("media", () => buildMediaTools(1)) as any) ?? {}),
     delay: delayTool,
     web_fetch: webFetchTool,
     ask_questions: askQuestionsTool,

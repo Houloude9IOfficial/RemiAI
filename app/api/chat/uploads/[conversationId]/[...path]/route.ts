@@ -40,6 +40,13 @@ const MIME_TYPES: Record<string, string> = {
   ".yaml": "text/yaml",
   ".yml": "text/yaml",
   ".toml": "text/toml",
+  ".mp3": "audio/mpeg",
+  ".wav": "audio/wav",
+  ".flac": "audio/flac",
+  ".ogg": "audio/ogg",
+  ".aac": "audio/aac",
+  ".m4a": "audio/mp4",
+  ".wma": "audio/x-ms-wma",
 };
 
 /**

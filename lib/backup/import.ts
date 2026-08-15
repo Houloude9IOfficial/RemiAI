@@ -2,7 +2,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
-import { UPLOAD_DIR, AVATAR_DIR, SESSION_FILES_DIR } from "@/lib/paths";
+import { UPLOAD_DIR, AVATAR_DIR, SESSION_FILES_DIR, SKILLS_DIR } from "@/lib/paths";
 import { decryptBackup } from "./crypto";
 import { getAllTables, getTableColumns } from "./schema";
 import {
@@ -62,11 +62,17 @@ function migrateV1Payload(
   data: Record<string, unknown>,
 ): { tables: Record<string, Record<string, unknown>[]>; files: BackupFiles } {
   // Extract files first
-  const rawFiles = (data.files ?? { uploads: {}, avatars: {}, sessionFiles: {} }) as BackupFiles;
+  const rawFiles = (data.files ?? {
+    uploads: {},
+    avatars: {},
+    sessionFiles: {},
+    skills: {},
+  }) as BackupFiles;
   const files: BackupFiles = {
     uploads: typeof rawFiles.uploads === "object" ? (rawFiles.uploads as Record<string, string>) : {},
     avatars: typeof rawFiles.avatars === "object" ? (rawFiles.avatars as Record<string, string>) : {},
     sessionFiles: typeof rawFiles.sessionFiles === "object" ? (rawFiles.sessionFiles as Record<string, string>) : {},
+    skills: typeof rawFiles.skills === "object" ? (rawFiles.skills as Record<string, string>) : {},
   };
 
   // Migrate each table
@@ -138,7 +144,7 @@ function validatePayload(payload: unknown): {
   } else if (p.version >= 2) {
     // ── v2+ — use as-is (snake_case keys matching actual table names) ──
     tables = {} as Record<string, Record<string, unknown>[]>;
-    files = { uploads: {}, avatars: {}, sessionFiles: {} };
+    files = { uploads: {}, avatars: {}, sessionFiles: {}, skills: {} };
 
     for (const [key, value] of Object.entries(data)) {
       if (key === "files") {
@@ -147,6 +153,7 @@ function validatePayload(payload: unknown): {
           uploads: typeof f.uploads === "object" ? (f.uploads as Record<string, string>) : {},
           avatars: typeof f.avatars === "object" ? (f.avatars as Record<string, string>) : {},
           sessionFiles: typeof f.sessionFiles === "object" ? (f.sessionFiles as Record<string, string>) : {},
+          skills: typeof f.skills === "object" ? (f.skills as Record<string, string>) : {},
         };
       } else if (Array.isArray(value)) {
         tables[key] = value as Record<string, unknown>[];
@@ -270,10 +277,12 @@ async function restoreFiles(data: BackupFiles): Promise<{
   uploads: number;
   avatars: number;
   sessionFiles: number;
+  skills: number;
 }> {
   let uploads = 0;
   let avatars = 0;
   let sessionFiles = 0;
+  let skills = 0;
 
   await fsp.mkdir(UPLOAD_DIR, { recursive: true });
   for (const [relPath, base64] of Object.entries(data.uploads)) {
@@ -301,7 +310,17 @@ async function restoreFiles(data: BackupFiles): Promise<{
     sessionFiles++;
   }
 
-  return { uploads, avatars, sessionFiles };
+  // Installed skills (source.json + skill folders) — restored with their
+  // folder structure preserved.
+  await fsp.mkdir(SKILLS_DIR, { recursive: true });
+  for (const [relPath, base64] of Object.entries(data.skills ?? {})) {
+    const fullPath = path.join(SKILLS_DIR, relPath);
+    await fsp.mkdir(path.dirname(fullPath), { recursive: true });
+    await fsp.writeFile(fullPath, Buffer.from(base64, "base64"));
+    skills++;
+  }
+
+  return { uploads, avatars, sessionFiles, skills };
 }
 
 // ---------------------------------------------------------------------------
@@ -407,7 +426,7 @@ export async function importBackup(
   // ── Restore files ──────────────────────────────────────────────────────
   const fileStats = payload.includesFiles
     ? await restoreFiles(payload.files)
-    : { uploads: 0, avatars: 0, sessionFiles: 0 };
+    : { uploads: 0, avatars: 0, sessionFiles: 0, skills: 0 };
 
   revokeAllSessions();
 

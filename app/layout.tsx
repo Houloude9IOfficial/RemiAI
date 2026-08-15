@@ -104,12 +104,24 @@ export default function RootLayout({
           <SidebarProvider>
             <ShortcutsProvider>
               <div className="flex h-screen w-full supports-[height:100dvh]:h-dvh">
-                <AppSidebar />
-                <MobileSidebar />
-                <main className="flex flex-1 flex-col overflow-auto">
-                  <GlobalMobileHeader />
-                  {children}
-                </main>
+                {/* Floating-card app shell: sidebar + main panel sit as one
+                    rounded card on a subtle gradient canvas with breathing
+                    room around it. Collapses to full-bleed on narrow
+                    viewports (no padding, square corners, no shadow). */}
+                <div className="relative min-w-0 flex-1 p-0 md:p-3 lg:p-4">
+                  <div
+                    aria-hidden="true"
+                    className="shell-canvas pointer-events-none absolute inset-0"
+                  />
+                  <div className="relative flex h-full w-full overflow-hidden rounded-none bg-background md:rounded-2xl md:border md:border-border/70 md:shadow-floating">
+                    <AppSidebar />
+                    <MobileSidebar />
+                    <main className="flex min-w-0 flex-1 flex-col overflow-y-auto overflow-x-clip">
+                      <GlobalMobileHeader />
+                      {children}
+                    </main>
+                  </div>
+                </div>
               </div>
             </ShortcutsProvider>
           </SidebarProvider>

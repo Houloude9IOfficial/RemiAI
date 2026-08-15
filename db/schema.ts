@@ -231,6 +231,7 @@ export const backupHistory = sqliteTable("backup_history", {
   tableStats: text("table_stats", { mode: "json" }).$type<Record<string, number>>().notNull().default({}),
   uploadCount: integer("upload_count").notNull().default(0),
   avatarCount: integer("avatar_count").notNull().default(0),
+  skillCount: integer("skill_count").notNull().default(0),
   appVersion: text("app_version").notNull().default(""),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
@@ -285,4 +286,103 @@ export const authBootstrap = sqliteTable("auth_bootstrap", {
   codeHash: text("code_hash").notNull(),
   consumedAt: text("consumed_at"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+/**
+ * A structured filter condition evaluated against an incoming webhook
+ * payload. All conditions on a webhook must pass (AND) for the AI run to
+ * trigger; an empty list means "always trigger".
+ */
+export type WebhookCondition = {
+  /** Dot path into the payload, e.g. "type" or "entry.0.messaging.0.message.text". */
+  field: string;
+  op: "eq" | "neq" | "contains" | "startsWith" | "endsWith" | "exists" | "matches";
+  /** Comparison value for all ops except `exists`. */
+  value?: string;
+};
+
+export const webhooks = sqliteTable("webhooks", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  // Secret the caller must present (X-Webhook-Secret header or
+  // Authorization: Bearer) for deliveries to be accepted.
+  secret: text("secret").notNull(),
+  // Trigger instructions given to the AI when this webhook fires.
+  // Supports {{payload.path}}, {{headers.name}}, {{query.name}} substitution.
+  systemPrompt: text("system_prompt").notNull().default(""),
+  // Structured filter conditions (AND). Empty array = always trigger.
+  conditions: text("conditions", { mode: "json" })
+    .$type<WebhookCondition[]>()
+    .notNull()
+    .default([]),
+  // Conversation the triggered AI run appears in (auto-created at setup by
+  // default, or any existing chat). Null if the conversation was deleted.
+  conversationId: integer("conversation_id").references(() => conversations.id, {
+    onDelete: "set null",
+  }),
+  // If true, the delivery request waits for the AI run and returns the
+  // response text to the caller (e.g. replying to a chat platform API).
+  respondSync: integer("respond_sync", { mode: "boolean" }).notNull().default(false),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  lastReceivedAt: text("last_received_at"),
+  lastStatus: text("last_status"),
+  lastEventId: integer("last_event_id"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const skillRepos = sqliteTable("skill_repos", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  // Normalised `owner/repo` or full URL string — the unique external address.
+  source: text("source").notNull().unique(),
+  // Display name (e.g. `vercel-labs/agent-skills`).
+  name: text("name").notNull(),
+  isPreloaded: integer("is_preloaded", { mode: "boolean" }).notNull().default(false),
+  lastCheckedAt: text("last_checked_at"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const skills = sqliteTable(
+  "skills",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    repoId: integer("repo_id")
+      .notNull()
+      .references(() => skillRepos.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description").notNull(),
+    // Relative path under DATA_DIR/skills/<repo-slug>/<skill-name>/
+    diskPath: text("disk_path").notNull(),
+    // The Library Active toggle: Active = listed in the chat system prompt
+    // AND load_skill can load it. Inactive = hidden from the model.
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+    // Hash of the installed content (files + SKILL.md) — update detection.
+    contentHash: text("content_hash"),
+    // Set by the background update check when upstream differs from what's
+    // installed; cleared when the user applies the update.
+    updateAvailable: integer("update_available", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    installedAt: text("installed_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (t) => [unique().on(t.repoId, t.name)],
+);
+
+export const webhookEvents = sqliteTable("webhook_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  webhookId: integer("webhook_id")
+    .notNull()
+    .references(() => webhooks.id, { onDelete: "cascade" }),
+  status: text("status", {
+    enum: ["received", "processing", "completed", "skipped", "failed"],
+  })
+    .notNull()
+    .default("received"),
+  payload: text("payload", { mode: "json" }).$type<unknown>().notNull(),
+  result: text("result"),
+  error: text("error"),
+  receivedAt: text("received_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  completedAt: text("completed_at"),
 });

@@ -247,7 +247,7 @@ export function SessionFilesPanel({
           ) : (
             <Archive className="h-3.5 w-3.5" />
           )}
-          Download all files
+          Download all
         </button>
         <button
           type="button"

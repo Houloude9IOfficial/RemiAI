@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Brain, BarChart3, Files, FolderOpen, Pen, Plug, Settings2, User, Wrench, Bot, Eye, Terminal, Gamepad2, Clock, ChevronDown, ChevronUp, Shield, Radio, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Brain, BarChart3, Files, FolderOpen, Pen, Plug, Settings2, Wrench, Bot, Eye, Terminal, Gamepad2, Clock, ChevronUp, Shield, Radio, Webhook, PanelLeftClose, PanelLeftOpen, Plus, Sparkles } from "lucide-react";
 import { useNewChat } from "@/lib/hooks/use-new-chat";
 import { ConversationList } from "./ConversationList";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -15,25 +15,30 @@ import { AboutModal } from "./AboutModal";
 import { ShortcutsTrigger } from "./ShortcutsModal";
 import { useSidebar } from "./SidebarContext";
 
+// Condensed top-level navigation. Secondary/admin destinations (models &
+// providers, games, talk, routines, MCP, webhooks, scheduled tasks, file
+// watcher, backup, usage) live under the "More" expander — every item stays
+// reachable in at most two clicks.
 const primaryLinks = [
-  { href: "/settings/providers", label: "Models & Providers", icon: Settings2 },
   { href: "/settings/directories", label: "Directories", icon: FolderOpen },
   { href: "/files", label: "Files", icon: Files },
-  { href: "/games", label: "Games", icon: Gamepad2 },
-];
-
-const extraLinks = [
-  { href: "/talk", label: "Talk", icon: Radio },
   { href: "/settings/tools", label: "Tools", icon: Wrench },
   { href: "/settings/memories", label: "Memories", icon: Brain },
-  { href: "/settings/routines", label: "Routines", icon: Terminal },
-  { href: "/settings/mcp", label: "MCP Servers", icon: Plug },
   { href: "/settings/tasks", label: "Agent Tasks", icon: Bot },
+];
+
+const moreLinks = [
+  { href: "/settings/providers", label: "Models & Providers", icon: Settings2 },
+  { href: "/games", label: "Games", icon: Gamepad2 },
+  { href: "/talk", label: "Talk", icon: Radio },
+  { href: "/settings/routines", label: "Routines", icon: Terminal },
+  { href: "/settings/skills", label: "Skills", icon: Sparkles },
+  { href: "/settings/mcp", label: "MCP Servers", icon: Plug },
+  { href: "/settings/webhooks", label: "Webhooks", icon: Webhook },
   { href: "/settings/scheduled-tasks", label: "Scheduled Tasks", icon: Clock },
   { href: "/settings/watcher", label: "File Watcher", icon: Eye },
   { href: "/settings/backup", label: "Backup", icon: Shield },
   { href: "/settings/usage", label: "Usage", icon: BarChart3 },
-  { href: "/settings/profile", label: "Profile", icon: User },
 ];
 
 export function AppSidebar() {
@@ -88,7 +93,7 @@ function DesktopSidebar() {
           onClick={() => newChatMutation.mutate()}
           disabled={newChatMutation.isPending}
           className={cn(
-            "flex items-center rounded-lg disabled:opacity-50 transition-colors",
+            "flex items-center rounded-lg disabled:opacity-50 transition-colors cursor-pointer",
             isDesktopSidebarCollapsed
               ? ""
               : "gap-2 px-1.5 py-1 hover:bg-sidebar-accent",
@@ -118,7 +123,7 @@ function DesktopSidebar() {
           <Button
             size="icon"
             variant="ghost"
-            className="h-8 w-8"
+            className="h-8 w-8 cursor-pointer"
             onClick={toggleDesktopSidebar}
             title="Expand sidebar"
             aria-label="Expand sidebar"
@@ -130,7 +135,7 @@ function DesktopSidebar() {
             <Button
               size="icon"
               variant="ghost"
-              className="h-8 w-8"
+              className="h-8 w-8 cursor-pointer"
               disabled={newChatMutation.isPending}
               onClick={() => newChatMutation.mutate()}
               title="New chat"
@@ -141,7 +146,7 @@ function DesktopSidebar() {
             <Button
               size="icon"
               variant="ghost"
-              className="h-8 w-8"
+              className="h-8 w-8 cursor-pointer"
               onClick={toggleDesktopSidebar}
               title="Collapse sidebar"
               aria-label="Collapse sidebar"
@@ -157,7 +162,7 @@ function DesktopSidebar() {
             <Button
               size="icon"
               variant="ghost"
-              className="h-8 w-8"
+              className="h-8 w-8 cursor-pointer"
               disabled={newChatMutation.isPending}
               onClick={() => newChatMutation.mutate()}
               title="New chat"
@@ -165,7 +170,7 @@ function DesktopSidebar() {
             >
               <Pen className="h-4 w-4" />
             </Button>
-          {primaryLinks.slice(0, 3).map(({ href, label, icon: Icon }) => (
+          {primaryLinks.slice(0, 4).map(({ href, label, icon: Icon }) => (
             <Link
               key={href}
               href={href}
@@ -193,23 +198,24 @@ function DesktopSidebar() {
           </div>
 
           <nav className="flex flex-col gap-0.5 border-t border-sidebar-border px-2 py-2.5">
-            {/* Collapse toggle — top of all links */}
+
+            {/* More — expands secondary/admin links */}
             <button
               type="button"
               onClick={() => setExtraExpanded((v) => !v)}
               aria-expanded={extraExpanded}
               className={cn(
-                "flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors duration-150",
+                "flex items-center gap-2 rounded-md px-2 py-1.25 text-sm text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors duration-150",
                 extraExpanded && "text-sidebar-foreground/80",
               )}
             >
               <ChevronUp
                 className={cn(
-                  "h-3.5 w-3.5 transition-transform duration-500",
+                  "h-4 w-4 transition-transform duration-500",
                   extraExpanded && "rotate-180",
                 )}
               />
-              <span>{extraExpanded ? "Less" : `More (${extraLinks.length})`}</span>
+              <span>{extraExpanded ? "Less" : `More (${moreLinks.length})`}</span>
             </button>
 
             {/* Primary links — always visible */}
@@ -227,7 +233,7 @@ function DesktopSidebar() {
               </Link>
             ))}
 
-            {/* Extra links — collapsible */}
+            {/* More links — collapsible */}
             <div
               className={cn(
                 "overflow-hidden transition-all duration-150 ease-in-out",
@@ -237,7 +243,7 @@ function DesktopSidebar() {
               )}
             >
               <div className="flex flex-col gap-0.5 pt-0.5">
-                {extraLinks.map(({ href, label, icon: Icon }) => (
+                {moreLinks.map(({ href, label, icon: Icon }) => (
                   <Link
                     key={href}
                     href={href}

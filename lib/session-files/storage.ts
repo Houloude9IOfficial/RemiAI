@@ -739,6 +739,8 @@ const MIME_BY_EXT: Record<string, string> = {
   ".gif": "image/gif",
   ".webp": "image/webp",
   ".avif": "image/avif",
+  ".heic": "image/heic",
+  ".heif": "image/heif",
   ".ico": "image/x-icon",
   ".pdf": "application/pdf",
   ".zip": "application/zip",

@@ -215,6 +215,26 @@
   background-attachment: fixed;
 }
 
+/* ------------------------------------------------------------------ */
+/* Floating-card app shell canvas                                     */
+/* ------------------------------------------------------------------ */
+/* The soft gradient the rounded app card floats on. Tinted with the
+   user's accent color (via --primary) so it adapts to every accent preset
+   and both theme variants — no hardcoded palette. */
+.shell-canvas {
+  background:
+    radial-gradient(900px 480px at 18% -10%, color-mix(in oklab, var(--primary) 7%, transparent), transparent 70%),
+    radial-gradient(1000px 620px at 85% 115%, color-mix(in oklab, var(--primary) 5%, transparent), transparent 70%),
+    var(--background);
+}
+
+.dark .shell-canvas {
+  background:
+    radial-gradient(1000px 560px at 50% -14%, color-mix(in oklab, var(--primary) 10%, transparent), transparent 72%),
+    radial-gradient(900px 700px at 90% 120%, color-mix(in oklab, var(--primary) 7%, transparent), transparent 68%),
+    var(--background);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -744,6 +764,23 @@
 
 .animate-fade-in {
   animation: fade-in 0.25s ease-out;
+}
+
+@keyframes fade-in-opacity {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Opacity-only entrance for full-height containers (chat skeleton, empty
+   state) that exactly fill their scroll parent — the translateY(8px) in
+   fade-in would push their bottom edge past the container and flash a
+   scrollbar for the duration of the animation. */
+.animate-fade-in-opacity {
+  animation: fade-in-opacity 0.25s ease-out;
 }
 
 .animate-slide-in {

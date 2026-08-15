@@ -2,6 +2,7 @@ import React from "react";
 import Markdown from "markdown-to-jsx";
 import hljs from "highlight.js";
 import { cn } from "@/lib/utils";
+import { ImagePreview } from "./ImagePreview";
 
 interface MarkdownRendererProps {
   content: string;
@@ -172,19 +173,22 @@ export function MarkdownRenderer({ content, className, isStreaming }: MarkdownRe
             ),
 
             // -- Paragraphs
-            p: ({ children, ...props }: any) => (
+            // markdown-to-jsx passes `className: undefined` in props for plain
+            // paragraphs (and real classes for raw HTML <p class="...">).
+            // Destructure it OUT so the spread below cannot clobber our own
+            // className — previously the styling was silently dropped and the
+            // rendered element showed className={undefined}.
+            p: ({ children, className: _pClassName, ...props }: any) => (
               <p className="mb-3 last:mb-0 leading-relaxed" {...props}>{children}</p>
             ),
 
-            // -- Images
-            img: ({ src, alt, ...props }: any) => (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+            // -- Images — rendered with download / copy / open-in-new-tab controls
+            img: ({ src, alt }: any) => (
+              <ImagePreview
                 src={src}
                 alt={alt ?? ""}
-                className="max-w-full rounded-lg border border-border/50 my-3"
-                loading="lazy"
-                {...props}
+                className="my-3"
+                imgClassName="max-w-full rounded-lg border border-border/50"
               />
             ),
 
