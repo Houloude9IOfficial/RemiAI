@@ -181,6 +181,7 @@ export function ChatInput({
   const [isDragging, setIsDragging] = useState(false);
   const dragCounterRef = useRef(0);
   const [bashMode, setBashMode] = useState<"sandboxed" | "full">("sandboxed");
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   // Status-capability chip (code execution) that the user has dismissed via
   // its X. Persisted so the preference survives reloads; re-showing is one
   // click in the "+" menu. Purely cosmetic — it never changes the server-side
@@ -921,18 +922,19 @@ export function ChatInput({
             )}
           >
             {/* "+" — attach / mode / capability menu */}
-            <DropdownMenu>
+            <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
               <DropdownMenuTrigger
                 type="button"
                 disabled={disabled || isStreaming}
                 className={cn(
-                  "flex items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                  "flex items-center cursor-pointer justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
                   iconBtn,
                   (disabled || isStreaming) && "pointer-events-none opacity-40",
                 )}
                 aria-label="Add photos, files, or capabilities"
               >
-                <Plus className="h-4 w-4" />
+                {/* rotate plus on dropdown open */}
+                <Plus className={`"h-6 w-6 transition-all ${dropdownOpen ? "transform rotate-45" : ""}`} /> 
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" side="top" sideOffset={6} className="w-64">
                 <DropdownMenuGroup>
