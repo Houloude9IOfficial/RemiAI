@@ -254,8 +254,7 @@ allow creating/editing mcp servers with json:
   }
 }
 
-show images images of results too, similar to google search.
-find a better icon for projects tab
+show images images of results too, similar to google search, but not always, only when the AI thinks it's relevant, and also allow to click on the image to open it in a new tab.
 
 bash_execute always fails. fix it.
 
