@@ -240,3 +240,23 @@ the ai users bash to write/edit/delete files, but it should use bash for command
 <!-- redesign tools section to be more convenient and user friendly, and also allow to search for tools by name or description, and also allow to filter tools by category. -->
 
 <!-- on open of site if no chat id, do not redirect to an old chat, instead go to new chat. (done) -->
+
+allow creating/editing mcp servers with json:
+{
+  "mcpServers": {
+    "ntfy": {
+      "command": "npx",
+      "args": ["-y", "..."],
+      "env": {
+        "ENVVAR": "VARVALUE"
+      }
+    }
+  }
+}
+
+show images images of results too, similar to google search.
+find a better icon for projects tab
+
+bash_execute always fails. fix it.
+
+create a tool to allow sending push notifications to the user via web/app.

@@ -57,6 +57,13 @@ import { createMcpToolsManager } from "@/lib/mcp/tools";
 import { queryRecentChanges } from "@/lib/fs/file-index";
 import { estimateTokenCount, normaliseTool } from "@/lib/utils";
 import { substituteTemplate } from "./template";
+import {
+  createAutomationRun,
+  finishAutomationRun,
+  getAutomationRun,
+  scheduleAutomationRetry,
+  startAutomationRun,
+} from "@/lib/runs/automation";
 
 export type WebhookRow = typeof webhooks.$inferSelect;
 
@@ -107,11 +114,14 @@ export async function processWebhookEvent(opts: {
   webhook: WebhookRow;
   eventId: number;
   payload: unknown;
+  automationRunId?: number;
   headers: Record<string, string>;
   query: Record<string, string>;
 }): Promise<{ result?: string; error?: string }> {
   const { webhook, eventId, payload, headers, query } = opts;
   let closeMcpClients: (() => Promise<void>) | undefined;
+  let automationRunId = opts.automationRunId;
+  let steeringInstruction = "";
 
   try {
     await db
@@ -163,6 +173,29 @@ export async function processWebhookEvent(opts: {
       return { error };
     }
 
+    if (!automationRunId) {
+      const run = await createAutomationRun({
+        conversationId: conversation.id,
+        kind: "webhook",
+        sourceId: eventId,
+        name: `Webhook: ${webhook.name}`,
+        task: webhook.systemPrompt || `Process webhook event #${eventId}`,
+      });
+      automationRunId = run.id;
+    }
+    const existingRun = await getAutomationRun(automationRunId);
+    if (existingRun?.control === "stop" || existingRun?.status === "cancelled") {
+      markEventFailed(eventId, "Cancelled by user");
+      return { error: "Cancelled by user" };
+    }
+    if (existingRun?.control === "steer" && existingRun.controlMessage) {
+      steeringInstruction = existingRun.controlMessage;
+    }
+    await startAutomationRun(automationRunId);
+    await db.update(webhookEvents)
+      .set({ automationRunId, status: "processing" })
+      .where(eq(webhookEvents.id, eventId)).run();
+
     // ── Build the FULL tool set (MCP + everything else) ──────────────
     const enabledMcpServers = await db
       .select()
@@ -189,7 +222,7 @@ export async function processWebhookEvent(opts: {
         Promise.resolve(buildFileIndexTools()),
         Promise.resolve(buildTodoTools(conversation.id)),
         buildProfileTools(),
-        buildRoutinesTools(),
+        buildRoutinesTools(conversation.id),
         buildScheduleTool(conversation.id),
       ]);
 
@@ -255,10 +288,10 @@ export async function processWebhookEvent(opts: {
       eventId,
       webhookName: webhook.name,
     };
-    const triggerInstructions = substituteTemplate(
+    const triggerInstructions = `${substituteTemplate(
       webhook.systemPrompt.trim() || DEFAULT_TRIGGER_INSTRUCTIONS,
       context,
-    );
+    )}${steeringInstruction ? `\n\nAdditional user steering instruction:\n${steeringInstruction}` : ""}`;
     const payloadText = formatPayload(payload);
     const headersText = truncate(JSON.stringify(context.headers, null, 2), HEADERS_PROMPT_LIMIT);
     const queryText = Object.keys(query).length > 0
@@ -348,12 +381,39 @@ export async function processWebhookEvent(opts: {
       })
       .where(eq(webhooks.id, webhook.id))
       .run();
+    if (automationRunId) {
+      await finishAutomationRun(automationRunId, {
+        status: "completed",
+        result: fullText,
+        checkpoint: { phase: "completed", eventId },
+      });
+    }
 
     return { result: fullText };
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     console.error(`[webhooks] Event #${eventId} ("${webhook.name}") failed:`, errorMsg);
     markEventFailed(eventId, errorMsg);
+    const canRetry = automationRunId
+      ? await scheduleAutomationRetry(automationRunId, errorMsg)
+      : false;
+    if (canRetry && automationRunId) {
+      const retryRun = await getAutomationRun(automationRunId);
+      const delayMs = retryRun?.nextRetryAt
+        ? Math.max(0, new Date(retryRun.nextRetryAt).getTime() - Date.now())
+        : 2_000;
+      setTimeout(() => {
+        void processWebhookEvent({ ...opts, automationRunId });
+      }, delayMs);
+      return { error: `Webhook run failed; retry ${retryRun?.attempt ?? 1} scheduled.` };
+    }
+    if (automationRunId) {
+      await finishAutomationRun(automationRunId, {
+        status: "failed",
+        error: errorMsg,
+        checkpoint: { phase: "failed", eventId },
+      }).catch(() => {});
+    }
     try {
       await db
         .update(webhooks)

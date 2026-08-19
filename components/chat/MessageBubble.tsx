@@ -11,6 +11,7 @@ import { GeneratingIndicator } from "./GeneratingIndicator";
 import { FollowupSuggestions } from "./FollowupSuggestions";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { ImagePreview } from "./ImagePreview";
+import { SourceEvidenceCard } from "./SourceEvidenceCard";
 import {
   SessionFilesPresentCard,
   SessionFilesPresentLoading,
@@ -312,7 +313,8 @@ type Segment =
   | { type: "tool"; parts: UIMessage["parts"] }
   | { type: "visual"; part: UIMessage["parts"][number] }
   | { type: "sessionPresent"; part: UIMessage["parts"][number] }
-  | { type: "suggestions"; data: unknown };
+  | { type: "suggestions"; data: unknown }
+  | { type: "sources"; data: unknown };
 
 /**
  * Text this short between two tool calls is transitional filler (e.g.
@@ -418,9 +420,20 @@ function buildSegments(parts: UIMessage["parts"]): Segment[] {
         partOutput !== null &&
         typeof partOutput === "object" &&
         (partOutput as Record<string, unknown>).type === "suggestions";
+      const hasSources =
+        isComplete &&
+        partOutput !== undefined &&
+        partOutput !== null &&
+        typeof partOutput === "object" &&
+        Array.isArray((partOutput as Record<string, unknown>).sources) &&
+        ((partOutput as Record<string, unknown>).sources as unknown[]).length > 0;
 
       if (isSuggestions && isComplete) {
         segments.push({ type: "suggestions", data: partOutput });
+        continue;
+      }
+      if (hasSources) {
+        segments.push({ type: "sources", data: partOutput });
         continue;
       }
 
@@ -464,6 +477,7 @@ export function MessageBubble({
   isStreaming,
   onRegenerate,
   messagesAfter,
+  conversationId,
 }: {
   message: UIMessage;
   isStreaming?: boolean;
@@ -471,6 +485,8 @@ export function MessageBubble({
   onRegenerate?: (messageId: string) => void;
   /** Number of messages that come after this one (used by the regenerate confirm). */
   messagesAfter?: number;
+  /** Conversation id used by chat-scoped evidence export actions. */
+  conversationId?: number;
 }) {
   // ---- User messages ----
   if (message.role === "user") {
@@ -615,6 +631,12 @@ export function MessageBubble({
                 <SessionFilesPresentSegment
                   key={`present-${idx}`}
                   part={segment.part}
+                />
+              ) : segment.type === "sources" ? (
+                <SourceEvidenceCard
+                  key={`sources-${idx}`}
+                  data={segment.data}
+                  conversationId={conversationId}
                 />
               ) : (
                 <ToolCallGroup key={`tool-${idx}`} parts={segment.parts as any} />

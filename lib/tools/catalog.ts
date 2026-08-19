@@ -260,6 +260,18 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     togglable: false,
     requiresApiKey: false,
   },
+  // ── Notifications (builtin, always on, not togglable) ──
+  {
+    id: "notifications",
+    name: "App Notifications",
+    description:
+      "Send concise local notifications to the user's active RemiAI web/PWA or desktop app. Does not send email or SMS.",
+    toolNames: ["send_notification"],
+    category: "builtin",
+    subgroup: "Automation",
+    togglable: false,
+    requiresApiKey: false,
+  },
   // ── Web Fetch tool (builtin, always on, not togglable) ──
   {
     id: "web_fetch",

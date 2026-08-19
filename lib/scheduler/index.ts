@@ -44,11 +44,20 @@ import { createMcpToolsManager } from "@/lib/mcp/tools";
 import { queryRecentChanges } from "@/lib/fs/file-index";
 import { estimateTokenCount, normaliseTool } from "@/lib/utils";
 import { computeNextCronTime } from "./cron";
+import {
+  appendAutomationRunEvent,
+  createAutomationRun,
+  finishAutomationRun,
+  getAutomationRun,
+  scheduleAutomationRetry,
+  startAutomationRun,
+} from "@/lib/runs/automation";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
 export type ScheduledTaskRow = {
   id: number;
+  automationRunId: number | null;
   conversationId: number;
   triggerAt: string;
   task: string;
@@ -186,11 +195,38 @@ async function pollDueTasks() {
 export async function executeTask(task: ScheduledTaskRow) {
   console.log(`[scheduler] Executing task #${task.id}: "${task.task.slice(0, 60)}..."`);
 
-  // Mark as processing
-  await db
-    .update(scheduledTasks)
-    .set({ status: "processing" })
-    .where(eq(scheduledTasks.id, task.id));
+  let automationRunId = task.automationRunId ?? undefined;
+  let steeringInstruction = "";
+  try {
+    const existingRun = automationRunId ? await getAutomationRun(automationRunId) : undefined;
+    if (existingRun?.control === "stop" || existingRun?.status === "cancelled") {
+      return;
+    }
+    if (existingRun?.control === "steer" && existingRun.controlMessage) {
+      steeringInstruction = existingRun.controlMessage;
+    }
+    if (!automationRunId) {
+      const createdRun = await createAutomationRun({
+        conversationId: task.conversationId,
+        kind: "scheduled_task",
+        sourceId: task.id,
+        name: task.schedule ? "Recurring scheduled task" : "Scheduled task",
+        task: task.task,
+      });
+      automationRunId = createdRun.id;
+      await db.update(scheduledTasks)
+        .set({ automationRunId })
+        .where(eq(scheduledTasks.id, task.id));
+    }
+    await db
+      .update(scheduledTasks)
+      .set({ status: "processing" })
+      .where(eq(scheduledTasks.id, task.id));
+    await startAutomationRun(automationRunId);
+    await appendAutomationRunEvent(automationRunId, "execution_started", `Scheduled task #${task.id} started.`);
+  } catch (error) {
+    console.error(`[scheduler] Failed to initialize durable run for task #${task.id}:`, error);
+  }
 
   try {
     // Load conversation
@@ -250,7 +286,7 @@ export async function executeTask(task: ScheduledTaskRow) {
         Promise.resolve(buildFileIndexTools()),
         Promise.resolve(buildTodoTools(task.conversationId)),
         buildProfileTools(),
-        buildRoutinesTools(),
+        buildRoutinesTools(task.conversationId),
         buildScheduleTool(task.conversationId),
       ]);
 
@@ -320,7 +356,7 @@ export async function executeTask(task: ScheduledTaskRow) {
 
 You are being triggered by a scheduled task that the user asked you to do earlier.
 
-**Task:** ${task.task}
+**Task:** ${task.task}${steeringInstruction ? `\n\n**Additional steering:** ${steeringInstruction}` : ""}
 
 **Scheduled at:** ${task.triggerAt}
 **Current time:** ${new Date().toISOString()}
@@ -500,6 +536,13 @@ After completing the task, the user will receive a desktop notification with you
       notificationBus.publish(updatedTask);
     }
 
+    if (automationRunId) {
+      await finishAutomationRun(automationRunId, {
+        status: "completed",
+        result: fullText,
+        checkpoint: { phase: "completed", taskId: task.id },
+      });
+    }
     console.log(`[scheduler] Task #${task.id} completed successfully`);
 
     // Clean up MCP clients
@@ -511,21 +554,35 @@ After completing the task, the user will receive a desktop notification with you
     console.error(`[scheduler] Task #${task.id} failed:`, errorMsg);
 
     const now = new Date().toISOString();
+    const canRetry = automationRunId
+      ? await scheduleAutomationRetry(automationRunId, errorMsg)
+      : false;
+    const retryRun = automationRunId ? await getAutomationRun(automationRunId) : undefined;
     await db
       .update(scheduledTasks)
       .set({
-        status: "failed",
+        status: canRetry ? "pending" : "failed",
         error: errorMsg,
-        completedAt: now,
+        triggerAt: canRetry && retryRun?.nextRetryAt ? retryRun.nextRetryAt : task.triggerAt,
+        completedAt: canRetry ? null : now,
+        ...(automationRunId ? { automationRunId } : {}),
       })
       .where(eq(scheduledTasks.id, task.id));
+
+    if (automationRunId && !canRetry) {
+      await finishAutomationRun(automationRunId, {
+        status: "failed",
+        error: errorMsg,
+        checkpoint: { phase: "failed", taskId: task.id },
+      });
+    }
 
     // Notify about failure too
     const failedTask = {
       ...task,
-      status: "failed",
+      status: canRetry ? "processing" : "failed",
       error: errorMsg,
-      completedAt: now,
+      completedAt: canRetry ? null : now,
     } as ScheduledTaskRow;
     notificationBus.publish(failedTask);
   }

@@ -14,8 +14,17 @@ import { buildMediaTools } from "@/lib/media/tools";
 import { delayTool } from "@/lib/tools/delay";
 import { webFetchTool } from "@/lib/tools/web-fetch";
 import { buildTodoTools } from "@/lib/tools/todo";
+import { buildRoutinesTools } from "@/lib/tools/routines";
 import { truncateToolResult, estimateTokenCount, normaliseTool } from "@/lib/utils";
 import type { UserContext } from "@/lib/geo";
+import {
+  createAutomationRun,
+  finishAutomationRun,
+  getAutomationRun,
+  scheduleAutomationRetry,
+  startAutomationRun,
+  updateAutomationRunCheckpoint,
+} from "@/lib/runs/automation";
 
 // ---------------------------------------------------------------------------
 // Constants & types for agent chaining
@@ -51,6 +60,7 @@ interface AgentQueueItem {
   agentType: string;
   task: string;
   taskId: number;
+  runId: number;
   chainDepth: number;
   systemPromptOverride?: string;
   userContext?: UserContext;
@@ -107,6 +117,7 @@ class AgentQueue {
       item.chainDepth,
       item.systemPromptOverride,
       item.userContext,
+      item.runId,
     );
   }
 
@@ -218,7 +229,7 @@ async function buildAgentTools(
   userContext?: UserContext,
   conversationId?: number,
 ): Promise<Record<string, any>> {
-  const [fsTools, memoryTools, integrationTools, executionTools, docTools, mediaTools] =
+  const [fsTools, memoryTools, integrationTools, executionTools, docTools, mediaTools, routineTools] =
     await Promise.all([
       buildFilesystemTools(),
       buildMemoryTools(),
@@ -231,6 +242,7 @@ async function buildAgentTools(
       conversationId != null
         ? Promise.resolve(buildMediaTools(conversationId))
         : Promise.resolve({} as Record<string, any>),
+      buildRoutinesTools(conversationId),
     ]);
 
   // Normalise every tool to ensure inputSchema is present (SDK v7
@@ -244,6 +256,7 @@ async function buildAgentTools(
     ...executionTools,
     ...docTools,
     ...mediaTools,
+    ...routineTools,
     delay: delayTool,
     web_fetch: webFetchTool,
   };
@@ -266,6 +279,7 @@ async function runAgent(
   systemPromptOverride: string | undefined,
   taskRecordId: number,
   chainContext: ChainContext | null,
+  runId?: number,
 ): Promise<{
   text: string;
   inputTokens: number;
@@ -331,13 +345,13 @@ async function runAgent(
     const now = Date.now();
     // Throttle progress updates to every ~300ms to avoid excessive DB writes
     if (now - lastProgressUpdate > 300) {
-      await updateAgentProgress(taskRecordId, accumulatedText);
+      await updateAgentProgress(taskRecordId, accumulatedText, runId);
       lastProgressUpdate = now;
     }
   }
 
   // Final progress update
-  await updateAgentProgress(taskRecordId, accumulatedText);
+  await updateAgentProgress(taskRecordId, accumulatedText, runId);
 
   // Read usage from the stream (textStream is already consumed above,
   // so we use accumulatedText instead of stream.text which returns empty)
@@ -377,6 +391,7 @@ async function executeAgentExecution(
   chainDepth: number,
   systemPromptOverride?: string,
   userContext?: UserContext,
+  runId?: number,
 ): Promise<void> {
   try {
     const provider = await db
@@ -394,6 +409,9 @@ async function executeAgentExecution(
           completedAt: new Date().toISOString(),
         })
         .where(eq(agentTasks.id, taskId));
+      if (runId) {
+        await finishAutomationRun(runId, { status: "failed", error: "Provider not found" });
+      }
       return;
     }
 
@@ -406,6 +424,14 @@ async function executeAgentExecution(
 
     if (!taskRecord) {
       return;
+    }
+    if (runId) {
+      const durableRun = await getAutomationRun(runId);
+      if (durableRun?.control === "stop" || durableRun?.status === "cancelled") {
+        await db.update(agentTasks).set({ status: "failed", error: "Cancelled by user", completedAt: new Date().toISOString() }).where(eq(agentTasks.id, taskId)).run();
+        return;
+      }
+      await startAutomationRun(runId);
     }
 
     const model = getLanguageModel(provider, modelId);
@@ -427,6 +453,7 @@ async function executeAgentExecution(
       systemPromptOverride,
       taskId,
       chainContext,
+      runId,
     );
 
     // Update the conversation's token usage
@@ -448,9 +475,35 @@ async function executeAgentExecution(
         completedAt: new Date().toISOString(),
       })
       .where(eq(agentTasks.id, taskId));
+    if (runId) {
+      await finishAutomationRun(runId, {
+        status: "completed",
+        result: result.text,
+        checkpoint: { phase: "completed", taskId },
+      });
+    }
   } catch (err) {
     const errorMessage =
       err instanceof Error ? err.message : "Unknown error in background agent";
+    const canRetry = runId ? await scheduleAutomationRetry(runId, errorMessage) : false;
+    if (canRetry && runId) {
+      await db.update(agentTasks).set({ status: "queued", error: errorMessage }).where(eq(agentTasks.id, taskId));
+      const retryRun = await getAutomationRun(runId);
+      setTimeout(() => {
+        agentQueue.enqueue({
+          providerId,
+          modelId,
+          agentType,
+          task,
+          taskId,
+          runId,
+          chainDepth,
+          systemPromptOverride,
+          userContext,
+        });
+      }, retryRun?.nextRetryAt ? Math.max(0, new Date(retryRun.nextRetryAt).getTime() - Date.now()) : 2_000);
+      return;
+    }
     await db
       .update(agentTasks)
       .set({
@@ -459,6 +512,13 @@ async function executeAgentExecution(
         completedAt: new Date().toISOString(),
       })
       .where(eq(agentTasks.id, taskId));
+    if (runId) {
+      await finishAutomationRun(runId, {
+        status: "failed",
+        error: errorMessage,
+        checkpoint: { phase: "failed", taskId },
+      });
+    }
   }
 }
 
@@ -473,7 +533,7 @@ async function createTaskRecord(
   systemPromptOverride: string | null,
   chainContext: ChainContext | null,
   initialStatus: "queued" | "running" = "running",
-): Promise<number> {
+): Promise<{ taskId: number; runId: number }> {
   const record = await db
     .insert(agentTasks)
     .values({
@@ -493,7 +553,18 @@ async function createTaskRecord(
     throw new Error("Failed to create agent task record");
   }
 
-  return record.id;
+  const run = await createAutomationRun({
+    conversationId,
+    kind: "agent",
+    sourceId: record.id,
+    parentRunId: null,
+    name: `Agent: ${getAgentLabel(agentType)}`,
+    task,
+  });
+  await db.update(agentTasks)
+    .set({ automationRunId: run.id })
+    .where(eq(agentTasks.id, record.id)).run();
+  return { taskId: record.id, runId: run.id };
 }
 
 // ---------------------------------------------------------------------------
@@ -503,6 +574,7 @@ async function createTaskRecord(
 async function updateAgentProgress(
   taskId: number,
   progress: string,
+  runId?: number,
 ): Promise<void> {
   try {
     await db
@@ -510,6 +582,13 @@ async function updateAgentProgress(
       .set({ progress })
       .where(eq(agentTasks.id, taskId))
       .run();
+    if (runId) {
+      await updateAutomationRunCheckpoint(runId, {
+        phase: "executing",
+        taskId,
+        progress: progress.slice(-1_000),
+      });
+    }
   } catch {
     // Best-effort — progress is non-critical
   }
@@ -652,7 +731,7 @@ Sub-agents can spawn their own agents up to a chain depth of ${MAX_CHAIN_DEPTH}.
         // ── Create task record first (so children can reference it) ──
         // Background tasks start as "queued" and are picked up by the AgentQueue.
         // Blocking tasks start as "running" immediately.
-        taskId = await createTaskRecord(
+        const taskRecord = await createTaskRecord(
           convId,
           agent_type,
           task,
@@ -660,6 +739,8 @@ Sub-agents can spawn their own agents up to a chain depth of ${MAX_CHAIN_DEPTH}.
           context,
           wait ? "running" : "queued",
         );
+        taskId = taskRecord.taskId;
+        const runId = taskRecord.runId;
 
         // Build child chain context for the new agent
         const childChainContext: ChainContext = {
@@ -678,6 +759,7 @@ Sub-agents can spawn their own agents up to a chain depth of ${MAX_CHAIN_DEPTH}.
             agentType: agent_type,
             task,
             taskId,
+            runId,
             chainDepth: childChainDepth,
             systemPromptOverride: system_prompt_override,
             userContext: context.userContext,
@@ -715,6 +797,7 @@ Sub-agents can spawn their own agents up to a chain depth of ${MAX_CHAIN_DEPTH}.
           system_prompt_override,
           taskId,
           childChainContext,
+          runId,
         );
 
         // Track the sub-agent's token usage on the conversation
@@ -729,6 +812,12 @@ Sub-agents can spawn their own agents up to a chain depth of ${MAX_CHAIN_DEPTH}.
           .where(eq(conversations.id, convId));
 
         // Mark task as completed
+        await finishAutomationRun(runId, {
+          status: "completed",
+          result: result.text,
+          checkpoint: { phase: "completed", taskId },
+        });
+
         await completeTaskRecord(
           taskId,
           "completed",
@@ -803,6 +892,26 @@ export function buildMainSpawnAgentTool(
 // ---------------------------------------------------------------------------
 // Builder: get_agent_result tool — check on a background agent
 // ---------------------------------------------------------------------------
+
+export async function retryAgentTask(taskId: number, runId: number): Promise<void> {
+  const task = await db.select().from(agentTasks).where(eq(agentTasks.id, taskId)).get();
+  if (!task) throw new Error("Agent task no longer exists.");
+  const conversation = await db.select().from(conversations).where(eq(conversations.id, task.conversationId)).get();
+  if (!conversation?.providerId || !conversation.modelId) throw new Error("Conversation has no configured model.");
+  const selectedProvider = await db.select().from(providers).where(eq(providers.id, conversation.providerId)).get();
+  if (!selectedProvider) throw new Error("Provider no longer exists.");
+  await db.update(agentTasks).set({ status: "queued", error: null, completedAt: null }).where(eq(agentTasks.id, taskId)).run();
+  agentQueue.enqueue({
+    providerId: selectedProvider.id,
+    modelId: conversation.modelId,
+    agentType: task.agentType,
+    task: task.task,
+    taskId,
+    runId,
+    chainDepth: task.chainDepth,
+    systemPromptOverride: task.systemPromptOverride ?? undefined,
+  });
+}
 
 export function buildGetAgentResultTool() {
   return {

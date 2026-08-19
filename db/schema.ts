@@ -86,7 +86,12 @@ export const conversations = sqliteTable("conversations", {
     onDelete: "set null",
   }),
   modelId: text("model_id"),
-  mode: text("mode", { enum: ["chat", "goal", "plan"] }).notNull().default("chat"),
+  mode: text("mode", { enum: ["chat", "goal", "plan", "build"] }).notNull().default("chat"),
+  qualityPolicy: text("quality_policy", {
+    enum: ["fast", "balanced", "quality", "selected"],
+  })
+    .notNull()
+    .default("balanced"),
   bashMode: text("bash_mode", { enum: ["sandboxed", "full"] })
     .notNull()
     .default("sandboxed"),
@@ -120,6 +125,145 @@ export const toolConfigs = sqliteTable("tool_configs", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const buildRuns = sqliteTable(
+  "build_runs",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    conversationId: integer("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    sourceRunId: text("source_run_id"),
+    task: text("task").notNull(),
+    status: text("status", {
+      enum: ["running", "completed", "failed", "interrupted"],
+    })
+      .notNull()
+      .default("running"),
+    definitionOfDone: text("definition_of_done", { mode: "json" })
+      .$type<string[]>()
+      .notNull()
+      .default([]),
+    changedFiles: text("changed_files", { mode: "json" })
+      .$type<Array<Record<string, unknown>>>()
+      .notNull()
+      .default([]),
+    checks: text("checks", { mode: "json" })
+      .$type<Array<Record<string, unknown>>>()
+      .notNull()
+      .default([]),
+    checkpoint: text("checkpoint", { mode: "json" })
+      .$type<Record<string, unknown> | null>(),
+    resultArtifactId: integer("result_artifact_id"),
+    summary: text("summary").notNull().default(""),
+    error: text("error"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    completedAt: text("completed_at"),
+  },
+);
+
+export const artifacts = sqliteTable(
+  "artifacts",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    conversationId: integer("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    /** Trace/run identifier that produced this output. */
+    sourceRunId: text("source_run_id"),
+    type: text("type", {
+      enum: ["file", "visual", "document", "chart", "research", "code", "other"],
+    })
+      .notNull()
+      .default("file"),
+    title: text("title").notNull(),
+    /** Legacy artifact path retained for compatibility with older databases. */
+    legacyPath: text("path").notNull().default(""),
+    status: text("status", {
+      enum: ["completed", "partial", "failed"],
+    })
+      .notNull()
+      .default("completed"),
+    /** Relative path in the conversation's session sandbox, when applicable. */
+    sessionPath: text("session_path"),
+    fileSize: integer("file_size").notNull().default(0),
+    version: integer("version").notNull().default(1),
+    metadata: text("metadata", { mode: "json" })
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+);
+
+export const sources = sqliteTable(
+  "sources",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    conversationId: integer("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    sourceRunId: text("source_run_id"),
+    toolName: text("tool_name").notNull(),
+    sourceType: text("source_type", {
+      enum: ["web", "news", "local", "other"],
+    })
+      .notNull()
+      .default("web"),
+    url: text("url").notNull(),
+    title: text("title").notNull(),
+    publisher: text("publisher").notNull().default(""),
+    retrievedAt: text("retrieved_at").notNull(),
+    contentHash: text("content_hash").notNull().default(""),
+    publishedAt: text("published_at"),
+    qualityScore: integer("quality_score").notNull().default(0),
+    freshnessStatus: text("freshness_status", {
+      enum: ["fresh", "stale", "unknown"],
+    })
+      .notNull()
+      .default("unknown"),
+    extractionStatus: text("extraction_status", {
+      enum: ["complete", "partial", "failed", "unavailable"],
+    })
+      .notNull()
+      .default("unavailable"),
+    status: text("status", {
+      enum: ["available", "partial", "failed"],
+    })
+      .notNull()
+      .default("partial"),
+    metadata: text("metadata", { mode: "json" })
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+);
+
+export const sourceClaims = sqliteTable(
+  "source_claims",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    conversationId: integer("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    sourceRunId: text("source_run_id"),
+    claimText: text("claim_text").notNull(),
+    sourceIds: text("source_ids", { mode: "json" })
+      .$type<number[]>()
+      .notNull()
+      .default([]),
+    supportStatus: text("support_status", {
+      enum: ["supported", "partial", "unsupported", "disputed", "inference"],
+    })
+      .notNull()
+      .default("unsupported"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+);
 
 export const messages = sqliteTable(
   "messages",
@@ -176,6 +320,67 @@ export const fileIndex = sqliteTable(
   (t) => [unique().on(t.directoryId, t.relativePath)],
 );
 
+export const automationRuns = sqliteTable("automation_runs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  conversationId: integer("conversation_id")
+    .notNull()
+    .references(() => conversations.id, { onDelete: "cascade" }),
+  kind: text("kind", {
+    enum: ["routine", "scheduled_task", "webhook", "agent"],
+  }).notNull(),
+  sourceId: integer("source_id"),
+  parentRunId: integer("parent_run_id"),
+  name: text("name").notNull(),
+  task: text("task").notNull(),
+  status: text("status", {
+    enum: [
+      "queued",
+      "planning",
+      "executing",
+      "verifying",
+      "repairing",
+      "waiting",
+      "completed",
+      "partially_completed",
+      "failed",
+      "cancelled",
+    ],
+  }).notNull().default("queued"),
+  attempt: integer("attempt").notNull().default(0),
+  maxAttempts: integer("max_attempts").notNull().default(2),
+  checkpoint: text("checkpoint", { mode: "json" })
+    .$type<Record<string, unknown> | null>(),
+  result: text("result"),
+  error: text("error"),
+  control: text("control", {
+    enum: ["none", "stop", "retry", "steer"],
+  }).notNull().default("none"),
+  controlMessage: text("control_message"),
+  metadata: text("metadata", { mode: "json" })
+    .$type<Record<string, unknown>>()
+    .notNull()
+    .default({}),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  startedAt: text("started_at"),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  completedAt: text("completed_at"),
+  nextRetryAt: text("next_retry_at"),
+});
+
+export const automationRunEvents = sqliteTable("automation_run_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  runId: integer("run_id")
+    .notNull()
+    .references(() => automationRuns.id, { onDelete: "cascade" }),
+  eventType: text("event_type").notNull(),
+  message: text("message").notNull().default(""),
+  metadata: text("metadata", { mode: "json" })
+    .$type<Record<string, unknown>>()
+    .notNull()
+    .default({}),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const routines = sqliteTable("routines", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull().unique(),
@@ -190,6 +395,9 @@ export const routines = sqliteTable("routines", {
 
 export const routineLogs = sqliteTable("routine_logs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  automationRunId: integer("automation_run_id").references(() => automationRuns.id, {
+    onDelete: "set null",
+  }),
   routineId: integer("routine_id")
     .notNull()
     .references(() => routines.id, { onDelete: "cascade" }),
@@ -202,6 +410,9 @@ export const routineLogs = sqliteTable("routine_logs", {
 
 export const scheduledTasks = sqliteTable("scheduled_tasks", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  automationRunId: integer("automation_run_id").references(() => automationRuns.id, {
+    onDelete: "set null",
+  }),
   conversationId: integer("conversation_id")
     .notNull()
     .references(() => conversations.id, { onDelete: "cascade" }),
@@ -238,6 +449,9 @@ export const backupHistory = sqliteTable("backup_history", {
 
 export const agentTasks = sqliteTable("agent_tasks", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  automationRunId: integer("automation_run_id").references(() => automationRuns.id, {
+    onDelete: "set null",
+  }),
   conversationId: integer("conversation_id")
     .notNull()
     .references(() => conversations.id, { onDelete: "cascade" }),
@@ -372,6 +586,9 @@ export const skills = sqliteTable(
 
 export const webhookEvents = sqliteTable("webhook_events", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  automationRunId: integer("automation_run_id").references(() => automationRuns.id, {
+    onDelete: "set null",
+  }),
   webhookId: integer("webhook_id")
     .notNull()
     .references(() => webhooks.id, { onDelete: "cascade" }),

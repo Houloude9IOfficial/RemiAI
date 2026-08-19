@@ -13,6 +13,8 @@ import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { messages } from "@/db/schema";
 import type { UIMessage, UIMessageChunk } from "ai";
+import type { RunTrace } from "@/lib/observability/run-trace";
+
 
 const PERSIST_INTERVAL_MS = 2000;
 
@@ -21,6 +23,7 @@ export async function periodicallyPersistMessages(
   originalMessages: UIMessage[],
   chunkStream: ReadableStream<UIMessageChunk>,
   onStreamEnd?: () => Promise<void>,
+  trace?: RunTrace,
 ): Promise<void> {
   const reader = chunkStream.getReader();
 
@@ -33,6 +36,7 @@ export async function periodicallyPersistMessages(
   let lastPersistTime = Date.now();
 
   async function persistSnapshot() {
+    const persistStartedAt = performance.now();
     const snapshot: UIMessage = {
       id: messageId,
       role: "assistant",
@@ -56,6 +60,9 @@ export async function periodicallyPersistMessages(
         },
       });
 
+    trace?.dbQuery("persist_assistant_snapshot", persistStartedAt, {
+      partCount: parts.length,
+    });
     lastPersistTime = Date.now();
   }
 
@@ -74,6 +81,9 @@ export async function periodicallyPersistMessages(
       }
     }
   } catch (err) {
+    trace?.event("persistence.error", {
+      category: err instanceof Error ? err.name : "UnknownError",
+    });
     console.error("Periodic persist stream error:", err);
   } finally {
     // Final persist: whether the stream completed cleanly or errored,

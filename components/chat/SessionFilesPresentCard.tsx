@@ -20,6 +20,7 @@ type PresentedFile = {
 
 type PresentOutput = {
   type: "session_files";
+  artifactIds?: number[];
   message?: string | null;
   count: number;
   files: PresentedFile[];
@@ -27,6 +28,7 @@ type PresentOutput = {
 
 type PresentSingleOutput = {
   type: "session_file";
+  artifactId?: number | null;
   path: string;
   name: string;
   size: number | null;
@@ -93,7 +95,9 @@ function SingleFileCard({ data }: { data: PresentSingleOutput }) {
           <p className="truncate text-sm font-medium text-foreground">
             {data.message || `Opened ${name}`}
           </p>
-          <p className="truncate text-[11px] text-muted-foreground">{data.path}</p>
+          <p className="truncate text-[11px] text-muted-foreground">
+            {data.path} · {data.artifactId ? "Saved in this chat" : "Session file"}
+          </p>
         </div>
         <a
           href={data.url}
@@ -168,6 +172,11 @@ function FilesCard({ data }: { data: PresentOutput }) {
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-foreground">
             {data.message || "Session files are ready"}
+          </p>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">
+            {data.artifactIds && data.artifactIds.length > 0
+              ? `${data.artifactIds.length} output${data.artifactIds.length === 1 ? "" : "s"} saved in this chat`
+              : "Available in this chat's session files"}
           </p>
         </div>
         <button

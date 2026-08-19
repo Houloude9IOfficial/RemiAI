@@ -131,7 +131,8 @@ export const createRoutineTool = {
 /**
  * Run a routine by name immediately and get its output.
  */
-export const runRoutineTool = {
+function buildRunRoutineTool(conversationId?: number) {
+  const runRoutineTool = {
   description: `Execute a saved routine by name and return its result (stdout, stderr, exit code, duration).`,
 
   parameters: z.object({
@@ -169,7 +170,9 @@ export const runRoutineTool = {
       });
     }
 
-    const { result } = await executeRoutine(routine.id, timeout ?? 30_000);
+    const { result, automationRunId } = await executeRoutine(routine.id, timeout ?? 30_000, {
+      conversationId,
+    });
 
     return truncateToolResult({
       type: "routine_result",
@@ -179,9 +182,12 @@ export const runRoutineTool = {
       exitCode: result.exitCode,
       timedOut: result.timedOut,
       duration: `${result.durationMs}ms`,
+      automation_run_id: automationRunId ?? null,
     });
   },
-};
+  };
+  return runRoutineTool;
+}
 
 /**
  * List all saved routines with their status.
@@ -429,7 +435,7 @@ export const getRoutineLogsTool = {
  * the "routines" tool config in settings. Disabled by default.
  * Matches the pattern used by buildExecutionTools.
  */
-export async function buildRoutinesTools(): Promise<Record<string, any>> {
+export async function buildRoutinesTools(conversationId?: number): Promise<Record<string, any>> {
   const config = await db
     .select()
     .from(toolConfigs)
@@ -442,7 +448,7 @@ export async function buildRoutinesTools(): Promise<Record<string, any>> {
 
   return {
     create_routine: createRoutineTool,
-    run_routine: runRoutineTool,
+    run_routine: buildRunRoutineTool(conversationId),
     list_routines: listRoutinesTool,
     update_routine: updateRoutineTool,
     delete_routine: deleteRoutineTool,

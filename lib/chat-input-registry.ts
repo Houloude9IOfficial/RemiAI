@@ -12,6 +12,12 @@
  */
 let chatInput: HTMLTextAreaElement | null = null;
 
+export const CHAT_INPUT_PREFILL_EVENT = "remi:chat-input:prefill";
+
+export type ChatInputPrefillDetail = {
+  text: string;
+};
+
 /** Register the mounted chat input. */
 export function registerChatInput(el: HTMLTextAreaElement): void {
   chatInput = el;
@@ -30,4 +36,14 @@ export function unregisterChatInput(el: HTMLTextAreaElement): void {
 /** Focus the chat input if one is currently mounted. */
 export function focusChatInput(): void {
   chatInput?.focus();
+}
+
+/** Prefill the mounted composer without automatically sending a message. */
+export function dispatchChatInputPrefill(text: string): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent<ChatInputPrefillDetail>(CHAT_INPUT_PREFILL_EVENT, {
+      detail: { text },
+    }),
+  );
 }

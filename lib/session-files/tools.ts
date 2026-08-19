@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { truncateToolResult } from "@/lib/utils";
+import { recordSessionFileArtifact } from "@/lib/artifacts/storage";
 import {
   listSessionFiles,
   readSessionFile,
@@ -144,6 +145,7 @@ const sessionPresentFileSchema = z.object({
  */
 export function buildSessionFileTools(
   conversationId: number,
+  options: { sourceRunId?: string } = {},
 ): Record<string, any> {
   const sandbox = {
     list: (relPath: string | null) => listSessionFiles(conversationId, relPath),
@@ -256,6 +258,7 @@ export function buildSessionFileTools(
           created: result.created,
           linesAdded: result.linesAdded,
           linesRemoved: result.linesRemoved,
+          ...(result.diffPreview ? { diffPreview: result.diffPreview } : {}),
           createdDirectories: result.createdDirectories,
         };
       },
@@ -271,6 +274,7 @@ export function buildSessionFileTools(
             bytesChanged: result.bytesChanged,
             linesAdded: result.linesAdded,
             linesRemoved: result.linesRemoved,
+            ...(result.diffPreview ? { diffPreview: result.diffPreview } : {}),
           };
         }
         return truncateToolResult(result);
@@ -331,8 +335,25 @@ export function buildSessionFileTools(
             availableFiles: all.map((e) => e.path),
           });
         }
+        let artifactId: number | undefined;
+        try {
+          const artifact = await recordSessionFileArtifact({
+            conversationId,
+            sourceRunId: options.sourceRunId,
+            path: target.path,
+            name: target.name,
+            size: target.size,
+            message,
+          });
+          artifactId = artifact?.id;
+        } catch (error) {
+          // Artifact indexing must not prevent the user from opening a valid
+          // session file if a legacy database has not migrated yet.
+          console.warn("[artifacts] Failed to record session file:", error);
+        }
         return truncateToolResult({
           type: "session_file" as const,
+          artifactId: artifactId ?? null,
           path: target.path,
           name: target.name,
           size: target.size,
@@ -357,8 +378,31 @@ export function buildSessionFileTools(
             ? all.filter((f) => paths.includes(f.path))
             : all
         ).filter((f) => f.isFile);
+        let artifactIds: number[] = [];
+        try {
+          const recorded = await Promise.all(
+            presented.map((entry) =>
+              recordSessionFileArtifact({
+                conversationId,
+                sourceRunId: options.sourceRunId,
+                path: entry.path,
+                name: entry.name,
+                size: entry.size,
+                message,
+              }),
+            ),
+          );
+          artifactIds = recorded.flatMap((artifact) =>
+            artifact?.id ? [artifact.id] : [],
+          );
+        } catch (error) {
+          // Keep the file presentation usable even if metadata persistence is
+          // unavailable during an upgrade or an interrupted database start.
+          console.warn("[artifacts] Failed to record session files:", error);
+        }
         return truncateToolResult({
           type: "session_files" as const,
+          artifactIds,
           message: message ?? null,
           count: presented.length,
           files: presented.map((e) => toModelEntry(e, conversationId)),

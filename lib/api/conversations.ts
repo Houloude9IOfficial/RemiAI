@@ -6,6 +6,7 @@ export type Conversation = {
   providerId: number | null;
   modelId: string | null;
   mode: string;
+  qualityPolicy: "fast" | "balanced" | "quality" | "selected";
   bashMode: "sandboxed" | "full";
   totalInputTokens: number;
   totalOutputTokens: number;
@@ -56,7 +57,14 @@ export const conversationsApi = {
 
   update: (
     id: number,
-    input: Partial<{ title: string; providerId: number | null; modelId: string | null; mode: string; bashMode: "sandboxed" | "full" }>,
+    input: Partial<{
+      title: string;
+      providerId: number | null;
+      modelId: string | null;
+      mode: string;
+      qualityPolicy: "fast" | "balanced" | "quality" | "selected";
+      bashMode: "sandboxed" | "full";
+    }>,
   ): Promise<Conversation> =>
     fetch(`/api/conversations/${id}`, {
       method: "PATCH",

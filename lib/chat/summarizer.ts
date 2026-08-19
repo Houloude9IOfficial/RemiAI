@@ -3,6 +3,7 @@ import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { conversations, messages as messagesTable, providers } from "@/db/schema";
 import { getLanguageModel } from "@/lib/providers/factory";
+import { createRunTrace } from "@/lib/observability/run-trace";
 
 /**
  * Rolling conversation summarizer.
@@ -120,10 +121,20 @@ export async function summarizeConversationBackground(opts: {
   provider: ProviderRow;
   modelId: string;
   untilCount: number;
+  parentTraceId?: string;
 }): Promise<void> {
+  const trace = createRunTrace({
+    kind: "background-summary",
+    conversationId: opts.conversationId,
+    parentTraceId: opts.parentTraceId,
+  });
+  trace.event("background.started");
   try {
     const { conversationId, provider, modelId, untilCount } = opts;
-    if (untilCount <= 0) return;
+    if (untilCount <= 0) {
+      trace.finish("cancelled", { phase: "no_messages" });
+      return;
+    }
 
     const rows = (await db
       .select({ role: messagesTable.role, parts: messagesTable.parts })
@@ -133,7 +144,10 @@ export async function summarizeConversationBackground(opts: {
       .limit(untilCount)
       .all()) as Array<{ role: string; parts: unknown[] }>;
 
-    if (rows.length === 0) return;
+    if (rows.length === 0) {
+      trace.finish("cancelled", { phase: "no_messages" });
+      return;
+    }
 
     // Flatten into a compact transcript, capped so the summarizer call stays
     // cheap no matter how huge the earlier segment was.
@@ -143,7 +157,10 @@ export async function summarizeConversationBackground(opts: {
       if (transcript.length + line.length > MAX_INPUT_CHARS) break;
       transcript += `${line}\n`;
     }
-    if (!transcript.trim()) return;
+    if (!transcript.trim()) {
+      trace.finish("cancelled", { phase: "empty_transcript" });
+      return;
+    }
 
     const model = getLanguageModel(provider, modelId);
     const result = await generateText({
@@ -151,17 +168,38 @@ export async function summarizeConversationBackground(opts: {
       system: SUMMARY_SYSTEM_PROMPT,
       messages: [{ role: "user", content: transcript }],
       maxOutputTokens: MAX_OUTPUT_TOKENS,
+      onLanguageModelCallStart: ({ callId, provider: modelProvider, modelId }) => {
+        trace.modelCallStart({ callId, provider: modelProvider, modelId });
+      },
+      onLanguageModelCallEnd: ({ callId, provider: modelProvider, modelId, usage, finishReason, performance }) => {
+        trace.modelCallEnd({
+          callId,
+          provider: modelProvider,
+          modelId,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          responseTimeMs: performance.responseTimeMs,
+          timeToFirstOutputMs: performance.timeToFirstOutputMs,
+          finishReason,
+        });
+      },
     });
 
     const summary = result.text.trim();
-    if (!summary) return;
+    if (!summary) {
+      trace.finish("partially_completed", { phase: "empty_summary" });
+      return;
+    }
 
     // Only claim coverage for the rows we ACTUALLY summarized. `untilCount` is
     // derived from the client's message count, which can briefly exceed the
     // persisted rows (the persist stream may not have flushed the tail yet);
     // claiming more than we loaded would drop messages the summary never saw.
     const covered = Math.min(untilCount, rows.length);
-    if (covered <= 0) return;
+    if (covered <= 0) {
+      trace.finish("partially_completed", { phase: "no_covered_messages" });
+      return;
+    }
 
     // Don't clobber a fresher summary if a previous background job won the race.
     const current = await db
@@ -169,7 +207,10 @@ export async function summarizeConversationBackground(opts: {
       .from(conversations)
       .where(eq(conversations.id, conversationId))
       .get();
-    if (current && current.summaryMessageCount >= covered) return;
+    if (current && current.summaryMessageCount >= covered) {
+      trace.finish("cancelled", { phase: "summary_already_fresh" });
+      return;
+    }
 
     await db
       .update(conversations)
@@ -179,7 +220,10 @@ export async function summarizeConversationBackground(opts: {
         updatedAt: new Date().toISOString(),
       })
       .where(eq(conversations.id, conversationId));
+    trace.finish("completed", { coveredMessages: covered, outputChars: summary.length });
   } catch (err) {
+    trace.providerError(err);
+    trace.finish("failed", { phase: "background_summary" });
     // Best-effort: a failed summary just means the history stays unsummarized.
     console.error("[summarizer] Failed to summarize conversation:", err);
   }

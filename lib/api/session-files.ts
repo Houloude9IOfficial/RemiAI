@@ -26,6 +26,24 @@ export type SessionFilesOverviewEntry = {
   totalSize: number;
 };
 
+export type ConversationArtifact = {
+  id: number;
+  conversationId: number;
+  sourceRunId: string | null;
+  type: string;
+  title: string;
+  status: "completed" | "partial" | "failed";
+  sessionPath: string | null;
+  fileSize: number;
+  version: number;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  openUrl: string | null;
+  downloadUrl: string | null;
+  conversationUrl: string;
+};
+
 // ---------------------------------------------------------------------------
 // Panel present event
 // ---------------------------------------------------------------------------
@@ -147,6 +165,13 @@ async function unwrap<T>(res: Response): Promise<T> {
 }
 
 export const sessionFilesApi = {
+  artifacts: (
+    conversationId: number,
+  ): Promise<{ conversationId: number; artifacts: ConversationArtifact[] }> =>
+    fetch(`/api/conversations/${conversationId}/artifacts`).then((res) =>
+      unwrap<{ conversationId: number; artifacts: ConversationArtifact[] }>(res),
+    ),
+
   list: (conversationId: number): Promise<SessionFilesList> =>
     fetch(base(conversationId)).then((res) => unwrap<SessionFilesList>(res)),
 

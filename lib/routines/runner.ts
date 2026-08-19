@@ -1,12 +1,18 @@
 import { spawn } from "node:child_process";
-import path from "node:path";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { routines, routineLogs } from "@/db/schema";
+import { automationRuns, routines, routineLogs } from "@/db/schema";
 import {
   createSandboxDir,
   cleanupSandboxDir,
 } from "@/lib/tools/exec-sandbox";
+import {
+  createAutomationRun,
+  finishAutomationRun,
+  getAutomationRun,
+  scheduleAutomationRetry,
+  startAutomationRun,
+} from "@/lib/runs/automation";
 
 // ---------------------------------------------------------------------------
 // Execution result type
@@ -201,10 +207,16 @@ function spawnSubprocess(
  * Execute a routine and store the result in the routine_logs table.
  * Returns the routine log record ID.
  */
+export type RoutineExecutionOptions = {
+  conversationId?: number;
+  automationRunId?: number;
+};
+
 export async function executeRoutine(
   routineId: number,
   timeoutMs: number = 30_000,
-): Promise<{ logId: number; result: ActionResult }> {
+  options: RoutineExecutionOptions = {},
+): Promise<{ logId: number; result: ActionResult; automationRunId?: number }> {
   // Get the routine
   const routine = await db
     .select()
@@ -216,16 +228,47 @@ export async function executeRoutine(
     throw new Error(`Routine not found: ${routineId}`);
   }
 
+  let automationRunId = options.automationRunId;
+  if (options.conversationId && !automationRunId) {
+    const run = await createAutomationRun({
+      conversationId: options.conversationId,
+      kind: "routine",
+      sourceId: routine.id,
+      name: `Routine: ${routine.name}`,
+      task: routine.description || `Run routine ${routine.name}`,
+    });
+    automationRunId = run.id;
+  }
+  if (automationRunId) {
+    const existingRun = await getAutomationRun(automationRunId);
+    if (existingRun?.control === "stop" || existingRun?.status === "cancelled") {
+      return {
+        logId: 0,
+        result: { stdout: "", stderr: "Cancelled by user", exitCode: -1, timedOut: false, durationMs: 0 },
+        automationRunId,
+      };
+    }
+    await startAutomationRun(automationRunId);
+  }
+
   // Create log entry
   const log = await db
     .insert(routineLogs)
     .values({
+      automationRunId: automationRunId ?? null,
       routineId: routine.id,
       status: "running" as const,
       startedAt: new Date().toISOString(),
     })
     .returning()
     .get();
+
+  if (automationRunId) {
+    await db.update(automationRuns).set({
+      checkpoint: { phase: "executing", routineId: routine.id, logId: log.id },
+      updatedAt: new Date().toISOString(),
+    }).where(eq(automationRuns.id, automationRunId)).run();
+  }
 
   try {
     const result = await runJavaScript(routine.code, timeoutMs);
@@ -245,7 +288,28 @@ export async function executeRoutine(
       .where(eq(routineLogs.id, log.id))
       .run();
 
-    return { logId: log.id, result };
+    if (automationRunId && status === "failed") {
+      const canRetry = await scheduleAutomationRetry(automationRunId, `Exit code: ${result.exitCode}`);
+      if (canRetry) {
+        const retryRun = await getAutomationRun(automationRunId);
+        const delayMs = retryRun?.nextRetryAt
+          ? Math.max(0, new Date(retryRun.nextRetryAt).getTime() - Date.now())
+          : 2_000;
+        setTimeout(() => {
+          void executeRoutine(routineId, timeoutMs, { ...options, automationRunId });
+        }, delayMs);
+        return { logId: log.id, result, automationRunId };
+      }
+    }
+    if (automationRunId) {
+      await finishAutomationRun(automationRunId, {
+        status: status === "completed" ? "completed" : "failed",
+        result: result.stdout,
+        error: status === "failed" ? `Exit code: ${result.exitCode}` : null,
+        checkpoint: { phase: status, routineId: routine.id, logId: log.id },
+      });
+    }
+    return { logId: log.id, result, automationRunId };
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
 
@@ -259,6 +323,13 @@ export async function executeRoutine(
       .where(eq(routineLogs.id, log.id))
       .run();
 
+    if (automationRunId) {
+      await finishAutomationRun(automationRunId, {
+        status: "failed",
+        error: errorMessage,
+        checkpoint: { phase: "failed", routineId: routine.id, logId: log.id },
+      });
+    }
     return {
       logId: log.id,
       result: {
@@ -268,6 +339,7 @@ export async function executeRoutine(
         timedOut: false,
         durationMs: 0,
       },
+      automationRunId,
     };
   }
 }

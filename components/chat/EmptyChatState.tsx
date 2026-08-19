@@ -4,9 +4,50 @@ import { motion } from "framer-motion";
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ChatStatus } from "ai";
-import { Loader2 } from "lucide-react";
+import {
+  BarChart3,
+  CalendarClock,
+  Code2,
+  FileText,
+  Loader2,
+  Search,
+  type LucideIcon,
+} from "lucide-react";
 import { preferencesApi } from "@/lib/api/preferences";
 import { ChatInput, type ChatMode } from "./ChatInput";
+import type { QualityPolicy } from "@/lib/chat/quality-policy";
+
+const OUTCOME_SUGGESTIONS: Array<{
+  label: string;
+  prompt: string;
+  icon: LucideIcon;
+}> = [
+  {
+    label: "Research a question",
+    prompt: "Research this question and give me a grounded answer with sources: ",
+    icon: Search,
+  },
+  {
+    label: "Analyze a file",
+    prompt: "Analyze the file I attach and summarize the important findings: ",
+    icon: BarChart3,
+  },
+  {
+    label: "Build or fix code",
+    prompt: "Help me build or fix this code. Inspect the relevant files, make the change, and verify it: ",
+    icon: Code2,
+  },
+  {
+    label: "Create a document",
+    prompt: "Create a polished document about this topic and save it in this chat: ",
+    icon: FileText,
+  },
+  {
+    label: "Schedule an operation",
+    prompt: "Schedule this recurring operation and explain when it will run: ",
+    icon: CalendarClock,
+  },
+];
 
 /**
  * Empty conversation state — code-editor style: a headline with a large,
@@ -21,6 +62,8 @@ export function EmptyChatState({
   disabled,
   mode,
   onModeChange,
+  qualityPolicy,
+  onQualityPolicyChange,
   onSend,
   onStop,
   onAiStart,
@@ -32,6 +75,8 @@ export function EmptyChatState({
   disabled?: boolean;
   mode?: ChatMode;
   onModeChange?: (value: ChatMode) => void;
+  qualityPolicy?: QualityPolicy;
+  onQualityPolicyChange?: (value: QualityPolicy) => void;
   onSend: (text: string) => void;
   onStop: () => void;
   onAiStart?: () => void;
@@ -49,6 +94,7 @@ export function EmptyChatState({
   const headline = preferredName
     ? `What are you up to, <a className="font-semibold underline" href="/settings/profile">${preferredName}</a>?`
     : "What should we do?";
+  const isStreaming = status === "submitted" || status === "streaming";
 
   return (
     /* my-auto (not justify-center) keeps the top of the content reachable if
@@ -71,6 +117,36 @@ export function EmptyChatState({
           <p dangerouslySetInnerHTML={{ __html: headline }} />
         </div>
 
+        <div
+          className="flex w-full max-w-3xl flex-wrap justify-center gap-2 hidden"
+          aria-label="Common outcomes"
+        >
+          {OUTCOME_SUGGESTIONS.map(({ label, prompt, icon: Icon }) => (
+            <button
+              key={label}
+              type="button"
+              disabled={disabled || status === "submitted" || status === "streaming"}
+              onClick={() => onSend(prompt)}
+              className="inline-flex min-h-9 items-center gap-2 rounded-full border border-border/65 bg-background/70 px-3.5 py-2 text-xs font-medium text-foreground/80 transition-colors hover:border-primary/40 hover:bg-primary/[0.05] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:pointer-events-none disabled:opacity-45"
+            >
+              <Icon className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {disabled && !isStreaming && (
+          <div className="flex flex-wrap items-center justify-center gap-2 text-center text-xs text-muted-foreground">
+            <span>Choose a model before sending a message.</span>
+            <a
+              href="/settings/providers"
+              className="font-medium text-primary underline underline-offset-2 hover:text-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+            >
+              Open model settings
+            </a>
+          </div>
+        )}
+
         {/* Big centered composer — shares layoutId with the docked input so
             the transition between the two states animates smoothly. Ease-out
             tween (not a spring) so the flight never overshoots the dock and
@@ -86,6 +162,8 @@ export function EmptyChatState({
             disabled={disabled}
             mode={mode}
             onModeChange={onModeChange}
+            qualityPolicy={qualityPolicy}
+            onQualityPolicyChange={onQualityPolicyChange}
             onSend={onSend}
             onStop={onStop}
             large
@@ -96,7 +174,7 @@ export function EmptyChatState({
           <button
             type="button"
             onClick={onAiStart}
-            disabled={isAiStarting}
+            disabled={isAiStarting || disabled}
             className="group relative inline-flex items-center gap-2 rounded-lg border border-border/70 bg-background px-4 py-2 text-sm font-medium text-foreground transition-all duration-150 hover:bg-accent/40 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
           >
             {isAiStarting ? (

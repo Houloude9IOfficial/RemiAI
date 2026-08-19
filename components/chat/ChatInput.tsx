@@ -15,6 +15,7 @@ import {
   Plus,
   X,
   Code2,
+  Hammer,
   Terminal,
   FolderOpen,
   Check,
@@ -43,10 +44,12 @@ import {
   isDownscalableImage,
 } from "@/lib/image-utils";
 import {
+  CHAT_INPUT_PREFILL_EVENT,
   registerChatInput,
   unregisterChatInput,
 } from "@/lib/chat-input-registry";
 import type { ChatStatus } from "ai";
+import type { QualityPolicy } from "@/lib/chat/quality-policy";
 
 /** Generate a descriptive filename for clipboard items that lack one. */
 function getClipboardFileName(file: File): string {
@@ -151,7 +154,14 @@ const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
  */
 const MAX_PASTE_TEXT_CHARS = 10_000;
 
-export type ChatMode = "chat" | "goal" | "plan";
+export type ChatMode = "chat" | "goal" | "plan" | "build";
+
+function qualityPolicyLabel(policy: QualityPolicy): string {
+  if (policy === "fast") return "Fast";
+  if (policy === "quality") return "Quality first";
+  if (policy === "selected") return "Selected model";
+  return "Balanced";
+}
 
 export function ChatInput({
   conversationId,
@@ -159,6 +169,8 @@ export function ChatInput({
   disabled,
   mode,
   onModeChange,
+  qualityPolicy = "balanced",
+  onQualityPolicyChange,
   onSend,
   onStop,
   large,
@@ -168,6 +180,8 @@ export function ChatInput({
   disabled?: boolean;
   mode?: ChatMode;
   onModeChange?: (value: ChatMode) => void;
+  qualityPolicy?: QualityPolicy;
+  onQualityPolicyChange?: (value: QualityPolicy) => void;
   onSend: (text: string) => void;
   onStop: () => void;
   /** Larger, centered "new chat" composer (code-editor style). */
@@ -291,6 +305,25 @@ export function ChatInput({
   useEffect(() => {
     resize();
   }, [text]);
+
+  // Build history can request a safe continuation without sending anything.
+  // Append to existing text rather than silently replacing a user's draft.
+  useEffect(() => {
+    const onPrefill = (event: Event) => {
+      const detail = (event as CustomEvent<{ text?: unknown }>).detail;
+      const prefill = detail?.text;
+      if (typeof prefill !== "string" || !prefill.trim()) return;
+      setText((previous) =>
+        previous.trim() ? `${previous.trim()}\n\n${prefill.trim()}` : prefill.trim(),
+      );
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+        resize();
+      });
+    };
+    window.addEventListener(CHAT_INPUT_PREFILL_EVENT, onPrefill);
+    return () => window.removeEventListener(CHAT_INPUT_PREFILL_EVENT, onPrefill);
+  }, []);
 
   // -----------------------------------------------------------------------
   // File selection from dialog
@@ -844,14 +877,53 @@ export function ChatInput({
             </motion.div>
           )}
         </AnimatePresence>
+            {/* {mode === "build" && (
+              <div className="mb-2 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 px-1 text-[10px] text-muted-foreground">
+                <span className="font-medium text-foreground/75">Definition of done</span>
+                <span>inspect</span>
+                <span aria-hidden="true">→</span>
+                <span>change</span>
+                <span aria-hidden="true">→</span>
+                <span>test/build</span>
+                <span aria-hidden="true">→</span>
+                <span>report</span>
+              </div>
+            )} */}
 
-        {/* {(mode === "goal" || mode === "plan") && !isStreaming && (
-          <div className="mb-1.5 px-1 text-[11px] font-medium text-primary/80">
-            {mode === "goal"
-              ? "Goal mode — works until the task is complete"
-              : "Plan mode — plans without writing files"}
-          </div>
-        )} */}
+        {!isStreaming && (
+          <>
+            <div className="mb-1.5 flex items-center gap-2 px-1 text-[11px] text-muted-foreground">
+              <span className="font-medium text-foreground/80">
+                {mode === "goal"
+                  ? "Goal mode"
+                  : mode === "plan"
+                    ? "Plan mode"
+                    : mode === "build"
+                      ? "Build mode"
+                      : "Chat mode"}
+              </span>
+              <span aria-hidden="true">·</span>
+              <span>
+                {mode === "goal"
+                  ? "Autonomous multi-step work until the goal is complete"
+                  : mode === "plan"
+                    ? "Read-only planning; file writes stay disabled"
+                    : mode === "build"
+                      ? "Change files, run checks, and report what was verified"
+                      : "Direct answer with minimal overhead"}
+              </span>
+              {onQualityPolicyChange && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span>
+                    Quality: {qualityPolicyLabel(qualityPolicy)}
+                    {qualityPolicy === "quality" && " · adaptive escalation"}
+                  </span>
+                </>
+              )}
+            </div>
+          </>
+        )}
 
         <div
           className={cn(
@@ -869,12 +941,20 @@ export function ChatInput({
             <div className="flex flex-wrap items-center gap-1.5 px-3 pt-3">
               {hasModeChip && (
                 <CapabilityChip
-                  icon={mode === "goal" ? Sparkles : ListChecks}
-                  label={mode === "goal" ? "Goal mode" : "Plan mode"}
+                  icon={mode === "goal" ? Sparkles : mode === "build" ? Hammer : ListChecks}
+                  label={
+                    mode === "goal"
+                      ? "Goal mode"
+                      : mode === "build"
+                        ? "Build mode"
+                        : "Plan mode"
+                  }
                   title={
                     mode === "goal"
                       ? "Goal mode — works until the task is complete"
-                      : "Plan mode — plans without writing files"
+                      : mode === "build"
+                        ? "Build mode — changes files, runs checks, and reports verification"
+                        : "Plan mode — plans without writing files"
                   }
                   disabled={disabled || isStreaming}
                   onClear={() => onModeChange?.("chat")}
@@ -953,20 +1033,79 @@ export function ChatInput({
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuGroup>
-                      <DropdownMenuLabel>Mode</DropdownMenuLabel>
+                      <DropdownMenuLabel>Mode · how Remi should work</DropdownMenuLabel>
+                      <DropdownMenuCheckboxItem
+                        checked={mode === "build"}
+                        onCheckedChange={(checked) => onModeChange(checked ? "build" : "chat")}
+                      >
+                        <Hammer className="h-4 w-4" />
+                        <span>
+                          <span className="block">Build mode</span>
+                          <span className="block text-[10px] font-normal text-muted-foreground">
+                            Change files, run checks, and show what passed
+                          </span>
+                        </span>
+                      </DropdownMenuCheckboxItem>
                       <DropdownMenuCheckboxItem
                         checked={mode === "goal"}
                         onCheckedChange={(checked) => onModeChange(checked ? "goal" : "chat")}
                       >
                         <Sparkles className="h-4 w-4" />
-                        Goal mode
+                        <span>
+                          <span className="block">Goal mode</span>
+                          <span className="block text-[10px] font-normal text-muted-foreground">
+                            Work autonomously until the goal is complete
+                          </span>
+                        </span>
                       </DropdownMenuCheckboxItem>
                       <DropdownMenuCheckboxItem
                         checked={mode === "plan"}
                         onCheckedChange={(checked) => onModeChange(checked ? "plan" : "chat")}
                       >
                         <ListChecks className="h-4 w-4" />
-                        Plan mode
+                        <span>
+                          <span className="block">Plan mode</span>
+                          <span className="block text-[10px] font-normal text-muted-foreground">
+                            Read and plan without writing files
+                          </span>
+                        </span>
+                      </DropdownMenuCheckboxItem>
+                    </DropdownMenuGroup>
+                  </>
+                )}
+
+                {onQualityPolicyChange && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuGroup>
+                      <DropdownMenuLabel>Quality · effort per request</DropdownMenuLabel>
+                      <DropdownMenuCheckboxItem
+                        checked={qualityPolicy === "fast"}
+                        onCheckedChange={(checked) => checked && onQualityPolicyChange("fast")}
+                      >
+                        Fast
+                        <span className="ml-auto text-[10px] text-muted-foreground">lowest latency</span>
+                      </DropdownMenuCheckboxItem>
+                      <DropdownMenuCheckboxItem
+                        checked={qualityPolicy === "balanced"}
+                        onCheckedChange={(checked) => checked && onQualityPolicyChange("balanced")}
+                      >
+                        Balanced
+                        <span className="ml-auto text-[10px] text-muted-foreground">recommended</span>
+                      </DropdownMenuCheckboxItem>
+                      <DropdownMenuCheckboxItem
+                        checked={qualityPolicy === "quality"}
+                        onCheckedChange={(checked) => checked && onQualityPolicyChange("quality")}
+                      >
+                        Quality first
+                        <span className="ml-auto text-[10px] text-muted-foreground">adaptive · may cost more</span>
+                      </DropdownMenuCheckboxItem>
+                      <DropdownMenuCheckboxItem
+                        checked={qualityPolicy === "selected"}
+                        onCheckedChange={(checked) => checked && onQualityPolicyChange("selected")}
+                      >
+                        Selected model
+                        <span className="ml-auto text-[10px] text-muted-foreground">pinned · no routing</span>
                       </DropdownMenuCheckboxItem>
                     </DropdownMenuGroup>
                   </>

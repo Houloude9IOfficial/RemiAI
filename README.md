@@ -68,6 +68,8 @@ Every chat gets its own **sandboxed session folder** that the AI can read and wr
 - **Built-in code editor** — edit text and code files with a theme-aware editor featuring syntax highlighting (JS, Python, Markdown, JSON, SQL, HTML, CSS, YAML, and more)
 - **Media previews** — images, audio, and video render inline
 - **Resizable panel** — the session files panel in chat can be resized to your liking
+- **Chat-scoped artifacts** — presented session-file outputs are saved as versioned metadata on the originating chat and can be reopened after reload
+- **Artifact listing** — inspect saved outputs at `/api/conversations/{id}/artifacts`; file content remains in the chat's session sandbox
 
 ### Memory System
 
@@ -113,7 +115,7 @@ Spawn specialized sub-agents for complex tasks, keeping the main conversation fo
 
 **Built-in tools:**
 - `delay` — wait between calls (rate limiting)
-- `web_fetch` — fetch URLs and read web content
+- `web_fetch` — fetch URLs and read web content; successful and failed fetches are recorded as sanitized chat-scoped source provenance
 - `read_document` — extract text from PDF, DOCX, etc.
 - `python_exec` — execute Python code in a subprocess
 - `js_exec` — execute JavaScript in a sandboxed VM
@@ -132,6 +134,8 @@ Spawn specialized sub-agents for complex tasks, keeping the main conversation fo
 | **ElevenLabs** | Premium text-to-speech and speech-to-text |
 | **Notion** | Notion integration |
 | **Context7** | Context-aware search |
+
+Research results now include a compact in-chat Sources card and durable provenance at `/api/conversations/{id}/sources`. RemiAI stores URL, title, publisher, retrieval time, content hash, extraction status, and source status without storing fetched page bodies.
 
 ### Talk Mode (Voice Interface)
 
@@ -181,7 +185,7 @@ RemiAI is available as a **native desktop app** for macOS, Windows, and Linux:
 ### Backup & Restore
 
 - **Encrypted backups** — protect your data and API keys with a password
-- **Export** — save conversations, preferences, provider keys, tool configurations, and more
+- **Export** — save conversations, preferences, provider keys, tool configurations, chat-scoped artifact metadata, and more
 - **Import** — restore from a backup file
 - **Backup history** — track when backups were created
 

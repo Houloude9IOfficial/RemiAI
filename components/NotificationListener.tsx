@@ -17,6 +17,19 @@ interface TaskEvent {
   };
 }
 
+interface UserNotification {
+  id: string;
+  conversationId: number;
+  title: string;
+  body: string;
+  requireInteraction: boolean;
+  createdAt: string;
+}
+
+type ElectronNotificationBridge = {
+  sendNotification: (payload: { title: string; body: string }) => Promise<void>;
+};
+
 /**
  * Track which task IDs we've already shown notifications for.
  */
@@ -45,6 +58,62 @@ export function NotificationListener() {
     permissionRequested.current = true;
     const result = await Notification.requestPermission();
     return result === "granted";
+  }, []);
+
+  const showUserNotification = useCallback((notification: UserNotification) => {
+    if (!hasPermission.current) return;
+
+    const targetUrl = `/chat/${notification.conversationId}`;
+    const electronApi = (window as Window & {
+      electronAPI?: ElectronNotificationBridge;
+    }).electronAPI;
+
+    if (electronApi) {
+      void electronApi.sendNotification({
+        title: notification.title,
+        body: notification.body,
+      });
+      return;
+    }
+
+    const options: NotificationOptions & { tag?: string } = {
+      body: notification.body,
+      icon: "/RemiAI.png",
+      tag: `user-notification-${notification.id}`,
+      requireInteraction: notification.requireInteraction,
+      data: { targetUrl },
+    };
+
+    // Prefer the service-worker notification API when available so installed
+    // PWAs can display the notification through their registered worker.
+    if ("serviceWorker" in navigator) {
+      void navigator.serviceWorker.ready
+        .then((registration) => registration.showNotification(notification.title, options))
+        .catch(() => {
+          try {
+            const native = new Notification(notification.title, options);
+            native.onclick = () => {
+              window.focus();
+              window.location.href = targetUrl;
+              native.close();
+            };
+          } catch {
+            // Notification may fail in restricted browser contexts.
+          }
+        });
+      return;
+    }
+
+    try {
+      const native = new Notification(notification.title, options);
+      native.onclick = () => {
+        window.focus();
+        window.location.href = targetUrl;
+        native.close();
+      };
+    } catch {
+      // Notification may fail in restricted browser contexts.
+    }
   }, []);
 
   const showNotification = useCallback(
@@ -87,6 +156,71 @@ export function NotificationListener() {
     [],
   );
 
+  const showAutomationNotification = useCallback(
+    (run: {
+      id: number;
+      conversationId: number;
+      kind: string;
+      name: string;
+      task: string;
+      status: string;
+      result: string | null;
+      error: string | null;
+    }) => {
+      if (!hasPermission.current || run.status === "waiting") return;
+      const title = run.status === "completed"
+        ? `✅ ${run.name} complete`
+        : run.status === "cancelled"
+          ? `⏹ ${run.name} stopped`
+          : `❌ ${run.name} failed`;
+      const body = run.status === "completed"
+        ? run.task.slice(0, 140)
+        : `${run.task.slice(0, 90)} — ${run.error ?? "Needs attention"}`;
+      try {
+        const notification = new Notification(title, {
+          body,
+          icon: "/RemiAI.png",
+          tag: `automation-run-${run.id}`,
+          requireInteraction: true,
+        });
+        notification.onclick = () => {
+          window.focus();
+          window.location.href = `/chat/${run.conversationId}`;
+          notification.close();
+        };
+        setTimeout(() => notification.close(), 15_000);
+      } catch {
+        // Browser notifications may be unavailable in some contexts.
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const eventSource = new EventSource("/api/notifications/stream");
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data) as {
+          type?: string;
+          run?: Parameters<typeof showAutomationNotification>[0];
+          notification?: UserNotification;
+        };
+        if (data.type === "connected") return;
+        if (data.notification) {
+          showUserNotification(data.notification);
+        }
+        if (data.run) {
+          queryClient.invalidateQueries({ queryKey: ["automation-runs"] });
+          queryClient.invalidateQueries({ queryKey: ["conversations"] });
+          showAutomationNotification(data.run);
+        }
+      } catch {
+        // Ignore malformed notification events.
+      }
+    };
+    return () => eventSource.close();
+  }, [queryClient, showAutomationNotification, showUserNotification]);
+
   /**
    * Poll for newly completed tasks as a fallback.
    */
@@ -98,7 +232,7 @@ export function NotificationListener() {
       const res = await fetch(
         `/api/scheduled-tasks?status=completed&limit=10&completedAfter=${encodeURIComponent(completedAfter)}`,
       );
-      const data = await res.json() as { tasks: any[]; count: number };
+      const data = await res.json() as { tasks: TaskEvent["task"][]; count: number };
       if (!data?.tasks?.length) return;
 
       for (const task of data.tasks) {

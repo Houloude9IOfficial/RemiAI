@@ -17,34 +17,48 @@ import { streamRegistry } from "@/lib/chat/stream-registry";
 import { estimateTokenCount } from "@/lib/utils";
 import { retrieveRelevantMemories } from "@/lib/chat/memories";
 import { getTimeDetails } from "@/lib/time";
+import { createRunTrace } from "@/lib/observability/run-trace";
 
 export async function POST(req: Request) {
+  const trace = createRunTrace({ kind: "chat-start" });
+  trace.metric("retryBudget", 3);
+  trace.event("request.received", { method: "POST" });
   const { conversationId } = (await req.json()) as {
     conversationId: number;
   };
 
+  trace.metric("conversationId", conversationId);
+  const conversationLookupStartedAt = performance.now();
   const conversation = await db
     .select()
     .from(conversations)
     .where(eq(conversations.id, conversationId))
     .get();
+  trace.dbQuery("conversation_lookup", conversationLookupStartedAt);
 
   if (!conversation) {
+    trace.finish("failed", { phase: "conversation_lookup" });
     return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
   }
   if (!conversation.providerId || !conversation.modelId) {
+    trace.finish("failed", { phase: "provider_selection" });
     return NextResponse.json(
       { error: "Pick a model for this conversation first" },
       { status: 400 },
     );
   }
 
+  const providerLookupStartedAt = performance.now();
   const provider = await db
     .select()
     .from(providers)
     .where(eq(providers.id, conversation.providerId))
     .get();
+  trace.dbQuery("provider_lookup", providerLookupStartedAt, {
+    providerKind: provider?.kind,
+  });
   if (!provider) {
+    trace.finish("failed", { phase: "provider_lookup" });
     return NextResponse.json({ error: "Provider not found" }, { status: 404 });
   }
 
@@ -162,8 +176,14 @@ ${timeContext}${userPrefsContext}${userProfileContext}${memoryContext}${fileChan
   // Track whether onFinish successfully applied tokens, so the cleanup
   // doesn't double-count by applying the same usage again.
   let tokensApplied = false;
+  let providerFailed = false;
+  let aborted = false;
+  let finalFinishReason: string | undefined;
 
   const fullSystemPrompt = SYSTEM_PROMPT + startPrompt;
+  trace.metric("promptChars", fullSystemPrompt.length);
+  trace.metric("activeToolCount", Object.keys(tools).length);
+  trace.metric("activeToolNames", Object.keys(tools));
 
   const result = streamText({
     model,
@@ -173,7 +193,67 @@ ${timeContext}${userPrefsContext}${userProfileContext}${memoryContext}${fileChan
     stopWhen: stepCountIs(100),
     // Retry retryable provider failures up to 3 times before erroring out.
     maxRetries: 3,
-    onFinish: async ({ text: outputText, usage }) => {
+    onStart: ({ callId, provider: modelProvider, modelId: modelName }) => {
+      trace.recordState("executing", { callId });
+      trace.event("generation.start", {
+        callId,
+        provider: modelProvider,
+        modelId: modelName,
+      });
+    },
+    onLanguageModelCallStart: ({ callId, provider: modelProvider, modelId: modelName }) => {
+      trace.modelCallStart({ callId, provider: modelProvider, modelId: modelName });
+    },
+    onLanguageModelCallEnd: ({
+      callId,
+      provider: modelProvider,
+      modelId: modelName,
+      usage,
+      finishReason,
+      performance: callPerformance,
+    }) => {
+      trace.modelCallEnd({
+        callId,
+        provider: modelProvider,
+        modelId: modelName,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        responseTimeMs: callPerformance.responseTimeMs,
+        timeToFirstOutputMs: callPerformance.timeToFirstOutputMs,
+        finishReason,
+      });
+    },
+    onToolExecutionStart: ({ callId, toolCall }) => {
+      trace.toolStart(toolCall.toolName, callId);
+    },
+    onToolExecutionEnd: ({ callId, toolCall, toolExecutionMs, toolOutput }) => {
+      trace.toolEnd(
+        toolCall.toolName,
+        toolExecutionMs,
+        toolOutput.type === "tool-result",
+        callId,
+      );
+    },
+    onStepEnd: ({ stepNumber, usage, toolCalls, toolResults, finishReason }) => {
+      trace.step(stepNumber, {
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        toolCallCount: toolCalls.length,
+        toolResultCount: toolResults.length,
+        finishReason,
+      });
+    },
+    onError: (error) => {
+      providerFailed = true;
+      trace.providerError(error);
+    },
+    onAbort: () => {
+      aborted = true;
+      trace.recordState("cancelled");
+    },
+    onFinish: async ({ text: outputText, usage, finishReason }) => {
+      finalFinishReason = finishReason;
+      trace.metric("finishReason", finishReason);
       // Derive a meaningful title from the AI's greeting
       const title = outputText
         ? outputText.length > 60
@@ -194,6 +274,7 @@ ${timeContext}${userPrefsContext}${userProfileContext}${memoryContext}${fileChan
         const estimatedOutput =
           outputTokens > 0 ? outputTokens : estimateTokenCount(outputText ?? "");
 
+        const tokenUpdateStartedAt = performance.now();
         await db
           .update(conversations)
           .set({
@@ -204,6 +285,10 @@ ${timeContext}${userPrefsContext}${userProfileContext}${memoryContext}${fileChan
               sql`total_output_tokens + ${estimatedOutput}`,
           })
           .where(eq(conversations.id, conversationId));
+        trace.dbQuery("token_usage_update", tokenUpdateStartedAt, {
+          inputTokens: estimatedInput,
+          outputTokens: estimatedOutput,
+        });
         tokensApplied = true;
       } catch (err) {
         console.error("Failed to update token usage in start route onFinish:", err);
@@ -225,10 +310,15 @@ ${timeContext}${userPrefsContext}${userProfileContext}${memoryContext}${fileChan
     async () => {
       if (tokensApplied) {
         // Tokens already applied by onFinish — just update updatedAt
+        const updatedAtStartedAt = performance.now();
         await db
           .update(conversations)
           .set({ updatedAt: new Date().toISOString() })
           .where(eq(conversations.id, conversationId));
+        trace.dbQuery("conversation_updated_at", updatedAtStartedAt);
+        const state = aborted ? "cancelled" : providerFailed ? "failed" : "completed";
+        trace.recordState(state, { finishReason: finalFinishReason });
+        trace.finish(state, { finishReason: finalFinishReason });
         return;
       }
       // onFinish wasn't able to apply tokens — try as a fallback
@@ -259,13 +349,20 @@ ${timeContext}${userPrefsContext}${userProfileContext}${memoryContext}${fileChan
           })
           .where(eq(conversations.id, conversationId));
       } catch (err) {
+        trace.event("persistence.error", {
+          category: err instanceof Error ? err.name : "UnknownError",
+        });
         console.error("Failed to update token usage in start cleanup:", err);
         await db
           .update(conversations)
           .set({ updatedAt: new Date().toISOString() })
           .where(eq(conversations.id, conversationId));
       }
+      const state = aborted ? "cancelled" : providerFailed ? "failed" : "completed";
+      trace.recordState(state, { finishReason: finalFinishReason });
+      trace.finish(state, { finishReason: finalFinishReason });
     },
+    trace,
   );
 
   return createUIMessageStreamResponse({

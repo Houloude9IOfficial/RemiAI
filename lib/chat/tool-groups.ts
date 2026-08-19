@@ -56,6 +56,7 @@ export const CORE_TOOLS: ReadonlySet<string> = new Set([
   "web_fetch",
   "ask_questions",
   "suggest_followups",
+  "send_notification",
   "set_run_name",
   "get_tool_help",
   "list_available_tools",

@@ -7,6 +7,7 @@ import {
 } from "@/lib/fs/access";
 import { SESSION_FILES_DIR } from "@/lib/paths";
 import { emitSessionFilesChanged } from "./events";
+import { buildBoundedLineDiff } from "@/lib/build/diff";
 
 // ---------------------------------------------------------------------------
 // Session file sandbox storage
@@ -292,6 +293,8 @@ export type WriteSessionFileResult = {
   /** Line-count delta (mixed precision — not a true hunk diff). */
   linesAdded: number;
   linesRemoved: number;
+  /** Bounded textual preview for Build history; omitted when unchanged. */
+  diffPreview?: string;
   createdDirectories: string[];
 };
 
@@ -305,11 +308,12 @@ export async function writeSessionFile(
   const writeMode = mode === "append" ? "append" : "overwrite";
   const normalizedRel = relativePath.replace(/\\/g, "/").replace(/^\/+/, "");
 
+  let previousContent = "";
   let previousLines: number | null = null;
   let created = true;
   try {
-    const existing = await fs.readFile(targetPath, "utf-8");
-    previousLines = existing.split("\n").length;
+    previousContent = await fs.readFile(targetPath, "utf-8");
+    previousLines = previousContent.split("\n").length;
     created = false;
   } catch {
     // File does not exist yet
@@ -344,6 +348,7 @@ export async function writeSessionFile(
     linesRemoved = Math.max(0, previousLines - linesWritten);
   }
 
+  const afterContent = writeMode === "append" ? `${previousContent}${content}` : content;
   return {
     wrote: Buffer.byteLength(content, "utf-8"),
     path: targetPath,
@@ -353,6 +358,7 @@ export async function writeSessionFile(
     linesWritten,
     linesAdded,
     linesRemoved,
+    diffPreview: buildBoundedLineDiff(previousContent, afterContent),
     createdDirectories,
   };
 }
@@ -363,6 +369,8 @@ export type EditSessionFileResult = {
   bytesChanged: number;
   linesAdded: number;
   linesRemoved: number;
+  /** Bounded textual preview for Build history; omitted when unchanged. */
+  diffPreview?: string;
 };
 
 /** Replace a uniquely matched string in a sandbox file. */
@@ -390,7 +398,8 @@ export async function editSessionFile(
       content,
     };
   }
-  await fs.writeFile(targetPath, content.replace(oldStr, newStr), "utf-8");
+  const updatedContent = content.replace(oldStr, newStr);
+  await fs.writeFile(targetPath, updatedContent, "utf-8");
   emitSessionFilesChanged(conversationId, {
     operation: "edit",
     path: normalizeSessionPath(relativePath),
@@ -401,6 +410,7 @@ export async function editSessionFile(
     bytesChanged: Math.abs(Buffer.byteLength(newStr, "utf-8") - Buffer.byteLength(oldStr, "utf-8")),
     linesAdded: Math.max(0, newStr.split("\n").length - oldStr.split("\n").length),
     linesRemoved: Math.max(0, oldStr.split("\n").length - newStr.split("\n").length),
+    diffPreview: buildBoundedLineDiff(content, updatedContent),
   };
 }
 

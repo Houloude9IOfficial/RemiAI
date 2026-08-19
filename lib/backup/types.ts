@@ -29,7 +29,7 @@ export interface BackupManifest {
   exportedAt: string;
   /** App version from package.json at export time. */
   appVersion: string;
-  /** Whether uploaded files and avatars are included. */
+  /** Whether uploaded files, session files, and avatars are included. */
   includesFiles: boolean;
 }
 
@@ -51,7 +51,7 @@ export interface BackupPayload extends BackupManifest {
 // ---------------------------------------------------------------------------
 
 export interface BackupData {
-  /** Table_name → Array of row objects (column_name → value). */
+  /** Table_name → Array of row objects (column_name → value). Includes chat-scoped artifacts and source provenance when present. */
   [tableName: string]: Record<string, unknown>[] | BackupFiles;
 }
 

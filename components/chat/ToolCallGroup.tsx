@@ -4,6 +4,11 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import type { ToolUIPart, DynamicToolUIPart } from "ai";
 import { getToolName } from "ai";
 import { cn } from "@/lib/utils";
+import {
+  summarizeBuildCheckCounts,
+  summarizeBuildChecks,
+  type BuildVerificationCheck,
+} from "@/lib/chat/build-verification";
 import { ToolCallCard } from "./ToolCallCard";
 import {
   CheckCircle2,
@@ -643,6 +648,61 @@ function FileChangeDigest({ changes }: { changes: FileChangeSummary[] }) {
   );
 }
 
+function VerificationDigest({ checks }: { checks: BuildVerificationCheck[] }) {
+  if (checks.length === 0) return null;
+
+  const counts = summarizeBuildCheckCounts(checks);
+  return (
+    <div className="px-2 pb-1.5">
+      <div className="mt-1 rounded-md border border-border/20 bg-surface-2/60 px-2.5 py-2">
+        <div className="mb-1.5 flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
+          <span>Verification</span>
+          <span className="ml-auto tabular-nums">
+            {counts.passed > 0 && (
+              <span className="text-status-success">{counts.passed} passed</span>
+            )}
+            {counts.failed > 0 && (
+              <span className="ml-2 text-status-danger">{counts.failed} failed</span>
+            )}
+            {counts.incomplete > 0 && (
+              <span className="ml-2 text-muted-foreground">{counts.incomplete} incomplete</span>
+            )}
+          </span>
+        </div>
+        <ul className="flex flex-col gap-1">
+          {checks.map((check, index) => (
+            <li
+              key={`${check.toolName}-${check.command}-${index}`}
+              className="flex min-w-0 items-center gap-2 text-[11px] leading-tight"
+            >
+              {check.status === "passed" ? (
+                <CheckCircle2 className="h-3 w-3 shrink-0 text-status-success" />
+              ) : (
+                <XCircle className="h-3 w-3 shrink-0 text-status-danger" />
+              )}
+              <span className="min-w-0 flex-1 truncate font-mono text-foreground/80">
+                {check.command}
+              </span>
+              <span
+                className={cn(
+                  "shrink-0 tabular-nums",
+                  check.status === "passed"
+                    ? "text-status-success"
+                    : check.status === "failed"
+                      ? "text-status-danger"
+                      : "text-muted-foreground",
+                )}
+              >
+                {check.detail}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -666,9 +726,16 @@ export function ToolCallGroup({
 
   const running = groupParts.some(isPartRunning);
   const completed = groupParts.every(isPartComplete) && groupParts.length > 0;
-  const hasError = false // DO NOT SHOW FOR NOW groupParts.some(isPartError);
+  const hasError = groupParts.some(isPartError);
 
   const fileChanges = useMemo(() => extractFileChanges(groupParts), [groupParts]);
+  const verificationChecks = useMemo(
+    () => summarizeBuildChecks(groupParts),
+    [groupParts],
+  );
+  const hasVerificationFailure = verificationChecks.some(
+    (check) => check.status === "failed",
+  );
 
   // Client-side elapsed timer (live while running; frozen when done)
   const startRef = useRef<number | null>(null);
@@ -711,9 +778,21 @@ export function ToolCallGroup({
   const displayElapsed =
     finalElapsedMs ?? (running && startRef.current !== null ? elapsedMs : null);
 
-  const summaryLabel = runName ?? (running ? present : past);
+  const summaryLabel = runName ??
+    (hasError || hasVerificationFailure
+      ? hasVerificationFailure && !hasError
+        ? "Verification failed"
+        : "Work stopped with an error"
+      : running
+        ? present
+        : past);
 
-  if (!isBatch && !runName) {
+  if (
+    !isBatch &&
+    !runName &&
+    fileChanges.length === 0 &&
+    verificationChecks.length === 0
+  ) {
     return <ToolCallCard part={groupParts[0]} compact />;
   }
 
@@ -724,15 +803,19 @@ export function ToolCallGroup({
       <button
         type="button"
         onClick={toggle}
-        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/35"
+        aria-expanded={isOpen}
+        aria-label={`${summaryLabel}${groupParts.length > 1 ? `, ${groupParts.length} calls` : ""}`}
+        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
       >
         <div
           className={cn(
             "flex h-3 w-3 shrink-0 items-center justify-center",
-            hasError ? "text-status-danger" : "text-muted-foreground",
+            hasError || hasVerificationFailure
+              ? "text-status-danger"
+              : "text-muted-foreground",
           )}
         >
-          {hasError ? (
+          {hasError || hasVerificationFailure ? (
             <XCircle className="h-3 w-3" />
           ) : running ? (
             <Loader2 className="h-3 w-3 animate-spin" />
@@ -766,9 +849,10 @@ export function ToolCallGroup({
 
       {/* File digest — rendered once in a stable spot below the header so it
           never pops or remounts when the tool calls expand/collapse beneath it */}
-      {isOpen && fileChanges.length > 0 && !running && (
+      {fileChanges.length > 0 && !running && (
         <FileChangeDigest changes={fileChanges} />
       )}
+      {!running && <VerificationDigest checks={verificationChecks} />}
 
       {/* Collapsible body — only the individual tool calls animate */}
       <div

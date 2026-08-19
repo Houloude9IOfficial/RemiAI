@@ -16,12 +16,18 @@ import { db } from "@/db";
 import {
   conversations,
   providers,
+  providerModels,
   mcpServers,
   userPreferences,
   messages,
 } from "@/db/schema";
 import { getLanguageModel } from "@/lib/providers/factory";
-import { SYSTEM_PROMPT_BASE, CREATE_VISUAL_SECTION, SESSION_FILES_SECTION } from "@/lib/chat/system-prompt";
+import {
+  SYSTEM_PROMPT_BASE,
+  CREATE_VISUAL_SECTION,
+  RESEARCH_SECTION,
+  SESSION_FILES_SECTION,
+} from "@/lib/chat/system-prompt";
 import { PERSISTENCE_GUIDANCE } from "@/lib/chat/persistence-guidance";
 import {
   buildCachedInstructions,
@@ -65,6 +71,7 @@ import { buildCreateVisualTool } from "@/lib/tools/create-visual";
 import { askQuestionsTool } from "@/lib/tools/ask-questions";
 import { suggestFollowupsTool } from "@/lib/tools/suggest-followups";
 import { setRunNameTool } from "@/lib/tools/run-name";
+import { buildSendNotificationTool } from "@/lib/tools/notifications";
 import {
   buildMainSpawnAgentTool,
   buildGetAgentResultTool,
@@ -90,6 +97,37 @@ import {
   encodeStreamError,
   type StreamErrorPayload,
 } from "@/lib/chat/error-payload";
+import { createRunTrace } from "@/lib/observability/run-trace";
+import {
+  advanceBuildRepairState,
+  buildRepairGuidance,
+  type BuildRepairState,
+} from "@/lib/chat/build-repair";
+import {
+  chooseQualityStrategy,
+  estimateTaskComplexity,
+  normalizeQualityPolicy,
+} from "@/lib/chat/quality-policy";
+import {
+  chooseModelRoute,
+  type ModelRouteCandidate,
+} from "@/lib/chat/model-routing";
+import { verifyQualityAnswer } from "@/lib/chat/quality-verifier";
+import {
+  buildRunSummary,
+  buildPartsFromSteps,
+  checksFromSteps,
+  finishBuildRun,
+  recordBuildRun,
+  summarizeChangedFiles,
+  updateBuildRunCheckpoint,
+  type BuildCheckpoint,
+} from "@/lib/build/runs";
+import {
+  recordCitedClaims,
+  withSourceProvenance,
+} from "@/lib/research/source-storage";
+import { saveBuildResultArtifact } from "@/lib/artifacts/storage";
 
 // A response that ends with a commitment to take an action (e.g. "let me dig
 // deeper into the pages") while the run made ZERO tool calls is almost always
@@ -136,12 +174,17 @@ const chatRequestSchema = z.object({
 });
 
 export async function POST(req: Request) {
+  const trace = createRunTrace({ kind: "chat" });
+  trace.metric("retryBudget", 3);
+  trace.event("request.received", { method: "POST" });
+
   // Validate the request body server-side so a malformed payload is rejected
   // with a clear 400 instead of silently corrupting conversation state.
   let body: unknown;
   try {
     body = await req.json();
   } catch {
+    trace.finish("failed", { phase: "request_validation" });
     return NextResponse.json(
       { error: "Invalid JSON body" },
       { status: 400 },
@@ -149,23 +192,31 @@ export async function POST(req: Request) {
   }
   const parsed = chatRequestSchema.safeParse(body);
   if (!parsed.success) {
+    trace.finish("failed", { phase: "request_validation" });
     return jsonError(parsed.error);
   }
   const { conversationId, trigger, messageId } = parsed.data;
+  trace.metric("conversationId", conversationId);
+  trace.metric("requestMessageCount", parsed.data.messages.length);
+  trace.event("request.validated", { trigger });
   // The delta's `parts` are a JSON round-trip of UI parts — validated as a
   // generic array above, narrowed to the SDK's UIMessage shape here.
   const deltaMessages = parsed.data.messages as UIMessage[];
 
+  const conversationLookupStartedAt = performance.now();
   const conversation = await db
     .select()
     .from(conversations)
     .where(eq(conversations.id, conversationId))
     .get();
+  trace.dbQuery("conversation_lookup", conversationLookupStartedAt);
 
   if (!conversation) {
+    trace.finish("failed", { phase: "conversation_lookup" });
     return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
   }
   if (!conversation.providerId || !conversation.modelId) {
+    trace.finish("failed", { phase: "provider_selection" });
     return NextResponse.json(
       { error: "Pick a model for this conversation first" },
       { status: 400 },
@@ -178,16 +229,22 @@ export async function POST(req: Request) {
   // Read mode from the conversation in the database
   let mode = (conversation as any).mode ?? "chat";
 
+  const providerLookupStartedAt = performance.now();
   const provider = await db
     .select()
     .from(providers)
     .where(eq(providers.id, conversation.providerId))
     .get();
+  trace.dbQuery("provider_lookup", providerLookupStartedAt, {
+    providerKind: provider?.kind,
+  });
   if (!provider) {
+    trace.finish("failed", { phase: "provider_lookup" });
     return NextResponse.json({ error: "Provider not found" }, { status: 404 });
   }
 
   if (deltaMessages.length === 0) {
+    trace.finish("failed", { phase: "request_validation" });
     return NextResponse.json(
       { error: "No messages to process" },
       { status: 400 },
@@ -201,11 +258,13 @@ export async function POST(req: Request) {
   // kick off a cheap background completion that turns the first two messages
   // into a proper title (e.g. "Particle Engine Error Fix"), so the sidebar
   // shows something meaningful even if the user already navigated away.
+  const messageCountStartedAt = performance.now();
   const [countRow] = await db
     .select({ count: count() })
     .from(messages)
     .where(eq(messages.conversationId, conversationId))
     .all();
+  trace.dbQuery("message_count", messageCountStartedAt);
   const existingMessageCount = countRow?.count ?? 0;
   const isFirstExchange =
     existingMessageCount === 0 && conversation.title === "New chat";
@@ -216,12 +275,17 @@ export async function POST(req: Request) {
   // delta (deduped by uiId), and persist any NEW user messages. Everything
   // downstream (`uiMessages`) now sees the complete, ordered history — the
   // exact same shape the client used to upload on every message.
+  const reconstructionStartedAt = performance.now();
   const uiMessages = await reconstructConversationHistory(db, {
     conversationId,
     deltaMessages,
     trigger,
     messageId,
   });
+  trace.dbQuery("conversation_reconstruction", reconstructionStartedAt, {
+    messageCount: uiMessages.length,
+  });
+  trace.metric("reconstructedMessageCount", uiMessages.length);
 
   const lastMessage = uiMessages[uiMessages.length - 1];
   if (lastMessage?.role === "user") {
@@ -248,7 +312,7 @@ export async function POST(req: Request) {
     }
   }
 
-  const model = getLanguageModel(provider, conversation.modelId);
+  const promptAssemblyStartedAt = performance.now();
 
   // Gather MCP tools from enabled servers
   const enabledMcpServers = await db
@@ -291,6 +355,32 @@ export async function POST(req: Request) {
 
   // Gather integration tools (Brave Search, Notion, Context7) based on config
   const integrationToolSet = await buildIntegrationTools(userContext);
+  const sourceProvenanceOptions = {
+    conversationId,
+    sourceRunId: trace.traceId,
+  };
+  const sourceAwareWebFetchTool = withSourceProvenance(
+    webFetchTool,
+    "web_fetch",
+    sourceProvenanceOptions,
+  );
+  const sourceAwareIntegrationToolSet = Object.fromEntries(
+    Object.entries(integrationToolSet).map(([name, tool]) =>
+      [
+        name,
+        [
+          "brave_web_search",
+          "news_search",
+          "news_top_headlines",
+          "fc_search",
+          "fc_scrape",
+          "fc_crawl",
+        ].includes(name)
+          ? withSourceProvenance(tool, name, sourceProvenanceOptions)
+          : tool,
+      ] as const,
+    ),
+  );
 
   // Gather code execution tools (python_exec, js_exec)
   const executionToolSet = await buildExecutionTools(
@@ -312,10 +402,11 @@ export async function POST(req: Request) {
   const createVisualToolSet = await buildCreateVisualTool();
   const createVisualEnabled = "create_visual" in createVisualToolSet;
 
-  // Built-in tools (delay, web_fetch, ask_questions, suggest_followups, get_tool_help, list_available_tools)
+  // Built-in tools (delay, web_fetch, notifications, ask_questions, suggest_followups, get_tool_help, list_available_tools)
   const builtinToolSet = {
     delay: delayTool,
-    web_fetch: webFetchTool,
+    send_notification: buildSendNotificationTool(conversationId),
+    web_fetch: sourceAwareWebFetchTool,
     ask_questions: askQuestionsTool,
     suggest_followups: suggestFollowupsTool,
     set_run_name: setRunNameTool,
@@ -345,13 +436,15 @@ export async function POST(req: Request) {
   const todoToolSet = buildTodoTools(conversationId);
 
   // Routine tools (create, run, list, update, delete routines)
-  const routineToolSet = await buildRoutinesTools();
+  const routineToolSet = await buildRoutinesTools(conversationId);
 
   // Scheduled tasks tool (schedule future tasks)
   const scheduleToolSet = await buildScheduleTool(conversationId);
 
   // Session files tools — per-conversation private file sandbox
-  const sessionFileToolSet = buildSessionFileTools(conversationId);
+  const sessionFileToolSet = buildSessionFileTools(conversationId, {
+    sourceRunId: trace.traceId,
+  });
 
   // Skills tools (list_skills, load_skill) — always available (core)
   const skillsToolSet = buildSkillsToolSet();
@@ -384,7 +477,7 @@ export async function POST(req: Request) {
         )
       : sessionFileToolSet;
 
-  // Build plan-mode specific system prompt instructions
+  // Build mode-specific system prompt instructions
   const planModePrompt =
     mode === "plan"
       ? `
@@ -401,6 +494,33 @@ You are currently in **Plan mode**. This means:
 - Use \`todos_init\` at the start to lay out the steps you'll help them plan.
 - Do NOT attempt to modify any files — you don't have permission to write in this mode.`
       : "";
+  const buildModePrompt =
+    mode === "build"
+      ? `
+
+## BUILD MODE — Deliver a verified software change
+
+You are currently in **Build mode**. Treat each request as a task contract, not as a request for a code snippet.
+
+Before editing:
+- State a concise plan and the acceptance checks you will use.
+- Inspect the relevant repository files and identify the correct permitted directory.
+- Prefer \`edit_file\` for existing files and use normalized forward-slash paths. Use \`write_file\` only for new files or intentional full replacements.
+
+While working:
+- Keep the work scoped to the user's request and use \`todos_init\`/\`todos_update\` for multi-step tasks.
+- Run the narrowest relevant typecheck, test, build, or preview command with \`bash_execute\` after changes. Do not treat file writes alone as verification.
+- For web outputs, perform a bounded preview smoke check in one command: start the local server, probe a localhost/127.0.0.1 URL with curl or wget, then terminate the server before the command exits. Never claim a preview passed from a server start alone.
+- If a check fails or is incomplete, automatically perform at most two repair attempts: inspect the error, edit with file tools, rerun the failed check, and stop with an honest failure report if it still fails.
+- If a check fails, diagnose the output, repair the change, and rerun the failed check when practical. A failed check must remain visible in the final report.
+- Do not use Bash to create, edit, or delete files; use the file tools so the change ledger remains inspectable.
+
+Definition of done:
+1. The requested files or behavior are implemented.
+2. Relevant checks were run and their actual outcomes are known.
+3. The final response lists changed files, checks run, and any remaining failure or uncertainty.
+4. Never claim the task is complete or verified when a relevant check failed, timed out, or was not run.`
+      : "";
 
   // Merge all tool sets (last writer wins on name collision)
   const tools = {
@@ -408,7 +528,7 @@ You are currently in **Plan mode**. This means:
     ...effectiveFsToolSet,
     ...contextToolSet,
     ...memoryToolSet,
-    ...integrationToolSet,
+    ...sourceAwareIntegrationToolSet,
     ...executionToolSet,
     ...playwrightToolSet,
     ...documentToolSet,
@@ -479,6 +599,76 @@ You are currently in **Plan mode**. This means:
       )
       .map((p) => p.text)
       .join(" ") ?? "";
+  const qualityStrategy = chooseQualityStrategy(
+    normalizeQualityPolicy(conversation.qualityPolicy),
+    estimateTaskComplexity(lastUserText, mode),
+  );
+  const enabledRouteProviders = await db
+    .select()
+    .from(providers)
+    .where(eq(providers.enabled, true))
+    .all();
+  const enabledRouteModels = await db
+    .select()
+    .from(providerModels)
+    .where(eq(providerModels.enabled, true))
+    .all();
+  const selectedRouteCandidate: ModelRouteCandidate = {
+    providerId: provider.id,
+    providerKind: provider.kind,
+    providerLabel: provider.label,
+    modelId: conversation.modelId,
+  };
+  const routeCandidates: ModelRouteCandidate[] = enabledRouteProviders.flatMap((routeProvider) =>
+    enabledRouteModels
+      .filter((routeModel) => routeModel.providerId === routeProvider.id)
+      .map((routeModel) => ({
+        providerId: routeProvider.id,
+        providerKind: routeProvider.kind,
+        providerLabel: routeProvider.label,
+        modelId: routeModel.modelId,
+      })),
+  );
+  if (!routeCandidates.some((candidate) =>
+    candidate.providerId === selectedRouteCandidate.providerId &&
+    candidate.modelId === selectedRouteCandidate.modelId,
+  )) {
+    routeCandidates.push(selectedRouteCandidate);
+  }
+  const qualityRoute = chooseModelRoute({
+    policy: qualityStrategy.policy,
+    complexity: qualityStrategy.complexity,
+    text: lastUserText,
+    mode,
+    selected: selectedRouteCandidate,
+    candidates: routeCandidates,
+  });
+  const activeProvider = enabledRouteProviders.find(
+    (routeProvider) => routeProvider.id === qualityRoute.active.providerId,
+  ) ?? provider;
+  const activeModelId = qualityRoute.active.modelId;
+  const model = getLanguageModel(activeProvider, activeModelId);
+  trace.metric("qualityPolicy", qualityStrategy.policy);
+  trace.metric("taskComplexity", qualityStrategy.complexity);
+  trace.metric("selectedProviderId", provider.id);
+  trace.metric("routedProviderId", qualityRoute.active.providerId);
+  trace.metric("qualityEscalated", qualityRoute.escalated);
+  trace.event("quality.strategy_selected", {
+    policy: qualityStrategy.policy,
+    complexity: qualityStrategy.complexity,
+    label: qualityStrategy.label,
+  });
+  trace.event("quality.route_selected", {
+    escalated: qualityRoute.escalated,
+    selectedModel: selectedRouteCandidate.modelId,
+    activeModel: qualityRoute.active.modelId,
+    activeProvider: qualityRoute.active.providerLabel,
+    reason: qualityRoute.reason,
+    expectedLatency: qualityRoute.expectedLatency,
+    expectedCost: qualityRoute.expectedCost,
+    verifierEligible: qualityRoute.verifierEligible,
+  });
+
   const relevantMemories = await retrieveRelevantMemories(lastUserText);
   const memoryTip = relevantMemories.length > 0
     ? `\n\n## Saved memories\nThings you have remembered about the user across conversations, ranked by relevance to the current request. Use them to personalize responses.\n${relevantMemories.map((m) => `- ${m.content}`).join("\n")}`
@@ -530,11 +720,19 @@ You are currently in **Plan mode**. This means:
   for (const [name, tool] of Object.entries(baseTools)) {
     baseTools[name] = normaliseTool(tool);
   }
-  const cachedBaseTools = markLastToolForCache(provider, baseTools);
+  const cachedBaseTools = markLastToolForCache(activeProvider, baseTools);
 
   // The initial active set = core + classified + stored groups (identical to
   // the old filtered set). prepareStep re-derives it before every step.
   const initialActiveToolNames = activeToolNames(tools, activeToolGroups);
+  const estimatedToolDefinitionChars = Object.entries(baseTools).reduce(
+    (total, [name, tool]) =>
+      total + name.length + String(tool?.description ?? "").length + (tool?.inputSchema ? 120 : 0),
+    0,
+  );
+  trace.metric("activeToolCount", initialActiveToolNames.length);
+  trace.metric("activeToolNames", initialActiveToolNames);
+  trace.metric("estimatedToolDefinitionChars", estimatedToolDefinitionChars);
 
   // Inject recent file changes into the system prompt for freshness.
   // Capped to 5 — the model can call query_recent_changes for more.
@@ -544,7 +742,7 @@ You are currently in **Plan mode**. This means:
     : "";
 
   // Adaptive system prompt: detect lower-end models and give them a shorter prompt
-  const modelId = conversation.modelId.toLowerCase();
+  const modelId = activeModelId.toLowerCase();
   // Detect lower-end models by checking for known small-model patterns.
   // "Small" = models under ~30B params or known to have <32K context or poor
   // instruction-following. Only models flagged as low-capability get an even
@@ -570,7 +768,21 @@ You are currently in **Plan mode**. This means:
   // plan mode) changes between requests and is placed AFTER the breakpoint
   // so it never invalidates the cached prefix. buildCachedInstructions
   // returns a plain string for providers without explicit caching.
-  const staticSystemPrompt = isLowCapability
+  const researchRequested =
+    /\bresearch\b|\bcitation|\bcite\b|\bsources?\b|\bcurrent information\b|\bsearch the web\b/i.test(
+      lastUserText,
+    ) ||
+    activeToolGroups.has("web_search") ||
+    activeToolGroups.has("news") ||
+    activeToolGroups.has("firecrawl");
+  const researchSection = researchRequested ? RESEARCH_SECTION : "";
+
+  const staticSystemPrompt = researchRequested
+    ? (isLowCapability
+      ? SYSTEM_PROMPT_BASE + visualSection + researchSection + SESSION_FILES_SECTION + PERSISTENCE_GUIDANCE +
+        `\n\n**CRITICAL: Keep responses very short and focused.** Use the simplest tool for each task. If unsure about a tool, call \`get_tool_help\`. Avoid multi-step planning unless the task truly requires it.`
+      : SYSTEM_PROMPT_BASE + visualSection + researchSection + SESSION_FILES_SECTION + PERSISTENCE_GUIDANCE)
+    : isLowCapability
     ? SYSTEM_PROMPT_BASE + visualSection + SESSION_FILES_SECTION + PERSISTENCE_GUIDANCE +
       `\n\n**CRITICAL: Keep responses very short and focused.** Use the simplest tool for each task. If unsure about a tool, call \`get_tool_help\`. Avoid multi-step planning unless the task truly requires it.`
     : SYSTEM_PROMPT_BASE + visualSection + SESSION_FILES_SECTION + PERSISTENCE_GUIDANCE;
@@ -605,9 +817,11 @@ You are currently in **Plan mode**. This means:
   // instructions with a FRESH note once load_tool_groups enables a group
   // mid-stream (the note is the only part of the dynamic prompt that can
   // change mid-request).
+  const qualityPolicyPrompt = `\n\n## Quality policy — ${qualityStrategy.label}\nTask complexity estimate: ${qualityStrategy.complexity}. ${qualityStrategy.verificationGuidance}\nSelected model: ${selectedRouteCandidate.providerLabel} / ${selectedRouteCandidate.modelId}. Active route: ${qualityRoute.active.providerLabel} / ${qualityRoute.active.modelId}. ${qualityRoute.reason} Routing is deterministic and bounded; never make another provider call unless the Quality-first verifier is eligible.`;
+
   const dynamicSystemPromptBase =
     systemTip + profileTip + memoryTip + fileChangeTip + summarySection +
-    planModePrompt + activeSkillsSection;
+    planModePrompt + buildModePrompt + activeSkillsSection + qualityPolicyPrompt;
 
   const dynamicSystemPrompt = dynamicSystemPromptBase + toolAvailabilityNote;
 
@@ -698,9 +912,18 @@ You are currently in **Plan mode**. This means:
     }
   }
 
+  trace.event("prompt.assembled", {
+    durationMs: Math.max(0, Math.round(performance.now() - promptAssemblyStartedAt)),
+    messageCount: modelMessages.length,
+    activeToolCount: initialActiveToolNames.length,
+  });
+
   // Track whether onFinish successfully applied tokens, so the cleanup
   // doesn't double-count by applying the same usage again.
   let tokensApplied = false;
+  let aborted = false;
+  let finalFinishReason: string | undefined;
+  let finalStepCount = 0;
 
   // Capture a normalized error payload from streamText's onError callback so
   // the frontend can render a friendly, structured error (instead of a raw
@@ -720,10 +943,49 @@ You are currently in **Plan mode**. This means:
       }
     | undefined;
 
+  let buildRunId: number | undefined;
+  const buildDefinitionOfDone = [
+    "Requested files or behavior implemented",
+    "Relevant checks run",
+    "Changed files reported",
+    "Failures or uncertainty disclosed",
+  ];
+  const buildCheckpointParts: unknown[] = [];
+  let buildCheckpointWrite: Promise<void> = Promise.resolve();
+  let buildRepairState: BuildRepairState = {
+    attempt: 0,
+    lastFailureSignature: "",
+  };
+  if (mode === "build") {
+    try {
+      const startedBuildRun = await recordBuildRun({
+        conversationId,
+        sourceRunId: trace.traceId,
+        task: lastUserText,
+        status: "running",
+        definitionOfDone: buildDefinitionOfDone,
+        changedFiles: [],
+        checks: [],
+        summary: buildRunSummary([], [], "running"),
+        checkpoint: {
+          step: 0,
+          phase: "executing",
+          repairAttempt: 0,
+          changedFiles: [],
+          checks: [],
+          updatedAt: new Date().toISOString(),
+        },
+      });
+      buildRunId = startedBuildRun.id;
+    } catch (error) {
+      console.warn("[build] Failed to create running build checkpoint:", error);
+    }
+  }
+
   const result = streamText({
     model,
     instructions: buildCachedInstructions(
-      provider,
+      activeProvider,
       staticSystemPrompt,
       dynamicSystemPrompt,
     ),
@@ -749,7 +1011,12 @@ You are currently in **Plan mode**. This means:
         prevStep?.toolCalls?.some(
           (tc) => tc.toolName === "load_tool_groups",
         ) ?? false;
-      if (!enabledGroupsThisRound && lastStepComputed) {
+      const currentBuildChecks =
+        mode === "build" ? checksFromSteps(steps) : [];
+      const buildHasFailure = currentBuildChecks.some(
+        (check) => check.status !== "passed",
+      );
+      if (!enabledGroupsThisRound && lastStepComputed && !buildHasFailure) {
         return lastStepComputed;
       }
 
@@ -765,12 +1032,16 @@ You are currently in **Plan mode**. This means:
         stored: freshStored,
       });
       activeToolGroups = freshActive;
+      const repairNote = buildHasFailure
+        ? `\n\n## BUILD REPAIR LOOP\n${buildRepairGuidance(Math.max(1, buildRepairState.attempt))}`
+        : "";
       lastStepComputed = {
         activeTools: activeToolNames(tools, freshActive),
         instructions: buildCachedInstructions(
-          provider,
+          activeProvider,
           staticSystemPrompt,
           dynamicSystemPromptBase +
+            repairNote +
             buildToolAvailabilityNote(tools, freshActive),
         ),
       };
@@ -778,21 +1049,114 @@ You are currently in **Plan mode**. This means:
     },
     // Retry retryable provider failures (network, 5xx, rate limits) up to
     // 3 times with exponential backoff before surfacing the error.
-    maxRetries: 3,
-    // Ask providers for a generous output budget so low default caps don't
-    // cut the model off mid-response — the #1 cause of runs that appear to
-    // "just stop" after a partial reply. 4096 covers typical chat replies;
-    // goal mode gets a much larger budget for long autonomous runs. Kept
-    // conservative so small-context models don't reject the request.
-    maxOutputTokens: mode === "goal" ? 16_384 : 4_096,
+    maxRetries: qualityStrategy.maxRetries,
+    // The quality policy adjusts effort without creating hidden provider calls.
+    // Complex Goal/Build tasks retain the larger execution budget.
+    maxOutputTokens:
+      mode === "goal" || mode === "build"
+        ? Math.max(qualityStrategy.maxOutputTokens, 16_384)
+        : qualityStrategy.maxOutputTokens,
     // Allow up to 100 steps normally (chat/plan), or 500 in goal mode
     // so the model can work autonomously until task completion
-    stopWhen: stepCountIs(mode === "goal" ? 10000 : 7500),
+    stopWhen: stepCountIs(mode === "goal" || mode === "build" ? 10000 : 7500),
+    onStart: ({ callId, provider: modelProvider, modelId: modelName }) => {
+      trace.recordState("executing", { callId });
+      trace.event("generation.start", {
+        callId,
+        provider: modelProvider,
+        modelId: modelName,
+      });
+    },
+    onLanguageModelCallStart: ({ callId, provider: modelProvider, modelId: modelName }) => {
+      trace.modelCallStart({ callId, provider: modelProvider, modelId: modelName });
+    },
+    onLanguageModelCallEnd: ({
+      callId,
+      provider: modelProvider,
+      modelId: modelName,
+      usage,
+      finishReason,
+      performance: callPerformance,
+    }) => {
+      trace.modelCallEnd({
+        callId,
+        provider: modelProvider,
+        modelId: modelName,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        responseTimeMs: callPerformance.responseTimeMs,
+        timeToFirstOutputMs: callPerformance.timeToFirstOutputMs,
+        finishReason,
+      });
+    },
+    onToolExecutionStart: ({ callId, toolCall }) => {
+      trace.toolStart(toolCall.toolName, callId);
+    },
+    onToolExecutionEnd: ({ callId, toolCall, toolExecutionMs, toolOutput }) => {
+      trace.toolEnd(
+        toolCall.toolName,
+        toolExecutionMs,
+        toolOutput.type === "tool-result",
+        callId,
+      );
+    },
+    onStepEnd: ({ stepNumber, usage, toolCalls: stepToolCalls, toolResults, finishReason }) => {
+      trace.step(stepNumber, {
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        toolCallCount: stepToolCalls.length,
+        toolResultCount: toolResults.length,
+        finishReason,
+      });
+      if (mode === "build" && buildRunId) {
+        buildCheckpointParts.push({ toolResults });
+        const changedFiles = summarizeChangedFiles(
+          buildPartsFromSteps(buildCheckpointParts),
+        );
+        const checks = checksFromSteps(buildCheckpointParts);
+        const repairUpdate = advanceBuildRepairState(buildRepairState, checks);
+        buildRepairState = {
+          attempt: repairUpdate.attempt,
+          lastFailureSignature: repairUpdate.lastFailureSignature,
+        };
+        if (repairUpdate.hasFailure) {
+          trace.metric("buildRepairAttempt", repairUpdate.attempt);
+          trace.event("build.repair_required", {
+            attempt: repairUpdate.attempt,
+            guidance: buildRepairGuidance(repairUpdate.attempt),
+          });
+        }
+        const checkpoint: BuildCheckpoint = {
+          step: stepNumber,
+          phase: repairUpdate.phase,
+          repairAttempt: repairUpdate.attempt,
+          changedFiles,
+          checks,
+          updatedAt: new Date().toISOString(),
+        };
+        buildCheckpointWrite = buildCheckpointWrite
+          .then(async () => {
+            await updateBuildRunCheckpoint(db, buildRunId!, checkpoint);
+          })
+          .catch((error) => {
+            console.warn("[build] Failed to persist checkpoint:", error);
+          });
+      }
+    },
     onError: (err) => {
       capturedErrorPayload = normalizeStreamError(err);
+      trace.providerError(err);
       console.error("[stream] Provider error:", err);
     },
+    onAbort: () => {
+      aborted = true;
+      trace.recordState("cancelled");
+    },
     onFinish: async ({ text: outputText, usage, finishReason, steps, toolCalls }) => {
+      finalFinishReason = finishReason;
+      finalStepCount = steps?.length ?? 0;
+      trace.metric("finishReason", finishReason);
+      trace.metric("finalStepCount", finalStepCount);
       // Treat provider/SDK hard stops as a structured "interrupted" error so
       // users understand why a run appeared to "just stop" — and so the UI
       // can offer a one-click Continue. Without this, these runs end with a
@@ -803,6 +1167,40 @@ You are currently in **Plan mode**. This means:
           .filter(Boolean)
           .join("\n") || outputText || "";
       const hasToolCalls = Array.isArray(toolCalls) && toolCalls.length > 0;
+      if (researchRequested && runText.trim() && !capturedErrorPayload) {
+        void recordCitedClaims({
+          conversationId,
+          sourceRunId: trace.traceId,
+          answerText: runText,
+        }).catch((error) => {
+          console.warn("[research] Failed to persist claim provenance:", error);
+        });
+      }
+      if (
+        qualityRoute.verifierEligible &&
+        finishReason === "stop" &&
+        runText.trim() &&
+        !capturedErrorPayload
+      ) {
+        try {
+          const verification = await verifyQualityAnswer({
+            model,
+            task: lastUserText,
+            answer: runText,
+          });
+          trace.metric("qualityVerifierIssueCount", verification.issueCount);
+          trace.metric("qualityVerifierConfidence", verification.confidence);
+          trace.event("quality.verifier_completed", {
+            verdict: verification.verdict,
+            issueCount: verification.issueCount,
+            confidence: verification.confidence,
+          });
+        } catch (error) {
+          trace.event("quality.verifier_failed", {
+            category: error instanceof Error ? error.name : "UnknownError",
+          });
+        }
+      }
       // Dangling-promise detection: only fire for short text-only responses.
       // A dangling stop is a brief fragment (the reported case was ~250
       // chars); a long completed reply that happens to close with a promise
@@ -840,6 +1238,78 @@ You are currently in **Plan mode**. This means:
         };
       }
 
+      if (mode === "build") {
+        const buildParts = buildPartsFromSteps(steps ?? []);
+        const checks = checksFromSteps(steps ?? []);
+        const changedFiles = summarizeChangedFiles(buildParts);
+        const buildStatus = aborted
+          ? "interrupted"
+          : capturedErrorPayload || checks.some((check) => check.status === "failed")
+            ? "failed"
+            : "completed";
+        const buildSummary = buildRunSummary(changedFiles, checks, buildStatus);
+        await buildCheckpointWrite;
+        const repairUpdate = advanceBuildRepairState(buildRepairState, checks);
+        buildRepairState = {
+          attempt: repairUpdate.attempt,
+          lastFailureSignature: repairUpdate.lastFailureSignature,
+        };
+        const finalCheckpoint: BuildCheckpoint = {
+          step: finalStepCount,
+          phase: repairUpdate.phase,
+          repairAttempt: repairUpdate.attempt,
+          changedFiles,
+          checks,
+          updatedAt: new Date().toISOString(),
+        };
+        let resultArtifactId: number | null = null;
+        try {
+          const resultArtifact = await saveBuildResultArtifact(db, {
+            conversationId,
+            sourceRunId: trace.traceId,
+            task: lastUserText,
+            status: buildStatus,
+            summary: buildSummary,
+            definitionOfDone: buildDefinitionOfDone,
+            changedFiles,
+            checks,
+            checkpoint: finalCheckpoint,
+          });
+          resultArtifactId = resultArtifact?.id ?? null;
+        } catch (error) {
+          console.warn("[build] Failed to persist result artifact:", error);
+        }
+        try {
+          if (buildRunId) {
+            await finishBuildRun(db, buildRunId, {
+              status: buildStatus,
+              changedFiles,
+              checks,
+              summary: buildSummary,
+              error: capturedErrorPayload?.message ?? null,
+              checkpoint: finalCheckpoint,
+              resultArtifactId,
+            });
+          } else {
+            await recordBuildRun({
+              conversationId,
+              sourceRunId: trace.traceId,
+              task: lastUserText,
+              status: buildStatus,
+              definitionOfDone: buildDefinitionOfDone,
+              changedFiles,
+              checks,
+              summary: buildSummary,
+              error: capturedErrorPayload?.message ?? null,
+              checkpoint: finalCheckpoint,
+              resultArtifactId,
+            });
+          }
+        } catch (error) {
+          console.warn("[build] Failed to finalize build run:", error);
+        }
+      }
+
       try {
         // Use provider's usage if available, otherwise estimate
         const inputTokens = usage?.inputTokens ?? 0;
@@ -869,6 +1339,7 @@ You are currently in **Plan mode**. This means:
         const estimatedOutput =
           outputTokens > 0 ? outputTokens : estimateTokenCount(outputText ?? "");
 
+        const tokenUpdateStartedAt = performance.now();
         await db
           .update(conversations)
           .set({
@@ -878,6 +1349,10 @@ You are currently in **Plan mode**. This means:
               sql`total_output_tokens + ${estimatedOutput}`,
           })
           .where(eq(conversations.id, conversationId));
+        trace.dbQuery("token_usage_update", tokenUpdateStartedAt, {
+          inputTokens: estimatedInput,
+          outputTokens: estimatedOutput,
+        });
         tokensApplied = true;
       } catch (err) {
         console.error("Failed to update token usage in onFinish:", err);
@@ -910,6 +1385,7 @@ You are currently in **Plan mode**. This means:
             provider,
             modelId: conversationModelId,
             untilCount,
+            parentTraceId: trace.traceId,
           });
         }
       }
@@ -935,6 +1411,7 @@ You are currently in **Plan mode**. This means:
             userText,
             assistantText: runText,
             expectedTitle: titleFromMessage(firstUser),
+            parentTraceId: trace.traceId,
           });
         }
       }
@@ -1049,6 +1526,7 @@ You are currently in **Plan mode**. This means:
             ? outputTokens
             : estimateTokenCount(await result.text);
 
+        const tokenFallbackStartedAt = performance.now();
         await db
           .update(conversations)
           .set({
@@ -1057,6 +1535,10 @@ You are currently in **Plan mode**. This means:
             updatedAt: new Date().toISOString(),
           })
           .where(eq(conversations.id, conversationId));
+        trace.dbQuery("token_usage_fallback_update", tokenFallbackStartedAt, {
+          inputTokens: estimatedInput,
+          outputTokens: estimatedOutput,
+        });
       } catch (err) {
         console.error("Failed to update token usage in cleanup:", err);
         await db
@@ -1066,12 +1548,30 @@ You are currently in **Plan mode**. This means:
       }
     } else {
       // Tokens already applied — just update updatedAt
+      const updatedAtStartedAt = performance.now();
       await db
         .update(conversations)
         .set({ updatedAt: new Date().toISOString() })
         .where(eq(conversations.id, conversationId));
+      trace.dbQuery("conversation_updated_at", updatedAtStartedAt);
     }
-  });
+
+    const state = aborted
+      ? "cancelled"
+      : capturedErrorPayload
+        ? capturedErrorPayload.shouldResume
+          ? "partially_completed"
+          : "failed"
+        : "completed";
+    trace.recordState(state, {
+      finishReason: finalFinishReason,
+      finalStepCount,
+    });
+    trace.finish(state, {
+      finishReason: finalFinishReason,
+      finalStepCount,
+    });
+  }, trace);
 
   // Build the SSE response for the client, and register the SSE stream
   // for reconnection support.

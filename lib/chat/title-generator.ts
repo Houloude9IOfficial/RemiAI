@@ -13,6 +13,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { conversations, providers } from "@/db/schema";
 import { getLanguageModel } from "@/lib/providers/factory";
+import { createRunTrace } from "@/lib/observability/run-trace";
 
 type ProviderRow = typeof providers.$inferSelect;
 
@@ -84,11 +85,21 @@ export async function autoTitleConversation(opts: {
   userText: string;
   assistantText: string;
   expectedTitle: string;
+  parentTraceId?: string;
 }): Promise<void> {
+  const trace = createRunTrace({
+    kind: "background-title",
+    conversationId: opts.conversationId,
+    parentTraceId: opts.parentTraceId,
+  });
+  trace.event("background.started");
   try {
     const userText = opts.userText.slice(0, MAX_MESSAGE_CHARS).trim();
     const assistantText = opts.assistantText.slice(0, MAX_MESSAGE_CHARS).trim();
-    if (!userText && !assistantText) return;
+    if (!userText && !assistantText) {
+      trace.finish("cancelled", { phase: "empty_input" });
+      return;
+    }
 
     const messages: { role: "user" | "assistant"; content: string }[] = [];
     if (userText) messages.push({ role: "user", content: userText });
@@ -102,10 +113,28 @@ export async function autoTitleConversation(opts: {
       // A title needs only a handful of tokens, but the budget is generous
       // enough that reasoning models don't burn it all on hidden reasoning.
       maxOutputTokens: 100,
+      onLanguageModelCallStart: ({ callId, provider: modelProvider, modelId }) => {
+        trace.modelCallStart({ callId, provider: modelProvider, modelId });
+      },
+      onLanguageModelCallEnd: ({ callId, provider: modelProvider, modelId, usage, finishReason, performance }) => {
+        trace.modelCallEnd({
+          callId,
+          provider: modelProvider,
+          modelId,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          responseTimeMs: performance.responseTimeMs,
+          timeToFirstOutputMs: performance.timeToFirstOutputMs,
+          finishReason,
+        });
+      },
     });
 
     const title = sanitizeTitle(result.text);
-    if (!title) return;
+    if (!title) {
+      trace.finish("partially_completed", { phase: "title_sanitization" });
+      return;
+    }
 
     // Guard: never clobber a title the user set while we were running.
     const current = await db
@@ -113,13 +142,19 @@ export async function autoTitleConversation(opts: {
       .from(conversations)
       .where(eq(conversations.id, opts.conversationId))
       .get();
-    if (!current || current.title !== opts.expectedTitle) return;
+    if (!current || current.title !== opts.expectedTitle) {
+      trace.finish("cancelled", { phase: "title_changed" });
+      return;
+    }
 
     await db
       .update(conversations)
       .set({ title })
       .where(eq(conversations.id, opts.conversationId));
+    trace.finish("completed", { outputChars: result.text.length });
   } catch (err) {
+    trace.providerError(err);
+    trace.finish("failed", { phase: "background_title" });
     // Best-effort: a failure here just keeps the fallback title.
     console.error("[auto-title] Failed to generate conversation title:", err);
   }

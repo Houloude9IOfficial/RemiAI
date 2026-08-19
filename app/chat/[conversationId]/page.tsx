@@ -10,8 +10,11 @@ import { Files, Menu, Plus } from "lucide-react";
 import { MessageList } from "@/components/chat/MessageList";
 import { EmptyChatState } from "@/components/chat/EmptyChatState";
 import { ChatInput, type ChatMode } from "@/components/chat/ChatInput";
+import type { QualityPolicy } from "@/lib/chat/quality-policy";
 import { ChatSkeleton } from "@/components/chat/ChatSkeleton";
 import { TodoProgressBar } from "@/components/chat/TodoProgressBar";
+import { BuildRunHistory } from "@/components/chat/BuildRunHistory";
+import { AutomationRunHistory } from "@/components/chat/AutomationRunHistory";
 import { ExportDialog } from "@/components/chat/ExportDialog";
 import { MobileChatHeader } from "@/components/chat/MobileChatHeader";
 import { ChatHeader } from "@/components/chat/ChatHeader";
@@ -359,6 +362,9 @@ function ConversationChat({
   const [mode, setMode] = useState<ChatMode>(
     (initialConversation as any).mode ?? "chat",
   );
+  const [qualityPolicy, setQualityPolicy] = useState<QualityPolicy>(
+    initialConversation.qualityPolicy ?? "balanced",
+  );
   const queryClient = useQueryClient();
   const [panelOpen, setPanelOpen] = useState(false);
   // When the AI presents a single file (session_present_file), the panel
@@ -383,6 +389,12 @@ function ConversationChat({
     if (mode === (initialConversation as any).mode) return;
     conversationsApi.update(conversationId, { mode }).catch(() => {});
   }, [mode, conversationId, initialConversation]);
+
+  // Persist the per-conversation quality policy alongside the selected mode.
+  useEffect(() => {
+    if (qualityPolicy === (initialConversation.qualityPolicy ?? "balanced")) return;
+    conversationsApi.update(conversationId, { qualityPolicy }).catch(() => {});
+  }, [qualityPolicy, conversationId, initialConversation]);
 
   // ── Resume (reconnection) ──────────────────────────────────────
   // `resume` must be captured once on mount and never change at runtime.
@@ -448,7 +460,10 @@ function ConversationChat({
       }
       // Small delay to ensure server-side token update completes
       // before the sidebar refetches the conversation list.
-      setTimeout(() => onConversationChanged(), 500);
+      setTimeout(() => {
+        onConversationChanged();
+        queryClient.invalidateQueries({ queryKey: ["build-runs", conversationId] });
+      }, 500);
       // First exchange in a brand-new chat (user + assistant only): the
       // server generates a real AI title in the background, so refetch again
       // shortly after to pick it up in the sidebar AND the header.
@@ -813,6 +828,8 @@ function ConversationChat({
 
       {/* ── Todo progress ── */}
       <TodoProgressBar conversationId={conversationId} />
+      {mode === "build" && <BuildRunHistory conversationId={conversationId} />}
+      <AutomationRunHistory conversationId={conversationId} />
 
       {/* ── Messages + Session files panel ── */}
       <div className="relative flex min-h-0 flex-1">
@@ -828,6 +845,8 @@ function ConversationChat({
                 disabled={!providerId || !modelId}
                 mode={mode}
                 onModeChange={setMode}
+                qualityPolicy={qualityPolicy}
+                onQualityPolicyChange={setQualityPolicy}
                 onSend={handleSend}
                 onStop={stop}
                 onAiStart={handleAiStart}
@@ -851,6 +870,7 @@ function ConversationChat({
                 status={status}
                 onSend={(text) => sendMessage({ text })}
                 onRegenerate={handleRegenerate}
+                conversationId={conversationId}
               />
             )}
           </div>
@@ -889,6 +909,8 @@ function ConversationChat({
                     disabled={!providerId || !modelId}
                     mode={mode}
                     onModeChange={setMode}
+                    qualityPolicy={qualityPolicy}
+                    onQualityPolicyChange={setQualityPolicy}
                     onSend={handleSend}
                     onStop={stop}
                   />
