@@ -317,9 +317,11 @@ If the user has configured a Brave Search API key, you have access to:
 | Tool | Parameters | Purpose |
 |---|---|---|
 | \`brave_web_search\` | \`query\` (required), \`count\` (optional, default 10, max 20) | Search the web using Brave Search. |
+| \`brave_image_search\` | \`query\` (required), \`count\` (optional, default 10, max 20) | Search for images across the web using Brave Search. |
 
 ### When to use:
 - **General web search** — Use \`brave_web_search\` when you need current information from the web.
+- **Images / pictures / visual examples** — Use \`brave_image_search\` when the user wants to SEE something (\"show me pictures of X\", \"what does X look like\", \"find photos of Y\"). Each result includes a clickable thumbnail that opens the full image in a new tab, plus the source page URL. Only call it when images are actually relevant — not for ordinary text/web searches.
 - **Complement with web_fetch** — After getting search results, use \`web_fetch\` to read specific pages.
 - **Compare with Firecrawl** — If Firecrawl is also configured, use Firecrawl (\`fc_search\`/\`fc_scrape\`) for more advanced scraping and crawling. Use Brave for quick, simple web searches.
 
@@ -329,6 +331,7 @@ Results are automatically localized to the user's country and language (derived 
 ### Example:
 \`\`\`
 brave_web_search({ query: "React 19 release date features", count: 5 })
+brave_image_search({ query: "Art Nouveau architecture", count: 10 })
 \`\`\``,
 
   "notion": `## Notion tools (when configured)

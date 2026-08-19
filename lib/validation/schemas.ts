@@ -77,3 +77,26 @@ export const mcpServerUpdateSchema = z.object({
   headers: z.record(z.string(), z.string()).optional().nullable(),
   enabled: z.boolean().optional(),
 });
+
+// A single server entry in the standard MCP client config format
+// (Claude Desktop / Cursor `.mcp.json`):
+// {
+//   "mcpServers": {
+//     "ntfy": { "command": "npx", "args": ["-y", "..."], "env": { ... } }
+//   }
+// }
+export const mcpServerJsonConfigSchema = z
+  .object({
+    command: z.string().min(1).optional(),
+    args: z.array(z.string()).optional(),
+    env: z.record(z.string(), z.string()).optional(),
+    url: z.string().url().optional(),
+    headers: z.record(z.string(), z.string()).optional(),
+  })
+  .refine((v) => !!v.command || !!v.url, {
+    message: "Each server needs a command (stdio) or a url (http)",
+  });
+
+export const mcpServersImportSchema = z.object({
+  mcpServers: z.record(z.string().min(1).max(100), mcpServerJsonConfigSchema),
+});

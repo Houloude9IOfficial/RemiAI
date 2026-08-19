@@ -14,7 +14,9 @@ import {
   AlertCircle,
   Terminal,
   Image,
+  Images,
   ChevronRight,
+  ExternalLink,
 } from "lucide-react";
 import { MediaDisplay } from "./MediaDisplay";
 import { QuestionsCard } from "./QuestionsCard";
@@ -202,6 +204,7 @@ function operationSummary(name: string, running: boolean): string {
     list_directory: "Listed directory",
     web_fetch: "Fetched page",
     web_search: "Searched web",
+    brave_web_search: "Searched web",
   };
   return labels[name] ?? name.replace(/_/g, " ");
 }
@@ -299,6 +302,18 @@ export function ToolCallCard({
     typeof output === "object" &&
     (output as Record<string, unknown>).type === "visual";
 
+  const isImageSearchResult =
+    output !== undefined &&
+    output !== null &&
+    typeof output === "object" &&
+    (output as Record<string, unknown>).type === "image_search";
+
+  const isWebSearchResult =
+    output !== undefined &&
+    output !== null &&
+    typeof output === "object" &&
+    (output as Record<string, unknown>).type === "web_search";
+
   const isAgentResult =
     output !== undefined &&
     output !== null &&
@@ -325,6 +340,12 @@ export function ToolCallCard({
     }
     if (isVisualResult && output && isComplete) {
       return <VisualCard data={output} />;
+    }
+    if (isImageSearchResult && output && isComplete) {
+      return <ImageSearchResult data={output as Record<string, unknown>} />;
+    }
+    if (isWebSearchResult && output && isComplete) {
+      return <WebSearchResult data={output as Record<string, unknown>} />;
     }
     if (isAgentResult && output && isComplete && !isMinor) {
       return <AgentResultCard data={output as Record<string, unknown>} />;
@@ -642,6 +663,20 @@ function ResultBody({
   if (isMediaResult && output) {
     return <MediaDisplay data={output as Record<string, unknown>} />;
   }
+  if (
+    output &&
+    typeof output === "object" &&
+    (output as Record<string, unknown>).type === "image_search"
+  ) {
+    return <ImageSearchResult data={output as Record<string, unknown>} />;
+  }
+  if (
+    output &&
+    typeof output === "object" &&
+    (output as Record<string, unknown>).type === "web_search"
+  ) {
+    return <WebSearchResult data={output as Record<string, unknown>} />;
+  }
   if (isExecResult && output) {
     return <ExecOutput data={output as Record<string, unknown>} />;
   }
@@ -758,6 +793,230 @@ function AgentResultCard({
   }
 
   return null;
+}
+
+/* ---- Web search results (Brave web search) ---- */
+
+interface WebSearchItem {
+  title: string;
+  url: string;
+  description: string;
+  thumbnailUrl: string;
+}
+
+function WebSearchResult({ data }: { data: Record<string, unknown> }) {
+  const query = typeof data.query === "string" ? data.query : "";
+  const rawResults = Array.isArray(data.results) ? data.results : [];
+
+  const results: WebSearchItem[] = [];
+  for (const r of rawResults) {
+    if (!r || typeof r !== "object") continue;
+    const rec = r as Record<string, unknown>;
+    const title = typeof rec.title === "string" ? rec.title : "";
+    const url = typeof rec.url === "string" ? rec.url : "";
+    const description =
+      typeof rec.description === "string" ? rec.description : "";
+    const thumbnail = rec.thumbnail && typeof rec.thumbnail === "object"
+      ? (rec.thumbnail as Record<string, unknown>)
+      : null;
+    const thumbnailSrc =
+      thumbnail && typeof thumbnail.src === "string" ? thumbnail.src : "";
+    // Skip favicon logos — only surface real content thumbnails.
+    const thumbnailUrl = thumbnail?.logo === true ? "" : thumbnailSrc;
+    if (!title && !url && !description) continue;
+    results.push({ title, url, description, thumbnailUrl });
+  }
+
+  if (results.length === 0) {
+    return <JsonBlock data={data} />;
+  }
+
+  return (
+    <div className="overflow-hidden rounded-md border border-border/40">
+      <div className="flex items-center gap-2 border-b border-border/35 bg-surface-2/50 px-2.5 py-1.5">
+        <Image className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-foreground/90">
+          {query || "Search results"}
+        </span>
+        <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+          {results.length} result{results.length === 1 ? "" : "s"}
+        </span>
+      </div>
+      <ul className="flex flex-col">
+        {results.map((r, i) => (
+          <li
+            key={`${r.url}-${i}`}
+            className="flex gap-2.5 border-b border-border/25 px-2.5 py-2 last:border-b-0"
+          >
+            <div className="min-w-0 flex-1">
+              <a
+                href={r.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="line-clamp-2 text-[12px] font-medium leading-snug text-foreground/90 transition-colors hover:underline"
+              >
+                {r.title || r.url}
+              </a>
+              {r.url && (
+                <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                  {r.url}
+                </p>
+              )}
+              {r.description && (
+                <p className="mt-0.5 line-clamp-2 text-[11px] leading-relaxed text-foreground/70">
+                  {r.description}
+                </p>
+              )}
+            </div>
+            {r.thumbnailUrl && (
+              <a
+                href={r.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="shrink-0 self-start"
+                aria-label={r.title ? `Open result: ${r.title}` : "Open result"}
+              >
+                <img
+                  src={r.thumbnailUrl}
+                  alt={r.title || ""}
+                  loading="lazy"
+                  className="h-14 w-20 rounded-md border border-border/40 object-cover"
+                />
+              </a>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/* ---- Image search results (Brave image search) ---- */
+
+interface ImageSearchItem {
+  thumbnailUrl: string;
+  imageUrl: string;
+  pageUrl: string;
+  title: string;
+  source: string;
+}
+
+function ImageSearchResult({ data }: { data: Record<string, unknown> }) {
+  const query = typeof data.query === "string" ? data.query : "";
+  const rawResults = Array.isArray(data.results) ? data.results : [];
+
+  const items: ImageSearchItem[] = [];
+  for (const r of rawResults) {
+    if (!r || typeof r !== "object") continue;
+    const rec = r as Record<string, unknown>;
+    const thumbnailUrl = typeof rec.thumbnailUrl === "string" ? rec.thumbnailUrl : "";
+    const imageUrl = typeof rec.imageUrl === "string" ? rec.imageUrl : "";
+    const pageUrl = typeof rec.pageUrl === "string" ? rec.pageUrl : "";
+    const title = typeof rec.title === "string" ? rec.title : "";
+    const source = typeof rec.source === "string" ? rec.source : "";
+    const src = thumbnailUrl || imageUrl;
+    if (!src) continue;
+    items.push({ thumbnailUrl: src, imageUrl, pageUrl, title, source });
+  }
+
+  const [expanded, setExpanded] = useState(false);
+
+  if (items.length === 0) {
+    return <JsonBlock data={data} />;
+  }
+
+  // Preview a horizontal strip of the first few images; when there are more,
+  // the last tile gets a "view all N" badge (and a header toggle) that opens
+  // the full set in a wrapping layout.
+  const PREVIEW_COUNT = 4;
+  const hasMore = items.length > PREVIEW_COUNT;
+  const visibleItems =
+    expanded || !hasMore ? items : items.slice(0, PREVIEW_COUNT);
+
+  return (
+    <div className="overflow-hidden rounded-md border border-border/40">
+      <div className="flex items-center gap-2 border-b border-border/35 bg-surface-2/50 px-2.5 py-1.5">
+        <Image className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-foreground/90">
+          {query || "Image results"}
+        </span>
+        <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+          {items.length} image{items.length === 1 ? "" : "s"}
+        </span>
+        {hasMore && (
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="shrink-0 text-[10px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            {expanded ? "Show less" : "View all"}
+          </button>
+        )}
+      </div>
+
+      <div
+        className={cn(
+          "gap-1.5 p-1.5",
+          expanded
+            ? "grid grid-cols-2 sm:grid-cols-4"
+            : "flex overflow-x-auto",
+        )}
+      >
+        {visibleItems.map((item, i) => {
+          const openUrl = item.imageUrl || item.pageUrl;
+          const isLastPreview =
+            !expanded && hasMore && i === PREVIEW_COUNT - 1;
+          const label = [item.title, item.source].filter(Boolean).join(" — ");
+          return (
+            <div
+              key={`${item.thumbnailUrl}-${i}`}
+              className={cn(
+                "group relative overflow-hidden rounded-md border border-border/40 bg-surface-2/50",
+                !expanded && "shrink-0",
+              )}
+            >
+              <a
+                href={openUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block"
+                title={label || undefined}
+                aria-label={label ? `Open image: ${label}` : `Open image ${i + 1}`}
+              >
+                <img
+                  src={item.thumbnailUrl}
+                  alt={item.title || `image ${i + 1}`}
+                  loading="lazy"
+                  className={cn(
+                    "block object-cover transition-transform duration-200 hover:scale-[1.04]",
+                    expanded ? "h-28 w-full" : "h-28 w-40",
+                  )}
+                />
+                {!isLastPreview && (
+                  <span className="absolute bottom-1 right-1 flex h-5 w-5 items-center justify-center rounded bg-black/55 text-white opacity-0 transition-opacity group-hover:opacity-100">
+                    <ExternalLink className="h-3 w-3" />
+                  </span>
+                )}
+              </a>
+              {isLastPreview && (
+                <button
+                  type="button"
+                  onClick={() => setExpanded(true)}
+                  className="absolute bottom-1 right-1 flex items-center gap-1 rounded-md bg-black/65 px-1.5 py-1 text-white transition-colors hover:bg-black/80"
+                  aria-label={`View all ${items.length} images`}
+                >
+                  <Images className="h-3.5 w-3.5" />
+                  <span className="text-[11px] font-semibold tabular-nums">
+                    {items.length}
+                  </span>
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 /* ---- Content output (e.g. extracted video frames) ---- */

@@ -241,7 +241,7 @@ the ai users bash to write/edit/delete files, but it should use bash for command
 
 <!-- on open of site if no chat id, do not redirect to an old chat, instead go to new chat. (done) -->
 
-allow creating/editing mcp servers with json:
+<!-- allow creating/editing mcp servers with json:
 {
   "mcpServers": {
     "ntfy": {
@@ -252,9 +252,9 @@ allow creating/editing mcp servers with json:
       }
     }
   }
-}
+} -->
 
-show images images of results too, similar to google search, but not always, only when the AI thinks it's relevant, and also allow to click on the image to open it in a new tab.
+<!-- show images images of results too, similar to google search, but not always, only when the AI thinks it's relevant, and also allow to click on the image to open it in a new tab. -->
 
 bash_execute always fails. fix it.
 

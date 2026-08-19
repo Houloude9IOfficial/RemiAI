@@ -107,6 +107,18 @@ export function EmptyChatState({
         {/* Headline — outer element is a <div>, not a <p>, because it renders
             a nested <p dangerouslySetInnerHTML> (may contain an <a> link).
             <p> inside <p> is invalid HTML and breaks hydration. */}
+
+        {disabled && !isStreaming && (
+          <div className="flex flex-wrap items-center justify-center gap-2 text-center text-xs text-muted-foreground">
+            <span>Choose a model before sending a message.</span>
+            <a
+              href="/settings/providers"
+              className="font-medium text-primary underline underline-offset-2 hover:text-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+            >
+              Open model settings
+            </a>
+          </div>
+        )}
         <div className="relative max-w-3xl text-center text-4xl font-semibold tracking-tight text-foreground/90 md:text-[2.75rem] md:leading-[1.15]">
           {/**
            * Reserved mascot slot — when a mascot/illustration exists it can
@@ -134,18 +146,6 @@ export function EmptyChatState({
             </button>
           ))}
         </div>
-
-        {disabled && !isStreaming && (
-          <div className="flex flex-wrap items-center justify-center gap-2 text-center text-xs text-muted-foreground">
-            <span>Choose a model before sending a message.</span>
-            <a
-              href="/settings/providers"
-              className="font-medium text-primary underline underline-offset-2 hover:text-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-            >
-              Open model settings
-            </a>
-          </div>
-        )}
 
         {/* Big centered composer — shares layoutId with the docked input so
             the transition between the two states animates smoothly. Ease-out

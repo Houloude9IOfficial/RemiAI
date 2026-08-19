@@ -251,10 +251,13 @@ export const CONDITIONAL_GROUPS: Record<string, ToolGroup> = {
   },
   web_search: {
     label: "web-search",
-    tools: ["brave_web_search"],
+    tools: ["brave_web_search", "brave_image_search"],
     keywords: [
       "search the web", "search online", "google", "look it up", "look this up",
       "web search", "search for", "on the internet", "find online",
+      "pictures of", "photos of", "images of", "picture of", "photo of",
+      "image of", "show me a picture", "show me pictures", "show me photos",
+      "show me images", "find images", "image search", "what does it look like",
     ],
   },
   notion: {

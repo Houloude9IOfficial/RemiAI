@@ -185,8 +185,8 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     name: "Brave Search",
     icon: "https://upload.wikimedia.org/wikipedia/commons/5/51/Brave_icon_lionface.png",
     description:
-      "Search the web using Brave Search. Get up-to-date information, news, and answers from the internet.",
-    toolNames: ["brave_web_search"],
+      "Search the web using Brave Search. Get up-to-date information, news, answers, and image results from the internet.",
+    toolNames: ["brave_web_search", "brave_image_search"],
     category: "integration",
     togglable: true,
     requiresApiKey: true,

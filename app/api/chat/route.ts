@@ -370,6 +370,7 @@ export async function POST(req: Request) {
         name,
         [
           "brave_web_search",
+          "brave_image_search",
           "news_search",
           "news_top_headlines",
           "fc_search",

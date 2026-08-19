@@ -312,6 +312,16 @@ const TOOL_LABELS: Record<string, ToolLabel> = {
     past: "Searched web",
     icon: Search,
   },
+  brave_web_search: {
+    present: "Searching web",
+    past: "Searched web",
+    icon: Search,
+  },
+  brave_image_search: {
+    present: "Searching images",
+    past: "Searched images",
+    icon: Image,
+  },
   web_fetch: {
     present: "Fetching content",
     past: "Fetched content",

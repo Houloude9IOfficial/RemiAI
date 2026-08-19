@@ -34,6 +34,24 @@ export type McpTestResult = {
   error?: string;
 };
 
+export type McpJsonServerConfig = {
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  url?: string;
+  headers?: Record<string, string>;
+};
+
+export type McpImportInput = {
+  mcpServers: Record<string, McpJsonServerConfig>;
+};
+
+export type McpImportResult = {
+  created: string[];
+  updated: string[];
+  errors: { name: string; error: string }[];
+};
+
 async function unwrap<T>(res: Response): Promise<T> {
   const data = await res.json();
   if (!res.ok) throw new Error(data.error ?? "Request failed");
@@ -70,4 +88,11 @@ export const mcpServersApi = {
     fetch(`/api/mcp-servers/${id}/test`, { method: "POST" }).then((res) =>
       unwrap<McpTestResult>(res),
     ),
+
+  import: (input: McpImportInput): Promise<McpImportResult> =>
+    fetch("/api/mcp-servers/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    }).then((res) => unwrap<McpImportResult>(res)),
 };
