@@ -1128,7 +1128,7 @@ export function ChatInput({
                     Code
                     <span className="ml-auto flex items-center">
                       {codeExecutionOn ? (
-                        <Check className="h-3.5 w-3.5 text-primary" />
+                        <></>// <Check className="h-3.5 w-3.5 text-primary" />
                       ) : (
                         <span className="text-[10px] text-muted-foreground">Set up</span>
                       )}
@@ -1137,16 +1137,23 @@ export function ChatInput({
                   {/* Bash access tier — one toggle between the two real
                       permission levels (Safe = sandboxed to permitted
                       directories, Full = device-wide). Shows the current
-                      tier; clicking switches to the other. */}
+                      tier; clicking switches to the other. Disabled when
+                      code execution is off. */}
                   <DropdownMenuItem
-                    onClick={() =>
-                      setBashModeValue(bashMode === "sandboxed" ? "full" : "sandboxed")
-                    }
+                    onClick={() => {
+                      if (codeExecutionOn) {
+                        setBashModeValue(bashMode === "sandboxed" ? "full" : "sandboxed");
+                      } else {
+                        router.push("/settings/tools");
+                      }
+                    }}
                   >
                     <Terminal className="h-4 w-4" />
-                    Bash: {bashMode === "full" ? "Full" : "Safe"}
+                    Bash: {codeExecutionOn ? (bashMode === "full" ? "Full" : "Safe") : "Safe"}
                     <span className="ml-auto text-[10px] text-muted-foreground">
-                      {bashMode === "full" ? "Switch to Safe" : "Switch to Full"}
+                      {codeExecutionOn
+                        ? (bashMode === "full" ? "Switch to Safe" : "Switch to Full")
+                        : "Set up"}
                     </span>
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
