@@ -953,7 +953,7 @@ export function ChatInput({
                     mode === "goal"
                       ? "Goal mode — works until the task is complete"
                       : mode === "build"
-                        ? "Build mode — changes files, runs checks, and reports verification"
+                        ? "Build mode — changes files and runs checks"
                         : "Plan mode — plans without writing files"
                   }
                   disabled={disabled || isStreaming}
@@ -1042,7 +1042,7 @@ export function ChatInput({
                         <span>
                           <span className="block">Build mode</span>
                           <span className="block text-[10px] font-normal text-muted-foreground">
-                            Change files, run checks, and show what passed
+                            Change files and run checks
                           </span>
                         </span>
                       </DropdownMenuCheckboxItem>
@@ -1054,7 +1054,7 @@ export function ChatInput({
                         <span>
                           <span className="block">Goal mode</span>
                           <span className="block text-[10px] font-normal text-muted-foreground">
-                            Work autonomously until the goal is complete
+                            Works autonomously until finish
                           </span>
                         </span>
                       </DropdownMenuCheckboxItem>
