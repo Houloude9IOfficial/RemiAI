@@ -259,4 +259,4 @@ find a better icon for projects tab
 
 bash_execute always fails. fix it.
 
-create a tool to allow sending push notifications to the user via web/app.
+<!-- create a tool to allow sending push notifications to the user via web/app. -->
