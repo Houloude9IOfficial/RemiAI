@@ -174,13 +174,14 @@ export const CONDITIONAL_GROUPS: Record<string, ToolGroup> = {
   },
   exec: {
     label: "code-execution",
-    tools: ["python_exec", "js_exec"],
+    tools: ["python_exec", "js_exec", "bash_execute"],
     keywords: [
       "run this", "run the", "run some", "run code", "execute", "python",
       "javascript", "node", "npm", "terminal", "bash", "shell", "script",
       "compute", "calculate", "snippet", "cli", "repl", "test the code",
       "execute code", "data analysis", "analyze data", "math", "algorithm",
       "pip install", "npm install", "run a script",
+      "git", "typecheck", "lint", "deploy", "compile",
     ],
   },
   create_visual: {
