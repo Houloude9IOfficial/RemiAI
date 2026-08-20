@@ -104,9 +104,10 @@ function getClipboardFiles(fileItems: DataTransferItem[]): File[] {
 
 /**
  * Small removable capability chip shown in the composer bar ("X to clear").
- * Mode chips are real per-conversation toggles; the code chip reflects the
- * real global tool configuration — clearing it only hides the chip, it never
- * changes server-side settings.
+ * Mode chips are real per-conversation toggles; the Code chip is a
+ * per-conversation opt-in too — it appears only after the user enables it in
+ * that chat via the "+" menu, and clearing it hides it for that chat only.
+ * Purely cosmetic — it never changes server-side tool configuration.
  */
 function CapabilityChip({
   icon: Icon,
@@ -154,6 +155,13 @@ const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
  */
 const MAX_PASTE_TEXT_CHARS = 10_000;
 
+/**
+ * localStorage key for per-conversation Code-chip opt-in state. Value is a
+ * map of { [conversationId]: true } — a conversation shows the Code chip only
+ * when it has an explicit `true` entry, so every fresh chat starts clean.
+ */
+const CODE_CHIP_KEY = "remi-code-per-session";
+
 export type ChatMode = "chat" | "goal" | "plan" | "build";
 
 function qualityPolicyLabel(policy: QualityPolicy): string {
@@ -196,11 +204,11 @@ export function ChatInput({
   const dragCounterRef = useRef(0);
   const [bashMode, setBashMode] = useState<"sandboxed" | "full">("sandboxed");
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  // Status-capability chip (code execution) that the user has dismissed via
-  // its X. Persisted so the preference survives reloads; re-showing is one
-  // click in the "+" menu. Purely cosmetic — it never changes the server-side
-  // tool configuration.
-  const [hiddenChips, setHiddenChips] = useState<Set<string>>(new Set());
+  // Per-conversation "Code" chip opt-in. Fresh sessions NEVER show the chip
+  // automatically (even when code execution is enabled in Settings) — the
+  // user turns it on per conversation via the "+" menu. Purely cosmetic — it
+  // never changes the server-side tool configuration.
+  const [codeChipOn, setCodeChipOn] = useState(false);
   const router = useRouter();
 
   const isStreaming = status === "streaming" || status === "submitted";
@@ -215,29 +223,40 @@ export function ChatInput({
 
   const codeExecutionOn = !!toolConfigs?.find((t) => t.id === "code_execution")?.config.enabled;
 
-  // Hydrate dismissed-chip preferences after mount (avoids SSR mismatch).
+  // Hydrate this conversation's chip preference after mount (avoids SSR
+  // mismatch — the initial render always starts with the chip hidden).
+  const hydratedRef = useRef(false);
   useEffect(() => {
     try {
-      const stored = localStorage.getItem("remi-hidden-chips");
+      const stored = localStorage.getItem(CODE_CHIP_KEY);
       if (stored) {
-        const parsed: unknown = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
+        const map: unknown = JSON.parse(stored);
+        if (map && typeof map === "object") {
+          const enabled = (map as Record<string, unknown>)[String(conversationId)];
           // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional post-hydration sync from localStorage (matches AppSidebar pattern)
-          setHiddenChips(new Set(parsed.filter((x) => typeof x === "string")));
+          setCodeChipOn(enabled === true);
         }
       }
     } catch {
       // localStorage unavailable
     }
-  }, []);
+    hydratedRef.current = true;
+  }, [conversationId]);
 
+  // Persist this conversation's preference (skipped until hydration ran, so
+  // the mount-time read is never clobbered by the initial `false`).
   useEffect(() => {
+    if (!hydratedRef.current) return;
     try {
-      localStorage.setItem("remi-hidden-chips", JSON.stringify([...hiddenChips]));
+      const stored = localStorage.getItem(CODE_CHIP_KEY);
+      const map: Record<string, boolean> = stored ? JSON.parse(stored) : {};
+      if (codeChipOn) map[String(conversationId)] = true;
+      else delete map[String(conversationId)];
+      localStorage.setItem(CODE_CHIP_KEY, JSON.stringify(map));
     } catch {
       // localStorage unavailable
     }
-  }, [hiddenChips]);
+  }, [codeChipOn, conversationId]);
 
   useEffect(() => {
     conversationsApi.get(conversationId)
@@ -258,22 +277,12 @@ export function ChatInput({
     [bashMode, conversationId],
   );
 
-  const hideChip = useCallback((id: string) => {
-    setHiddenChips((prev) => new Set(prev).add(id));
-  }, []);
-
-  const showChip = useCallback((id: string) => {
-    setHiddenChips((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-  }, []);
-
   // Active capability chips shown in the bar (mode toggle + code status).
-  const chipVisible = (id: string) => !hiddenChips.has(id);
+  // The Code chip is a per-conversation opt-in: it appears only once the user
+  // enables it via the "+" menu for THIS conversation.
   const hasModeChip = !!onModeChange && mode !== "chat";
-  const hasChips = hasModeChip || (codeExecutionOn && chipVisible("code"));
+  const codeChipVisible = codeExecutionOn && codeChipOn;
+  const hasChips = hasModeChip || codeChipVisible;
 
   // Register this textarea so the global "/" shortcut can focus it.
   // Capture the element up front — React nulls refs before effect cleanups
@@ -960,12 +969,12 @@ export function ChatInput({
                   onClear={() => onModeChange?.("chat")}
                 />
               )}
-              {codeExecutionOn && chipVisible("code") && (
+              {codeChipVisible && (
                 <CapabilityChip
                   icon={Code2}
                   label="Code"
-                  title="Code execution is enabled — the access tier is set with the Safe/Full control"
-                  onClear={() => hideChip("code")}
+                  title="Code execution is on for this conversation — the access tier is set with the Safe/Full control"
+                  onClear={() => setCodeChipOn(false)}
                 />
               )}
             </div>
@@ -1117,8 +1126,8 @@ export function ChatInput({
                   <DropdownMenuItem
                     onClick={() => {
                       if (codeExecutionOn) {
-                        if (chipVisible("code")) hideChip("code");
-                        else showChip("code");
+                        // Per-conversation opt-in — this conversation only.
+                        setCodeChipOn((on) => !on);
                       } else {
                         router.push("/settings/tools");
                       }
@@ -1128,7 +1137,13 @@ export function ChatInput({
                     Code
                     <span className="ml-auto flex items-center">
                       {codeExecutionOn ? (
-                        <></>// <Check className="h-3.5 w-3.5 text-primary" />
+                        codeChipOn ? (
+                          <Check className="h-3.5 w-3.5 text-primary" />
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground">
+                            Off for this chat
+                          </span>
+                        )
                       ) : (
                         <span className="text-[10px] text-muted-foreground">Set up</span>
                       )}
