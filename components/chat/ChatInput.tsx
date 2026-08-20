@@ -1020,6 +1020,7 @@ export function ChatInput({
             <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
               <DropdownMenuTrigger
                 type="button"
+                title="Add photos, files, or capabilities"
                 disabled={disabled || isStreaming}
                 className={cn(
                   "flex cursor-pointer items-center justify-center rounded-full border border-border/60 transition-colors hover:bg-muted hover:text-foreground",
