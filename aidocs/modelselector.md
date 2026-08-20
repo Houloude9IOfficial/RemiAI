@@ -1,0 +1,649 @@
+# Model Selector
+
+
+
+import ModelSelectorDefault from "@/components/nexus-ui/examples/model-selector/default";
+import ModelSelectorBasic from "@/components/nexus-ui/examples/model-selector/basic";
+import ModelSelectorWithSub from "@/components/nexus-ui/examples/model-selector/with-sub";
+import ModelSelectorWithItems from "@/components/nexus-ui/examples/model-selector/with-items";
+import ModelSelectorWithCheckbox from "@/components/nexus-ui/examples/model-selector/with-checkbox";
+import ModelSelectorTriggerVariants from "@/components/nexus-ui/examples/model-selector/trigger-variants";
+import ModelSelectorWithPromptInput from "@/components/nexus-ui/examples/model-selector/with-prompt-input";
+import ModelSelectorCustomTrigger from "@/components/nexus-ui/examples/model-selector/custom-trigger";
+import ModelSelectorWithSearch from "@/components/nexus-ui/examples/model-selector/with-search";
+
+A composable dropdown for selecting AI models. Built on [Radix UI Dropdown Menu](https://www.radix-ui.com/primitives/docs/components/dropdown-menu),
+it supports radio groups for single selection, sub-menus for nested options, plain items for toggles or actions, and separators for grouping.
+The trigger displays the selected model's icon and title when you pass an `items` array.
+
+<DemoWithCode src="components/nexus-ui/examples/model-selector/default.tsx">
+  <ModelSelectorDefault />
+</DemoWithCode>
+
+Installation [#installation]
+
+<Tabs items={["CLI", "Manual"]} framed={false}>
+  <Tab value="CLI">
+    <Tabs items={["npm", "pnpm", "yarn", "bun"]}>
+      <Tab value="npm">
+        ```bash
+        npx shadcn@latest add @nexus-ui/model-selector
+        ```
+      </Tab>
+
+      <Tab value="pnpm">
+        ```bash
+        pnpm dlx shadcn@latest add @nexus-ui/model-selector
+        ```
+      </Tab>
+
+      <Tab value="yarn">
+        ```bash
+        yarn dlx shadcn@latest add @nexus-ui/model-selector
+        ```
+      </Tab>
+
+      <Tab value="bun">
+        ```bash
+        bunx shadcn@latest add @nexus-ui/model-selector
+        ```
+      </Tab>
+    </Tabs>
+  </Tab>
+
+  <Tab value="Manual">
+    <Steps>
+      <Step>
+        <h3>
+          Install the following dependencies:
+        </h3>
+
+        <Tabs items={["npm", "pnpm", "yarn", "bun"]}>
+          <Tab value="npm">
+            ```bash
+            npm install radix-ui class-variance-authority @hugeicons/react @hugeicons/core-free-icons
+            ```
+          </Tab>
+
+          <Tab value="pnpm">
+            ```bash
+            pnpm add radix-ui class-variance-authority @hugeicons/react @hugeicons/core-free-icons
+            ```
+          </Tab>
+
+          <Tab value="yarn">
+            ```bash
+            yarn add radix-ui class-variance-authority @hugeicons/react @hugeicons/core-free-icons
+            ```
+          </Tab>
+
+          <Tab value="bun">
+            ```bash
+            bun add radix-ui class-variance-authority @hugeicons/react @hugeicons/core-free-icons
+            ```
+          </Tab>
+        </Tabs>
+      </Step>
+
+      <Step>
+        <h3>
+          Copy and paste the following code into your project.
+        </h3>
+
+        <ComponentSource src="components/nexus-ui/model-selector.tsx" title="components/nexus-ui/model-selector.tsx" />
+      </Step>
+
+      <Step>
+        <h3>
+          Update import paths to match your project setup.
+        </h3>
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+Usage [#usage]
+
+```tsx keepBackground
+import {
+  ModelSelector,
+  ModelSelectorTrigger,
+  ModelSelectorContent,
+  ModelSelectorGroup,
+  ModelSelectorLabel,
+  ModelSelectorRadioGroup,
+  ModelSelectorRadioItem,
+} from "@/components/nexus-ui/model-selector";
+```
+
+```tsx keepBackground noCollapse
+<ModelSelector value={model} onValueChange={setModel} items={models}>
+  <ModelSelectorTrigger />
+  <ModelSelectorContent>
+    <ModelSelectorGroup>
+      <ModelSelectorLabel>Select model</ModelSelectorLabel>
+      <ModelSelectorRadioGroup value={model} onValueChange={setModel}>
+        {models.map((m) => (
+          <ModelSelectorRadioItem
+            key={m.value}
+            value={m.value}
+            title={m.title}
+          />
+        ))}
+      </ModelSelectorRadioGroup>
+    </ModelSelectorGroup>
+  </ModelSelectorContent>
+</ModelSelector>
+```
+
+Examples [#examples]
+
+Basic [#basic]
+
+A minimal model selector with radio items. No icons, descriptions, or labels.
+
+<DemoWithCode src="components/nexus-ui/examples/model-selector/basic.tsx">
+  <ModelSelectorBasic />
+</DemoWithCode>
+
+Trigger Variants [#trigger-variants]
+
+The trigger supports three variants: `filled` (default), `outline`, and `ghost`. Use `outline` or `ghost` when placing
+the model selector inside a [Prompt Input](/docs/components/prompt-input) or other dense UI.
+
+<DemoWithCode src="components/nexus-ui/examples/model-selector/trigger-variants.tsx">
+  <ModelSelectorTriggerVariants />
+</DemoWithCode>
+
+Custom Trigger [#custom-trigger]
+
+Pass custom `children` to `ModelSelectorTrigger` to override the default icon-and-title layout.
+You control the content entirely—use your own copy, icons, and layout.
+
+<DemoWithCode src="components/nexus-ui/examples/model-selector/custom-trigger.tsx">
+  <ModelSelectorCustomTrigger />
+</DemoWithCode>
+
+With Sub-menus [#with-sub-menus]
+
+Use `ModelSelectorSub`, `ModelSelectorSubTrigger`, `ModelSelectorPortal`, and `ModelSelectorSubContent` for nested
+options like provider-specific model groups.
+
+<DemoWithCode src="components/nexus-ui/examples/model-selector/with-sub.tsx">
+  <ModelSelectorWithSub />
+</DemoWithCode>
+
+With Checkbox [#with-checkbox]
+
+Use `ModelSelectorCheckboxItem` alone for multi-select. Each item is a checkbox—toggle models on or off. Use a custom
+trigger to show the selection (e.g. "Select models", "GPT-4", or "3 models").
+
+<DemoWithCode src="components/nexus-ui/examples/model-selector/with-checkbox.tsx">
+  <ModelSelectorWithCheckbox />
+</DemoWithCode>
+
+With Prompt Input [#with-prompt-input]
+
+Place the model selector in a `PromptInputActionGroup` alongside attach, image, mic, and send buttons.
+
+<DemoWithCode src="components/nexus-ui/examples/model-selector/with-prompt-input.tsx">
+  <ModelSelectorWithPromptInput />
+</DemoWithCode>
+
+With Search [#with-search]
+
+Place `ModelSelectorSearch` first in `ModelSelectorContent`; the root owns the query and clears it when the menu closes (`onOpenChange` still runs if you pass it). Radio items filter on `value`, `title`, and `description`; checkbox items on `title` and `description` only; plain `ModelSelectorItem` rows are not filtered. Optional search `onChange` runs after internal updates. `ModelSelectorEmpty` needs root `items` to show no-match copy (default: No models found).
+
+<DemoWithCode src="components/nexus-ui/examples/model-selector/with-search.tsx">
+  <ModelSelectorWithSearch />
+</DemoWithCode>
+
+With Items and Separators [#with-items-and-separators]
+
+Use `ModelSelectorItem` for non-selection actions (e.g. extended thinking toggle) and `ModelSelectorSeparator`
+to divide sections.
+
+<DemoWithCode src="components/nexus-ui/examples/model-selector/with-items.tsx">
+  <ModelSelectorWithItems />
+</DemoWithCode>
+
+Vercel AI SDK Integration [#vercel-ai-sdk-integration]
+
+Use the Model Selector with the [Vercel AI SDK](https://sdk.vercel.ai) to let users pick which model powers the chat. Pass the selected model to your API via `prepareSendMessagesRequest`.
+
+<Steps>
+  <Step>
+    <h3>
+      Install the AI SDK
+    </h3>
+
+    ```bash
+    npm install ai @ai-sdk/react @ai-sdk/openai
+    ```
+  </Step>
+
+  <Step>
+    <h3>
+      Create your chat API route
+    </h3>
+
+    Create a route that reads `model` from the request body:
+
+    ```ts title="app/api/chat/route.ts"
+    import { convertToModelMessages, streamText, UIMessage } from "ai";
+    import { openai } from "@ai-sdk/openai";
+
+    export async function POST(req: Request) {
+      const { messages, model = "gpt-4o-mini" }: { messages: UIMessage[]; model?: string } =
+        await req.json();
+
+      const result = streamText({
+        model: openai(model),
+        system: "You are a helpful assistant.",
+        messages: await convertToModelMessages(messages),
+      });
+
+      return result.toUIMessageStreamResponse();
+    }
+    ```
+  </Step>
+
+  <Step>
+    <h3>
+      Wire Model Selector + Prompt Input to 
+
+      `useChat`
+    </h3>
+
+    ```tsx
+    "use client";
+
+    import { useState } from "react";
+    import { useChat } from "@ai-sdk/react";
+    import { DefaultChatTransport } from "ai";
+    import { Button } from "@/components/ui/button";
+    import {
+      PromptInput,
+      PromptInputActions,
+      PromptInputAction,
+      PromptInputActionGroup,
+      PromptInputTextarea,
+    } from "@/components/nexus-ui/prompt-input";
+    import {
+      ModelSelector,
+      ModelSelectorContent,
+      ModelSelectorGroup,
+      ModelSelectorLabel,
+      ModelSelectorRadioGroup,
+      ModelSelectorRadioItem,
+      ModelSelectorTrigger,
+    } from "@/components/nexus-ui/model-selector";
+    import ChatgptIcon from "@/components/svgs/chatgpt";
+    import {
+      ArrowUp02Icon,
+      PlusSignIcon,
+      SquareIcon,
+    } from "@hugeicons/core-free-icons";
+    import { HugeiconsIcon } from "@hugeicons/react";
+
+    const models = [
+      { value: "gpt-4", icon: ChatgptIcon, title: "GPT-4", description: "Most capable" },
+      { value: "gpt-4o-mini", icon: ChatgptIcon, title: "GPT-4o Mini", description: "Fast" },
+      { value: "gpt-4o", icon: ChatgptIcon, title: "GPT-4o", description: "Multimodal" },
+    ];
+
+    export default function ChatWithModelSelector() {
+      const [model, setModel] = useState("gpt-4o-mini");
+      const { sendMessage, status } = useChat({
+        transport: new DefaultChatTransport({
+          api: "/api/chat",
+          prepareSendMessagesRequest: ({ body }) => ({
+            body: { ...body, model },
+          }),
+        }),
+      });
+      const [input, setInput] = useState("");
+      const isLoading = status !== "ready";
+
+      const handleSubmit = (value?: string) => {
+        const text = (value ?? input).trim();
+        if (text) {
+          sendMessage({ text });
+          setInput("");
+        }
+      };
+
+      return (
+        <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} className="w-full">
+          <PromptInput onSubmit={handleSubmit}>
+            <PromptInputTextarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Ask anything..."
+              disabled={isLoading}
+            />
+            <PromptInputActions>
+              <PromptInputActionGroup>
+                <ModelSelector value={model} onValueChange={setModel} items={models}>
+                  <ModelSelectorTrigger variant="outline" />
+                  <ModelSelectorContent className="w-[264px]" align="start">
+                    <ModelSelectorGroup>
+                      <ModelSelectorLabel>Select model</ModelSelectorLabel>
+                      <ModelSelectorRadioGroup value={model} onValueChange={setModel}>
+                        {models.map((m) => (
+                          <ModelSelectorRadioItem
+                            key={m.value}
+                            value={m.value}
+                            icon={m.icon}
+                            title={m.title}
+                            description={m.description}
+                          />
+                        ))}
+                      </ModelSelectorRadioGroup>
+                    </ModelSelectorGroup>
+                  </ModelSelectorContent>
+                </ModelSelector>
+                <PromptInputAction asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="cursor-pointer rounded-full text-secondary-foreground active:scale-97 disabled:opacity-70 hover:dark:bg-secondary"
+                  >
+                    <HugeiconsIcon icon={PlusSignIcon} strokeWidth={2.0} className="size-4" />
+                  </Button>
+                </PromptInputAction>
+              </PromptInputActionGroup>
+              <PromptInputActionGroup>
+                <PromptInputAction asChild>
+                  <Button
+                    type="submit"
+                    size="icon-sm"
+                    className="cursor-pointer rounded-full active:scale-97 disabled:opacity-70"
+                    disabled={isLoading || !input.trim()}
+                  >
+                    {isLoading ? (
+                      <HugeiconsIcon icon={SquareIcon} strokeWidth={2.0} className="size-3.5 fill-current" />
+                    ) : (
+                      <HugeiconsIcon icon={ArrowUp02Icon} strokeWidth={2.0} className="size-4" />
+                    )}
+                  </Button>
+                </PromptInputAction>
+              </PromptInputActionGroup>
+            </PromptInputActions>
+          </PromptInput>
+        </form>
+      );
+    }
+    ```
+  </Step>
+</Steps>
+
+For multi-provider support (OpenAI, Anthropic, etc.), add `@ai-sdk/anthropic` and similar, then map the model value to the correct provider in your API route.
+
+API Reference [#api-reference]
+
+The Model Selector primitives extend [Radix UI Dropdown Menu](https://www.radix-ui.com/primitives/docs/components/dropdown-menu).
+For props like `open`, `onOpenChange`, `modal`, `dir`, etc., refer to the Radix docs. Below are the props specific to
+the Model Selector.
+
+ModelSelector [#modelselector]
+
+Root component. Provides `value`, `onValueChange`, and `items` to children via context.
+
+<TypeTable
+  type={{
+  className: {
+    type: "string",
+    description: "Additional CSS classes to apply to the root.",
+  },
+  value: {
+    type: "string",
+    description: "The currently selected model value.",
+  },
+  onValueChange: {
+    type: "(value: string) => void",
+    description: "Called when the selection changes.",
+  },
+  onOpenChange: {
+    type: "(open: boolean) => void",
+    description:
+      "Forwarded from the Radix menu root. The root also clears the internal search query when the menu closes.",
+  },
+  items: {
+    type: "Array<{ value: string; icon?: React.ComponentType<{ className?: string }>; title: string; description?: string }>",
+    description:
+      "Optional. Used by ModelSelectorTrigger to display the selected model's icon and title. Omit for custom trigger content.",
+  },
+}}
+/>
+
+ModelSelectorTrigger [#modelselectortrigger]
+
+The button that opens the dropdown. Shows selected model (icon + title) when `items` is provided, or custom `children`.
+Supports `asChild` to merge into a child element (e.g. Button).
+
+<TypeTable
+  type={{
+  className: {
+    type: "string",
+    description: "Additional CSS classes to apply to the trigger.",
+  },
+  variant: {
+    type: '"filled" | "outline" | "ghost"',
+    default: '"filled"',
+    description:
+      "Visual style. Use outline or ghost when placing inside a prompt input or dense UI.",
+  },
+  asChild: {
+    type: "boolean",
+    default: "false",
+    description:
+      "When true, merges props onto the child element instead of rendering a button.",
+  },
+}}
+/>
+
+ModelSelectorSearch [#modelselectorsearch]
+
+A search input bound to the root filter query; radio and checkbox items hide when they do not match. Place at the top of `ModelSelectorContent`. Accepts standard `<input>` props.
+
+<TypeTable
+  type={{
+  className: {
+    type: "string",
+    description: "Additional CSS classes for the input element.",
+  },
+}}
+/>
+
+ModelSelectorEmpty [#modelselectorempty]
+
+Shown when the query is non-empty, `items` is set on the root, and none of those entries match the filter. Otherwise hidden. Default copy: No models found. Accepts standard `<div>` props.
+
+<TypeTable
+  type={{
+  className: {
+    type: "string",
+    description: "Additional CSS classes for the message.",
+  },
+  children: {
+    type: "React.ReactNode",
+    description: "Optional. Replaces the default No models found copy.",
+  },
+}}
+/>
+
+ModelSelectorItem [#modelselectoritem]
+
+A plain menu item (no selection state). Use for toggles, links, or actions.
+
+<TypeTable
+  type={{
+  className: {
+    type: "string",
+    description: "Additional CSS classes to apply to the item.",
+  },
+  inset: {
+    type: "boolean",
+    default: "false",
+    description:
+      "Adds left padding for alignment with items that have icons.",
+  },
+  variant: {
+    type: '"default" | "destructive"',
+    default: '"default"',
+    description:
+      "Visual variant. Use destructive for delete or dangerous actions.",
+  },
+}}
+/>
+
+ModelSelectorItemTitle [#modelselectoritemtitle]
+
+A paragraph for the item title. Used internally by CheckboxItem and RadioItem when `title` is provided. Accepts standard `p` element props.
+
+<TypeTable
+  type={{
+  className: {
+    type: "string",
+    description: "Additional CSS classes to apply to the title.",
+  },
+}}
+/>
+
+ModelSelectorItemDescription [#modelselectoritemdescription]
+
+A paragraph for the item description. Used internally by CheckboxItem and RadioItem when `description` is provided. Accepts standard `p` element props.
+
+<TypeTable
+  type={{
+  className: {
+    type: "string",
+    description: "Additional CSS classes to apply to the description.",
+  },
+}}
+/>
+
+ModelSelectorItemIcon [#modelselectoritemicon]
+
+A span wrapper for the item icon. Used internally by CheckboxItem and RadioItem when `icon` is provided. Accepts standard `span` element props.
+
+<TypeTable
+  type={{
+  className: {
+    type: "string",
+    description: "Additional CSS classes to apply to the icon wrapper.",
+  },
+}}
+/>
+
+ModelSelectorItemIndicator [#modelselectoritemindicator]
+
+A span that wraps selection indicators. Renders children inside Radix `ItemIndicator` by default. Use `wrapWithItemIndicator={false}` for always-visible content (e.g. LockIcon when disabled).
+
+<TypeTable
+  type={{
+  className: {
+    type: "string",
+    description: "Additional CSS classes to apply to the indicator wrapper.",
+  },
+  wrapWithItemIndicator: {
+    type: "boolean",
+    default: "true",
+    description:
+      "When false, children render directly without ItemIndicator. Use for always-visible content like LockIcon when disabled.",
+  },
+}}
+/>
+
+ModelSelectorCheckboxItem [#modelselectorcheckboxitem]
+
+A checkbox-style item for multi-select. Shows a check indicator when `checked` is true, or a lock icon when `disabled`.
+
+<TypeTable
+  type={{
+  className: {
+    type: "string",
+    description: "Additional CSS classes to apply to the item.",
+  },
+  checked: {
+    type: "boolean",
+    description: "Whether the item is checked.",
+  },
+  disabled: {
+    type: "boolean",
+    default: "false",
+    description: "When true, the item is disabled and shows a lock icon.",
+  },
+  icon: {
+    type: "React.ComponentType<{ className?: string }>",
+    description: "Optional icon component for the item.",
+  },
+  indicator: {
+    type: "React.ReactNode",
+    default: "CheckIcon",
+    description:
+      "Custom indicator to show when selected. Renders inside ItemIndicator.",
+  },
+  title: {
+    type: "string",
+    description: "Optional title. Override with children for full control.",
+  },
+  description: {
+    type: "string",
+    description: "Optional description shown below the title.",
+  },
+}}
+/>
+
+ModelSelectorRadioItem [#modelselectorradioitem]
+
+A radio-style item for single selection. Shows a check when selected, or a lock icon when `disabled`.
+
+<TypeTable
+  type={{
+  className: {
+    type: "string",
+    description: "Additional CSS classes to apply to the item.",
+  },
+  value: {
+    type: "string",
+    description:
+      "The value for this option. Must be unique within the RadioGroup.",
+  },
+  disabled: {
+    type: "boolean",
+    default: "false",
+    description: "When true, the item is disabled and shows a lock icon.",
+  },
+  icon: {
+    type: "React.ComponentType<{ className?: string }>",
+    description: "Optional icon component for the item.",
+  },
+  indicator: {
+    type: "React.ReactNode",
+    default: "CheckIcon",
+    description:
+      "Custom indicator to show when selected. Renders inside ItemIndicator.",
+  },
+  title: {
+    type: "string",
+    description: "Optional title. Override with children for full control.",
+  },
+  description: {
+    type: "string",
+    description: "Optional description shown below the title.",
+  },
+}}
+/>
+
+Other primitives [#other-primitives]
+
+`ModelSelectorContent`, `ModelSelectorPortal`, `ModelSelectorGroup`, `ModelSelectorLabel`, `ModelSelectorRadioGroup`,
+`ModelSelectorSeparator`, `ModelSelectorSub`, `ModelSelectorSubTrigger`, and `ModelSelectorSubContent` accept the
+same props as their Radix Dropdown Menu counterparts. See the
+[Radix Dropdown Menu documentation](https://www.radix-ui.com/primitives/docs/components/dropdown-menu) for details.
+
+`ModelSelectorItemTitle`, `ModelSelectorItemDescription`, `ModelSelectorItemIcon`, and `ModelSelectorItemIndicator`
+are low-level building blocks used by CheckboxItem and RadioItem. Use them when composing custom item content with `children`.

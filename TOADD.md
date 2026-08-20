@@ -256,6 +256,8 @@ the ai users bash to write/edit/delete files, but it should use bash for command
 
 <!-- show images images of results too, similar to google search, but not always, only when the AI thinks it's relevant, and also allow to click on the image to open it in a new tab. -->
 
-bash_execute always fails. fix it.
+<!-- bash_execute always fails. fix it. -->
 
 <!-- create a tool to allow sending push notifications to the user via web/app. -->
+
+make model selector next to capability menu in chat input. And make it look like e.g cursor's/claude's model selector, not a simple selector menu. E.g https://nexus-ui.dev/docs/components/model-selector, see ./aidocs/modelselector.md
