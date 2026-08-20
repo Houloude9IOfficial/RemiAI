@@ -93,6 +93,21 @@ export const providersApi = {
       method: "DELETE",
     }).then((res) => unwrap<{ ok: true }>(res)),
 
+  batchUpdateModels: (
+    providerId: number,
+    updates: Array<{
+      modelId: string;
+      enabled?: boolean;
+      isDefault?: boolean;
+      label?: string | null;
+    }>,
+  ): Promise<ProviderModel[]> =>
+    fetch(`/api/providers/${providerId}/models`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ updates }),
+    }).then((res) => unwrap<ProviderModel[]>(res)),
+
   refreshModels: (
     providerId: number,
   ): Promise<{ count: number; discovered: boolean; message: string }> =>

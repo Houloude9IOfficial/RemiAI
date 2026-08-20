@@ -10,7 +10,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { RefreshCw, Trash2 } from "lucide-react";
+import { RefreshCw, Trash2, ToggleLeft, ToggleRight } from "lucide-react";
 import { toast } from "sonner";
 import { providersApi, type Provider } from "@/lib/api/providers";
 import { PROVIDER_MODEL_CATALOG } from "@/lib/providers/catalog";
@@ -53,6 +53,18 @@ export function ProviderModelList({ provider }: { provider: Provider }) {
     onError: (err: Error) => toast.error(err.message),
   });
 
+  const allEnabled = models.length > 0 && models.every((m) => m.enabled);
+
+  const toggleAllMutation = useMutation({
+    mutationFn: (enable: boolean) =>
+      providersApi.batchUpdateModels(
+        provider.id,
+        models.map((m) => ({ modelId: m.modelId, enabled: enable })),
+      ),
+    onSuccess: invalidate,
+    onError: (err: Error) => toast.error(err.message),
+  });
+
   const refreshMutation = useMutation({
     mutationFn: () => providersApi.refreshModels(provider.id),
     onSuccess: (result) => {
@@ -72,24 +84,48 @@ export function ProviderModelList({ provider }: { provider: Provider }) {
         <p className="text-xs font-medium text-muted-foreground">
           {models.length === 0 ? "No models yet" : "Models"}
         </p>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                size="icon-xs"
-                variant="ghost"
-                className="h-6 w-6"
-                disabled={refreshMutation.isPending}
-                onClick={() => refreshMutation.mutate()}
+        <div className="flex items-center gap-1">
+          {models.length > 0 && (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    size="icon-xs"
+                    variant="ghost"
+                    className="h-6 w-6"
+                    disabled={toggleAllMutation.isPending}
+                    onClick={() => toggleAllMutation.mutate(!allEnabled)}
+                  />
+                }
+              >
+                {allEnabled ? (
+                  <ToggleRight className="h-3 w-3" />
+                ) : (
+                  <ToggleLeft className="h-3 w-3" />
+                )}
+              </TooltipTrigger>
+              <TooltipContent>{allEnabled ? "Disable all" : "Enable all"}</TooltipContent>
+            </Tooltip>
+          )}
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  size="icon-xs"
+                  variant="ghost"
+                  className="h-6 w-6"
+                  disabled={refreshMutation.isPending}
+                  onClick={() => refreshMutation.mutate()}
+                />
+              }
+            >
+              <RefreshCw
+                className={cn("h-3 w-3", refreshMutation.isPending && "animate-spin")}
               />
-            }
-          >
-            <RefreshCw
-              className={cn("h-3 w-3", refreshMutation.isPending && "animate-spin")}
-            />
-          </TooltipTrigger>
-          <TooltipContent>Refresh models from provider</TooltipContent>
-        </Tooltip>
+            </TooltipTrigger>
+            <TooltipContent>Refresh models from provider</TooltipContent>
+          </Tooltip>
+        </div>
       </div>
 
       {models.length > 0 && (

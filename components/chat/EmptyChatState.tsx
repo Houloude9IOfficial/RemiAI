@@ -114,7 +114,7 @@ export function EmptyChatState({
             a nested <p dangerouslySetInnerHTML> (may contain an <a> link).
             <p> inside <p> is invalid HTML and breaks hydration. */}
 
-        {disabled && !isStreaming && (
+        {disabled && !isStreaming && true == false && (
           <div className="flex flex-wrap items-center justify-center gap-2 text-center text-xs text-muted-foreground">
             <span>Choose a model before sending a message.</span>
             <a

@@ -21,7 +21,7 @@ export const PROVIDER_PRESET_DEFAULTS: Record<
 > = {
   anthropic: { label: "Anthropic", baseUrl: null, requiresApiKey: true },
   openai: { label: "OpenAI", baseUrl: null, requiresApiKey: true },
-  ollama: { label: "Ollama (local)", baseUrl: "http://localhost:11434/v1", requiresApiKey: false },
+  ollama: { label: "Ollama", baseUrl: "http://localhost:11434/v1", requiresApiKey: false },
   "openai-compatible": { label: "Custom (OpenAI-compatible)", baseUrl: "", requiresApiKey: false },
 };
 

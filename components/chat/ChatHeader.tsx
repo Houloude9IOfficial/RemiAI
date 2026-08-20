@@ -31,7 +31,7 @@ function UsageMeter({ used, contextWindow }: { used: number; contextWindow: numb
   return (
     <div
       className="flex items-center gap-2"
-      title={`Approximate tokens used this conversation (${used.toLocaleString()}) vs. the model's context window (${safeWindow.toLocaleString()}). Updates as responses finish.`}
+      title={`Approximate tokens used this conversation (${used.toLocaleString()}) vs. the model's context window (${safeWindow.toLocaleString()}). Updates as responses finish. Context window is approximate, may be different for some models.`}
     >
       <span
         className={cn(

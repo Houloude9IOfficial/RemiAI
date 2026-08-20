@@ -917,7 +917,7 @@ export function ChatInput({
                       ? "Build mode"
                       : "Chat mode"}
               </span>
-              <span aria-hidden="true">·</span>
+              {/* <span aria-hidden="true">·</span>
               <span>
                 {mode === "goal"
                   ? "Autonomous multi-step work until the goal is complete"
@@ -926,13 +926,13 @@ export function ChatInput({
                     : mode === "build"
                       ? "Change files, run checks, and report what was verified"
                       : "Direct answer with minimal overhead"}
-              </span>
+              </span> */}
               {onQualityPolicyChange && (
                 <>
                   <span aria-hidden="true">·</span>
                   <span>
-                    Quality: {qualityPolicyLabel(qualityPolicy)}
-                    {qualityPolicy === "quality" && " · adaptive escalation"}
+                    {qualityPolicyLabel(qualityPolicy)}
+                    {qualityPolicy === "quality" && " · Adaptive escalation"}
                   </span>
                 </>
               )}
@@ -1038,7 +1038,7 @@ export function ChatInput({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" side="top" sideOffset={6} className="w-64">
                 <DropdownMenuGroup>
-                  <DropdownMenuLabel>Attach</DropdownMenuLabel>
+                  <DropdownMenuLabel>Attach files for context</DropdownMenuLabel>
                   <DropdownMenuItem onClick={openFilePicker}>
                     <Paperclip className="h-4 w-4" />
                     Add photos &amp; files
@@ -1053,7 +1053,7 @@ export function ChatInput({
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuGroup>
-                      <DropdownMenuLabel>Mode · how Remi should work</DropdownMenuLabel>
+                      <DropdownMenuLabel>Mode · How Remi should work</DropdownMenuLabel>
                       <DropdownMenuCheckboxItem
                         checked={mode === "build"}
                         onCheckedChange={(checked) => onModeChange(checked ? "build" : "chat")}
@@ -1098,34 +1098,34 @@ export function ChatInput({
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuGroup>
-                      <DropdownMenuLabel>Quality · effort per request</DropdownMenuLabel>
+                      <DropdownMenuLabel>Quality · Effort per request</DropdownMenuLabel>
                       <DropdownMenuCheckboxItem
                         checked={qualityPolicy === "fast"}
                         onCheckedChange={(checked) => checked && onQualityPolicyChange("fast")}
                       >
                         Fast
-                        <span className="ml-auto text-[10px] text-muted-foreground">lowest latency</span>
+                        {/* <span className="ml-auto text-[10px] text-muted-foreground">Lowest latency</span> */}
                       </DropdownMenuCheckboxItem>
                       <DropdownMenuCheckboxItem
                         checked={qualityPolicy === "balanced"}
                         onCheckedChange={(checked) => checked && onQualityPolicyChange("balanced")}
                       >
                         Balanced
-                        <span className="ml-auto text-[10px] text-muted-foreground">recommended</span>
+                        {/* <span className="ml-auto text-[10px] text-muted-foreground">Recommended</span> */}
                       </DropdownMenuCheckboxItem>
                       <DropdownMenuCheckboxItem
                         checked={qualityPolicy === "quality"}
                         onCheckedChange={(checked) => checked && onQualityPolicyChange("quality")}
                       >
                         Quality first
-                        <span className="ml-auto text-[10px] text-muted-foreground">adaptive · may cost more</span>
+                        {/* <span className="ml-auto text-[10px] text-muted-foreground">Adaptive · May cost more</span> */}
                       </DropdownMenuCheckboxItem>
                       <DropdownMenuCheckboxItem
                         checked={qualityPolicy === "selected"}
                         onCheckedChange={(checked) => checked && onQualityPolicyChange("selected")}
                       >
                         Selected model
-                        <span className="ml-auto text-[10px] text-muted-foreground">pinned · no routing</span>
+                        {/* <span className="ml-auto text-[10px] text-muted-foreground">Pinned · No routing</span> */}
                       </DropdownMenuCheckboxItem>
                     </DropdownMenuGroup>
                   </>
@@ -1133,7 +1133,7 @@ export function ChatInput({
 
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
-                  <DropdownMenuLabel>Capabilities</DropdownMenuLabel>
+                  <DropdownMenuLabel>Extra capabilities</DropdownMenuLabel>
                   <DropdownMenuItem
                     onClick={() => {
                       if (codeExecutionOn) {

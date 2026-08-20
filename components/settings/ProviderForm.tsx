@@ -131,21 +131,6 @@ export function ProviderForm() {
               />
             </div>
 
-            {needsBaseUrl && (
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="provider-base-url">Base URL</Label>
-                <Input
-                  id="provider-base-url"
-                  placeholder="http://localhost:11434/v1"
-                  value={baseUrl}
-                  onChange={(e) => setBaseUrl(e.target.value)}
-                />
-                <p className="text-[11px] text-muted-foreground">
-                  Endpoint for this provider&apos;s OpenAI-compatible API.
-                </p>
-              </div>
-            )}
-
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="provider-api-key">
                 API key
@@ -161,6 +146,21 @@ export function ProviderForm() {
                 onChange={(e) => setApiKey(e.target.value)}
               />
             </div>
+
+            {needsBaseUrl && (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="provider-base-url">Base URL</Label>
+                <Input
+                  id="provider-base-url"
+                  placeholder="http://localhost:11434/v1"
+                  value={baseUrl}
+                  onChange={(e) => setBaseUrl(e.target.value)}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Endpoint for this provider&apos;s OpenAI-compatible API.
+                </p>
+              </div>
+            )}
           </div>
         </CardContent>
 

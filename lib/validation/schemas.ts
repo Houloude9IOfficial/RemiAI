@@ -51,6 +51,17 @@ export const providerModelUpdateSchema = z.object({
   label: z.string().max(200).optional().nullable(),
 });
 
+export const providerModelsBatchUpdateSchema = z.object({
+  updates: z.array(
+    z.object({
+      modelId: z.string().min(1).max(200),
+      enabled: z.boolean().optional(),
+      isDefault: z.boolean().optional(),
+      label: z.string().max(200).optional().nullable(),
+    }),
+  ),
+});
+
 export const mcpTransportSchema = z.enum(["stdio", "http"]);
 
 export const mcpServerCreateSchema = z
