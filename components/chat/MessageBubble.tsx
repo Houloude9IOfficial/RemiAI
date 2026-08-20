@@ -416,8 +416,8 @@ const QUIET_TOOL_NAMES = new Set([
   "get_tool_details",
   "set_run_name",
   "get_time_details",
-  "get_device_details",
   "get_recent_memories",
+  "query_recent_changes"
 ]);
 
 function isQuietToolPart(part: UIMessage["parts"][number]): boolean {

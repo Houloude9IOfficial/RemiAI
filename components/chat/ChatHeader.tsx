@@ -125,7 +125,7 @@ export function ChatHeader({
   return (
     <div className="sticky top-0 z-20 hidden items-center gap-3 border-b border-border/60 bg-background/95 px-4 py-2 backdrop-blur md:flex">
       {/* Left — conversation title */}
-      <div className="flex min-w-0 items-center gap-2.5">
+      <div className={`flex min-w-0 items-center gap-2.5 ${title === "New chat" ? "hidden" : ""}`}>
         <span className="min-w-0 truncate text-sm font-medium tracking-tight text-foreground">
           {title}
         </span>

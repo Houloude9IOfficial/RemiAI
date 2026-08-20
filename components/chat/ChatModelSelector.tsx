@@ -187,7 +187,7 @@ export function ChatModelSelector({
         <ProviderBrandIcon
           kind={currentProvider?.kind}
           modelId={modelId}
-          className="h-4 w-4 shrink-0"
+          className={`h-4 w-4 shrink-0 ${modelLabel == 'Auto' ? 'hidden' : ''}`}
         />
         <span className="max-w-36 truncate">{modelLabel}</span>
         <ChevronDown
