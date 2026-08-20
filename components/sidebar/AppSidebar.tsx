@@ -12,6 +12,7 @@ import { ConversationList } from "./ConversationList";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { SidebarProfile } from "./SidebarProfile";
 import { AboutModal } from "./AboutModal";
+import { UpdateChecker } from "./UpdateChecker";
 import { ShortcutsTrigger } from "./ShortcutsModal";
 import { useSidebar } from "./SidebarContext";
 
@@ -187,6 +188,7 @@ function DesktopSidebar() {
           ))}
 
           <div className="mt-auto flex flex-col items-center gap-2 border-t border-sidebar-border pt-3">
+            <UpdateChecker />
             <SidebarProfile collapsed />
             {/* <ThemeToggle /> */}
           </div>
@@ -267,6 +269,7 @@ function DesktopSidebar() {
               <div className="flex items-center gap-0.5">
                 <AboutModal />
                 <ShortcutsTrigger className="h-7 w-7" />
+                <UpdateChecker />
               </div>
               <ThemeToggle />
             </div>

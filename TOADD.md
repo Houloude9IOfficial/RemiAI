@@ -269,3 +269,6 @@ the ai users bash to write/edit/delete files, but it should use bash for command
 <!-- Make SourceEvidenceCard.tsx collapsed by default and allow to expand it. -->
 
 <!-- Make reasoning block collapse and expand with animation, and on expand to have a smooth fade typewrite animation for the text, and on collapse to have a smooth fade out animation for the text. -->
+
+
+<!-- Add check for updates & check every 6hrs through the Github repo's releases. If new update show an icon on sidebar's bottom next to info and onclick show modal saying that there's a new update alongside with changelog and download link. -->

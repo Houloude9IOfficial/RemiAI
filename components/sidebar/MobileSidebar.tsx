@@ -33,6 +33,7 @@ import { useNewChat } from "@/lib/hooks/use-new-chat";
 import { ConversationList } from "./ConversationList";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { AboutModal } from "./AboutModal";
+import { UpdateChecker } from "./UpdateChecker";
 import { ShortcutsTrigger } from "./ShortcutsModal";
 import { SidebarProfile } from "./SidebarProfile";
 import { useSidebar } from "./SidebarContext";
@@ -250,6 +251,7 @@ export function MobileSidebar() {
               <div className="flex items-center gap-0.5">
                 <ShortcutsTrigger className="h-7 w-7" />
                 <AboutModal />
+                <UpdateChecker className="h-7 w-7" />
               </div>
               <ThemeToggle />
             </div>

@@ -5,6 +5,9 @@ const PUBLIC_AUTH_PATHS = new Set([
   "/api/auth/signup",
   "/api/auth/login",
   "/api/auth/logout",
+  // Update check — reads the public GitHub releases API and leaks no user
+  // data, so it can run before authentication (e.g. on the login screen).
+  "/api/updates",
 ]);
 
 // Webhook delivery (POST /api/webhooks/:id) and verification ping
