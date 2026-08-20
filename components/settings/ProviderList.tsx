@@ -6,6 +6,14 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ChevronDown, KeyRound, Layers, Loader2, PlugZap, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { providersApi, type Provider } from "@/lib/api/providers";
@@ -94,6 +102,7 @@ function ProviderCard({
   const meta = PROVIDER_KIND_META[provider.kind];
   const Icon = meta?.icon ?? PlugZap;
   const [expanded, setExpanded] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   // Shares the ["provider-models", id] cache with ProviderModelList, so this
   // is only ever fetched once and lets us show a count while collapsed.
@@ -104,11 +113,11 @@ function ProviderCard({
 
   return (
     <Card className={cn(!enabled && "opacity-70")}>
-      <CardHeader className="flex-row items-center gap-3 space-y-0">
+      <CardHeader className="!flex !flex-row items-center gap-3 space-y-0">
         <div
           className={cn(
             "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
-            enabled ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
+            enabled ? "text-primary" : "text-muted-foreground",
           )}
         >
           <Icon className="h-5 w-5" />
@@ -156,7 +165,7 @@ function ProviderCard({
             variant="ghost"
             className="h-7 w-7 text-muted-foreground hover:text-destructive"
             aria-label={`Remove ${provider.label}`}
-            onClick={onRemove}
+            onClick={() => setConfirmOpen(true)}
           >
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -169,6 +178,32 @@ function ProviderCard({
           <ProviderModelList provider={provider} />
         </CardContent>
       )}
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove provider</DialogTitle>
+            <DialogDescription>
+              Remove <span className="font-medium text-foreground">{provider.label}</span>? All
+              its models will be deleted. This can&apos;t be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setConfirmOpen(false);
+                onRemove();
+              }}
+            >
+              Remove
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

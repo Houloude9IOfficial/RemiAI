@@ -21,15 +21,15 @@ import { useSidebar } from "./SidebarContext";
 // watcher, backup, usage) live under the "More" expander — every item stays
 // reachable in at most two clicks.
 const primaryLinks = [
-  { href: "/settings/directories", label: "Directories", icon: FolderOpen },
+  { href: "/settings/providers", label: "Models & Providers", icon: Settings2 },
   { href: "/files", label: "Files", icon: Files },
   { href: "/settings/tools", label: "Tools", icon: Wrench },
   { href: "/settings/memories", label: "Memories", icon: Brain },
-  { href: "/settings/tasks", label: "Agent Tasks", icon: Bot },
 ];
 
 const moreLinks = [
-  { href: "/settings/providers", label: "Models & Providers", icon: Settings2 },
+  { href: "/settings/tasks", label: "Agent Tasks", icon: Bot },
+  { href: "/settings/directories", label: "Directories", icon: FolderOpen },
   { href: "/games", label: "Games", icon: Gamepad2 },
   { href: "/talk", label: "Talk", icon: Radio },
   { href: "/settings/routines", label: "Routines", icon: Terminal },
