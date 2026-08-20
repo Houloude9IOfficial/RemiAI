@@ -22,6 +22,7 @@ import {
   messages,
 } from "@/db/schema";
 import { getLanguageModel } from "@/lib/providers/factory";
+import { streamingReasoningProviderOptions } from "@/lib/providers/reasoning";
 import {
   SYSTEM_PROMPT_BASE,
   CREATE_VISUAL_SECTION,
@@ -523,8 +524,10 @@ Definition of done:
 4. Never claim the task is complete or verified when a relevant check failed, timed out, or was not run.`
       : "";
 
-  // Merge all tool sets (last writer wins on name collision)
-  const tools = {
+  // Merge all tool sets (last writer wins on name collision). Typed as a
+  // loose record so the list_available_tools rebuild below can replace the
+  // original entry.
+  const tools: Record<string, any> = {
     ...mcpToolSet,
     ...effectiveFsToolSet,
     ...contextToolSet,
@@ -544,6 +547,16 @@ Definition of done:
     ...effectiveSessionFileToolSet,
     ...skillsToolSet,
   };
+
+  // list_available_tools should only advertise tools that are ACTUALLY
+  // registered for this request — a tool behind a disabled toggle (e.g. Code
+  // Execution, off by default) or an unconfigured integration cannot be
+  // called, and telling the model it exists only leads to failed calls.
+  // Rebuild it after the merge with the real tool names (normaliseTool below
+  // still normalises the rebuilt definition like every other tool).
+  tools.list_available_tools = buildListAvailableToolsTool(
+    new Set(Object.keys(tools)),
+  )["list_available_tools"];
 
   // Build combined system prompt with user preferences
   const prefs = await db.select().from(userPreferences).get();
@@ -992,6 +1005,12 @@ Definition of done:
     ),
     messages: modelMessages,
     tools: cachedBaseTools,
+    // Only supported Anthropic reasoning families receive reasoning options.
+    // Unknown/local/OpenAI-compatible models stay on their normal stream.
+    providerOptions: streamingReasoningProviderOptions(
+      activeProvider.kind,
+      activeModelId,
+    ),
     // Initial active set (core + classified + stored groups). prepareStep
     // re-evaluates it before every step, so load_tool_groups can add groups
     // mid-stream.
@@ -1429,6 +1448,9 @@ Definition of done:
   // a generic message.
   const uiMessageStream = result.toUIMessageStream({
     originalMessages: uiMessages,
+    // Forward structured reasoning parts when the selected provider emits
+    // them; providers without reasoning output simply emit none.
+    sendReasoning: true,
     generateMessageId: () => crypto.randomUUID(),
     // Return the PLAIN error message here. The SDK uses this callback's return
     // value as the `errorText` for inline tool errors (tool-input-error,

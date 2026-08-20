@@ -39,7 +39,7 @@ export function SourceEvidenceCard({
   return (
     <section
       aria-label="Research sources"
-      className="overflow-hidden rounded-xl border border-border/60 bg-muted/[0.22]"
+      className="overflow-hidden rounded-xl border border-border/60 bg-muted/[0.22] hidden"
     >
       <div className="flex items-center gap-2 border-b border-border/50 px-3.5 py-2.5">
         <Link2 className="h-3.5 w-3.5 text-primary" aria-hidden="true" />

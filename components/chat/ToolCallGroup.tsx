@@ -864,7 +864,8 @@ export function ToolCallGroup({
       )}
       {!running && <VerificationDigest checks={verificationChecks} />}
 
-      {/* Collapsible body — only the individual tool calls animate */}
+      {/* Collapsible execution trace — the connector makes sequential tool
+          work readable without exposing private model chain-of-thought. */}
       <div
         className={cn(
           "grid transition-[grid-template-rows] duration-300 ease-out",
@@ -873,11 +874,54 @@ export function ToolCallGroup({
       >
         <div className="overflow-hidden">
           <div className="flex flex-col gap-1 p-1.5 pt-0">
-            {groupParts.map((part, idx) => (
-              <div key={(part as any).toolCallId ?? idx}>
-                <ToolCallCard part={part} compact />
-              </div>
-            ))}
+            {groupParts.map((part, idx) => {
+              const runningPart = isPartRunning(part);
+              const errorPart = isPartError(part);
+              const completePart = isPartComplete(part);
+              let toolName = "tool";
+              try {
+                toolName = bareToolName(getToolName(part));
+              } catch {
+                // Keep a stable generic label for malformed/persisted parts.
+              }
+              const StepIcon = getToolLabel(toolName).icon ?? Wrench;
+              return (
+                <div
+                  key={(part as any).toolCallId ?? idx}
+                  className="relative pl-5"
+                  aria-label={`${getToolLabel(toolName).past}: ${toolName}`}
+                >
+                  {idx < groupParts.length - 1 && (
+                    <span
+                      className="absolute left-1.5 top-4.5 bottom-[-0.25rem] w-px bg-border/60"
+                      aria-hidden="true"
+                    />
+                  )}
+                  <span
+                    className={cn(
+                      "absolute left-0 top-2 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-background",
+                      errorPart
+                        ? "text-status-danger"
+                        : runningPart
+                          ? "text-primary"
+                          : completePart
+                            ? "text-status-success"
+                            : "text-muted-foreground",
+                    )}
+                    aria-hidden="true"
+                  >
+                    {errorPart ? (
+                      <XCircle className="h-3 w-3" />
+                    ) : runningPart ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <StepIcon className="h-3 w-3" />
+                    )}
+                  </span>
+                  <ToolCallCard part={part} compact />
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>

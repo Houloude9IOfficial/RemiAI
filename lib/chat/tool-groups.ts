@@ -182,6 +182,15 @@ export const CONDITIONAL_GROUPS: Record<string, ToolGroup> = {
       "execute code", "data analysis", "analyze data", "math", "algorithm",
       "pip install", "npm install", "run a script",
       "git", "typecheck", "lint", "deploy", "compile",
+      // Hardware / performance questions — "how does X perform on my machine"
+      // needs bash (or at least get_device_details) to answer, not a spec
+      // questionnaire for the user.
+      "on my machine", "my machine", "my computer", "my pc", "my mac",
+      "my system", "run on my", "will it run", "can my", "does it run",
+      "how does it perform", "how does it run", "how fast is", "how well does it run",
+      "system info", "system information", "system details", "device info",
+      "machine info", "processor", "hardware", "specs", "benchmark",
+      "benchmarks", "benchmarking", "gpu", "cpu", "ram",
     ],
   },
   create_visual: {

@@ -261,3 +261,11 @@ the ai users bash to write/edit/delete files, but it should use bash for command
 <!-- create a tool to allow sending push notifications to the user via web/app. -->
 
 make model selector next to capability menu in chat input. And make it look like e.g cursor's/claude's model selector, not a simple selector menu. E.g https://nexus-ui.dev/docs/components/model-selector, see ./aidocs/modelselector.md
+
+<!-- Make it automatically hide 'load tool groups' and 'list available tools' and other tools in an array (constant) if they're alone run and not chained with other tools. -->
+
+<!-- Combine reasoning blocks and seperate with new paragraph instead of showing 2+ next-to-next reasoning blocks. -->
+
+<!-- Make SourceEvidenceCard.tsx collapsed by default and allow to expand it. -->
+
+<!-- Make reasoning block collapse and expand with animation, and on expand to have a smooth fade typewrite animation for the text, and on collapse to have a smooth fade out animation for the text. -->

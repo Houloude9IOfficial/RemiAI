@@ -1121,8 +1121,16 @@ export function buildToolHelpTool(): Record<string, any> {
  * This helps the AI find the right tool for a task without needing to know
  * the exact tool name upfront. Each result includes a \`helpTopic\` that can
  * be passed to \`get_tool_help\` for detailed usage guidance.
+ *
+ * @param registeredToolNames When provided, only tools that are actually
+ *   registered for this request are listed. Tools behind a disabled toggle
+ *   (e.g. Code Execution, off by default) or an unconfigured integration
+ *   cannot be called, so advertising them as "available" only makes the
+ *   model attempt calls that fail.
  */
-export function buildListAvailableToolsTool(): Record<string, any> {
+export function buildListAvailableToolsTool(
+  registeredToolNames?: ReadonlySet<string>,
+): Record<string, any> {
   return {
     list_available_tools: {
       description: `List available tools grouped by category, with names and brief descriptions. Filter by keyword (e.g. "search", "file", "web") or category (builtin, integration, memory). Each result includes a \`helpTopic\` for get_tool_help.`,
@@ -1144,6 +1152,19 @@ export function buildListAvailableToolsTool(): Record<string, any> {
         category?: string | null;
       }) => {
         let groups = TOOL_GROUPS;
+
+        // Only advertise tools that are actually registered for this request
+        // (see param doc). MCP tools are not in the static catalog and are
+        // always listed by the model's inline tool list, so no special
+        // handling is needed here.
+        if (registeredToolNames) {
+          groups = groups
+            .map((g) => ({
+              ...g,
+              tools: g.tools.filter((t) => registeredToolNames.has(t.name)),
+            }))
+            .filter((g) => g.tools.length > 0);
+        }
 
         // Filter by category
         if (category) {

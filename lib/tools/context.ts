@@ -1,4 +1,5 @@
 import { z } from "zod";
+import os from "node:os";
 import { truncateToolResult } from "@/lib/utils";
 import { getTimeDetails } from "@/lib/time";
 
@@ -34,10 +35,25 @@ export function buildContextTools(
   // -----------------------------------------------------------------------
   tools.get_device_details = {
     description:
-      "Get details about the user's device and browser (OS, browser name/version, device type, language, timezone).",
+      "Get details about the user's device: hardware (platform, architecture, CPU model/cores, RAM), OS, and browser (name/version, device type, language, timezone). Use this when asked how something performs or runs on the user's machine — never ask the user for specs you can gather here.",
     parameters: z.object({}),
     execute: async () => {
       const info = parseUserAgent(userAgent ?? "");
+      // Hardware is detected from the machine running this assistant. In the
+      // desktop app that IS the user's device; in a hosted deployment it
+      // describes the server host (labelled so the model doesn't mislead the
+      // user about a remote host's specs).
+      const cpus = os.cpus();
+      const hardware = {
+        platform: os.platform(),
+        arch: os.arch(),
+        osType: os.type(),
+        osRelease: os.release(),
+        cpuModel: cpus.length > 0 ? cpus[0]!.model : null,
+        cpuCores: cpus.length,
+        totalMemoryGB: round1(os.totalmem() / 1024 ** 3),
+        freeMemoryGB: round1(os.freemem() / 1024 ** 3),
+      };
       return {
         userAgent: userAgent ?? "Not available",
         browser: info.browser,
@@ -51,7 +67,9 @@ export function buildContextTools(
         timezone:
           timezone ??
           (Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"),
-        note: "The timezone is provided by the browser and may not be accurate if the user has manually changed their system timezone. Also, you may or may not be running on user's device, so the timezone may not be accurate. Use this information as a hint, but do not rely on it for critical decisions, if you have access you may use Bash to get timezone/hardware info, or use the get_time_details tool to get the timezone and time in the user's timezone.",
+        // Hardware of the machine running this assistant (see note).
+        hardware,
+        note: "The timezone is provided by the browser and may not be accurate if the user has manually changed their system timezone. The hardware above is detected from the machine running this assistant: in the desktop app that is the user's own device, but in a hosted deployment it describes the server host, not the user's machine — if in doubt, verify with a bash command (system_profiler / systeminfo / lscpu) or ask. Use get_time_details for the time and timezone in the user's local timezone.",
       };
     },
   };
@@ -70,6 +88,10 @@ export function buildContextTools(
   }
 
   return tools;
+}
+
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
 }
 
 // ---------------------------------------------------------------------------

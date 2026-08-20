@@ -1,13 +1,14 @@
 "use client";
 
 import type { UIMessage } from "ai";
-import { isTextUIPart, isToolUIPart, getToolName } from "ai";
+import { isTextUIPart, isToolUIPart, isReasoningUIPart, getToolName } from "ai";
 import { Component, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Copy, Check, RefreshCw } from "lucide-react";
 import { ToolCallGroup } from "./ToolCallGroup";
 import { VisualCard } from "./VisualCard";
 import { GeneratingIndicator } from "./GeneratingIndicator";
+import { ReasoningBlock } from "./ReasoningBlock";
 import { FollowupSuggestions } from "./FollowupSuggestions";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { ImagePreview } from "./ImagePreview";
@@ -310,6 +311,7 @@ function StreamingSafeMarkdown({ content, isStreaming }: { content: string; isSt
 
 type Segment =
   | { type: "text"; text: string }
+  | { type: "reasoning"; text: string; isStreaming: boolean }
   | { type: "tool"; parts: UIMessage["parts"] }
   | { type: "visual"; part: UIMessage["parts"][number] }
   | { type: "sessionPresent"; part: UIMessage["parts"][number] }
@@ -381,6 +383,84 @@ function mergeInRowToolSegments(segments: Segment[]): Segment[] {
 }
 
 /**
+ * Tools whose standalone execution is pure bookkeeping (loading tool groups,
+ * listing available tools, getting help) — they render nothing the user needs
+ * to see when run alone. A tool segment made up ENTIRELY of these tools is
+ * dropped; a segment that chains them with real work (e.g. load_tool_groups
+ * followed by web_fetch) is kept. Names are matched against the bare tool
+ * name (MCP-style `server__tool` prefixes are stripped).
+ */
+const QUIET_TOOL_NAMES = new Set([
+  "load_tool_groups",
+  "list_available_tools",
+  "get_tool_help",
+  "get_tool_details",
+  "set_run_name",
+  "get_time_details",
+  "get_device_details",
+  "get_recent_memories",
+]);
+
+function isQuietToolPart(part: UIMessage["parts"][number]): boolean {
+  try {
+    const name = getToolName(part as Parameters<typeof getToolName>[0]);
+    const bare = name.toLowerCase().includes("__")
+      ? name.toLowerCase().split("__").slice(1).join("__")
+      : name.toLowerCase();
+    return QUIET_TOOL_NAMES.has(bare);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Drop tool segments that contain ONLY quiet bookkeeping tools. A segment
+ * mixing quiet tools with real work is kept so the real calls stay visible.
+ */
+function dropQuietToolSegments(segments: Segment[]): Segment[] {
+  return segments.filter(
+    (seg) =>
+      seg.type !== "tool" ||
+      !seg.parts.every((part) => isQuietToolPart(part)),
+  );
+}
+
+/**
+ * Combine EVERY reasoning segment in a message into a single reasoning block.
+ * Multi-step runs emit one reasoning part per step (interleaved with tools),
+ * so without this pass a message shows 2+ stacked "Reasoning..." disclosures.
+ * The merged block sits where the FIRST reasoning appeared; each step's
+ * reasoning is separated by a blank paragraph. Streaming state is OR'd across
+ * all steps, so the block stays open while any step is still reasoning.
+ */
+function mergeReasoningSegments(segments: Segment[]): Segment[] {
+  const merged: Segment[] = [];
+  let combined: Extract<Segment, { type: "reasoning" }> | null = null;
+  let combinedInserted = false;
+
+  for (const seg of segments) {
+    if (seg.type === "reasoning") {
+      if (combined) {
+        combined.text += "\n\n" + seg.text;
+        combined.isStreaming = combined.isStreaming || seg.isStreaming;
+      } else {
+        combined = { type: "reasoning", text: seg.text, isStreaming: seg.isStreaming };
+      }
+      // Insert the merged block at the position of the FIRST reasoning
+      // segment; every later reasoning segment accumulates into it.
+      if (!combinedInserted) {
+        merged.push(combined);
+        combinedInserted = true;
+      }
+      continue;
+    }
+    merged.push(seg);
+  }
+  if (combined && !combinedInserted) merged.push(combined);
+  return merged;
+}
+
+/**
  * Walk through `parts` in order and produce interleaved segments.
  * Consecutive text parts are merged into one text segment.
  * Consecutive tool parts are merged into one tool segment, and tool groups
@@ -392,7 +472,22 @@ function buildSegments(parts: UIMessage["parts"]): Segment[] {
   const segments: Segment[] = [];
 
   for (const part of parts) {
-    if (isTextUIPart(part)) {
+    if (isReasoningUIPart(part)) {
+      const reasoningText = part.text ?? "";
+      if (!reasoningText.trim()) continue;
+      const last = segments[segments.length - 1];
+      const reasoningStreaming = part.state === "streaming";
+      if (last?.type === "reasoning") {
+        last.text += reasoningText;
+        last.isStreaming = last.isStreaming || reasoningStreaming;
+      } else {
+        segments.push({
+          type: "reasoning",
+          text: reasoningText,
+          isStreaming: reasoningStreaming,
+        });
+      }
+    } else if (isTextUIPart(part)) {
       const last = segments[segments.length - 1];
       if (last?.type === "text") {
         // Append to ongoing text segment (streaming appends text-deltas)
@@ -469,7 +564,9 @@ function buildSegments(parts: UIMessage["parts"]): Segment[] {
     // Skip step-start, source, file parts
   }
 
-  return mergeInRowToolSegments(segments);
+  return mergeReasoningSegments(
+    mergeInRowToolSegments(dropQuietToolSegments(segments)),
+  );
 }
 
 export function MessageBubble({
@@ -625,6 +722,16 @@ export function MessageBubble({
                     isStreaming={isStreaming && idx === segments.length - 1}
                   />
                 </div>
+              ) : segment.type === "reasoning" ? (
+                <ReasoningBlock
+                  key={`reasoning-${idx}`}
+                  text={segment.text}
+                  isStreaming={segment.isStreaming}
+                  // Whole-message streaming keeps the single merged block open
+                  // across tool gaps between reasoning phases, and is what
+                  // finalizes the accumulated duration when the run completes.
+                  messageStreaming={isStreaming}
+                />
               ) : segment.type === "visual" ? (
                 <VisualCardSegment key={`visual-${idx}`} part={segment.part} />
               ) : segment.type === "sessionPresent" ? (

@@ -473,7 +473,7 @@ export function ToolCallCard({
         </button>
 
         {!isComplete && !isError && isReadMedia && (
-          <div className="border-t border-border/35 px-3 py-2.5">
+          <div className="px-3 py-2.5">
             <div className="flex items-center gap-2.5">
               <Image className="h-4 w-4 text-muted-foreground" />
               <div className="min-w-0 flex-1">
@@ -490,7 +490,7 @@ export function ToolCallCard({
         )}
 
         {outputOpen && (
-          <div className="border-t border-border/35 mb-5">
+          <div className="mb-5">
             {!isEmptyObject(input) && (
               <DetailSection
                 open={inputOpen}
@@ -1093,7 +1093,7 @@ function DetailSection({
   children: React.ReactNode;
 }) {
   return (
-    <div className="border-t border-border/35">
+    <div className="border-t border-border/35 border-none">
       <button
         type="button"
         className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground transition-colors hover:bg-muted/30"
