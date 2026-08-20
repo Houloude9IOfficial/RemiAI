@@ -692,6 +692,18 @@ export function MessageBubble({
   const segments = buildSegments(message.parts);
   const hasAnyContent = segments.length > 0;
 
+  // True once the model has stopped thinking and started writing its final
+  // answer: a text part is actively streaming and no reasoning part is still
+  // streaming. The reasoning block collapses the moment this flips on.
+  const responseStreaming =
+    isStreaming &&
+    message.parts.some(
+      (part) => isTextUIPart(part) && part.state === "streaming",
+    ) &&
+    !message.parts.some(
+      (part) => isReasoningUIPart(part) && part.state === "streaming",
+    );
+
   // If nothing to render yet, show a polished streaming placeholder.
   if (!hasAnyContent && isStreaming) {
     return (
@@ -772,6 +784,9 @@ export function MessageBubble({
                 // across tool gaps between reasoning phases, and is what
                 // finalizes the accumulated duration when the run completes.
                 messageStreaming={isStreaming}
+                // Collapse the block the moment the final answer starts
+                // generating (text streaming, no reasoning left).
+                responseStreaming={responseStreaming}
               />
             ) : segment.type === "visual" ? (
               <VisualCardSegment key={`visual-${idx}`} part={segment.part} />

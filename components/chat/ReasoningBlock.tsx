@@ -23,14 +23,18 @@ export function ReasoningBlock({
   text,
   isStreaming = false,
   messageStreaming = false,
+  responseStreaming = false,
 }: {
   text: string;
   isStreaming?: boolean;
   /** Whether the whole message is still generating (keeps the block open across tool gaps). */
   messageStreaming?: boolean;
+  /** Whether the final text answer has started generating (collapses the block immediately). */
+  responseStreaming?: boolean;
 }) {
   const contentId = useId();
   const [open, setOpen] = useState(false);
+  const [finalized, setFinalized] = useState(false);
   const [durationSeconds, setDurationSeconds] = useState<number | null>(null);
   const accumulatedMsRef = useRef(0);
   const phaseStartRef = useRef<number | null>(null);
@@ -41,9 +45,13 @@ export function ReasoningBlock({
     const wasStreaming = previousStreamingRef.current;
     previousStreamingRef.current = isStreaming;
 
-    // A reasoning phase started — begin timing it and open the block.
+    // A reasoning phase started — begin timing it and open the block. If a
+    // final answer already collapsed the block (e.g. text followed by another
+    // reasoning phase in an agentic run), let it re-open and finalize again.
     if (!wasStreaming && isStreaming && phaseStartRef.current == null) {
       phaseStartRef.current = Date.now();
+      finalizedRef.current = false;
+      setFinalized(false);
       setDurationSeconds(null);
       setOpen(true);
     }
@@ -55,10 +63,7 @@ export function ReasoningBlock({
       phaseStartRef.current = null;
     }
 
-    // The whole message finished (or aborted) — finalize the accumulated
-    // duration exactly once and collapse the block.
-    if (!messageStreaming && !finalizedRef.current) {
-      finalizedRef.current = true;
+    const finalize = () => {
       if (phaseStartRef.current != null) {
         accumulatedMsRef.current += Date.now() - phaseStartRef.current;
         phaseStartRef.current = null;
@@ -68,20 +73,36 @@ export function ReasoningBlock({
           Math.max(1, Math.round(accumulatedMsRef.current / 1000)),
         );
       }
+      finalizedRef.current = true;
+      setFinalized(true);
       setOpen(false);
+    };
+
+    // The final response started generating — reasoning is over, so finalize
+    // the accumulated duration and collapse the block the moment the answer
+    // begins streaming instead of keeping it open (and labeled "Reasoning...")
+    // through the whole response.
+    if (responseStreaming && !finalizedRef.current) {
+      finalize();
     }
-  }, [isStreaming, messageStreaming]);
+
+    // The whole message finished (or aborted) — finalize exactly once.
+    if (!messageStreaming && !finalizedRef.current) {
+      finalize();
+    }
+  }, [isStreaming, messageStreaming, responseStreaming]);
 
   if (!text.trim()) return null;
 
   // While the run is still generating (including tool gaps between reasoning
-  // phases) keep the live "Reasoning..." label; only after the message
-  // completes does the final total duration take over.
-  const label = messageStreaming
-    ? "Reasoning..."
-    : durationSeconds != null
-      ? `Reasoned for ${durationSeconds} ${durationSeconds === 1 ? "second" : "seconds"}`
-      : "Reasoning complete";
+  // phases) keep the live "Reasoning..." label; once the reasoning is done
+  // (final answer streaming or message complete) the final total takes over.
+  const label =
+    !finalized && messageStreaming
+      ? "Reasoning..."
+      : durationSeconds != null
+        ? `Reasoned for ${durationSeconds} ${durationSeconds === 1 ? "second" : "seconds"}`
+        : "Reasoning complete";
 
   return (
     <section
