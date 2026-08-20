@@ -677,7 +677,7 @@ export function MessageBubble({
   if (!hasAnyContent && isStreaming) {
     return (
       <GeneratingIndicator
-        label="Thinking through your request..."
+        label="Thinking"
         variant="pill"
         className="animate-fade-in"
       />
@@ -750,10 +750,13 @@ export function MessageBubble({
               ),
             )}
 
-          {/* Suggestions always rendered at the bottom, cleanly separated.
-              The AI can call suggest_followups multiple times per response —
-              only the LAST set is shown so duplicate cards never stack. */}
-          {lastSuggestion && (
+          {/* Suggestions only appear once the ENTIRE response has finished
+              streaming. The model often calls suggest_followups mid-run —
+              right after a tool executes, while it is still reasoning and
+              writing — so without this gate the card pops up before the
+              run ends. The AI can call it multiple times per response; only
+              the LAST set is shown so duplicate cards never stack. */}
+          {lastSuggestion && !isStreaming && (
             <div key="suggestions-last" className="mt-0.5">
               <FollowupSuggestions data={lastSuggestion.data} />
             </div>

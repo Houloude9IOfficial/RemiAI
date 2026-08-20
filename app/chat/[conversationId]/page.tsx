@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState, useCallback, useRef } from "react";
+import { use, useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useChat } from "@ai-sdk/react";
@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Files, Menu, Plus } from "lucide-react";
 import { MessageList } from "@/components/chat/MessageList";
 import { EmptyChatState } from "@/components/chat/EmptyChatState";
+import { ActiveQuestionsPanel } from "@/components/chat/ActiveQuestionsPanel";
 import { ChatInput, type ChatMode } from "@/components/chat/ChatInput";
 import type { QualityPolicy } from "@/lib/chat/quality-policy";
 import { ChatSkeleton } from "@/components/chat/ChatSkeleton";
@@ -28,6 +29,7 @@ import { toast } from "sonner";
 import { useErrorHandler } from "@/lib/hooks/use-error-handler";
 import { conversationsApi } from "@/lib/api/conversations";
 import { useStreamingContext } from "@/lib/chat/streaming-context";
+import { findActiveQuestions } from "@/lib/chat/questions";
 import { useSidebar } from "@/components/sidebar/SidebarContext";
 import {
   SESSION_FILES_PRESENT_EVENT,
@@ -776,6 +778,11 @@ function ConversationChat({
     (!lastMessage || lastMessage.role === "user");
   const isEmpty = messages.length === 0 && !isWaiting;
 
+  // The newest unanswered ask_questions set — drives the Nexus-style "active"
+  // questions panel above the composer. Derived from the message list, so it
+  // survives reloads (any user message after a questions part marks it answered).
+  const activeQuestions = useMemo(() => findActiveQuestions(messages), [messages]);
+
   const handleModelChange = async (nextProviderId: number, nextModelId: string) => {
     await conversationsApi.update(conversationId, {
       providerId: nextProviderId,
@@ -893,6 +900,26 @@ function ConversationChat({
 
               {/* ── Input ── */}
               <div className="sticky bottom-0 z-20 supports-[padding-bottom:env(safe-area-inset-bottom)]:pb-[env(safe-area-inset-bottom)]">
+                {/* Nexus-style "active" questions — the AI's pending questions
+                    live above the composer, not as static text in the chat. */}
+                <AnimatePresence>
+                  {activeQuestions && (
+                    <motion.div
+                      key={activeQuestions.id}
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 8 }}
+                      transition={{ duration: 0.22, ease: "easeOut" }}
+                    >
+                      <ActiveQuestionsPanel
+                        data={activeQuestions.data}
+                        status={status}
+                        onSubmit={handleSend}
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
                 {/* Shared layoutId with the centered EmptyChatState composer —
                     makes the input glide down to the dock when chat starts.
                     Ease-out tween (not a spring): a spring overshoots past the
