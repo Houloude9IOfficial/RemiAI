@@ -580,7 +580,7 @@ export function MessageBubble({
   if (!hasAnyContent && isStreaming) {
     return (
       <GeneratingIndicator
-        label="Thinking"
+        label="Thinking through your request..."
         variant="pill"
         className="animate-fade-in"
       />
