@@ -22,7 +22,7 @@ import { MediaDisplay } from "./MediaDisplay";
 import { QuestionsCard } from "./QuestionsCard";
 import { VisualCard } from "./VisualCard";
 
-type AnyToolPart = ToolUIPart<any> | DynamicToolUIPart;
+type AnyToolPart = ToolUIPart | DynamicToolUIPart;
 
 /** Lightweight / metadata tools — render as a single expandable line. */
 const MINOR_TOOLS = new Set([
@@ -50,19 +50,19 @@ function bareName(name: string): string {
 }
 
 function getState(part: AnyToolPart): string {
-  return (part as any).state ?? "call-result";
+  return part.state ?? "call-result";
 }
 
 function getInput(part: AnyToolPart): unknown {
-  return (part as any).input;
+  return part.input;
 }
 
 function getOutput(part: AnyToolPart): unknown {
-  return (part as any).output;
+  return part.output;
 }
 
 function getError(part: AnyToolPart): string | undefined {
-  return (part as any).errorText;
+  return part.errorText;
 }
 
 /**
@@ -89,7 +89,7 @@ function formatToolError(errorText: string | undefined): string {
 }
 
 function getApproved(part: AnyToolPart): boolean | undefined {
-  return (part as any).approved;
+  return part.approval?.approved;
 }
 
 function isEmptyObject(obj: unknown): boolean {
@@ -213,9 +213,14 @@ export function ToolCallCard({
   part,
   compact = true,
 }: {
-  part: any;
+  part: AnyToolPart;
   compact?: boolean;
 }) {
+  const [inputOpen, setInputOpen] = useState(false);
+  // Collapsed by default — avoids oversized cards and nested scroll traps.
+  const [outputOpen, setOutputOpen] = useState(false);
+  const [minorOpen, setMinorOpen] = useState(false);
+
   if (!part || typeof part !== "object") return null;
   if (!isToolUIPart(part)) return null;
 
@@ -236,11 +241,6 @@ export function ToolCallCard({
   const output = getOutput(toolPart);
   const errorText = formatToolError(getError(toolPart));
   const approved = getApproved(toolPart);
-
-  const [inputOpen, setInputOpen] = useState(false);
-  // Collapsed by default — avoids oversized cards and nested scroll traps.
-  const [outputOpen, setOutputOpen] = useState(false);
-  const [minorOpen, setMinorOpen] = useState(false);
 
   const isCallResult = state === "call-result";
   const isStreamingInput =

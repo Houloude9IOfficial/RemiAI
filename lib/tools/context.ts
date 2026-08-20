@@ -17,8 +17,8 @@ export function buildContextTools(
   userAgent?: string,
   timezone?: string,
   locale?: string,
-): Record<string, any> {
-  const tools: Record<string, any> = {};
+): Record<string, unknown> {
+  const tools: Record<string, unknown> = {};
 
   // -----------------------------------------------------------------------
   // get_time_details
@@ -77,11 +77,18 @@ export function buildContextTools(
   // Wrap all tools with result truncation
   for (const key of Object.keys(tools)) {
     const tool = tools[key];
+    if (!tool || typeof tool !== "object") continue;
+    const toolRecord = tool as {
+      description?: unknown;
+      parameters?: unknown;
+      execute?: (...args: unknown[]) => unknown;
+    };
+    if (typeof toolRecord.execute !== "function") continue;
     tools[key] = {
-      description: tool.description,
-      parameters: tool.parameters,
-      execute: async (...args: any[]) => {
-        const result = await tool.execute(...args);
+      description: toolRecord.description,
+      parameters: toolRecord.parameters,
+      execute: async (...args: unknown[]) => {
+        const result = await toolRecord.execute?.(...args);
         return truncateToolResult(result);
       },
     };

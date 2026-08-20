@@ -305,16 +305,21 @@ function StreamingSafeMarkdown({
 
   if (!isStreaming) {
     // Streaming done — reset tracker and render clean markdown
+    // eslint-disable-next-line react-hooks/refs -- render-time animation bookkeeping must use the previous streamed length
     prevLengthRef.current = 0;
     return <SafeMarkdown content={content} isStreaming={false} citations={citations} />;
   }
 
   // Text shrunk (e.g. error recovery / new stream starting) — reset
+  // eslint-disable-next-line react-hooks/refs -- render-time animation bookkeeping must compare the previous streamed length
   if (content.length < prevLengthRef.current) {
+    // eslint-disable-next-line react-hooks/refs -- render-time animation bookkeeping resets the previous streamed length
     prevLengthRef.current = 0;
   }
 
+  // eslint-disable-next-line react-hooks/refs -- render-time animation bookkeeping reads the previous streamed length
   const prevLen = prevLengthRef.current;
+  // eslint-disable-next-line react-hooks/refs -- render-time animation bookkeeping stores the current streamed length
   prevLengthRef.current = content.length;
 
   // Wrap newly arrived characters in individually animated spans
@@ -796,7 +801,10 @@ export function MessageBubble({
                 part={segment.part}
               />
             ) : (
-              <ToolCallGroup key={`tool-${idx}`} parts={segment.parts as any} />
+              <ToolCallGroup
+                key={`tool-${idx}`}
+                parts={segment.parts as unknown as Parameters<typeof ToolCallGroup>[0]["parts"]}
+              />
             ),
           )}
 

@@ -362,7 +362,7 @@ function ConversationChat({
   onConversationChanged: () => void;
 }) {
   const [mode, setMode] = useState<ChatMode>(
-    (initialConversation as any).mode ?? "chat",
+    (initialConversation.mode as ChatMode | undefined) ?? "chat",
   );
   const [qualityPolicy, setQualityPolicy] = useState<QualityPolicy>(
     initialConversation.qualityPolicy ?? "balanced",
@@ -388,7 +388,7 @@ function ConversationChat({
 
   // Persist mode to DB whenever it changes
   useEffect(() => {
-    if (mode === (initialConversation as any).mode) return;
+    if (mode === initialConversation.mode) return;
     conversationsApi.update(conversationId, { mode }).catch(() => {});
   }, [mode, conversationId, initialConversation]);
 
@@ -407,8 +407,8 @@ function ConversationChat({
   // field on the `AbstractChat` instance. Whichever finishes first sets it
   // to `undefined` in its `finally` block, causing the other to crash with:
   //   "can't access property 'state', this.activeResponse is undefined"
-  const resumeRef = useRef(isReconnecting);
-  const resume = resumeRef.current;
+  const [resume] = useState(() => isReconnecting);
+  const messagesRef = useRef(initialMessages);
 
   const {
     messages,
@@ -484,8 +484,9 @@ function ConversationChat({
   // editing the deps array LENGTH under Fast Refresh makes React throw
   // ("changed size between renders"), and a live messages dep would also
   // re-register the handler on every streamed chunk.
-  const messagesRef = useRef(messages);
-  messagesRef.current = messages;
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   useEffect(() => {
     if (status === "submitted" || status === "streaming") {

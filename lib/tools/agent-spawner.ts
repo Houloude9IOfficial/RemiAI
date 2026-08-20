@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { streamText } from "ai";
+import { streamText, type LanguageModel, type ToolSet } from "ai";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { providers, agentTasks, conversations } from "@/db/schema";
@@ -40,6 +40,8 @@ const MAX_CHAIN_DEPTH = 10;
  * Context passed down the agent chain so children can spawn their own
  * sub-agents with the correct provider, model, and parent tracking.
  */
+type AgentType = "researcher" | "coder" | "analyst" | "summarizer" | "custom";
+
 interface ChainContext {
   provider: ProviderRow;
   modelId: string;
@@ -228,7 +230,7 @@ You have access to filesystem tools (for reading files), web_fetch (for reading 
 async function buildAgentTools(
   userContext?: UserContext,
   conversationId?: number,
-): Promise<Record<string, any>> {
+): Promise<Record<string, unknown>> {
   const [fsTools, memoryTools, integrationTools, executionTools, docTools, mediaTools, routineTools] =
     await Promise.all([
       buildFilesystemTools(),
@@ -241,7 +243,7 @@ async function buildAgentTools(
       // spawned agents).
       conversationId != null
         ? Promise.resolve(buildMediaTools(conversationId))
-        : Promise.resolve({} as Record<string, any>),
+        : Promise.resolve({} as Record<string, unknown>),
       buildRoutinesTools(conversationId),
     ]);
 
@@ -273,7 +275,7 @@ async function buildAgentTools(
 // ---------------------------------------------------------------------------
 
 async function runAgent(
-  model: any,
+  model: LanguageModel,
   agentType: string,
   task: string,
   systemPromptOverride: string | undefined,
@@ -332,7 +334,7 @@ async function runAgent(
     // Mark the last tool with an Anthropic cache_control breakpoint so the
     // full tool-definitions prefix is cached across steps (sub-agent system
     // prompts are short, so only the tools are worth caching here).
-    tools: markLastToolForCache(chainContext?.provider, agentTools),
+    tools: markLastToolForCache(chainContext?.provider, agentTools) as ToolSet,
     // Retry retryable provider failures up to 3 times before erroring out.
     maxRetries: 3,
   });
@@ -540,7 +542,7 @@ async function createTaskRecord(
       conversationId,
       parentTaskId: chainContext?.parentTaskId ?? null,
       chainDepth: chainContext?.chainDepth ?? 0,
-      agentType: agentType as any,
+      agentType: agentType as AgentType,
       task,
       systemPromptOverride: systemPromptOverride ?? null,
       status: initialStatus,

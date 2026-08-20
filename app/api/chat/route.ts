@@ -8,6 +8,7 @@ import {
   createUIMessageStreamResponse,
   type UIMessage,
   type UIMessageChunk,
+  type ToolSet,
 } from "ai";
 import { streamRegistry } from "@/lib/chat/stream-registry";
 import { periodicallyPersistMessages } from "@/lib/chat/persist-interval";
@@ -228,7 +229,7 @@ export async function POST(req: Request) {
   const conversationModelId = conversation.modelId;
 
   // Read mode from the conversation in the database
-  let mode = (conversation as any).mode ?? "chat";
+  let mode = conversation.mode ?? "chat";
 
   const providerLookupStartedAt = performance.now();
   const provider = await db
@@ -300,11 +301,14 @@ export async function POST(req: Request) {
       })
       .where(eq(conversations.id, conversationId));
 
-    const previousMessage = uiMessages[uiMessages.length - 2] as any;
+    const previousMessage = uiMessages[uiMessages.length - 2];
     const answeredPlanQuestions = mode === "plan" && previousMessage?.role === "assistant" &&
-      Array.isArray(previousMessage.parts) && previousMessage.parts.some((part: any) =>
-        part?.output?.type === "questions",
-      );
+      previousMessage.parts.some((part) => {
+        if (!part || typeof part !== "object" || !("output" in part)) return false;
+        const output = part.output;
+        return output !== null && typeof output === "object" &&
+          "type" in output && output.type === "questions";
+      });
     if (answeredPlanQuestions) {
       mode = "goal";
       await db.update(conversations)
@@ -386,7 +390,7 @@ export async function POST(req: Request) {
 
   // Gather code execution tools (python_exec, js_exec)
   const executionToolSet = await buildExecutionTools(
-    (conversation as any).bashMode === "full" ? "full" : "sandboxed",
+    conversation.bashMode === "full" ? "full" : "sandboxed",
   );
 
   // Gather native Playwright browser automation tools (browser_open, ...)
@@ -527,7 +531,7 @@ Definition of done:
   // Merge all tool sets (last writer wins on name collision). Typed as a
   // loose record so the list_available_tools rebuild below can replace the
   // original entry.
-  const tools: Record<string, any> = {
+  const tools: Record<string, unknown> = {
     ...mcpToolSet,
     ...effectiveFsToolSet,
     ...contextToolSet,
@@ -715,7 +719,7 @@ Definition of done:
   // (the AI SDK accepts these raw `{ description, inputSchema, execute }`
   // objects, e.g. in lib/tools/*.ts) — it also keeps the load_tool_groups
   // shape from breaking the ToolSet union.
-  const baseTools: Record<string, any> = {
+  const baseTools: Record<string, unknown> = {
     ...tools,
     // Appended LAST on purpose: markLastToolForCache puts the Anthropic
     // cache breakpoint on it, and since load_tool_groups is always active
@@ -732,7 +736,9 @@ Definition of done:
   // tool call input would never be validated). Normalise once so every tool
   // gets its real schema sent to the model and its input validated.
   for (const [name, tool] of Object.entries(baseTools)) {
-    baseTools[name] = normaliseTool(tool);
+    if (tool && typeof tool === "object") {
+      baseTools[name] = normaliseTool(tool as Record<string, unknown>);
+    }
   }
   const cachedBaseTools = markLastToolForCache(activeProvider, baseTools);
 
@@ -740,8 +746,13 @@ Definition of done:
   // the old filtered set). prepareStep re-derives it before every step.
   const initialActiveToolNames = activeToolNames(tools, activeToolGroups);
   const estimatedToolDefinitionChars = Object.entries(baseTools).reduce(
-    (total, [name, tool]) =>
-      total + name.length + String(tool?.description ?? "").length + (tool?.inputSchema ? 120 : 0),
+    (total, [name, tool]) => {
+      const toolRecord = tool && typeof tool === "object"
+        ? tool as Record<string, unknown>
+        : {};
+      return total + name.length + String(toolRecord.description ?? "").length +
+        (toolRecord.inputSchema ? 120 : 0);
+    },
     0,
   );
   trace.metric("activeToolCount", initialActiveToolNames.length);
@@ -867,7 +878,7 @@ Definition of done:
       const attachments = await extractImageAttachments(content);
       if (attachments.length > 0) {
         const cleanText = stripImageMarkdown(content);
-        const parts: any[] = [];
+        const parts: unknown[] = [];
         if (cleanText) {
           parts.push({ type: "text" as const, text: cleanText });
         }
@@ -881,7 +892,7 @@ Definition of done:
             mediaType: att.mimeType,
           });
         }
-        msg.content = parts;
+        msg.content = parts as typeof msg.content;
       }
     } else if (Array.isArray(content)) {
       // Check if any text part contains image references
@@ -896,7 +907,7 @@ Definition of done:
         }
       }
       if (hasImages) {
-        const newParts: any[] = [];
+        const newParts: unknown[] = [];
         for (const part of content) {
           if (part.type === "text") {
             const attachments = await extractImageAttachments(part.text);
@@ -921,7 +932,7 @@ Definition of done:
             newParts.push(part);
           }
         }
-        msg.content = newParts;
+        msg.content = newParts as typeof msg.content;
       }
     }
   }
@@ -1004,7 +1015,7 @@ Definition of done:
       dynamicSystemPrompt,
     ),
     messages: modelMessages,
-    tools: cachedBaseTools,
+    tools: cachedBaseTools as ToolSet,
     // Only supported Anthropic reasoning families receive reasoning options.
     // Unknown/local/OpenAI-compatible models stay on their normal stream.
     providerOptions: streamingReasoningProviderOptions(

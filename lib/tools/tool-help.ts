@@ -1030,7 +1030,7 @@ const TOOL_GROUPS = buildToolGroups();
  * This replaces the verbose tutorials that used to live in the system prompt.
  * By moving them to an on-demand tool, we save ~10k+ tokens per message.
  */
-export function buildToolHelpTool(): Record<string, any> {
+export function buildToolHelpTool(): Record<string, unknown> {
   return {
     get_tool_help: {
       description: `Get detailed usage guidance and examples for a tool or feature. Call when unsure how to use a tool or want workflow examples. Topics: ${SHORT_TOPIC_LIST}.`,
@@ -1130,7 +1130,7 @@ export function buildToolHelpTool(): Record<string, any> {
  */
 export function buildListAvailableToolsTool(
   registeredToolNames?: ReadonlySet<string>,
-): Record<string, any> {
+): Record<string, unknown> {
   return {
     list_available_tools: {
       description: `List available tools grouped by category, with names and brief descriptions. Filter by keyword (e.g. "search", "file", "web") or category (builtin, integration, memory). Each result includes a \`helpTopic\` for get_tool_help.`,

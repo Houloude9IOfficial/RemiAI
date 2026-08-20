@@ -75,7 +75,10 @@ export function MobileSidebar() {
   useEffect(() => {
     try {
       const stored = localStorage.getItem("sidebarExtraExpanded");
-      if (stored === "true") setExtraExpanded(true);
+      if (stored === "true") {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate persisted UI state after mount to avoid SSR mismatch
+        setExtraExpanded(true);
+      }
     } catch {
       // ignore
     }

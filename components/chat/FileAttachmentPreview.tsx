@@ -58,6 +58,7 @@ function ImageThumb({
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   useEffect(() => {
     if (!file.file) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear a stale object URL when the attachment disappears
       setObjectUrl(null);
       return;
     }
@@ -198,6 +199,7 @@ function AttachmentCard({
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   useEffect(() => {
     if (!isImg || !file.file) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear a stale object URL when the attachment stops being an image
       setObjectUrl(null);
       return;
     }

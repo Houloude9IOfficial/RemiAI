@@ -288,7 +288,9 @@ export const updateRoutineTool = {
       });
     }
 
-    const updates: Record<string, unknown> = { updatedAt: new Date().toISOString() };
+    const updates: Partial<typeof routines.$inferInsert> = {
+      updatedAt: new Date().toISOString(),
+    };
     if (newName !== undefined) updates.name = newName;
     if (description !== undefined) updates.description = description;
     if (code !== undefined) updates.code = code;
@@ -296,7 +298,7 @@ export const updateRoutineTool = {
 
     await db
       .update(routines)
-      .set(updates as any)
+      .set(updates)
       .where(eq(routines.id, routine.id))
       .run();
 
@@ -435,7 +437,7 @@ export const getRoutineLogsTool = {
  * the "routines" tool config in settings. Disabled by default.
  * Matches the pattern used by buildExecutionTools.
  */
-export async function buildRoutinesTools(conversationId?: number): Promise<Record<string, any>> {
+export async function buildRoutinesTools(conversationId?: number): Promise<Record<string, unknown>> {
   const config = await db
     .select()
     .from(toolConfigs)

@@ -45,10 +45,10 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 
-type AnyToolPart = ToolUIPart<any> | DynamicToolUIPart;
+type AnyToolPart = ToolUIPart | DynamicToolUIPart;
 
 function getState(part: AnyToolPart): string {
-  return (part as any).state ?? "call-result";
+  return part.state ?? "call-result";
 }
 
 function isPartRunning(part: AnyToolPart): boolean {
@@ -75,11 +75,11 @@ function isPartError(part: AnyToolPart): boolean {
 }
 
 function getOutput(part: AnyToolPart): unknown {
-  return (part as any).output;
+  return part.output;
 }
 
 function getInput(part: AnyToolPart): unknown {
-  return (part as any).input;
+  return part.input;
 }
 
 function isQuestionsPart(part: AnyToolPart): boolean {
@@ -523,7 +523,7 @@ function extractFileChanges(parts: AnyToolPart[]): FileChangeSummary[] {
 
       // Fallback: estimate lines from input content when metadata missing
       let added = linesAdded;
-      let removed = linesRemoved;
+      const removed = linesRemoved;
       if (added === undefined && typeof input?.content === "string") {
         const content = input.content as string;
         added = content.length === 0 ? 0 : content.split("\n").length;
@@ -755,6 +755,7 @@ export function ToolCallGroup({
   useEffect(() => {
     if (running) {
       if (startRef.current === null) startRef.current = Date.now();
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset the frozen duration when a new tool run starts
       setFinalElapsedMs(null);
       const id = window.setInterval(() => {
         setElapsedMs(Date.now() - (startRef.current ?? Date.now()));
@@ -769,7 +770,10 @@ export function ToolCallGroup({
   }, [running, completed, finalElapsedMs]);
 
   useEffect(() => {
-    if (keepOpen) setIsOpen(true);
+    if (keepOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- questions must force the disclosure open after tool output arrives
+      setIsOpen(true);
+    }
   }, [keepOpen]);
 
   useEffect(() => {
@@ -785,8 +789,9 @@ export function ToolCallGroup({
     setIsOpen((o) => !o);
   }, []);
 
-  const displayElapsed =
-    finalElapsedMs ?? (running && startRef.current !== null ? elapsedMs : null);
+  const displayElapsed = finalElapsedMs ??
+    // eslint-disable-next-line react-hooks/refs -- the timer's start marker is intentionally read during render for the live label
+    (running && startRef.current !== null ? elapsedMs : null);
 
   const summaryLabel = runName ??
     (hasError || hasVerificationFailure
@@ -887,7 +892,7 @@ export function ToolCallGroup({
               const StepIcon = getToolLabel(toolName).icon ?? Wrench;
               return (
                 <div
-                  key={(part as any).toolCallId ?? idx}
+                  key={part.toolCallId ?? idx}
                   className="relative pl-5"
                   aria-label={`${getToolLabel(toolName).past}: ${toolName}`}
                 >

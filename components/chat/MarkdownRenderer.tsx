@@ -8,6 +8,23 @@ import {
   type CitationRef,
 } from "@/lib/chat/citations";
 
+type MarkdownLinkProps = React.ComponentPropsWithoutRef<"a">;
+type MarkdownPreProps = React.ComponentPropsWithoutRef<"pre">;
+type MarkdownCodeProps = React.ComponentPropsWithoutRef<"code">;
+type MarkdownTableProps = React.ComponentPropsWithoutRef<"table">;
+type MarkdownTableCellProps = React.ComponentPropsWithoutRef<"th">;
+type MarkdownRowProps = React.ComponentPropsWithoutRef<"tr">;
+type MarkdownDataCellProps = React.ComponentPropsWithoutRef<"td">;
+type MarkdownHeadingProps = React.ComponentPropsWithoutRef<"h1">;
+type MarkdownListProps = React.ComponentPropsWithoutRef<"ul">;
+type MarkdownOrderedListProps = React.ComponentPropsWithoutRef<"ol">;
+type MarkdownListItemProps = React.ComponentPropsWithoutRef<"li">;
+type MarkdownQuoteProps = React.ComponentPropsWithoutRef<"blockquote">;
+type MarkdownParagraphProps = React.ComponentPropsWithoutRef<"p">;
+type MarkdownImageProps = Omit<React.ComponentPropsWithoutRef<"img">, "src"> & {
+  src?: string;
+};
+
 interface MarkdownRendererProps {
   content: string;
   className?: string;
@@ -48,7 +65,7 @@ export function MarkdownRenderer({ content, className, isStreaming, citations }:
           overrides: {
             // -- Links: destinations matching a retrieved source render as a
             // numbered citation chip; everything else opens in a new tab.
-            a: ({ href, children, ...props }: any) => {
+            a: ({ href, children, ...props }: MarkdownLinkProps) => {
               const citation =
                 typeof href === "string" && citations?.size
                   ? citations.get(normalizeUrlKey(href))
@@ -69,7 +86,7 @@ export function MarkdownRenderer({ content, className, isStreaming, citations }:
             },
 
             // -- Code blocks with language badge + copy button
-            pre: ({ children, ...props }: any) => {
+            pre: ({ children, ...props }: MarkdownPreProps) => {
               // Extract language and raw text so we can highlight the code
               const rawText = extractCodeContent(children);
               const lang = extractLanguage(children);
@@ -111,7 +128,7 @@ export function MarkdownRenderer({ content, className, isStreaming, citations }:
             // -- Inline code only. Block code (inside <pre>) must preserve its
             // language class so the pre override can detect it for highlighting.
             // markdown-to-jsx uses className="language-js lang-js" for fenced blocks.
-            code: ({ className: cls, children, ...props }: any) => {
+            code: ({ className: cls, children, ...props }: MarkdownCodeProps) => {
               // Block code inside <pre> — preserve language class for pre override
               if (cls?.includes("lang-")) {
                 return <code className={cls} {...props}>{children}</code>;
@@ -128,14 +145,14 @@ export function MarkdownRenderer({ content, className, isStreaming, citations }:
             },
 
             // -- Tables (clean, spacious, clearly separated grid)
-            table: ({ children, ...props }: any) => (
+            table: ({ children, ...props }: MarkdownTableProps) => (
               <div className="custom-scrollbar overflow-x-auto">
                 <table className="w-full border-separate border-spacing-0 text-sm" {...props}>
                   {children}
                 </table>
               </div>
             ),
-            th: ({ children, ...props }: any) => (
+            th: ({ children, ...props }: MarkdownTableCellProps) => (
               <th
                 className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground/80 bg-muted/75 border-b-2 border-border/50 border-r border-border/35 last:border-r-0 whitespace-normal"
                 {...props}
@@ -143,7 +160,7 @@ export function MarkdownRenderer({ content, className, isStreaming, citations }:
                 {children}
               </th>
             ),
-            tr: ({ children, ...props }: any) => (
+            tr: ({ children, ...props }: MarkdownRowProps) => (
               <tr
                 className="transition-colors duration-150 hover:bg-muted/30 even:bg-muted/10 last:[&>td]:border-b-0"
                 {...props}
@@ -151,36 +168,36 @@ export function MarkdownRenderer({ content, className, isStreaming, citations }:
                 {children}
               </tr>
             ),
-            td: ({ children, ...props }: any) => (
+            td: ({ children, ...props }: MarkdownDataCellProps) => (
               <td className="px-5 py-3 border-b border-border/30 border-r border-border/25 last:border-r-0 leading-relaxed align-top whitespace-normal" {...props}>
                 {children}
               </td>
             ),
 
             // -- Headings
-            h1: ({ children, ...props }: any) => (
+            h1: ({ children, ...props }: MarkdownHeadingProps) => (
               <h1 className="text-xl font-bold leading-tight mt-6 mb-3" {...props}>{children}</h1>
             ),
-            h2: ({ children, ...props }: any) => (
+            h2: ({ children, ...props }: MarkdownHeadingProps) => (
               <h2 className="text-lg font-bold leading-tight mt-5 mb-2" {...props}>{children}</h2>
             ),
-            h3: ({ children, ...props }: any) => (
+            h3: ({ children, ...props }: MarkdownHeadingProps) => (
               <h3 className="text-base font-semibold leading-tight mt-4 mb-2" {...props}>{children}</h3>
             ),
 
             // -- Lists
-            ul: ({ children, ...props }: any) => (
+            ul: ({ children, ...props }: MarkdownListProps) => (
               <ul className="list-disc pl-5 my-2 space-y-1" {...props}>{children}</ul>
             ),
-            ol: ({ children, ...props }: any) => (
+            ol: ({ children, ...props }: MarkdownOrderedListProps) => (
               <ol className="list-decimal pl-5 my-2 space-y-1" {...props}>{children}</ol>
             ),
-            li: ({ children, ...props }: any) => (
+            li: ({ children, ...props }: MarkdownListItemProps) => (
               <li className="leading-relaxed" {...props}>{children}</li>
             ),
 
             // -- Blockquotes
-            blockquote: ({ children, ...props }: any) => (
+            blockquote: ({ children, ...props }: MarkdownQuoteProps) => (
               <blockquote
                 className="border-l-4 border-muted-foreground/20 pl-4 italic text-muted-foreground my-3"
                 {...props}
@@ -195,14 +212,14 @@ export function MarkdownRenderer({ content, className, isStreaming, citations }:
             // Destructure it OUT so the spread below cannot clobber our own
             // className — previously the styling was silently dropped and the
             // rendered element showed className={undefined}.
-            p: ({ children, className: _pClassName, ...props }: any) => (
+            p: ({ children, className: _pClassName, ...props }: MarkdownParagraphProps) => (
               <p className="mb-3 last:mb-0 leading-relaxed" {...props}>{children}</p>
             ),
 
             // -- Images — rendered with download / copy / open-in-new-tab controls
-            img: ({ src, alt }: any) => (
+            img: ({ src, alt }: MarkdownImageProps) => (
               <ImagePreview
-                src={src}
+                src={src ?? ""}
                 alt={alt ?? ""}
                 className="my-3"
                 imgClassName="max-w-full rounded-lg border border-border/50"

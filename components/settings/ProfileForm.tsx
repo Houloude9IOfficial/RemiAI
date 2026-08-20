@@ -146,6 +146,7 @@ export function ProfileForm() {
   // edits aren't clobbered by refetches after auto-saves.
   useEffect(() => {
     if (data && !hydrated) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate local editing state from the fetched server preferences
       setForm(data);
       setLinks(
         Object.entries(data.links || {}).map(([key, value]) => ({
@@ -239,8 +240,12 @@ export function ProfileForm() {
       setForm((prev) => ({ ...prev, avatarUrl: url }));
 
       toast.success("Profile picture saved");
-    } catch (err: any) {
-      toast.error(err.message ?? "Failed to upload profile picture");
+    } catch (err: unknown) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Failed to upload profile picture",
+      );
     } finally {
       setAvatarUploading(false);
       // Reset file input so re-selecting the same file works

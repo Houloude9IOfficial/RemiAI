@@ -146,7 +146,7 @@ const sessionPresentFileSchema = z.object({
 export function buildSessionFileTools(
   conversationId: number,
   options: { sourceRunId?: string } = {},
-): Record<string, any> {
+): Record<string, unknown> {
   const sandbox = {
     list: (relPath: string | null) => listSessionFiles(conversationId, relPath),
     read: (relPath: string, offset?: number | null, limit?: number | null) =>
