@@ -96,6 +96,8 @@ export function EmptyChatState({
     staleTime: 300_000,
   });
 
+  const showWarning = false;
+
   const preferredName = (prefs?.preferredName ?? "").trim();
   const headline = preferredName
     ? `What are you up to, <a className="font-semibold underline" href="/settings/profile">${preferredName}</a>?`
@@ -114,7 +116,7 @@ export function EmptyChatState({
             a nested <p dangerouslySetInnerHTML> (may contain an <a> link).
             <p> inside <p> is invalid HTML and breaks hydration. */}
 
-        {disabled && !isStreaming && true == false && (
+        {disabled && !isStreaming && showWarning && (
           <div className="flex flex-wrap items-center justify-center gap-2 text-center text-xs text-muted-foreground">
             <span>Choose a model before sending a message.</span>
             <a
