@@ -232,6 +232,13 @@
       "when": 1787207200000,
       "tag": "0037_durable_automation",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1787210800000,
+      "tag": "0038_background_color",
+      "breakpoints": true
     }
   ]
 }

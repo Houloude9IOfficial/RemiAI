@@ -12,6 +12,7 @@ export type UserPreferences = {
   birthday: string;
   links: Record<string, string>;
   accentColor: string;
+  backgroundColor: string;
 };
 
 async function get(): Promise<UserPreferences> {

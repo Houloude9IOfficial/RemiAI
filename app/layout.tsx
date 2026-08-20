@@ -92,6 +92,13 @@ export default function RootLayout({
                   var vars=JSON.parse(accent);
                   for(var k in vars){document.documentElement.style.setProperty(k, vars[k]);}
                 }
+                // Re-apply a previously chosen background palette (cached by
+                // BackgroundColorProvider) so it shows before first paint.
+                var bg=localStorage.getItem("remi-background-"+r);
+                if(bg){
+                  var bvars=JSON.parse(bg);
+                  for(var bk in bvars){document.documentElement.style.setProperty(bk, bvars[bk]);}
+                }
               } catch(e){}
             `,
           }}

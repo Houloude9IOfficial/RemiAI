@@ -2,6 +2,8 @@
 
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AccentColorProvider } from "@/components/AccentColorProvider";
+import { BackgroundColorProvider } from "@/components/BackgroundColorProvider";
+import { AppearancePreviewProvider } from "@/components/AppearancePreviewProvider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { QueryProvider } from "@/lib/query-client";
@@ -19,7 +21,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
             <TooltipProvider>
               <NotificationListener />
               <AuthWall>
-                <AccentColorProvider>{children}</AccentColorProvider>
+                <AppearancePreviewProvider>
+                  <BackgroundColorProvider>
+                    <AccentColorProvider>{children}</AccentColorProvider>
+                  </BackgroundColorProvider>
+                </AppearancePreviewProvider>
               </AuthWall>
               <Toaster />
             </TooltipProvider>

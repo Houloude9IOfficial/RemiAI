@@ -30,7 +30,7 @@ export function AccountSecurity() {
     <CardHeader><CardTitle className="flex items-center gap-2 text-sm font-medium"><ShieldCheck className="h-4 w-4 text-primary" />Account security</CardTitle><CardDescription>{account?.email} · Your local RemiAI account protects the app and its APIs.</CardDescription></CardHeader>
     <CardContent className="space-y-5">
       <form onSubmit={changePassword} className="space-y-3">
-        <div className="flex items-center gap-2 text-sm font-medium"><KeyRound className="h-4 w-4" />Change password</div>
+        <div className="flex items-center gap-2 text-sm font-medium"><KeyRound className="h-4 w-4 text-primary" />Change password</div>
         <div className="grid gap-3 sm:grid-cols-2"><div className="space-y-1.5"><Label htmlFor="current-password">Current password</Label><Input id="current-password" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required /></div><div className="space-y-1.5"><Label htmlFor="new-password">New password</Label><Input id="new-password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} minLength={8} required /></div></div>
         <Button type="submit" variant="outline" disabled={pending}>{pending && <Loader2 className="animate-spin" />} Update password</Button>
       </form>

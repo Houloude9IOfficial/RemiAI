@@ -4,6 +4,7 @@ import { useEffect, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { preferencesApi } from "@/lib/api/preferences";
 import { useTheme } from "@/components/ThemeProvider";
+import { useAppearancePreview } from "@/components/AppearancePreviewProvider";
 import {
   accentVarsFor,
   applyAccentVars,
@@ -20,15 +21,28 @@ const ACCENT_CACHE_DARK = "remi-accent-dark";
  * Applies the user's configured accent color (from profile preferences) to
  * the whole app by overriding the primary CSS custom properties on <html>.
  * Re-applies whenever the accent changes or the light/dark theme flips.
+ *
+ * An unsaved "preview" accent (set from the profile form) is layered on top:
+ * it applies immediately, while the localStorage cache always tracks the
+ * *saved* value so a preview never leaks into the pre-paint script.
  */
 export function AccentColorProvider({ children }: { children: ReactNode }) {
   const { resolvedTheme } = useTheme();
+  const { preview } = useAppearancePreview();
   const { data, isLoading } = useQuery({
     queryKey: ["preferences"],
     queryFn: preferencesApi.get,
   });
 
-  const accentId = data?.accentColor ?? "";
+  const savedAccentId = data?.accentColor ?? "";
+  const previewAccent = preview.accentColor;
+  const hoverAccent = preview.accentHover;
+  const accentId =
+    hoverAccent !== null
+      ? hoverAccent
+      : previewAccent !== null
+        ? previewAccent
+        : savedAccentId;
   const theme: "light" | "dark" = resolvedTheme === "dark" ? "dark" : "light";
 
   useEffect(() => {
@@ -38,17 +52,18 @@ export function AccentColorProvider({ children }: { children: ReactNode }) {
     // page load.
     if (isLoading) return;
 
-    const light = accentVarsFor(accentId, "light");
-    const dark = accentVarsFor(accentId, "dark");
+    // Cache the SAVED accent (not the preview) for the pre-paint script.
+    const savedLight = accentVarsFor(savedAccentId, "light");
+    const savedDark = accentVarsFor(savedAccentId, "dark");
 
     try {
-      if (light) {
-        localStorage.setItem(ACCENT_CACHE_LIGHT, JSON.stringify(light));
+      if (savedLight) {
+        localStorage.setItem(ACCENT_CACHE_LIGHT, JSON.stringify(savedLight));
       } else {
         localStorage.removeItem(ACCENT_CACHE_LIGHT);
       }
-      if (dark) {
-        localStorage.setItem(ACCENT_CACHE_DARK, JSON.stringify(dark));
+      if (savedDark) {
+        localStorage.setItem(ACCENT_CACHE_DARK, JSON.stringify(savedDark));
       } else {
         localStorage.removeItem(ACCENT_CACHE_DARK);
       }
@@ -56,8 +71,11 @@ export function AccentColorProvider({ children }: { children: ReactNode }) {
       // localStorage may be unavailable (private browsing, etc.) — ignore.
     }
 
+    // Apply the effective accent (preview if present, otherwise saved).
+    const light = accentVarsFor(accentId, "light");
+    const dark = accentVarsFor(accentId, "dark");
     applyAccentVars(theme === "dark" ? dark : light);
-  }, [accentId, theme, isLoading]);
+  }, [savedAccentId, accentId, theme, isLoading]);
 
   return <>{children}</>;
 }

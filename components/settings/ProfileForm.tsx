@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { preferencesApi, type UserPreferences } from "@/lib/api/preferences";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,6 @@ import {
 } from "@/components/ui/card";
 import {
   Loader2,
-  Save,
   Sparkles,
   User,
   Camera,
@@ -41,7 +40,9 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { ACCENT_PRESETS } from "@/lib/accent-colors";
+import { BACKGROUND_PRESETS } from "@/lib/background-colors";
 import { useTheme } from "@/components/ThemeProvider";
+import { useAppearancePreview } from "@/components/AppearancePreviewProvider";
 
 const DEFAULT_PREFERENCES: UserPreferences = {
   preferredName: "",
@@ -57,6 +58,7 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   birthday: "",
   links: {},
   accentColor: "",
+  backgroundColor: "",
 };
 
 interface LinkEntry {
@@ -70,8 +72,59 @@ const LINK_PRESETS = [    { key: "github", label: "GitHub", icon: Code2, placeho
   { key: "linkedin", label: "LinkedIn", icon: Link, placeholder: "https://linkedin.com/in/username" },
 ];
 
+function linksToObject(links: LinkEntry[]): Record<string, string> {
+  const obj: Record<string, string> = {};
+  for (const { key, value } of links) {
+    if (key.trim() && value.trim()) {
+      obj[key.trim()] = value.trim();
+    }
+  }
+  return obj;
+}
+
+function linksEqual(
+  a: Record<string, string>,
+  b: Record<string, string>,
+): boolean {
+  const aKeys = Object.keys(a).sort();
+  const bKeys = Object.keys(b).sort();
+  if (aKeys.length !== bKeys.length) return false;
+  for (let i = 0; i < aKeys.length; i++) {
+    if (aKeys[i] !== bKeys[i] || a[aKeys[i]] !== b[bKeys[i]]) return false;
+  }
+  return true;
+}
+
+function preferencesEqual(a: UserPreferences, b: UserPreferences): boolean {
+  return (
+    a.preferredName === b.preferredName &&
+    a.preferences === b.preferences &&
+    a.personality === b.personality &&
+    a.avatarUrl === b.avatarUrl &&
+    a.bio === b.bio &&
+    a.location === b.location &&
+    a.occupation === b.occupation &&
+    a.interests === b.interests &&
+    a.skills === b.skills &&
+    a.pronouns === b.pronouns &&
+    a.birthday === b.birthday &&
+    a.accentColor === b.accentColor &&
+    a.backgroundColor === b.backgroundColor &&
+    linksEqual(a.links || {}, b.links || {})
+  );
+}
+
 export function ProfileForm() {
   const { resolvedTheme } = useTheme();
+  const {
+    setAccentPreview,
+    setBackgroundPreview,
+    clearPreviews,
+    setAccentHover,
+    clearAccentHover,
+    setBackgroundHover,
+    clearBackgroundHover,
+  } = useAppearancePreview();
   const queryClient = useQueryClient();
   const accentTheme: "light" | "dark" = resolvedTheme === "dark" ? "dark" : "light";
   const [form, setForm] = useState<UserPreferences>(DEFAULT_PREFERENCES);
@@ -79,62 +132,74 @@ export function ProfileForm() {
   const [customLinkKey, setCustomLinkKey] = useState("");
   const [customLinkValue, setCustomLinkValue] = useState("");
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Last confirmed server-side preferences, used to detect unsaved changes.
+  const serverRef = useRef<UserPreferences | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["preferences"],
     queryFn: preferencesApi.get,
   });
 
+  // Hydrate the form once from the server, then leave it alone so in-flight
+  // edits aren't clobbered by refetches after auto-saves.
   useEffect(() => {
-    if (data) {
+    if (data && !hydrated) {
       setForm(data);
-      // Convert links object to array for editing
-      const linkEntries: LinkEntry[] = Object.entries(data.links || {}).map(
-        ([key, value]) => ({ key, value }),
+      setLinks(
+        Object.entries(data.links || {}).map(([key, value]) => ({
+          key,
+          value,
+        })),
       );
-      setLinks(linkEntries);
+      serverRef.current = data;
+      setHydrated(true);
     }
+  }, [data, hydrated]);
+
+  // Keep track of the latest confirmed server state.
+  useEffect(() => {
+    if (data) serverRef.current = data;
   }, [data]);
+
+  // Revert any unsaved accent/background preview when leaving this page.
+  useEffect(() => {
+    return () => clearPreviews();
+  }, [clearPreviews]);
 
   const updateMutation = useMutation({
     mutationFn: (data: Partial<UserPreferences>) => preferencesApi.update(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["preferences"] });
-      toast.success("Profile saved");
     },
     onError: () => {
       toast.error("Failed to save profile");
     },
   });
 
-  const handleSave = () => {
-    // Convert links array back to object
-    const linksObject: Record<string, string> = {};
-    links.forEach(({ key, value }) => {
-      if (key.trim() && value.trim()) {
-        linksObject[key.trim()] = value.trim();
-      }
-    });
+  const savePreferences = updateMutation.mutate;
 
-    updateMutation.mutate({ ...form, links: linksObject });
-  };
+  // Auto-save any changes (debounced).
+  useEffect(() => {
+    if (isLoading || !data || !hydrated) return;
 
-  const hasChanges =
-    form.preferredName !== (data?.preferredName ?? "") ||
-    form.preferences !== (data?.preferences ?? "") ||
-    form.personality !== (data?.personality ?? "") ||
-    form.avatarUrl !== (data?.avatarUrl ?? "") ||
-    form.bio !== (data?.bio ?? "") ||
-    form.location !== (data?.location ?? "") ||
-    form.occupation !== (data?.occupation ?? "") ||
-    form.interests !== (data?.interests ?? "") ||
-    form.skills !== (data?.skills ?? "") ||
-    form.pronouns !== (data?.pronouns ?? "") ||
-    form.birthday !== (data?.birthday ?? "") ||
-    form.accentColor !== (data?.accentColor ?? "") ||
-    JSON.stringify(links) !==
-      JSON.stringify(Object.entries(data?.links || {}).map(([k, v]) => ({ key: k, value: v })));
+    const payload = { ...form, links: linksToObject(links) };
+    if (serverRef.current && preferencesEqual(payload, serverRef.current)) {
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      savePreferences(payload);
+    }, 400);
+
+    return () => clearTimeout(timeout);
+  }, [form, links, isLoading, data, hydrated, savePreferences]);
+
+  const dirty = useMemo(() => {
+    if (!data) return false;
+    return !preferencesEqual({ ...form, links: linksToObject(links) }, data);
+  }, [form, links, data]);
 
   // ── Avatar handling ──────────────────────────────────────────────
 
@@ -173,12 +238,6 @@ export function ProfileForm() {
       const { url } = await res.json();
       setForm((prev) => ({ ...prev, avatarUrl: url }));
 
-      // Immediately persist the avatar URL so the user doesn't need
-      // to click "Save Profile" separately for the picture to show.
-      // We don't invalidate the query here because that would reset
-      // any other unsaved form changes the user may have made.
-      await preferencesApi.update({ avatarUrl: url });
-
       toast.success("Profile picture saved");
     } catch (err: any) {
       toast.error(err.message ?? "Failed to upload profile picture");
@@ -203,13 +262,6 @@ export function ProfileForm() {
     }
 
     setForm((prev) => ({ ...prev, avatarUrl: "" }));
-
-    // Immediately persist the removal
-    try {
-      await preferencesApi.update({ avatarUrl: "" });
-    } catch {
-      // Best-effort — file may already have been removed
-    }
 
     toast.success("Profile picture removed");
   };
@@ -244,12 +296,27 @@ export function ProfileForm() {
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
       {/* Header */}
-      <div>
-        <h1 className="text-lg font-semibold">Profile</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Your personal details, social links, and AI preferences. Remi uses
-          this information to personalise every conversation.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-lg font-semibold">Profile</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Your personal details, social links, and AI preferences. Remi uses
+            this information to personalise every conversation.
+          </p>
+        </div>
+        <div className="flex flex-shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+          {updateMutation.isPending || dirty ? (
+            <>
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Saving…
+            </>
+          ) : (
+            <>
+              <Check className="h-3.5 w-3.5 text-emerald-500" />
+              All changes saved
+            </>
+          )}
+        </div>
       </div>
 
       {/* Profile Picture Card */}
@@ -326,79 +393,145 @@ export function ProfileForm() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-sm font-medium">
             <Palette className="h-4 w-4 text-primary" />
-            Accent Color
+            Appearance
           </CardTitle>
           <CardDescription className="text-xs">
-            Pick the accent color used across the app — buttons, highlights,
-            focus rings, and the sidebar.
+            Personalise the app&apos;s accent color and background palette.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap items-center gap-2.5">
-            {/* Default */}
-            <button
-              type="button"
-              onClick={() => setForm({ ...form, accentColor: "" })}
-              className={cn(
-                "flex h-9 w-9 items-center justify-center rounded-full border border-border transition-all duration-150 hover:scale-110 hover:border-foreground/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                form.accentColor === "" && "ring-2 ring-foreground ring-offset-2",
-              )}
-              style={{
-                background:
-                  accentTheme === "dark"
-                    ? "oklch(0.72 0.12 252)"
-                    : "oklch(0.58 0.14 252)",
-              }}
-              title="Default"
-              aria-label="Default accent color"
-            >
-              {form.accentColor === "" && (
-                <Check
-                  className={cn(
-                    "h-4 w-4",
-                    accentTheme === "dark" ? "text-foreground" : "text-white",
-                  )}
-                />
-              )}
-            </button>
+        <CardContent className="space-y-6">
+          {/* Accent color */}
+          <div className="space-y-2.5">
+            <p className="text-xs font-semibold">Accent color</p>
+            <div className="flex flex-wrap items-center gap-2.5">
+              {/* Default */}
+              <button
+                type="button"
+                onClick={() => {
+                  setAccentPreview("");
+                  setForm({ ...form, accentColor: "" });
+                }}
+                onMouseEnter={() => setAccentHover("")}
+                onMouseLeave={() => clearAccentHover()}
+                className={cn(
+                  "flex h-9 w-9 items-center justify-center rounded-full border border-border transition-all duration-150 hover:scale-110 hover:border-foreground/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                  form.accentColor === "" &&
+                    "ring-2 ring-foreground ring-offset-2",
+                )}
+                style={{
+                  background:
+                    accentTheme === "dark"
+                      ? "oklch(0.72 0.12 252)"
+                      : "oklch(0.58 0.14 252)",
+                }}
+                title="Default"
+                aria-label="Default accent color"
+              >
+                {form.accentColor === "" && (
+                  <Check
+                    className={cn(
+                      "h-4 w-4",
+                      accentTheme === "dark" ? "text-foreground" : "text-white",
+                    )}
+                  />
+                )}
+              </button>
 
-            {/* Presets */}
-            {ACCENT_PRESETS.map((preset) => {
-              const selected = form.accentColor === preset.id;
-              return (
-                <button
-                  key={preset.id}
-                  type="button"
-                  onClick={() => setForm({ ...form, accentColor: preset.id })}
-                  className={cn(
-                    "flex h-9 w-9 items-center justify-center rounded-full border border-border/40 transition-all duration-150 hover:scale-110 hover:border-foreground/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                    selected && "ring-2 ring-foreground ring-offset-2",
-                  )}
-                  style={{
-                    backgroundColor:
-                      accentTheme === "dark" ? preset.dark : preset.light,
-                  }}
-                  title={preset.label}
-                  aria-label={`${preset.label} accent color`}
-                >
-                  {selected && (
-                    <Check
-                      className={cn(
-                        "h-4 w-4",
-                        accentTheme === "dark"
-                          ? "text-foreground"
-                          : "text-white",
-                      )}
-                    />
-                  )}
-                </button>
-              );
-            })}
+              {/* Presets */}
+              {ACCENT_PRESETS.map((preset) => {
+                const selected = form.accentColor === preset.id;
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => {
+                      setAccentPreview(preset.id);
+                      setForm({ ...form, accentColor: preset.id });
+                    }}
+                    onMouseEnter={() => setAccentHover(preset.id)}
+                    onMouseLeave={() => clearAccentHover()}
+                    className={cn(
+                      "flex h-9 w-9 items-center justify-center rounded-full border border-border/40 transition-all duration-150 hover:scale-110 hover:border-foreground/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                      selected && "ring-2 ring-foreground ring-offset-2",
+                    )}
+                    style={{
+                      backgroundColor:
+                        accentTheme === "dark" ? preset.dark : preset.light,
+                    }}
+                    title={preset.label}
+                    aria-label={`${preset.label} accent color`}
+                  >
+                    {selected && (
+                      <Check
+                        className={cn(
+                          "h-4 w-4",
+                          accentTheme === "dark"
+                            ? "text-foreground"
+                            : "text-white",
+                        )}
+                      />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[11px] text-muted-foreground/60">
+              Used for buttons, highlights, and focus rings.
+            </p>
           </div>
-          <p className="mt-3 text-[11px] text-muted-foreground/60">
-            Applies app-wide after you save, and adapts automatically to light
-            and dark mode.
-          </p>
+
+          {/* Background */}
+          <div className="space-y-2.5">
+            <p className="text-xs font-semibold">Background</p>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setBackgroundPreview("");
+                  setForm({ ...form, backgroundColor: "" });
+                }}
+                onMouseEnter={() => setBackgroundHover("")}
+                onMouseLeave={() => clearBackgroundHover()}
+                className={cn(
+                  "rounded-full border px-4 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                  form.backgroundColor === ""
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border text-foreground hover:border-foreground/40 hover:bg-accent/40",
+                )}
+                aria-pressed={form.backgroundColor === ""}
+              >
+                Default
+              </button>
+
+              {BACKGROUND_PRESETS.map((preset) => {
+                const selected = form.backgroundColor === preset.id;
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => {
+                      setBackgroundPreview(preset.id);
+                      setForm({ ...form, backgroundColor: preset.id });
+                    }}
+                    onMouseEnter={() => setBackgroundHover(preset.id)}
+                    onMouseLeave={() => clearBackgroundHover()}
+                    className={cn(
+                      "rounded-full border px-4 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                      selected
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border text-foreground hover:border-foreground/40 hover:bg-accent/40",
+                    )}
+                    aria-pressed={selected}
+                  >
+                    {preset.label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[11px] text-muted-foreground/60">
+              The canvas, cards, and sidebar palette.
+            </p>
+          </div>
         </CardContent>
       </Card>
 
@@ -711,18 +844,6 @@ export function ProfileForm() {
             </p>
           </div>
 
-          <Button
-            onClick={handleSave}
-            disabled={updateMutation.isPending || !hasChanges}
-            className="w-full gap-2"
-          >
-            {updateMutation.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Save className="h-4 w-4" />
-            )}
-            {updateMutation.isPending ? "Saving..." : "Save Profile"}
-          </Button>
         </CardContent>
       </Card>
     </div>
