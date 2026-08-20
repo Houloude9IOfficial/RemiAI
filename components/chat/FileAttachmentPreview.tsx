@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, Loader2, AlertCircle } from "lucide-react";
+import { X, Loader2, AlertCircle, ImageIcon, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { getFileTypeInfo, formatFileSize } from "@/lib/file-types";
@@ -27,6 +27,9 @@ interface FileAttachmentPreviewProps {
   onRemove: (id: string) => void;
 }
 
+/** Max image thumbnails shown inline before collapsing the rest into a "+N" tile */
+const MAX_VISIBLE_IMAGES = 5;
+
 // Fallback name for clipboard files that may have empty names
 function displayName(file: File): string {
   if (file.name) return file.name;
@@ -35,7 +38,142 @@ function displayName(file: File): string {
 }
 
 // ---------------------------------------------------------------------------
-// Card
+// Image thumbnail
+// ---------------------------------------------------------------------------
+
+function ImageThumb({
+  file,
+  onRemove,
+}: {
+  file: AttachedFile;
+  onRemove: (id: string) => void;
+}) {
+  const isUploading = file.status === "uploading";
+  const isError = file.status === "error";
+
+  // Show the thumbnail straight from the already-in-memory File (an object
+  // URL) instead of fetching it back from the server — the file was just
+  // selected locally, so a round-trip to /api/chat/*/session-files would be
+  // pure waste (and would load full quality for a 56px thumb).
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!file.file) {
+      setObjectUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(file.file);
+    setObjectUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file.file]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.9, y: 6 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.9, y: 6 }}
+      transition={{ duration: 0.18, ease: "easeOut" }}
+      layout
+      className={cn(
+        "group relative h-14 w-14 shrink-0 overflow-hidden rounded-lg ring-1",
+        isError
+          ? "ring-destructive/50"
+          : "ring-black/[0.06] dark:ring-white/10",
+      )}
+    >
+      {objectUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={objectUrl}
+          alt={displayName(file.file)}
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center bg-muted/50">
+          <ImageIcon className="h-5 w-5 text-muted-foreground/50" />
+        </div>
+      )}
+
+      {/* Status overlays */}
+      {isUploading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-background/60">
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        </div>
+      )}
+      {isError && (
+        <div className="absolute inset-0 flex items-center justify-center bg-destructive/[0.08]">
+          <AlertCircle className="h-4 w-4 text-destructive/70" />
+        </div>
+      )}
+
+      {/* Remove button — revealed on hover (always visible on touch) */}
+      <button
+        type="button"
+        onClick={() => onRemove(file.id)}
+        className={cn(
+          "absolute top-0.5 right-0.5 flex h-5 w-5 items-center justify-center rounded-full",
+          "bg-background/90 text-muted-foreground shadow-sm ring-1 ring-black/[0.08]",
+          "opacity-0 transition-all duration-150",
+          "hover:bg-background hover:text-foreground active:scale-90",
+          "group-hover:opacity-100 group-focus-within:opacity-100 max-md:opacity-100",
+        )}
+        aria-label={`Remove ${displayName(file.file)}`}
+      >
+        <X className="h-3 w-3" />
+      </button>
+    </motion.div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Overflow tile ("+N more" / collapse)
+// ---------------------------------------------------------------------------
+
+function MoreTile({
+  count,
+  expanded,
+  onClick,
+}: {
+  count: number;
+  expanded: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <motion.button
+      type="button"
+      initial={{ opacity: 0, scale: 0.9, y: 6 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.9, y: 6 }}
+      transition={{ duration: 0.18, ease: "easeOut" }}
+      layout
+      onClick={onClick}
+      className={cn(
+        "flex h-14 w-14 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg",
+        "border border-dashed bg-muted/30 text-muted-foreground/70",
+        "transition-all duration-150 hover:bg-muted/60 hover:text-foreground active:scale-95",
+      )}
+      aria-label={
+        expanded
+          ? "Show fewer attachments"
+          : `Show ${count} more attachments`
+      }
+    >
+      {expanded ? (
+        <>
+          <ChevronUp className="h-4 w-4" />
+          <span className="text-[9px] font-medium">Less</span>
+        </>
+      ) : (
+        <>
+          <span className="text-xs font-semibold tabular-nums">+{count}</span>
+          <span className="text-[9px] font-medium">More</span>
+        </>
+      )}
+    </motion.button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Card (non-image files)
 // ---------------------------------------------------------------------------
 
 function AttachmentCard({
@@ -76,8 +214,7 @@ function AttachmentCard({
       transition={{ duration: 0.2, ease: "easeOut" }}
       layout
       className={cn(
-        "group relative flex items-center gap-3 rounded-xl border px-3 py-2.5 text-xs shadow-sm transition-all duration-200",
-        "hover:shadow-md",
+        "group relative flex items-center gap-3 rounded-xl border px-3 py-2.5 text-xs transition-all duration-200",
         isError && "border-destructive/40 bg-destructive/[0.04]",
         isUploading && "border-primary/25 bg-primary/[0.03]",
         isUploaded && "border-border/60 bg-card",
@@ -128,11 +265,11 @@ function AttachmentCard({
           <span className="max-w-[160px] truncate text-xs font-medium text-foreground/90">
             {displayName(file.file)}
           </span>
-          {isUploaded && (
+          {/* {isUploaded && (
             <span className="shrink-0 rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-medium text-emerald-600 dark:text-emerald-400">
               Ready
             </span>
-          )}
+          )} */}
         </div>
         <span className="text-[10px] text-muted-foreground/50">
           {isUploading && file.progress !== undefined
@@ -150,7 +287,6 @@ function AttachmentCard({
             <motion.div
               initial={{ width: 0 }}
               animate={{ width: `${file.progress}%` }}
-              // transition={{ duration: 0.2, ease: "easeOut" }}
               className="h-full rounded-full bg-gradient-to-r from-primary/50 to-primary"
             />
           </div>
@@ -179,11 +315,42 @@ function AttachmentCard({
 // ---------------------------------------------------------------------------
 
 export function FileAttachmentPreview({ files, onRemove }: FileAttachmentPreviewProps) {
+  const [expanded, setExpanded] = useState(false);
+
   if (files.length === 0) return null;
 
+  const images = files.filter((f) => f.mimeType.startsWith("image/"));
+  const others = files.filter((f) => !f.mimeType.startsWith("image/"));
+
+  const hiddenCount = images.length - MAX_VISIBLE_IMAGES;
+  const showOverflow = !expanded && hiddenCount > 0;
+  const visibleImages = showOverflow
+    ? images.slice(0, MAX_VISIBLE_IMAGES)
+    : images;
+
   return (
-    <div className="flex flex-wrap gap-2.5 px-1 pb-3">
-      {files.map((file) => (
+    <div className="flex flex-wrap items-center gap-2.5 px-1 pb-3">
+      {visibleImages.map((file) => (
+        <ImageThumb key={file.id} file={file} onRemove={onRemove} />
+      ))}
+
+      {showOverflow && (
+        <MoreTile
+          count={hiddenCount}
+          expanded={false}
+          onClick={() => setExpanded(true)}
+        />
+      )}
+
+      {expanded && hiddenCount > 0 && (
+        <MoreTile
+          count={hiddenCount}
+          expanded
+          onClick={() => setExpanded(false)}
+        />
+      )}
+
+      {others.map((file) => (
         <AttachmentCard key={file.id} file={file} onRemove={onRemove} />
       ))}
     </div>
