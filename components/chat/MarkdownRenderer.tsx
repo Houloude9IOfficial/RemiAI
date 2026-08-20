@@ -3,6 +3,10 @@ import Markdown from "markdown-to-jsx";
 import hljs from "highlight.js";
 import { cn } from "@/lib/utils";
 import { ImagePreview } from "./ImagePreview";
+import {
+  normalizeUrlKey,
+  type CitationRef,
+} from "@/lib/chat/citations";
 
 interface MarkdownRendererProps {
   content: string;
@@ -10,6 +14,9 @@ interface MarkdownRendererProps {
   /** When true, disables copy buttons on unclosed code blocks (they may
    *  still be receiving tokens). */
   isStreaming?: boolean;
+  /** Normalized URL → citation ref. Links whose destination matches a key
+   *  render as a numbered Nexus-style chip instead of a plain link. */
+  citations?: Map<string, CitationRef> | null;
 }
 
 /**
@@ -19,7 +26,7 @@ interface MarkdownRendererProps {
  *
  * When `isStreaming` is true, copy buttons on code blocks are hidden.
  */
-export function MarkdownRenderer({ content, className, isStreaming }: MarkdownRendererProps) {
+export function MarkdownRenderer({ content, className, isStreaming, citations }: MarkdownRendererProps) {
   // While streaming, the caller injects raw HTML (animated <span>s) that must
   // be parsed. Once streaming is done, escape raw HTML outside of code fences
   // so stray JSX/HTML in message content renders as literal text instead of
@@ -39,17 +46,27 @@ export function MarkdownRenderer({ content, className, isStreaming }: MarkdownRe
           // nested <p> tags from react-markdown's old behavior
           wrapper: "div",
           overrides: {
-            // -- Links open in new tab with security attributes
-            a: ({ href, children, ...props }: any) => (
-              <a
-                href={href}
-                target="_blank"
-                rel="noopener noreferrer"
-                {...props}
-              >
-                {children}
-              </a>
-            ),
+            // -- Links: destinations matching a retrieved source render as a
+            // numbered citation chip; everything else opens in a new tab.
+            a: ({ href, children, ...props }: any) => {
+              const citation =
+                typeof href === "string" && citations?.size
+                  ? citations.get(normalizeUrlKey(href))
+                  : undefined;
+              if (citation) {
+                return <CitationChip citation={citation} />;
+              }
+              return (
+                <a
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  {...props}
+                >
+                  {children}
+                </a>
+              );
+            },
 
             // -- Code blocks with language badge + copy button
             pre: ({ children, ...props }: any) => {
@@ -296,6 +313,46 @@ function extractCodeContent(children: React.ReactNode): string {
     }
   });
   return text;
+}
+
+/**
+ * Nexus-style numbered citation chip — a tiny favicon + number pill that
+ * replaces inline links to sources the model actually retrieved. Hover shows
+ * the source title; clicking opens the page.
+ */
+function CitationChip({ citation }: { citation: CitationRef }) {
+  let favicon = "";
+  try {
+    const host = new URL(citation.url).hostname;
+    if (host) {
+      favicon = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=32`;
+    }
+  } catch {
+    // Unparseable URL — chip renders with the number only.
+  }
+
+  return (
+    <a
+      href={citation.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={`${citation.title} — opens in a new tab`}
+      aria-label={`Source ${citation.number}: ${citation.title}`}
+      className="mx-0.5 inline-flex max-w-[220px] items-center gap-1 rounded-full bg-secondary py-px pl-0.5 pr-2 align-middle text-[0.7em] leading-none text-primary no-underline transition-colors hover:bg-border"
+    >
+      {favicon && (
+        // eslint-disable-next-line @next/next/no-img-element -- tiny favicon from a dynamic third-party URL; next/image needs remote-pattern config for no benefit
+        <img
+          src={favicon}
+          alt=""
+          loading="lazy"
+          className="h-[1.05em] w-[1.05em] shrink-0 rounded-full bg-background"
+        />
+      )}
+      {/* <span className="shrink-0 font-semibold tabular-nums">{citation.number}</span> */}
+      <span className="truncate font-medium">{citation.title}</span>
+    </a>
+  );
 }
 
 /** A small copy-to-clipboard button that appears on hover over code blocks. */

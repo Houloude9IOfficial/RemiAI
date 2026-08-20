@@ -6,6 +6,8 @@ type SourceItem = {
   id?: number;
   url: string;
   title?: string;
+  /** Position in the message's citation order — matches the inline chips. */
+  number?: number;
   status?: "available" | "partial" | "failed";
   qualityScore?: number;
   freshnessStatus?: "fresh" | "stale" | "unknown";
@@ -69,6 +71,12 @@ export function SourceEvidenceCard({
           return (
             <li key={`${source.id ?? source.url}-${index}`} className="px-3.5 py-2.5">
               <div className="flex items-start gap-2">
+                <span
+                  className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-secondary text-[11px] font-bold tabular-nums text-primary"
+                  aria-hidden="true"
+                >
+                  {source.number ?? index + 1}
+                </span>
                 <a
                   href={source.url}
                   target="_blank"

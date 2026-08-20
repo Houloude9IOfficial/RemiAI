@@ -14,6 +14,12 @@ import { MarkdownRenderer } from "./MarkdownRenderer";
 import { ImagePreview } from "./ImagePreview";
 import { SourceEvidenceCard } from "./SourceEvidenceCard";
 import {
+  collectMessageSources,
+  stripTrailingSourcesSection,
+  wrapBareSourceUrls,
+  type CitationRef,
+} from "@/lib/chat/citations";
+import {
   SessionFilesPresentCard,
   SessionFilesPresentLoading,
 } from "./SessionFilesPresentCard";
@@ -83,7 +89,11 @@ function wrapNewCharsWithFadeIn(text: string, prevLength: number): string {
  * entirely invisible.
  */
 class SafeMarkdown extends Component<
-  { content: string; isStreaming?: boolean },
+  {
+    content: string;
+    isStreaming?: boolean;
+    citations?: Map<string, CitationRef> | null;
+  },
   { hasError: boolean }
 > {
   state = { hasError: false };
@@ -102,6 +112,7 @@ class SafeMarkdown extends Component<
       <MarkdownRenderer
         content={this.props.content}
         isStreaming={this.props.isStreaming}
+        citations={this.props.citations}
       />
     );
   }
@@ -281,13 +292,21 @@ function UserMessageText({ text }: { text: string }) {
  * streaming segment. Tracks the `prevLength` across renders so only
  * newly arrived characters get animated.
  */
-function StreamingSafeMarkdown({ content, isStreaming }: { content: string; isStreaming?: boolean }) {
+function StreamingSafeMarkdown({
+  content,
+  isStreaming,
+  citations,
+}: {
+  content: string;
+  isStreaming?: boolean;
+  citations?: Map<string, CitationRef> | null;
+}) {
   const prevLengthRef = useRef(0);
 
   if (!isStreaming) {
     // Streaming done — reset tracker and render clean markdown
     prevLengthRef.current = 0;
-    return <SafeMarkdown content={content} isStreaming={false} />;
+    return <SafeMarkdown content={content} isStreaming={false} citations={citations} />;
   }
 
   // Text shrunk (e.g. error recovery / new stream starting) — reset
@@ -301,7 +320,7 @@ function StreamingSafeMarkdown({ content, isStreaming }: { content: string; isSt
   // Wrap newly arrived characters in individually animated spans
   const enriched = wrapNewCharsWithFadeIn(content, prevLen);
 
-  return <SafeMarkdown content={enriched} isStreaming={true} />;
+  return <SafeMarkdown content={enriched} isStreaming={true} citations={citations} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -703,52 +722,79 @@ export function MessageBubble({
       ? suggestionSegments[suggestionSegments.length - 1]
       : undefined;
 
+  // Sources this message's tools actually retrieved — numbered, deduped, and
+  // used for BOTH the inline citation chips and the single aggregated
+  // Sources card (per-tool "sources" segments are folded into it).
+  const messageSources = collectMessageSources(message.parts);
+  const hasRetrievedSources = messageSources.list.length > 0;
+
+  // Segments that render in the message body — suggestions and sources are
+  // hoisted out (suggestions to the bottom, sources into one card).
+  const renderableSegments = segments.filter(
+    (s): s is Exclude<Segment, { type: "suggestions" } | { type: "sources" }> =>
+      s.type !== "suggestions" && s.type !== "sources",
+  );
+
   return (
     <div className="group flex justify-start">
       <div className="w-full text-[15px] leading-relaxed text-foreground">
         {/* Render segments in their original interleaved order */}
         <div className="flex flex-col gap-3.5">
-          {/* Render non-suggestions segments in their original interleaved order */}
-          {segments
-            .filter((s) => s.type !== "suggestions")
-            .map((segment, idx) =>
-              segment.type === "text" ? (
-                <div
-                  key={`text-${idx}`}
-                  className="[&_.markdown-body]:text-[15px] [&_.markdown-body]:leading-[1.7]"
-                >
-                  <StreamingSafeMarkdown
-                    content={segment.text}
-                    isStreaming={isStreaming && idx === segments.length - 1}
-                  />
-                </div>
-              ) : segment.type === "reasoning" ? (
-                <ReasoningBlock
-                  key={`reasoning-${idx}`}
-                  text={segment.text}
-                  isStreaming={segment.isStreaming}
-                  // Whole-message streaming keeps the single merged block open
-                  // across tool gaps between reasoning phases, and is what
-                  // finalizes the accumulated duration when the run completes.
-                  messageStreaming={isStreaming}
+          {/* Render non-suggestions/non-sources segments in their original
+              interleaved order */}
+          {renderableSegments.map((segment, idx) =>
+            segment.type === "text" ? (
+              <div
+                key={`text-${idx}`}
+                className="[&_.markdown-body]:text-[15px] [&_.markdown-body]:leading-[1.7]"
+              >
+                <StreamingSafeMarkdown
+                  content={
+                    hasRetrievedSources
+                      ? wrapBareSourceUrls(
+                          stripTrailingSourcesSection(segment.text),
+                          messageSources.byUrl,
+                        )
+                      : segment.text
+                  }
+                  isStreaming={
+                    isStreaming && idx === renderableSegments.length - 1
+                  }
+                  citations={messageSources.byUrl}
                 />
-              ) : segment.type === "visual" ? (
-                <VisualCardSegment key={`visual-${idx}`} part={segment.part} />
-              ) : segment.type === "sessionPresent" ? (
-                <SessionFilesPresentSegment
-                  key={`present-${idx}`}
-                  part={segment.part}
-                />
-              ) : segment.type === "sources" ? (
-                <SourceEvidenceCard
-                  key={`sources-${idx}`}
-                  data={segment.data}
-                  conversationId={conversationId}
-                />
-              ) : (
-                <ToolCallGroup key={`tool-${idx}`} parts={segment.parts as any} />
-              ),
-            )}
+              </div>
+            ) : segment.type === "reasoning" ? (
+              <ReasoningBlock
+                key={`reasoning-${idx}`}
+                text={segment.text}
+                isStreaming={segment.isStreaming}
+                // Whole-message streaming keeps the single merged block open
+                // across tool gaps between reasoning phases, and is what
+                // finalizes the accumulated duration when the run completes.
+                messageStreaming={isStreaming}
+              />
+            ) : segment.type === "visual" ? (
+              <VisualCardSegment key={`visual-${idx}`} part={segment.part} />
+            ) : segment.type === "sessionPresent" ? (
+              <SessionFilesPresentSegment
+                key={`present-${idx}`}
+                part={segment.part}
+              />
+            ) : (
+              <ToolCallGroup key={`tool-${idx}`} parts={segment.parts as any} />
+            ),
+          )}
+
+          {/* Aggregated Sources card — the full numbered list behind the
+              inline citation chips. The model's own trailing Sources section
+              is stripped from the text above so this is the single list. */}
+          {hasRetrievedSources && (
+            <SourceEvidenceCard
+              key="sources-card"
+              data={{ sources: messageSources.list }}
+              conversationId={conversationId}
+            />
+          )}
 
           {/* Suggestions only appear once the ENTIRE response has finished
               streaming. The model often calls suggest_followups mid-run —

@@ -72,6 +72,65 @@ function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+/** Decode the most common HTML entities found in <title> / og:title text. */
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0?39;/gi, "'")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => {
+      try {
+        return String.fromCodePoint(parseInt(code, 16));
+      } catch {
+        return "";
+      }
+    })
+    .replace(/&#(\d+);/g, (_, code) => {
+      try {
+        return String.fromCodePoint(Number(code));
+      } catch {
+        return "";
+      }
+    });
+}
+
+const MAX_TITLE_CHARS = 200;
+
+/**
+ * Extract a page title from raw HTML content — prefers the Open Graph
+ * `og:title` meta tag, then the classic `<title>` element. Used as a fallback
+ * when a tool result has a URL but no title field (web_fetch returns the raw
+ * HTML, whose `<head>` sits at the start and survives output truncation).
+ */
+function extractTitleFromHtml(content: string | null | undefined): string | null {
+  if (!content) return null;
+
+  // Open Graph title (handles `content` and `property` in either order).
+  const metaRe = /<meta\b([^>]*)>/gi;
+  let meta: RegExpExecArray | null;
+  while ((meta = metaRe.exec(content)) !== null) {
+    const attrs = meta[1];
+    if (!/\bproperty=["']og:title["']/i.test(attrs)) continue;
+    const value = /\bcontent=["']([^"']*)["']/i.exec(attrs);
+    if (value?.[1]?.trim()) {
+      return decodeHtmlEntities(value[1].trim()).slice(0, MAX_TITLE_CHARS);
+    }
+  }
+
+  // Classic <title> element.
+  const titleMatch = /<title[^>]*>([^<]+)<\/title>/i.exec(content);
+  if (titleMatch?.[1]?.trim()) {
+    return decodeHtmlEntities(titleMatch[1])
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, MAX_TITLE_CHARS);
+  }
+  return null;
+}
+
 function candidateFromRecord(
   record: Record<string, unknown>,
   fallbackType: SourceCandidate["sourceType"],
@@ -80,19 +139,20 @@ function candidateFromRecord(
   if (!url || !/^https?:\/\//i.test(url) && !url.startsWith("/api/")) return null;
 
   const metadata = isRecord(record.metadata) ? record.metadata : null;
+  const content =
+    stringValue(record.content) ??
+    stringValue(record.markdown) ??
+    stringValue(record.description);
   const title =
     stringValue(record.title) ??
     stringValue(metadata?.title) ??
-    stringValue(record.name);
+    stringValue(record.name) ??
+    extractTitleFromHtml(content);
   const publisher =
     stringValue(record.publisher) ??
     stringValue(record.source) ??
     stringValue(metadata?.publisher) ??
     stringValue(metadata?.siteName);
-  const content =
-    stringValue(record.content) ??
-    stringValue(record.markdown) ??
-    stringValue(record.description);
   const publishedAt =
     stringValue(record.publishedAt) ??
     stringValue(metadata?.publishedAt) ??
