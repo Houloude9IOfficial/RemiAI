@@ -62,7 +62,7 @@ function prettyModelLabel(label: string | null | undefined): string {
  */
 const MODEL_NAME_ICONS: Record<
   string,
-  React.ComponentType<React.SVGProps<SVGSVGElement>>
+  null | React.ComponentType<React.SVGProps<SVGSVGElement>>
 > = {
   auto: FaBrain,
   gemini: SiGooglegemini,
@@ -120,6 +120,9 @@ function ProviderBrandIcon({
         modelId.toLowerCase().includes(key),
       )?.[1]
     : undefined;
+  if (ModelIcon) {
+    return <ModelIcon className={className} />;
+  }
   const KindIcon = kind ? PROVIDER_KIND_META[kind as ProviderKind]?.icon : undefined;
   const Icon = ModelIcon ?? KindIcon ?? Bot;
   return <Icon className={className} />;

@@ -1002,8 +1002,8 @@ export function ChatInput({
               }
               disabled={disabled}
               className={cn(
-                "max-h-20 resize-none border-none bg-transparent! py-0 leading-6 shadow-none focus-visible:ring-0 dark:bg-transparent!",
-                large ? "min-h-5 text-[17px]" : "min-h-[1px]",
+                "max-h-40 resize-none border-none bg-transparent! py-0 leading-6 shadow-none focus-visible:ring-0 dark:bg-transparent!",
+                large ? "min-h-10 text-[17px]" : "min-h-[1px]",
               )}
               rows={1}
             />
@@ -1022,7 +1022,7 @@ export function ChatInput({
                 type="button"
                 disabled={disabled || isStreaming}
                 className={cn(
-                  "flex cursor-pointer items-center justify-center rounded-full border border-border/60 transition-colors",
+                  "flex cursor-pointer items-center justify-center rounded-full border border-border/60 transition-colors hover:bg-muted hover:text-foreground",
                   large ? "h-9 w-9" : "h-8 w-8",
                   (disabled || isStreaming) && "pointer-events-none opacity-40",
                 )}
