@@ -260,7 +260,7 @@ the ai users bash to write/edit/delete files, but it should use bash for command
 
 <!-- create a tool to allow sending push notifications to the user via web/app. -->
 
-make model selector next to capability menu in chat input. And make it look like e.g cursor's/claude's model selector, not a simple selector menu. E.g https://nexus-ui.dev/docs/components/model-selector, see ./aidocs/modelselector.md
+<!-- make model selector next to capability menu in chat input. And make it look like e.g cursor's/claude's model selector, not a simple selector menu. E.g https://nexus-ui.dev/docs/components/model-selector, see ./aidocs/modelselector.md -->
 
 <!-- Make it automatically hide 'load tool groups' and 'list available tools' and other tools in an array (constant) if they're alone run and not chained with other tools. -->
 

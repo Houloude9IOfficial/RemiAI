@@ -8,7 +8,6 @@ import { conversationsApi } from "@/lib/api/conversations";
 import { availableModelsApi } from "@/lib/api/available-models";
 import { skillsApi } from "@/lib/api/skills";
 import { DEFAULT_CONTEXT_WINDOW } from "@/lib/providers/catalog";
-import { ModelPicker } from "./ModelPicker";
 import { cn } from "@/lib/utils";
 
 /**
@@ -65,9 +64,9 @@ function UsageMeter({ used, contextWindow }: { used: number; contextWindow: numb
 /**
  * Desktop chat header — the redesigned chrome bar.
  *
- * Left: the active model chip (status dot + name + provider), which opens the
- * model-provider dropdown on click. Right: the live per-conversation usage
- * meter, then the page's own actions (export, session files).
+ * Left: the conversation title. Right: the live per-conversation usage meter,
+ * then the page's own actions (export, session files). The model switcher
+ * lives in the composer now (ChatModelSelector).
  */
 export function ChatHeader({
   conversationId,
@@ -76,7 +75,6 @@ export function ChatHeader({
   modelId,
   status,
   initialTotalTokens,
-  onModelChange,
   actions,
 }: {
   conversationId: number;
@@ -86,7 +84,6 @@ export function ChatHeader({
   status: ChatStatus;
   /** Seed value from the initial conversation fetch (avoids a 0 flash). */
   initialTotalTokens: number;
-  onModelChange: (providerId: number, modelId: string) => void;
   actions?: React.ReactNode;
 }) {
   const isStreaming = status === "submitted" || status === "streaming";
@@ -127,15 +124,8 @@ export function ChatHeader({
 
   return (
     <div className="sticky top-0 z-20 hidden items-center gap-3 border-b border-border/60 bg-background/95 px-4 py-2 backdrop-blur md:flex">
-      {/* Left — model chip (opens the model dropdown) + conversation title */}
+      {/* Left — conversation title */}
       <div className="flex min-w-0 items-center gap-2.5">
-        <ModelPicker
-          variant="header"
-          providerId={providerId}
-          modelId={modelId}
-          onChange={onModelChange}
-          status={status}
-        />
         <span className="min-w-0 truncate text-sm font-medium tracking-tight text-foreground">
           {title}
         </span>

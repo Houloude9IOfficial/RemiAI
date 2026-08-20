@@ -2,22 +2,15 @@
 
 import { Menu } from "lucide-react";
 import { useSidebar } from "@/components/sidebar/SidebarContext";
-import { ModelPicker } from "./ModelPicker";
 import { cn } from "@/lib/utils";
 
 interface MobileChatHeaderProps {
   title: string;
-  providerId: number | null;
-  modelId: string | null;
-  onModelChange: (providerId: number, modelId: string) => void;
   actions?: React.ReactNode;
 }
 
 export function MobileChatHeader({
   title,
-  providerId,
-  modelId,
-  onModelChange,
   actions,
 }: MobileChatHeaderProps) {
   const { toggleMobileSidebar } = useSidebar();
@@ -39,11 +32,6 @@ export function MobileChatHeader({
 
       <div className="flex shrink-0 items-center gap-0.5">
         {actions}
-        <ModelPicker
-          providerId={providerId}
-          modelId={modelId}
-          onChange={onModelChange}
-        />
       </div>
     </div>
   );
@@ -51,9 +39,6 @@ export function MobileChatHeader({
 
 export function DesktopChatHeader({
   title,
-  providerId,
-  modelId,
-  onModelChange,
   extra,
   actions,
 }: MobileChatHeaderProps & { extra?: React.ReactNode }) {
@@ -67,11 +52,6 @@ export function DesktopChatHeader({
       </div>
       <div className={cn("flex shrink-0 items-center gap-1")}>
         {actions}
-        <ModelPicker
-          providerId={providerId}
-          modelId={modelId}
-          onChange={onModelChange}
-        />
       </div>
     </div>
   );

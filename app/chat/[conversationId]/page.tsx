@@ -805,9 +805,6 @@ function ConversationChat({
       {/* ── Mobile Header ── */}
       <MobileChatHeader
         title={initialConversation.title}
-        providerId={providerId}
-        modelId={modelId}
-        onModelChange={handleModelChange}
         actions={filesToggle}
       />
 
@@ -822,7 +819,6 @@ function ConversationChat({
           (initialConversation.totalInputTokens ?? 0) +
           (initialConversation.totalOutputTokens ?? 0)
         }
-        onModelChange={handleModelChange}
         actions={
           <>
             {messages.length > 0 && (
@@ -854,6 +850,9 @@ function ConversationChat({
                 onModeChange={setMode}
                 qualityPolicy={qualityPolicy}
                 onQualityPolicyChange={setQualityPolicy}
+                providerId={providerId}
+                modelId={modelId}
+                onModelChange={handleModelChange}
                 onSend={handleSend}
                 onStop={stop}
                 onAiStart={handleAiStart}
@@ -938,6 +937,9 @@ function ConversationChat({
                     onModeChange={setMode}
                     qualityPolicy={qualityPolicy}
                     onQualityPolicyChange={setQualityPolicy}
+                    providerId={providerId}
+                    modelId={modelId}
+                    onModelChange={handleModelChange}
                     onSend={handleSend}
                     onStop={stop}
                   />

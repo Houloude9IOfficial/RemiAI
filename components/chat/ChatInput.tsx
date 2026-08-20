@@ -33,6 +33,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { FilePickerDialog } from "./FilePickerDialog";
+import { ChatModelSelector } from "./ChatModelSelector";
 import { dispatchSessionFilesChanged } from "@/lib/api/session-files";
 import { toast } from "sonner";
 import { FileAttachmentPreview, type AttachedFile } from "./FileAttachmentPreview";
@@ -179,6 +180,9 @@ export function ChatInput({
   onModeChange,
   qualityPolicy = "balanced",
   onQualityPolicyChange,
+  providerId,
+  modelId,
+  onModelChange,
   onSend,
   onStop,
   large,
@@ -190,6 +194,9 @@ export function ChatInput({
   onModeChange?: (value: ChatMode) => void;
   qualityPolicy?: QualityPolicy;
   onQualityPolicyChange?: (value: QualityPolicy) => void;
+  providerId?: number | null;
+  modelId?: string | null;
+  onModelChange?: (providerId: number, modelId: string) => void;
   onSend: (text: string) => void;
   onStop: () => void;
   /** Larger, centered "new chat" composer (code-editor style). */
@@ -838,7 +845,6 @@ export function ChatInput({
   // Render — ChatGPT-style dock: same column width as messages, toolbar row
   // -----------------------------------------------------------------------
 
-  const iconBtn = large ? "h-9 w-9" : "h-8 w-8";
   const sendBtn = large ? "h-10 w-10" : "h-8 w-8";
 
   return (
@@ -1016,14 +1022,19 @@ export function ChatInput({
                 type="button"
                 disabled={disabled || isStreaming}
                 className={cn(
-                  "flex items-center cursor-pointer justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-                  iconBtn,
+                  "flex cursor-pointer items-center justify-center rounded-full border border-border/60 transition-colors",
+                  large ? "h-9 w-9" : "h-8 w-8",
                   (disabled || isStreaming) && "pointer-events-none opacity-40",
                 )}
                 aria-label="Add photos, files, or capabilities"
               >
                 {/* rotate plus on dropdown open */}
-                <Plus className={`"h-6 w-6 transition-all ${dropdownOpen ? "transform rotate-45" : ""}`} /> 
+                <Plus
+                  className={cn(
+                    "h-4 w-4 transition-all",
+                    dropdownOpen && "rotate-45",
+                  )}
+                />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" side="top" sideOffset={6} className="w-64">
                 <DropdownMenuGroup>
@@ -1174,6 +1185,20 @@ export function ChatInput({
                 </DropdownMenuGroup>
               </DropdownMenuContent>
             </DropdownMenu>
+
+            {/* Model selector — Cursor/Claude-style, right of the "+". It is
+                the only place to switch models now (header pickers were
+                removed), so it stays enabled even when the rest of the input
+                is disabled — only mid-stream is it locked. */}
+            {onModelChange && (
+              <ChatModelSelector
+                providerId={providerId ?? null}
+                modelId={modelId ?? null}
+                onChange={onModelChange}
+                disabled={isStreaming}
+                large={large}
+              />
+            )}
 
             <div className="flex-1" />
 

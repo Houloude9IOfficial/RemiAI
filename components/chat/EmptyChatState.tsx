@@ -64,6 +64,9 @@ export function EmptyChatState({
   onModeChange,
   qualityPolicy,
   onQualityPolicyChange,
+  providerId,
+  modelId,
+  onModelChange,
   onSend,
   onStop,
   onAiStart,
@@ -77,6 +80,9 @@ export function EmptyChatState({
   onModeChange?: (value: ChatMode) => void;
   qualityPolicy?: QualityPolicy;
   onQualityPolicyChange?: (value: QualityPolicy) => void;
+  providerId?: number | null;
+  modelId?: string | null;
+  onModelChange?: (providerId: number, modelId: string) => void;
   onSend: (text: string) => void;
   onStop: () => void;
   onAiStart?: () => void;
@@ -164,6 +170,9 @@ export function EmptyChatState({
             onModeChange={onModeChange}
             qualityPolicy={qualityPolicy}
             onQualityPolicyChange={onQualityPolicyChange}
+            providerId={providerId}
+            modelId={modelId}
+            onModelChange={onModelChange}
             onSend={onSend}
             onStop={onStop}
             large
