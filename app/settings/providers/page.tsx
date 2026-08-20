@@ -5,15 +5,15 @@ import CenteredLayout from '@/components/layout/CenteredLayout';
 export default function ProvidersSettingsPage() {
   return (
     <CenteredLayout>
-      <div className="flex max-w-3xl flex-col gap-6 w-full">
+      <div className="flex max-w-3xl w-full flex-col gap-8">
         <div>
           <h1 className="text-lg font-semibold">Models & Providers</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Configure Anthropic, OpenAI, Ollama, or any custom OpenAI-compatible endpoint,
-            and pick which models are available to chat with.
+            Connect Anthropic, OpenAI, Ollama, or any OpenAI-compatible endpoint,
+            then choose which models are available to chat with.
           </p>
         </div>
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-8">
           <ProviderForm />
           <ProviderList />
         </div>

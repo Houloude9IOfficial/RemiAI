@@ -5,11 +5,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { providersApi, type Provider } from "@/lib/api/providers";
 import { PROVIDER_MODEL_CATALOG } from "@/lib/providers/catalog";
+import { cn } from "@/lib/utils";
 
 export function ProviderModelList({ provider }: { provider: Provider }) {
   const queryClient = useQueryClient();
@@ -62,68 +67,75 @@ export function ProviderModelList({ provider }: { provider: Provider }) {
   );
 
   return (
-    <div className="flex flex-col gap-2 border-t pt-3">
+    <div className="flex flex-col gap-2.5 border-t pt-3">
       <div className="flex items-center justify-between">
-        {models.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No models enabled yet.</p>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            {models.length} model{models.length === 1 ? "" : "s"}
-          </p>
-        )}
-        <button
-          type="button"
-          onClick={() => refreshMutation.mutate()}
-          disabled={refreshMutation.isPending}
-          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
-          title="Refresh models from provider"
-        >
-          <RefreshCw
-            className={`h-3 w-3 ${refreshMutation.isPending ? "animate-spin" : ""}`}
-          />
-          Refresh
-        </button>
-      </div>
-      {models.map((model) => (
-        <div key={model.id} className="flex items-center gap-2 text-sm">
-          <Switch
-            size="sm"
-            checked={model.enabled}
-            onCheckedChange={(enabled) =>
-              updateMutation.mutate({ modelId: model.modelId, enabled })
+        <p className="text-xs font-medium text-muted-foreground">
+          {models.length === 0 ? "No models yet" : "Models"}
+        </p>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                size="icon-xs"
+                variant="ghost"
+                className="h-6 w-6"
+                disabled={refreshMutation.isPending}
+                onClick={() => refreshMutation.mutate()}
+              />
             }
-          />
-          <span className="font-mono text-xs">{model.modelId}</span>
-          {/* {model.isDefault ? (
-            <Badge variant="secondary" className="text-[10px]">
-              default
-            </Badge>
-          ) : (
-            <button
-              type="button"
-              className="text-[10px] text-muted-foreground underline-offset-2 hover:underline"
-              onClick={() => updateMutation.mutate({ modelId: model.modelId, isDefault: true })}
-            >
-              set default
-            </button>
-          )} */}
-          <Button
-            size="icon"
-            variant="ghost"
-            className="ml-auto h-6 w-6 text-muted-foreground hover:text-destructive"
-            onClick={() => removeMutation.mutate(model.modelId)}
           >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      ))}
+            <RefreshCw
+              className={cn("h-3 w-3", refreshMutation.isPending && "animate-spin")}
+            />
+          </TooltipTrigger>
+          <TooltipContent>Refresh models from provider</TooltipContent>
+        </Tooltip>
+      </div>
 
-      <div className="flex items-center gap-2 pt-1">
+      {models.length > 0 && (
+        <div className="flex flex-col gap-0.5">
+          {models.map((model) => (
+            <div
+              key={model.id}
+              className="flex items-center gap-2.5 rounded-md px-1.5 py-1 transition-colors hover:bg-muted/40"
+            >
+              <Switch
+                size="sm"
+                checked={model.enabled}
+                onCheckedChange={(enabled) =>
+                  updateMutation.mutate({ modelId: model.modelId, enabled })
+                }
+              />
+              <span className="font-mono text-xs">{model.modelId}</span>
+              {model.label && (
+                <span className="text-[11px] text-muted-foreground">· {model.label}</span>
+              )}
+              <Button
+                size="icon-xs"
+                variant="ghost"
+                className="ml-auto h-6 w-6 text-muted-foreground hover:text-destructive"
+                aria-label={`Remove ${model.modelId}`}
+                onClick={() => removeMutation.mutate(model.modelId)}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex items-center gap-2 pt-0.5">
         <Input
-          placeholder="model id, e.g. claude-sonnet-5"
+          placeholder="Add a model id, e.g. claude-sonnet-5"
           className="h-7 text-xs"
           value={newModelId}
           onChange={(e) => setNewModelId(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && newModelId.trim()) {
+              e.preventDefault();
+              addMutation.mutate(newModelId.trim());
+            }
+          }}
         />
         <Button
           size="sm"
