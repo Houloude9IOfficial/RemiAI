@@ -57,7 +57,7 @@ async function readUpload(url: string, maxChars: number) {
  */
 export const webFetchTool = {
   description:
-    "Fetch a URL (web page, REST API, raw text) and return its content as text. Also reads local chat/session file URLs directly from disk. Returns status code, content type, and body.",
+    "Fetch a URL (web page, REST API, raw text) and return its content as text. Also reads local chat/session file URLs directly from disk. Returns status code, content type, and body. Only fetch URLs you obtained from a search result, the user, or a previous tool result — never guess or invent a URL.",
   inputSchema: z.object({
     url: z
       .string()

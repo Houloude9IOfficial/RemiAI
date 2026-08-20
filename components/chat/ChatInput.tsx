@@ -992,7 +992,7 @@ export function ChatInput({
                   ? "Pick a model to start chatting"
                   : isStreaming
                     ? "Remi is responding…"
-                    : "Message Remi..."
+                    : "How can I help you today?"
               }
               disabled={disabled}
               className={cn(

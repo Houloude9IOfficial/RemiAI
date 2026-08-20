@@ -254,11 +254,26 @@ export const CONDITIONAL_GROUPS: Record<string, ToolGroup> = {
     label: "web-search",
     tools: ["brave_web_search", "brave_image_search"],
     keywords: [
+      // Explicit search requests
       "search the web", "search online", "google", "look it up", "look this up",
-      "web search", "search for", "on the internet", "find online",
+      "web search", "search for", "on the internet", "find online", "find out",
+      "look up",
+      // Images / visual lookups
       "pictures of", "photos of", "images of", "picture of", "photo of",
       "image of", "show me a picture", "show me pictures", "show me photos",
       "show me images", "find images", "image search", "what does it look like",
+      // Current / time-sensitive / verifiable information
+      "latest", "newest", "most recent", "as of", "right now", "nowadays",
+      "this week", "this month", "this year", "today",
+      "news", "headline", "headlines", "breaking", "what happened",
+      "current events", "trending", "viral", "rumor", "rumours",
+      "fact check", "fact-check", "debunk", "is it true",
+      "who is", "who won", "when did", "what is the latest",
+      "how much", "price", "prices", "cost of", "worth",
+      "release", "released", "changelog", "latest version", "new version",
+      "election", "stock", "stocks", "crypto", "weather", "score",
+      // Comparison / research framing
+      "compare", " vs ", "versus", "difference between", "pros and cons",
     ],
   },
   notion: {

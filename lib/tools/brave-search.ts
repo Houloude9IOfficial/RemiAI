@@ -77,7 +77,7 @@ export function buildBraveSearchTool(apiKey: string, userContext?: UserContext) 
   return {
     brave_web_search: {
       description:
-        "Search the web using Brave Search for current information, news, docs, and answers. Returns results with titles, URLs, and descriptions, localized to the user's region when known.",
+        "Search the web using Brave Search for current information, news, docs, and answers. Returns results with titles, URLs, and descriptions, localized to the user's region when known. For current or verifiable facts, run several differently-phrased queries and web_fetch the top results to confirm before answering — always answer from the returned results, not from memory.",
       parameters: z.object({
         query: z
           .string()

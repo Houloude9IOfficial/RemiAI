@@ -513,7 +513,7 @@ export function MessageBubble({
               "flex flex-col gap-2",
               // When there's text, wrap it in a rounded bubble
               hasText &&
-                "rounded-2xl bg-primary px-3.5 py-2.5 text-[15px] leading-relaxed text-primary-foreground",
+                "rounded-4xl bg-primary px-3.5 py-2.5 text-[15px] leading-relaxed text-primary-foreground",
             )}
           >
             {/* Text content (if any) — plain text, only images render */}
@@ -580,7 +580,7 @@ export function MessageBubble({
   if (!hasAnyContent && isStreaming) {
     return (
       <GeneratingIndicator
-        label="Generating response"
+        label="Thinking"
         variant="pill"
         className="animate-fade-in"
       />
