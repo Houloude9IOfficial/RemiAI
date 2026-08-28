@@ -56,13 +56,14 @@ export async function refreshProviderModels(
     apiKey: provider.apiKey,
   });
 
-  let seedModels: { modelId: string; label: string | null }[];
+  let seedModels: { modelId: string; label: string | null; contextWindow: number | null }[];
   if (discovered) {
     seedModels = models;
   } else if (options.fallbackToCatalog) {
     seedModels = (PROVIDER_MODEL_CATALOG[provider.kind] ?? []).map((m) => ({
       modelId: m.modelId,
       label: m.label,
+      contextWindow: null,
     }));
   } else {
     // Auto-refresh: discovery failed, so there is nothing to sync against —
@@ -120,9 +121,10 @@ export async function refreshProviderModels(
     for (const model of seedModels) {
       const prev = existingByModelId.get(model.modelId);
       if (prev) {
-        // Keep the user's enabled/isDefault state; just refresh the label.
+        // Keep the user's enabled/isDefault state; refresh label + context
+        // window from the provider's latest metadata.
         tx.update(providerModels)
-          .set({ label: model.label })
+          .set({ label: model.label, contextWindow: model.contextWindow })
           .where(
             and(
               eq(providerModels.providerId, providerId),
@@ -137,6 +139,7 @@ export async function refreshProviderModels(
             providerId,
             modelId: model.modelId,
             label: model.label,
+            contextWindow: model.contextWindow,
             enabled: true,
           })
           .run();

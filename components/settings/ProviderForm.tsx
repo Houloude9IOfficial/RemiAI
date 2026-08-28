@@ -23,6 +23,10 @@ import { cn } from "@/lib/utils";
 const KIND_ORDER: ProviderKind[] = [
   "anthropic",
   "openai",
+  "google",
+  "mistral",
+  "groq",
+  "openrouter",
   "ollama",
   "openai-compatible",
 ];

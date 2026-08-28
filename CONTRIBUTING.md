@@ -58,7 +58,7 @@ The app will be available at `http://127.0.0.1:3000`. The database auto-migrates
 
 Some features require API keys. You can configure these through the Settings UI once the app is running:
 
-1. Go to **Settings -> Providers** to add an AI provider (Anthropic, OpenAI, or Ollama)
+1. Go to **Settings -> Providers** to add an AI provider (Anthropic, OpenAI, Gemini, Mistral, Groq, OpenRouter, or Ollama)
 2. Go to **Settings -> Tools** to configure external integrations (Firecrawl, Brave Search, ElevenLabs, NewsAPI, etc.)
 3. Go to **Settings -> Tools -> ElevenLabs** for voice features (TTS/STT)
 

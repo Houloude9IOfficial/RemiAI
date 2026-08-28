@@ -1,4 +1,12 @@
-export type ProviderKind = "anthropic" | "openai" | "ollama" | "openai-compatible";
+export type ProviderKind =
+  | "anthropic"
+  | "openai"
+  | "ollama"
+  | "openai-compatible"
+  | "google"
+  | "mistral"
+  | "groq"
+  | "openrouter";
 
 export type Provider = {
   id: number;
@@ -30,6 +38,8 @@ export type ProviderModel = {
   providerId: number;
   modelId: string;
   label: string | null;
+  /** Provider-reported context window in tokens; null when unpublished. */
+  contextWindow: number | null;
   enabled: boolean;
   isDefault: boolean;
 };

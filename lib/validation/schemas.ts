@@ -23,6 +23,10 @@ export const providerKindSchema = z.enum([
   "openai",
   "ollama",
   "openai-compatible",
+  "google",
+  "mistral",
+  "groq",
+  "openrouter",
 ]);
 
 export const providerCreateSchema = z.object({

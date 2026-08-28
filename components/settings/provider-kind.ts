@@ -1,8 +1,8 @@
 import type { LucideIcon } from "lucide-react";
-import { Bot, Braces, Cpu, Sparkles } from "lucide-react";
+import { Bot, Braces, Cpu, Sparkles, Zap } from "lucide-react";
 import type { ProviderKind } from "@/lib/api/providers";
 import { BsAnthropic, BsOpenai } from "react-icons/bs";
-import { SiOllama } from "react-icons/si";
+import { SiOllama, SiGooglegemini, SiMistralai, SiOpenrouter } from "react-icons/si";
 
 export type ProviderKindMeta = {
   label: string;
@@ -23,4 +23,8 @@ export const PROVIDER_KIND_META: Record<ProviderKind, ProviderKindMeta> = {
     description: "OpenAI-compatible",
     icon: Braces,
   },
+  google: { label: "Google", description: "Gemini models", icon: SiGooglegemini },
+  mistral: { label: "Mistral", description: "Mistral models", icon: SiMistralai },
+  groq: { label: "Groq", description: "Groq models", icon: Zap },
+  openrouter: { label: "OpenRouter", description: "Any model", icon: SiOpenrouter },
 };

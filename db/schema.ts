@@ -14,7 +14,16 @@ export const directories = sqliteTable("directories", {
 export const providers = sqliteTable("providers", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   kind: text("kind", {
-    enum: ["anthropic", "openai", "ollama", "openai-compatible"],
+    enum: [
+      "anthropic",
+      "openai",
+      "ollama",
+      "openai-compatible",
+      "google",
+      "mistral",
+      "groq",
+      "openrouter",
+    ],
   }).notNull(),
   isPreset: integer("is_preset", { mode: "boolean" }).notNull(),
   label: text("label").notNull(),
@@ -33,6 +42,12 @@ export const providerModels = sqliteTable(
       .references(() => providers.id, { onDelete: "cascade" }),
     modelId: text("model_id").notNull(),
     label: text("label"),
+    // Context-window size reported by the provider's models API (real source
+    // of truth, e.g. Anthropic `context_window`, Google `inputTokenLimit`,
+    // Mistral `max_context_length`, Groq/OpenRouter `context_length`). Null
+    // when the provider doesn't publish it — the UI falls back to the
+    // hardcoded {@link MODEL_CONTEXT_WINDOWS} heuristics.
+    contextWindow: integer("context_window"),
     enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
     isDefault: integer("is_default", { mode: "boolean" }).notNull().default(false),
   },

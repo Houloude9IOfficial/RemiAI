@@ -125,6 +125,15 @@ function repairSchemaCompatibility(): void {
     }
   }
 
+  if (tableExists("provider_models")) {
+    const columns = tableColumns("provider_models");
+    // Provider-reported context-window size (per model). Null until the
+    // next model refresh populates it from the provider's models API.
+    if (!columns.has("context_window")) {
+      sqlite.exec('ALTER TABLE "provider_models" ADD COLUMN "context_window" INTEGER');
+    }
+  }
+
   if (tableExists("artifacts")) {
     let columns = tableColumns("artifacts");
     const add = (name: string, definition: string) => {

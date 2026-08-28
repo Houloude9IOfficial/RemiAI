@@ -283,4 +283,6 @@ add temporary chats and allow selecting whether it uses memory or not, and if no
 
 <!-- make every 5m to refresh all models, but make sure on refresh (and on manual too) it doesn't enable all models, only the ones that were enabled and new ones. -->
 
-add native support for gemini, mistral, openrouter and groq
+<!-- add native support for gemini, mistral, openrouter and groq -->
+
+on send/responding chatinput box does some kind of animation/transition that modifies it's size and position, and it should be smooth and not abrupt, and also it should not change the size and position of the chatinput box when sending/responding.

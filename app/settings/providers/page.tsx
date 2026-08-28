@@ -9,8 +9,7 @@ export default function ProvidersSettingsPage() {
         <div>
           <h1 className="text-lg font-semibold">Models & Providers</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Connect Anthropic, OpenAI, Ollama, or any OpenAI-compatible endpoint,
-            then choose which models are available to chat with.
+            Connect with AI providers to access their models.
           </p>
         </div>
         <div className="flex flex-col gap-8">
