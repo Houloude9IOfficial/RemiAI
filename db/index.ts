@@ -376,6 +376,16 @@ export async function initializeApp(): Promise<void> {
       .catch((err) => console.error("[scheduler] Failed to start:", err));
   }, 0);
 
+  // Auto-refresh provider models every 5 minutes so newly released models
+  // appear (and removed ones drop out) without user action. Keeps each
+  // model's enabled state — only new models get enabled.
+  // Uses dynamic import to avoid circular dependency (refresh imports db).
+  setTimeout(() => {
+    import("@/lib/providers/refresh")
+      .then(({ startModelAutoRefresh }) => startModelAutoRefresh())
+      .catch((err) => console.error("[models] Failed to start auto-refresh:", err));
+  }, 0);
+
   // Seed the preloaded skill repos and auto-check for skill updates.
   // Non-blocking background task (network + disk work must never gate boot).
   setTimeout(() => {

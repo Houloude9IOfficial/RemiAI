@@ -281,6 +281,6 @@ the ai users bash to write/edit/delete files, but it should use bash for command
 
 add temporary chats and allow selecting whether it uses memory or not, and if not do not include any memory in the system/user prompt and do not allow the AI to save memory snapshots for that chat. Keep exact same interface though and make it look hacky/temporary, and allow to convert a temporary chat to a normal chat and vice versa.
 
-make every 5m to refresh all models, but make sure on refresh (and on manual too) it doesn't enable all models, only the ones that were enabled and new ones.
+<!-- make every 5m to refresh all models, but make sure on refresh (and on manual too) it doesn't enable all models, only the ones that were enabled and new ones. -->
 
 add native support for gemini, mistral, openrouter and groq

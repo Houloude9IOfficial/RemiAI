@@ -99,7 +99,7 @@ export function McpServerImport() {
             onChange={(e) => setJsonText(e.target.value)}
             placeholder={EXAMPLE}
             spellCheck={false}
-            className="min-h-[200px] resize-y font-mono text-xs"
+            className="min-h-62.5 resize-y font-mono text-xs"
           />
           <div className="flex justify-end gap-2">
             <Button
