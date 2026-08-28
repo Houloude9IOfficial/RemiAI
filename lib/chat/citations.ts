@@ -14,6 +14,8 @@ export interface CitationRef {
   url: string;
   title: string;
   number: number;
+  /** Best-effort publish date (ISO string or a raw relative age like "2 days ago"). */
+  publishedAt?: string;
 }
 
 export interface MessageSources {
@@ -59,7 +61,7 @@ export function collectMessageSources(parts: UIMessage["parts"]): MessageSources
   const list: CitationRef[] = [];
   const byUrl = new Map<string, CitationRef>();
 
-  const add = (url: unknown, title: unknown) => {
+  const add = (url: unknown, title: unknown, publishedAt?: unknown) => {
     if (typeof url !== "string" || !url.trim()) return;
     const key = normalizeUrlKey(url);
     if (byUrl.has(key)) return;
@@ -67,6 +69,10 @@ export function collectMessageSources(parts: UIMessage["parts"]): MessageSources
       url,
       title: typeof title === "string" && title.trim() ? title.trim() : url,
       number: list.length + 1,
+      publishedAt:
+        typeof publishedAt === "string" && publishedAt.trim()
+          ? publishedAt
+          : undefined,
     };
     byUrl.set(key, ref);
     list.push(ref);
@@ -98,7 +104,7 @@ export function collectMessageSources(parts: UIMessage["parts"]): MessageSources
     if (!Array.isArray(sources)) continue;
     for (const source of sources) {
       if (!isRecord(source)) continue;
-      add(source.url, source.title);
+      add(source.url, source.title, source.publishedAt);
     }
   }
 

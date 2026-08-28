@@ -343,6 +343,7 @@ export async function recordToolSources(
     status: record.status,
     qualityScore: record.qualityScore,
     freshnessStatus: record.freshnessStatus,
+    publishedAt: record.publishedAt,
   }));
 }
 

@@ -333,43 +333,172 @@ function extractCodeContent(children: React.ReactNode): string {
 }
 
 /**
- * Nexus-style numbered citation chip — a tiny favicon + number pill that
- * replaces inline links to sources the model actually retrieved. Hover shows
- * the source title; clicking opens the page.
+ * Favicon cache — host → resolved data URL. Streaming re-renders rebuild the
+ * markdown tree and remount citation chips, and a freshly mounted <img> with
+ * a remote src visibly reloads. Once a favicon has been fetched it is cached
+ * as a data URL, so remounted chips paint instantly with no flash.
+ */
+const faviconDataUrlCache = new Map<string, string>();
+const faviconInflight = new Set<string>();
+const faviconFailed = new Set<string>();
+
+function googleFaviconFor(url: string): { src: string; host: string } {
+  try {
+    const host = new URL(url).hostname;
+    if (!host) return { src: "", host: "" };
+    return {
+      src: `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=32`,
+      host,
+    };
+  } catch {
+    return { src: "", host: "" };
+  }
+}
+
+/**
+ * Best available favicon src for `url`. Reads the module cache (populated by
+ * previous mounts — this is what makes streaming remounts paint instantly)
+ * and, from an effect, primes the cache with a one-off background fetch.
+ *
+ * Render stays PURE: the fetch lives in an effect. Kicking it off during
+ * render made renders impure, which sent Next.js dev/Fast Refresh into
+ * constant full-page reloads.
+ */
+function useCachedFavicon(url: string): string {
+  const { src, host } = googleFaviconFor(url);
+  // Snapshot per mount — later remounts re-run the initializer and pick up
+  // anything the cache gained in between. No state updates needed afterwards:
+  // the already-rendered <img> keeps its remote src, which never flashes.
+  const [cached] = React.useState(() =>
+    host ? faviconDataUrlCache.get(host) ?? null : null,
+  );
+
+  React.useEffect(() => {
+    if (!host || !src) return;
+    if (
+      faviconDataUrlCache.has(host) ||
+      faviconInflight.has(host) ||
+      faviconFailed.has(host)
+    ) {
+      return;
+    }
+    faviconInflight.add(host);
+    void fetch(src)
+      .then((res) =>
+        res.ok ? res.blob() : Promise.reject(new Error(String(res.status))),
+      )
+      .then(
+        (blob) =>
+          new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(blob);
+          }),
+      )
+      .then((dataUrl) => {
+        faviconDataUrlCache.set(host, dataUrl);
+      })
+      .catch(() => {
+        // Fetch can fail (offline, CORS) — the <img> keeps using the remote
+        // src, which loads without CORS anyway. Don't retry every mount.
+        faviconFailed.add(host);
+      })
+      .finally(() => {
+        faviconInflight.delete(host);
+      });
+  }, [host, src]);
+
+  return cached ?? src;
+}
+
+/**
+ * Citation chip — a light pill (favicon + source title) that replaces inline
+ * links to sources the model actually retrieved. Hovering reveals a preview
+ * card (site favicon + domain, full title, publish date); clicking opens the
+ * page.
  */
 function CitationChip({ citation }: { citation: CitationRef }) {
-  let favicon = "";
+  let siteLabel = "";
   try {
-    const host = new URL(citation.url).hostname;
-    if (host) {
-      favicon = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=32`;
-    }
+    siteLabel = new URL(citation.url).hostname.replace(/^www\./, "");
   } catch {
-    // Unparseable URL — chip renders with the number only.
+    siteLabel = citation.url;
   }
+  const favicon = useCachedFavicon(citation.url);
+  const dateLabel = formatCitationDate(citation.publishedAt);
 
   return (
-    <a
-      href={citation.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      title={`${citation.title} — opens in a new tab`}
-      aria-label={`Source ${citation.number}: ${citation.title}`}
-      className="mx-0.5 inline-flex max-w-[220px] items-center gap-1 rounded-full bg-secondary py-px pl-0.5 pr-2 align-middle text-[0.7em] leading-none text-primary no-underline transition-colors hover:bg-border"
-    >
-      {favicon && (
-        // eslint-disable-next-line @next/next/no-img-element -- tiny favicon from a dynamic third-party URL; next/image needs remote-pattern config for no benefit
-        <img
-          src={favicon}
-          alt=""
-          loading="lazy"
-          className="h-[1.05em] w-[1.05em] shrink-0 rounded-full bg-background"
-        />
-      )}
-      {/* <span className="shrink-0 font-semibold tabular-nums">{citation.number}</span> */}
-      <span className="truncate font-medium">{citation.title}</span>
-    </a>
+    <span className="group/chip relative mx-0.5 inline-flex h-7.5 align-middle">
+      <a
+        href={citation.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={`Source: ${citation.title}`}
+        className="citation-chip inline-flex max-w-[200px] items-center gap-1.5 rounded-full bg-secondary py-[3px] pr-2.5 pl-[9px] text-[11px] leading-none font-medium text-primary no-underline transition-colors hover:bg-border"
+      >
+        {favicon && (
+          // eslint-disable-next-line @next/next/no-img-element -- tiny favicon from a dynamic third-party URL; next/image needs remote-pattern config for no benefit
+          <img
+            src={favicon}
+            alt=""
+            loading="lazy"
+            className="h-4.5 w-4.5 shrink-0 rounded-full bg-background"
+          />
+        )}
+        {/* leading must exceed the font's ascent+descent (≈1.12em) or the
+            truncate span's overflow-hidden clips descenders (g, y, p, …). */}
+        <span className="truncate leading-[1.3]">{citation.title}</span>
+      </a>
+
+      {/* Hover preview card — pure CSS, no portal needed. pointer-events-none
+          keeps it from flickering when the cursor slides across it. */}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none invisible absolute top-full left-0 z-50 mt-0 w-72 max-w-[min(80vw,18rem)] rounded-xl border border-border/60 bg-background px-3.5 py-2.5 text-left opacity-0 shadow-xl transition-opacity duration-150 group-hover/chip:visible group-hover/chip:opacity-100"
+      >
+        <span className="flex items-center gap-0.5">
+          {favicon && (
+            // eslint-disable-next-line @next/next/no-img-element -- dynamic third-party favicon, see above
+            <img
+              src={favicon}
+              alt=""
+              loading="lazy"
+              className="h-4 w-4 shrink-0 rounded-full bg-muted object-contain"
+            />
+          )}
+          <span className="truncate text-[11px] ml-2 text-foreground/70">{siteLabel}</span>
+        </span>
+        <span className="mt-0.1 line-clamp-3 block text-[13px] leading-snug font-medium text-foreground">
+          {citation.title}
+        </span>
+        {dateLabel && (
+          <span className="mt-1.5 block text-[11px] text-muted-foreground">
+            {dateLabel}
+          </span>
+        )}
+      </span>
+    </span>
   );
+}
+
+/**
+ * Format a source's publish date for the hover card. Parseable values render
+ * as "August 15, 2026" (en-US hardcoded so SSR and client agree); relative
+ * ages from search results ("2 days ago") pass through as-is.
+ */
+function formatCitationDate(publishedAt?: string): string | null {
+  const value = publishedAt?.trim();
+  if (!value) return null;
+  const ms = Date.parse(value);
+  if (Number.isFinite(ms)) {
+    return new Intl.DateTimeFormat("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    }).format(ms);
+  }
+  return value;
 }
 
 /** A small copy-to-clipboard button that appears on hover over code blocks. */

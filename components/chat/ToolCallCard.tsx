@@ -383,7 +383,7 @@ export function ToolCallCard({
             )}
           </button>
           {minorOpen && (
-            <div className="mx-2 mb-1 rounded-md border border-border/40 bg-surface-2/50 px-2.5 py-2">
+            <div className="mx-2 mt-2.5 mb-1 rounded-md border border-border/40 bg-surface-2/50 px-2.5 py-2">
               {errorText ? (
                 <p className="text-[11px] text-status-danger">{errorText}</p>
               ) : (
