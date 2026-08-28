@@ -383,9 +383,9 @@ function CtaBand() {
             <h2 className="mx-auto max-w-2xl text-balance text-3xl font-semibold tracking-[-0.015em] text-white md:text-4xl">
               Run your AI assistant on your own hardware.
             </h2>
-            <p className="mx-auto mt-4 max-w-xl text-pretty text-base leading-relaxed text-zinc-400">
+            <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-zinc-400">
               Clone the repo, install dependencies, and start talking to your
-              local AI in under a minute.
+              models in under a minute.
             </p>
             <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
               <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer">
@@ -488,7 +488,7 @@ export default function Home() {
       <Header />
       <main>
         <Hero />
-        <TechStrip />
+        {/* <TechStrip /> */}
         <Features />
         <Quickstart />
         <Faq />

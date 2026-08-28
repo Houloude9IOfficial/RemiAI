@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { motion, useReducedMotion } from "framer-motion";
+import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import { SITE_NAME } from "@/lib/constants";
 
 const ease: [number, number, number, number] = [0.16, 1, 0.3, 1];
@@ -25,16 +25,27 @@ export function DashboardShot() {
   const prefersReduced = useReducedMotion();
   const dark = usePrefersDark();
 
+  // Real-time scroll-linked tilt: the screenshot starts rotated 45 degrees
+  // (leaning back, top edge away) and flattens to 0 as you scroll the hero
+  // out of view. Motion values scrub with scroll position - no one-shot trigger.
+  const { scrollY } = useScroll();
+  const rotateX = useTransform(scrollY, [0, 600], [45, 0]);
+  const scale = useTransform(scrollY, [0, 600], [1.12, 1]);
+  const tiltStyle = prefersReduced
+    ? undefined
+    : { rotateX, scale, transformPerspective: 1200 };
+
   return (
     <div className="relative mx-auto mt-16 max-w-5xl md:mt-20">
       {/* Soft aura behind the frame */}
       <div className="hero-glow absolute -inset-x-8 -top-16 -bottom-10 -z-10" aria-hidden />
 
       <motion.div
-        initial={prefersReduced ? false : { opacity: 0, y: 40, scale: 0.98 }}
-        whileInView={{ opacity: 1, y: 0, scale: 1 }}
+        initial={prefersReduced ? false : { opacity: 0, y: 40 }}
+        whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, amount: 0.2 }}
         transition={{ duration: 0.8, ease }}
+        style={tiltStyle}
       >
         <figure className="overflow-hidden rounded-xl border border-border bg-card shadow-[0_1px_1px_rgba(0,0,0,0.03),0_8px_24px_-8px_rgba(0,0,0,0.06)]">
           <div className="flex items-center gap-3 border-b border-border bg-muted/50 px-4 py-2.5">
