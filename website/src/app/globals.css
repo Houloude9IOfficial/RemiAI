@@ -1,20 +1,58 @@
 @import "tailwindcss";
 
+/* ------------------------------------------------------------------ */
+/*  Semantic tokens (light default, dark via prefers-color-scheme)     */
+/* ------------------------------------------------------------------ */
+
+:root {
+  --background: #fafafa;
+  --foreground: #171717;
+  --card: #ffffff;
+  --card-foreground: #171717;
+  --muted: #f4f4f5;
+  --muted-foreground: #52525b;
+  --border: #e8e8ea;
+  --primary: #2563eb;
+  --primary-foreground: #ffffff;
+  --primary-hover: #1d4ed8;
+  --accent: #eef2ff;
+  --accent-foreground: #1e3a8a;
+  --ring: #93c5fd;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0b;
+    --foreground: #f4f4f5;
+    --card: #121214;
+    --card-foreground: #f4f4f5;
+    --muted: #18181b;
+    --muted-foreground: #a1a1aa;
+    --border: #27272a;
+    --primary: #2563eb;
+    --primary-foreground: #ffffff;
+    --primary-hover: #1d4ed8;
+    --accent: #16233f;
+    --accent-foreground: #bfdbfe;
+    --ring: #3b82f6;
+  }
+}
+
 @theme inline {
-  --color-background: #fbfbfc;
-  --color-foreground: #101216;
-  --color-muted: #f3f4f6;
-  --color-muted-foreground: #596170;
-  --color-border: #e6e8ec;
-  --color-card: #ffffff;
-  --color-card-foreground: #101216;
-  --color-primary: #2563eb;
-  --color-primary-foreground: #ffffff;
-  --color-accent: #eef2ff;
-  --color-accent-foreground: #1e3a8a;
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-mono: var(--font-jetbrains-mono), ui-monospace, "SF Mono", monospace;
-  --radius: 0.75rem;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-ring: var(--ring);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", monospace;
 }
 
 /* ------------------------------------------------------------------ */
@@ -26,8 +64,8 @@ html {
 }
 
 body {
-  background: var(--color-background);
-  color: var(--color-foreground);
+  background: var(--background);
+  color: var(--foreground);
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -35,14 +73,24 @@ body {
 }
 
 ::selection {
-  background: oklch(0.62 0.18 255 / 0.28);
+  background: oklch(0.62 0.18 255 / 0.25);
   color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* Remove native disclosure marker on FAQ summaries (Safari) */
+summary::-webkit-details-marker {
+  display: none;
 }
 
 /* Slim, subtle scrollbar */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #d4d6dc transparent;
+  scrollbar-color: oklch(0.85 0 0 / 0.6) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -51,7 +99,7 @@ body {
 }
 
 *::-webkit-scrollbar-thumb {
-  background-color: #d4d6dc;
+  background-color: oklch(0.85 0 0 / 0.6);
   border-radius: 999px;
 }
 
@@ -72,29 +120,31 @@ img {
 /* Faint engineering grid used in the hero background */
 .bg-grid {
   background-image:
-    linear-gradient(to right, oklch(0.2 0.02 262 / 0.045) 1px, transparent 1px),
-    linear-gradient(to bottom, oklch(0.2 0.02 262 / 0.045) 1px, transparent 1px);
+    linear-gradient(to right, oklch(0.24 0.02 262 / 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.24 0.02 262 / 0.05) 1px, transparent 1px);
   background-size: 56px 56px;
 }
 
-/* Radial glow behind the hero screenshot */
-.glow-hero {
-  background:
-    radial-gradient(42% 46% at 50% 42%, oklch(0.68 0.16 255 / 0.22), transparent 72%),
-    radial-gradient(30% 34% at 72% 26%, oklch(0.62 0.14 295 / 0.12), transparent 70%);
+@media (prefers-color-scheme: dark) {
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, oklch(1 0 0 / 0.05) 1px, transparent 1px),
+      linear-gradient(to bottom, oklch(1 0 0 / 0.05) 1px, transparent 1px);
+  }
 }
 
-/* Reduced motion — kill decorative animation */
-@media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+/* Soft blue aura behind the hero screenshot */
+.hero-glow {
+  background:
+    radial-gradient(42% 46% at 50% 40%, oklch(0.62 0.18 255 / 0.16), transparent 72%),
+    radial-gradient(30% 34% at 70% 24%, oklch(0.62 0.16 262 / 0.08), transparent 70%);
+}
+
+@media (prefers-color-scheme: dark) {
+  .hero-glow {
+    background:
+      radial-gradient(42% 46% at 50% 40%, oklch(0.62 0.18 255 / 0.2), transparent 72%),
+      radial-gradient(30% 34% at 70% 24%, oklch(0.62 0.16 262 / 0.1), transparent 70%);
   }
 }
 
@@ -116,4 +166,21 @@ img {
 .terminal-enter > p {
   opacity: 0;
   animation: terminal-line-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Reduced motion - kill decorative animation                         */
+/* ------------------------------------------------------------------ */
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

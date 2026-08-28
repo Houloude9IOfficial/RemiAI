@@ -1,29 +1,32 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
-import { SITE_URL } from "@/lib/constants";
+import { Geist, Geist_Mono } from "next/font/google";
+import { GITHUB_URL, SITE_NAME, SITE_URL } from "@/lib/constants";
 import "./globals.css";
 
-const inter = Inter({
-  variable: "--font-inter",
+const geistSans = Geist({
+  variable: "--font-geist-sans",
   subsets: ["latin"],
   display: "swap",
 });
 
-const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-jetbrains-mono",
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
   subsets: ["latin"],
   display: "swap",
 });
+
+const TITLE = "RemiAI - Your Local AI Assistant";
+const DESCRIPTION =
+  "RemiAI is a self-hosted AI assistant that runs entirely on your own hardware. Deep file system integration, persistent memory, MCP tool support, and a full agent system. No cloud, no telemetry.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "RemiAI - Your Local AI Assistant",
-    template: "%s · RemiAI",
+    default: TITLE,
+    template: "%s - RemiAI",
   },
-  description:
-    "RemiAI is a self-hosted AI assistant with deep file system integration, persistent memory, MCP tool support, and a powerful agent system — 100% under your control.",
-  applicationName: "RemiAI",
+  description: DESCRIPTION,
+  applicationName: SITE_NAME,
   authors: [{ name: "Houloude9IOfficial", url: "https://github.com/Houloude9IOfficial" }],
   creator: "Houloude9IOfficial",
   publisher: "Houloude9IOfficial",
@@ -42,7 +45,8 @@ export const metadata: Metadata = {
     "agent",
     "LLM",
     "OpenClaw",
-    "ChatGPT",
+    "ChatGPT alternative",
+    "Claude alternative",
     "Anthropic",
     "Ollama",
     "OpenAI",
@@ -79,19 +83,17 @@ export const metadata: Metadata = {
     },
   },
   openGraph: {
-    title: "RemiAI - Your Local AI Assistant",
-    description:
-      "A self-hosted AI assistant with file system integration, persistent memory, and MCP tool support.",
+    title: TITLE,
+    description: DESCRIPTION,
     url: SITE_URL,
-    siteName: "RemiAI",
+    siteName: SITE_NAME,
     locale: "en_US",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "RemiAI - Your Local AI Assistant",
-    description:
-      "A self-hosted AI assistant with file system integration, persistent memory, and MCP tool support.",
+    title: TITLE,
+    description: DESCRIPTION,
   },
   icons: {
     icon: [
@@ -111,7 +113,7 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
-    title: "RemiAI",
+    title: SITE_NAME,
     statusBarStyle: "default",
   },
   formatDetection: {
@@ -124,8 +126,34 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#fbfbfc",
-  colorScheme: "light",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#fafafa" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a0a0b" },
+  ],
+  colorScheme: "light dark",
+};
+
+const softwareJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: SITE_NAME,
+  description: DESCRIPTION,
+  applicationCategory: "DeveloperApplication",
+  operatingSystem: "macOS, Windows, Linux",
+  url: SITE_URL,
+  downloadUrl: GITHUB_URL,
+  license: `${GITHUB_URL}/blob/main/LICENSE`,
+  isAccessibleForFree: true,
+  offers: {
+    "@type": "Offer",
+    price: "0",
+    priceCurrency: "USD",
+  },
+  author: {
+    "@type": "Person",
+    name: "Houloude9IOfficial",
+    url: "https://github.com/Houloude9IOfficial",
+  },
 };
 
 export default function RootLayout({
@@ -134,8 +162,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
       <body className="min-h-screen bg-background text-foreground antialiased">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareJsonLd) }}
+        />
         {children}
       </body>
     </html>
