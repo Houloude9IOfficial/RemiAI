@@ -8,7 +8,7 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { conversations, providers, userPreferences } from "@/db/schema";
 import { getLanguageModel } from "@/lib/providers/factory";
-import { SYSTEM_PROMPT } from "@/lib/chat/system-prompt";
+import { SYSTEM_PROMPT, SYSTEM_PROMPT_NO_MEMORY } from "@/lib/chat/system-prompt";
 import { delayTool } from "@/lib/tools/delay";
 import { webFetchTool } from "@/lib/tools/web-fetch";
 import { queryRecentChanges } from "@/lib/fs/file-index";
@@ -129,22 +129,29 @@ export async function POST(req: Request) {
     ? `\n\n## User profile\nThe following is what you know about the user from their profile:\n${profileParts.map((p) => `- ${p}`).join("\n")}`
     : "";
 
-  // 3. Saved memories — budget-capped (most recent, since there's no query yet)
-  const relevantMemories = await retrieveRelevantMemories("");
+  // 3. Saved memories — budget-capped (most recent, since there's no query
+  // yet). Skipped for memory-disabled chats (e.g. temporary chats): the AI
+  // must greet without any saved context, and the no-memory prompt variant
+  // below removes the memory guidance too.
+  const memoryEnabled = conversation.memoryEnabled !== false;
+  const relevantMemories = memoryEnabled ? await retrieveRelevantMemories("") : [];
   const memoryContext = relevantMemories.length > 0
     ? `\n\n## Saved memories about the user\n${relevantMemories.map((m) => `- ${m.content}`).join("\n")}`
     : "";
 
   // 4. Recent file changes
-  const recentChanges = await queryRecentChanges(10);
+  const recentChanges = memoryEnabled ? await queryRecentChanges(10) : [];
   const fileChangeContext = recentChanges.length > 0
     ? `\n\n## Recent file changes (${recentChanges.length} most recent)\n${recentChanges.map((c) => `- [${c.changeType}] ${c.directoryLabel}/${c.relativePath} (${c.changedAt})`).join("\n")}`
     : "";
 
   // ── Conversation starter prompt ─────────────────────────────────
   // This is ALL the instruction the AI needs — no need to call tools.
+  // Fully isolated (memory-disabled) chats get a variant that greets a
+  // STRANGER: no name, no personal context, no "something you remember".
 
-  const startPrompt = `\n\n## 🎯 You are starting the conversation — the user just opened a new chat
+  const startPrompt = memoryEnabled
+    ? `\n\n## 🎯 You are starting the conversation — the user just opened a new chat
 
 All the context you need has ALREADY been gathered below. Do NOT call any tools to get context — it's all right here.
 
@@ -167,6 +174,28 @@ ${timeContext}${userPrefsContext}${userProfileContext}${memoryContext}${fileChan
 - **Do NOT say "Let me check..." or "Let me grab..."** — just start talking naturally.
 - **Do NOT use the ask_questions tool** — ask casually in text.
 - **Do NOT use markdown** — plain text feels more natural.
+- **Go straight into the greeting** — no preamble, no searching, no checking. Just talk.`
+    : `\n\n## 🎯 You are starting the conversation — the user just opened a new chat
+
+This chat is fully isolated: you do NOT know the user — no name, profile, preferences, memories, or files. Do NOT call any tools.
+
+### Your context (already provided):
+${timeContext}
+
+### What to do:
+
+1. **Greet them warmly, as a stranger** — a friendly, generic hello. Do NOT use a name.
+2. **Reference only the time of day** (e.g. "Good evening" if it's evening) — nothing else about them.
+3. **Ask a natural question** — open-ended, like "What are you working on?", "What's on your mind?", etc..
+4. **Keep it brief** — 2-3 sentences: greeting, small touch, question.
+
+### ⚠️ CRITICAL RULES:
+
+- **Do NOT call ANY tools** — everything you need is already in this prompt.
+- **Never assume, guess, or reference anything about the user** — you know nothing about them.
+- **Do NOT say "Let me check..." or "Let me grab..."** — just start talking naturally.
+- **Do NOT use the ask_questions tool** — ask casually in text.
+- **Do NOT use markdown** — plain text feels more natural.
 - **Go straight into the greeting** — no preamble, no searching, no checking. Just talk.`;
 
   // ── StreamText ──────────────────────────────────────────────────
@@ -180,7 +209,8 @@ ${timeContext}${userPrefsContext}${userProfileContext}${memoryContext}${fileChan
   let aborted = false;
   let finalFinishReason: string | undefined;
 
-  const fullSystemPrompt = SYSTEM_PROMPT + startPrompt;
+  const fullSystemPrompt =
+    (memoryEnabled ? SYSTEM_PROMPT : SYSTEM_PROMPT_NO_MEMORY) + startPrompt;
   trace.metric("promptChars", fullSystemPrompt.length);
   trace.metric("activeToolCount", Object.keys(tools).length);
   trace.metric("activeToolNames", Object.keys(tools));

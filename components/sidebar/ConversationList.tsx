@@ -29,6 +29,7 @@ import {
   ArrowUpToLine,
   ArrowDownToLine,
   Clock,
+  Timer,
 } from "lucide-react";
 import { conversationsApi, type Conversation } from "@/lib/api/conversations";
 import { toast } from "sonner";
@@ -67,6 +68,7 @@ function ContextMenuPortal({
   onRename,
   onDuplicate,
   onDelete,
+  onConvert,
   onClose,
 }: {
   conversation: Conversation;
@@ -74,6 +76,7 @@ function ContextMenuPortal({
   onRename: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  onConvert: () => void;
   onClose: () => void;
 }) {
   return createPortal(
@@ -100,6 +103,31 @@ function ContextMenuPortal({
         <div className="mx-1 h-px bg-border" />
 
         {/* Actions */}
+        {conversation.isTemporary ? (
+          <button
+            type="button"
+            className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-sm select-none hover:bg-accent hover:text-accent-foreground"
+            onClick={() => {
+              onConvert();
+              onClose();
+            }}
+          >
+            <Timer className="h-3.5 w-3.5 text-status-warning" />
+            Make permanent
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-sm select-none hover:bg-accent hover:text-accent-foreground"
+            onClick={() => {
+              onConvert();
+              onClose();
+            }}
+          >
+            <Timer className="h-3.5 w-3.5" />
+            Make temporary
+          </button>
+        )}
         <button
           type="button"
           className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-sm select-none hover:bg-accent hover:text-accent-foreground"
@@ -310,6 +338,17 @@ export function ConversationList() {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
       router.push(`/chat/${conversation.id}`);
       toast.success("Conversation duplicated");
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  // Convert between temporary and permanent — flips the is_temporary flag.
+  const convertMutation = useMutation({
+    mutationFn: ({ id, temporary }: { id: number; temporary: boolean }) =>
+      conversationsApi.update(id, { isTemporary: temporary }),
+    onSuccess: (_, { temporary }) => {
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      toast.success(temporary ? "Converted to temporary chat" : "Made permanent");
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -592,6 +631,17 @@ export function ConversationList() {
                       )}
                       <span className="flex-1 truncate">{conversation.title}</span>
 
+                      {/* Temporary badge — hacky/temporary look */}
+                      {conversation.isTemporary && (
+                        <span
+                          className="ml-1.5 inline-flex shrink-0 items-center gap-0.5 rounded-full border border-dashed border-status-warning/50 bg-status-warning/[0.08] px-1.5 py-px text-[10px] font-medium text-foreground/80"
+                          title="Temporary chat — deleted after 30 days of inactivity"
+                        >
+                          <Timer className="h-2.5 w-2.5 text-status-warning" />
+                          Temporary
+                        </span>
+                      )}
+
                       {/* Keep only critical state icon */}
                       {isStreaming && (
                         <span className="flex h-6 w-6 items-center justify-center" title="Generating...">
@@ -703,6 +753,12 @@ export function ConversationList() {
             onRename={() => startRename(conversation.id, conversation.title)}
             onDuplicate={() => duplicateMutation.mutate(conversation.id)}
             onDelete={() => setDeletingId(conversation.id)}
+            onConvert={() =>
+              convertMutation.mutate({
+                id: conversation.id,
+                temporary: !conversation.isTemporary,
+              })
+            }
             onClose={() => {
               setContextMenuId(null);
               setContextMenuPos(null);

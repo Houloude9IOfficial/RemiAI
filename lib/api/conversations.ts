@@ -8,6 +8,10 @@ export type Conversation = {
   mode: string;
   qualityPolicy: "fast" | "balanced" | "quality" | "selected";
   bashMode: "sandboxed" | "full";
+  /** Temporary chat (ChatGPT-style): hacky/temporary UI, auto-deleted after 30 days. */
+  isTemporary: boolean;
+  /** Per-chat memory switch — off means no memory in prompts and no saving. */
+  memoryEnabled: boolean;
   totalInputTokens: number;
   totalOutputTokens: number;
   createdAt: string;
@@ -32,7 +36,12 @@ export const conversationsApi = {
   list: (): Promise<Conversation[]> =>
     fetch("/api/conversations").then((res) => unwrap<Conversation[]>(res)),
 
-  create: (input?: { providerId?: number | null; modelId?: string | null }): Promise<Conversation> =>
+  create: (input?: {
+    providerId?: number | null;
+    modelId?: string | null;
+    isTemporary?: boolean;
+    memoryEnabled?: boolean;
+  }): Promise<Conversation> =>
     fetch("/api/conversations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -64,6 +73,8 @@ export const conversationsApi = {
       mode: string;
       qualityPolicy: "fast" | "balanced" | "quality" | "selected";
       bashMode: "sandboxed" | "full";
+      isTemporary: boolean;
+      memoryEnabled: boolean;
     }>,
   ): Promise<Conversation> =>
     fetch(`/api/conversations/${id}`, {

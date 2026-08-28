@@ -123,6 +123,13 @@ function repairSchemaCompatibility(): void {
         'ALTER TABLE "conversations" ADD COLUMN "quality_policy" TEXT NOT NULL DEFAULT \'balanced\'',
       );
     }
+    // Temporary-chat flag + per-chat memory switch (see migration 0040).
+    if (!columns.has("is_temporary")) {
+      sqlite.exec('ALTER TABLE "conversations" ADD COLUMN "is_temporary" INTEGER NOT NULL DEFAULT 0');
+    }
+    if (!columns.has("memory_enabled")) {
+      sqlite.exec('ALTER TABLE "conversations" ADD COLUMN "memory_enabled" INTEGER NOT NULL DEFAULT 1');
+    }
   }
 
   if (tableExists("provider_models")) {
@@ -371,6 +378,16 @@ export async function initializeApp(): Promise<void> {
     import("@/lib/runs/automation")
       .then(({ recoverStaleAutomationRuns }) => recoverStaleAutomationRuns())
       .catch((err) => console.error("[runs] Failed to recover stale runs:", err));
+  }, 0);
+
+  // Delete temporary chats that outlived their retention period (30 days of
+  // inactivity). Best-effort and non-blocking — never gates boot.
+  setTimeout(() => {
+    import("@/lib/chat/temporary-chats")
+      .then(({ cleanupExpiredTemporaryChats }) => cleanupExpiredTemporaryChats())
+      .catch((err) =>
+        console.error("[temporary-chats] Failed to clean expired chats:", err),
+      );
   }, 0);
 
   // Start the file watcher in the background (non-blocking).

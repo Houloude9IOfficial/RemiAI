@@ -368,7 +368,8 @@ export function ToolCallCard({
             ) : isError ? (
               <XCircle className="h-3 w-3 shrink-0 text-status-danger" />
             ) : (
-              <CheckCircle2 className="h-3 w-3 shrink-0 text-muted-foreground/70" />
+              // <CheckCircle2 className="h-3 w-3 shrink-0 text-muted-foreground/70" />
+              <></>
             )}
             <span className="min-w-0 flex-1 truncate text-[12px] text-foreground/85">
               {minorSummary(toolBare, output, isRunning)}

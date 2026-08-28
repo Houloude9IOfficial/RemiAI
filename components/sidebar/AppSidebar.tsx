@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Brain, BarChart3, Files, FolderOpen, Pen, Plug, Settings2, Wrench, Bot, Eye, Terminal, Gamepad2, Clock, ChevronUp, Shield, Radio, Webhook, PanelLeftClose, PanelLeftOpen, Plus, Sparkles } from "lucide-react";
+import { Brain, BarChart3, Files, FolderOpen, Pen, Plug, Settings2, Wrench, Bot, Eye, Terminal, Gamepad2, Clock, ChevronUp, Shield, Radio, Webhook, PanelLeftClose, PanelLeftOpen, Plus, Sparkles, Timer } from "lucide-react";
 import { useNewChat } from "@/lib/hooks/use-new-chat";
 import { ConversationList } from "./ConversationList";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -52,6 +52,8 @@ function DesktopSidebar() {
   const { isDesktopSidebarCollapsed, toggleDesktopSidebar } = useSidebar();
 
   const newChatMutation = useNewChat();
+  // Dedicated instance for the "Temporary chat" button (creates temp chats).
+  const temporaryChatMutation = useNewChat(undefined, { temporary: true });
 
   const [extraExpanded, setExtraExpanded] = useState(false);
 
@@ -149,6 +151,17 @@ function DesktopSidebar() {
               size="icon"
               variant="ghost"
               className="h-8 w-8 cursor-pointer"
+              disabled={temporaryChatMutation.isPending}
+              onClick={() => temporaryChatMutation.mutate()}
+              title="Temporary chat"
+              aria-label="Temporary chat"
+            >
+              <Timer className="h-4 w-4" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8 cursor-pointer"
               onClick={toggleDesktopSidebar}
               title="Collapse sidebar"
               aria-label="Collapse sidebar"
@@ -171,6 +184,17 @@ function DesktopSidebar() {
               aria-label="New chat"
             >
               <Pen className="h-4 w-4" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8 cursor-pointer"
+              disabled={temporaryChatMutation.isPending}
+              onClick={() => temporaryChatMutation.mutate()}
+              title="Temporary chat"
+              aria-label="Temporary chat"
+            >
+              <Timer className="h-4 w-4" />
             </Button>
           {primaryLinks.slice(0, 4).map(({ href, label, icon: Icon }) => (
             <Link

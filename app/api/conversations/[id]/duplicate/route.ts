@@ -24,13 +24,16 @@ export async function POST(
     );
   }
 
-  // Create a new conversation based on the original
+  // Create a new conversation based on the original — a duplicated temporary
+  // chat stays temporary, and the memory toggle carries over too.
   const dupe = await db
     .insert(conversations)
     .values({
       title: `${original.title} (copy)`,
       providerId: original.providerId,
       modelId: original.modelId,
+      isTemporary: original.isTemporary ?? false,
+      memoryEnabled: original.memoryEnabled ?? true,
     })
     .returning()
     .get();

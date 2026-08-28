@@ -26,6 +26,7 @@ import { getLanguageModel } from "@/lib/providers/factory";
 import { streamingReasoningProviderOptions } from "@/lib/providers/reasoning";
 import {
   SYSTEM_PROMPT_BASE,
+  SYSTEM_PROMPT_BASE_NO_MEMORY,
   CREATE_VISUAL_SECTION,
   RESEARCH_SECTION,
   SESSION_FILES_SECTION,
@@ -151,6 +152,36 @@ function titleFromMessage(message: UIMessage): string {
   return text.length > 60 ? `${text.slice(0, 60)}…` : text;
 }
 
+/**
+ * Wrap tools so directory-based (`rootId` / `relativePath`) access is
+ * rejected, keeping only chat-file `url` access. Used for fully isolated
+ * (memory-disabled) chats: read_document / media tools may still read files
+ * the user explicitly attached to THIS chat, but never the user's configured
+ * directories. The model gets a clear string result instead of a throw so it
+ * can recover (e.g. ask for the file as an attachment).
+ */
+function restrictToChatUrls(tools: Record<string, unknown>): Record<string, unknown> {
+  const restricted: Record<string, unknown> = {};
+  for (const [name, tool] of Object.entries(tools)) {
+    const t = tool as Record<string, unknown>;
+    const originalExecute = t.execute as
+      | ((args: Record<string, unknown>) => unknown)
+      | undefined;
+    restricted[name] = originalExecute
+      ? {
+          ...t,
+          execute: (args: Record<string, unknown>) => {
+            if (args && (args.rootId !== undefined || args.relativePath !== undefined)) {
+              return "Directory access is disabled in this chat (memory is off — fully isolated). Attach the file to the chat and read it via its `url` instead.";
+            }
+            return originalExecute(args);
+          },
+        }
+      : t;
+  }
+  return restricted;
+}
+
 // ── Request validation ────────────────────────────────────────────────
 // ChatGPT-style chat requests: the client ships only the NEW message(s) plus
 // the conversation id — never the full history (that caused 413s on long
@@ -230,6 +261,12 @@ export async function POST(req: Request) {
 
   // Read mode from the conversation in the database
   let mode = conversation.mode ?? "chat";
+
+  // Per-chat memory switch: when off, NO saved memories are injected into the
+  // system prompt and the memory tools (remember / search_memories /
+  // get_recent_memories) are not registered — the AI can neither read nor
+  // write memory snapshots from this conversation.
+  const memoryEnabled = conversation.memoryEnabled !== false;
 
   const providerLookupStartedAt = performance.now();
   const provider = await db
@@ -338,8 +375,10 @@ export async function POST(req: Request) {
     mcpToolSet = undefined;
   }
 
-  // Gather filesystem tools from configured directories
-  const fsToolSet = await buildFilesystemTools();
+  // Gather filesystem tools from configured directories. Fully isolated
+  // (memory-disabled) chats get NO filesystem access — the AI cannot read or
+  // write the user's directories at all.
+  const fsToolSet = memoryEnabled ? await buildFilesystemTools() : {};
 
   // User context sent by the browser (timezone + locale). Used to report the
   // user's LOCAL time in get_time_details and to localize web search results.
@@ -355,8 +394,11 @@ export async function POST(req: Request) {
     userContext.language,
   );
 
-  // Gather memory tools (remember, search_memories)
-  const memoryToolSet = buildMemoryTools();
+  // Gather memory tools (remember, search_memories, get_recent_memories).
+  // Skipped entirely for memory-disabled chats (e.g. temporary chats) so the
+  // AI cannot read or write memory snapshots — the tools simply don't exist
+  // in the toolset for those requests.
+  const memoryToolSet = memoryEnabled ? buildMemoryTools() : {};
 
   // Gather integration tools (Brave Search, Notion, Context7) based on config
   const integrationToolSet = await buildIntegrationTools(userContext);
@@ -388,21 +430,32 @@ export async function POST(req: Request) {
     ),
   );
 
-  // Gather code execution tools (python_exec, js_exec)
-  const executionToolSet = await buildExecutionTools(
-    conversation.bashMode === "full" ? "full" : "sandboxed",
-  );
+  // Gather code execution tools (python_exec, js_exec, bash_execute). Code
+  // runs on the user's machine and can reach their data — excluded entirely
+  // from fully isolated (memory-disabled) chats.
+  const executionToolSet = memoryEnabled
+    ? await buildExecutionTools(
+        conversation.bashMode === "full" ? "full" : "sandboxed",
+      )
+    : {};
 
   // Gather native Playwright browser automation tools (browser_open, ...)
   const playwrightToolSet = await buildPlaywrightTools(conversationId);
 
-  // Gather document reader tools (read_document)
-  const documentToolSet = await buildDocumentReaderTools();
+  // Gather document reader tools (read_document) and media tools. In fully
+  // isolated (memory-disabled) chats these are restricted to chat-file URLs
+  // only — rootId-based directory access is rejected (the tool sets stay so
+  // files the user explicitly attaches in THIS chat still work).
+  const documentToolSet = memoryEnabled
+    ? await buildDocumentReaderTools()
+    : restrictToChatUrls(await buildDocumentReaderTools());
 
   // Gather media tools (get_media_metadata, convert_media, extract_audio,
   // extract_video_frames, transcribe_audio, manage_transcription_models) —
   // outputs default to this conversation's session sandbox
-  const mediaToolSet = buildMediaTools(conversationId);
+  const mediaToolSet = memoryEnabled
+    ? buildMediaTools(conversationId)
+    : restrictToChatUrls(buildMediaTools(conversationId));
 
   // Build create visual tool (conditionally based on user setting)
   const createVisualToolSet = await buildCreateVisualTool();
@@ -421,22 +474,28 @@ export async function POST(req: Request) {
     ...buildListAvailableToolsTool(),
   };
 
-  // Agent spawner tools with chaining support
-  const agentToolSet = {
-    spawn_agent: buildMainSpawnAgentTool(
-      provider,
-      conversation.modelId,
-      conversationId,
-      userContext,
-    ),
-    get_agent_result: buildGetAgentResultTool(),
-  };
+  // Agent spawner tools with chaining support. Spawned sub-agents bundle
+  // memory/profile tools, so fully isolated chats can't spawn them.
+  const agentToolSet = memoryEnabled
+    ? {
+        spawn_agent: buildMainSpawnAgentTool(
+          provider,
+          conversation.modelId,
+          conversationId,
+          userContext,
+        ),
+        get_agent_result: buildGetAgentResultTool(),
+      }
+    : {};
 
-  // File index tools for querying recent changes and searching indexed files
-  const fileIndexToolSet = buildFileIndexTools();
+  // File index tools for querying recent changes and searching indexed files.
+  // Excluded from fully isolated chats — the file index is a persistent scan
+  // of the user's directories.
+  const fileIndexToolSet = memoryEnabled ? buildFileIndexTools() : {};
 
-  // Profile tools (get_profile, update_profile)
-  const profileToolSet = buildProfileTools();
+  // Profile tools (get_profile, update_profile) — the profile is the user's
+  // personal data; excluded from fully isolated (memory-disabled) chats.
+  const profileToolSet = memoryEnabled ? buildProfileTools() : {};
 
   // Todo list tools for multi-step task planning
   const todoToolSet = buildTodoTools(conversationId);
@@ -452,8 +511,10 @@ export async function POST(req: Request) {
     sourceRunId: trace.traceId,
   });
 
-  // Skills tools (list_skills, load_skill) — always available (core)
-  const skillsToolSet = buildSkillsToolSet();
+  // Skills tools (list_skills, load_skill) — the "plugins" analog; hidden in
+  // fully isolated (memory-disabled) chats just like ChatGPT temp chats ignore
+  // plugins.
+  const skillsToolSet = memoryEnabled ? buildSkillsToolSet() : {};
 
   // In plan mode, filter out write tools — AI can only read/plan, not modify files
   const writeBlocklist = [
@@ -596,13 +657,20 @@ Definition of done:
     profileParts.push(`Pronouns: ${prefs.pronouns}`);
   }
 
-  const profileTip = profileParts.length > 0
-    ? `\n\n## User profile\nThe following is what you know about the user from their profile:\n${profileParts.map((p) => `- ${p}`).join("\n")}`
-    : "";
+  // Fully isolated (memory-disabled) chats must not know the user AT ALL —
+  // no profile, no preferences, no name. The AI greets and answers as a
+  // stranger would.
+  const profileTip = !memoryEnabled
+    ? ""
+    : profileParts.length > 0
+      ? `\n\n## User profile\nThe following is what you know about the user from their profile:\n${profileParts.map((p) => `- ${p}`).join("\n")}`
+      : "";
 
-  const systemTip = prefParts.length > 0
-    ? `\n\n## User preferences\n${prefParts.join("\n")}`
-    : "";
+  const systemTip = !memoryEnabled
+    ? ""
+    : prefParts.length > 0
+      ? `\n\n## User preferences\n${prefParts.join("\n")}`
+      : "";
 
   // Inject memories relevant to the CURRENT request, capped to a hard token
   // budget (relevance + recency scoring, deduped). Irrelevant memories are
@@ -687,7 +755,9 @@ Definition of done:
     verifierEligible: qualityRoute.verifierEligible,
   });
 
-  const relevantMemories = await retrieveRelevantMemories(lastUserText);
+  // Memory-disabled chats get NO saved-memories block — the model must answer
+  // from this conversation alone (the memory tools aren't registered either).
+  const relevantMemories = memoryEnabled ? await retrieveRelevantMemories(lastUserText) : [];
   const memoryTip = relevantMemories.length > 0
     ? `\n\n## Saved memories\nThings you have remembered about the user across conversations, ranked by relevance to the current request. Use them to personalize responses.\n${relevantMemories.map((m) => `- ${m.content}`).join("\n")}`
     : "";
@@ -760,8 +830,9 @@ Definition of done:
   trace.metric("estimatedToolDefinitionChars", estimatedToolDefinitionChars);
 
   // Inject recent file changes into the system prompt for freshness.
-  // Capped to 5 — the model can call query_recent_changes for more.
-  const recentChanges = await queryRecentChanges(5);
+  // Capped to 5 — the model can call query_recent_changes for more. Skipped
+  // for fully isolated (memory-disabled) chats — that's the user's data.
+  const recentChanges = memoryEnabled ? await queryRecentChanges(5) : [];
   const fileChangeTip = recentChanges.length > 0
     ? `\n\n## Recent file changes\nRecently modified in your watched directories (most recent first):\n${recentChanges.map((c) => `- [${c.changeType}] ${c.directoryLabel}/${c.relativePath}`).join("\n")}`
     : "";
@@ -801,16 +872,19 @@ Definition of done:
     activeToolGroups.has("news") ||
     activeToolGroups.has("firecrawl");
   const researchSection = researchRequested ? RESEARCH_SECTION : "";
+  // Memory-disabled chats (temporary or the per-chat memory toggle) use the
+  // base prompt WITHOUT the memory guidance section — see lib/chat/system-prompt.ts.
+  const promptBase = memoryEnabled ? SYSTEM_PROMPT_BASE : SYSTEM_PROMPT_BASE_NO_MEMORY;
 
   const staticSystemPrompt = researchRequested
     ? (isLowCapability
-      ? SYSTEM_PROMPT_BASE + visualSection + researchSection + SESSION_FILES_SECTION + PERSISTENCE_GUIDANCE +
+      ? promptBase + visualSection + researchSection + SESSION_FILES_SECTION + PERSISTENCE_GUIDANCE +
         `\n\n**CRITICAL: Keep responses very short and focused.** Use the simplest tool for each task. If unsure about a tool, call \`get_tool_help\`. Avoid multi-step planning unless the task truly requires it.`
-      : SYSTEM_PROMPT_BASE + visualSection + researchSection + SESSION_FILES_SECTION + PERSISTENCE_GUIDANCE)
+      : promptBase + visualSection + researchSection + SESSION_FILES_SECTION + PERSISTENCE_GUIDANCE)
     : isLowCapability
-    ? SYSTEM_PROMPT_BASE + visualSection + SESSION_FILES_SECTION + PERSISTENCE_GUIDANCE +
+    ? promptBase + visualSection + SESSION_FILES_SECTION + PERSISTENCE_GUIDANCE +
       `\n\n**CRITICAL: Keep responses very short and focused.** Use the simplest tool for each task. If unsure about a tool, call \`get_tool_help\`. Avoid multi-step planning unless the task truly requires it.`
-    : SYSTEM_PROMPT_BASE + visualSection + SESSION_FILES_SECTION + PERSISTENCE_GUIDANCE;
+    : promptBase + visualSection + SESSION_FILES_SECTION + PERSISTENCE_GUIDANCE;
   // Rolling-conversation summary: the earliest messages (covered by a
   // background summary) are replaced in the model payload by a compact prose
   // recap injected into the dynamic prompt below. The full messages stay in
@@ -835,8 +909,11 @@ Definition of done:
   // Active skills section — enabled skills' name + description injected into
   // the DYNAMIC prompt (after the static prompt / prompt-cache breakpoint) so
   // toggling a skill never invalidates the cached prefix. Full instructions
-  // load on demand via the always-available load_skill tool.
-  const activeSkillsSection = await buildActiveSkillsSection(isLowCapability);
+  // load on demand via the always-available load_skill tool. Skipped for
+  // fully isolated chats (the skills tools aren't registered either).
+  const activeSkillsSection = memoryEnabled
+    ? await buildActiveSkillsSection(isLowCapability)
+    : "";
 
   // Split off the availability note so prepareStep can rebuild the
   // instructions with a FRESH note once load_tool_groups enables a group

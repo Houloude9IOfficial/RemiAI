@@ -28,6 +28,7 @@ import {
   Webhook,
   X,
   Sparkles,
+  Timer,
 } from "lucide-react";
 import { useNewChat } from "@/lib/hooks/use-new-chat";
 import { ConversationList } from "./ConversationList";
@@ -69,6 +70,8 @@ export function MobileSidebar() {
   const overlayRef = useRef<HTMLDivElement>(null);
 
   const newChatMutation = useNewChat(onClose);
+  // Dedicated instance for the "Temporary chat" button (creates temp chats).
+  const temporaryChatMutation = useNewChat(onClose, { temporary: true });
 
   const [extraExpanded, setExtraExpanded] = useState(false);
 
@@ -164,6 +167,17 @@ export function MobileSidebar() {
               onClick={() => newChatMutation.mutate()}
             >
               <Pen className="h-4 w-4" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7 cursor-pointer"
+              disabled={temporaryChatMutation.isPending}
+              onClick={() => temporaryChatMutation.mutate()}
+              title="Temporary chat"
+              aria-label="Temporary chat"
+            >
+              <Timer className="h-4 w-4" />
             </Button>
             <button
               type="button"
