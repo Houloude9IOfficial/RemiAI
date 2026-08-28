@@ -262,6 +262,11 @@ const TOOL_LABELS: Record<string, ToolLabel> = {
     past: "Discovered tools",
     icon: Search,
   },
+  load_tool_groups: {
+    present: "Loading tools",
+    past: "Loaded tools",
+    icon: Search,
+  },
   get_tool_details: {
     present: "Checking tool",
     past: "Checked tool",

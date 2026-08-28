@@ -275,8 +275,12 @@ the ai users bash to write/edit/delete files, but it should use bash for command
 
 <!-- electron app fails to launch -->
 
-when tools run some text gets together, e.g if 'hi, my name is ...' it says 'Hi,mynameis'. Shows it with animation too, fix it.
+<!-- when tools run some text gets together, e.g if 'hi, my name is ...' it says 'Hi,mynameis'. Shows it with animation too, fix it. -->
 
-tools are not showing up sometimes not while running somethimes not at all even after
+<!-- tools are not showing up sometimes not while running somethimes not at all even after -->
 
 add temporary chats and allow selecting whether it uses memory or not, and if not do not include any memory in the system/user prompt and do not allow the AI to save memory snapshots for that chat. Keep exact same interface though and make it look hacky/temporary, and allow to convert a temporary chat to a normal chat and vice versa.
+
+make every 5m to refresh all models, but make sure on refresh (and on manual too) it doesn't enable all models, only the ones that were enabled and new ones.
+
+add native support for gemini, mistral, openrouter and groq

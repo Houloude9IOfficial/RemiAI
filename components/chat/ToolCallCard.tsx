@@ -37,6 +37,7 @@ const MINOR_TOOLS = new Set([
   "get_tool_help",
   "list_available_tools",
   "get_tool_details",
+  "load_tool_groups",
   "todos_view",
   "todos_init",
   "todos_update",
@@ -115,6 +116,7 @@ function minorSummary(name: string, output: unknown, running: boolean): string {
       get_tool_help: "Getting help…",
       list_available_tools: "Listing tools…",
       get_tool_details: "Checking tool…",
+      load_tool_groups: "Loading tools…",
       todos_view: "Viewing tasks…",
       todos_init: "Planning tasks…",
       todos_update: "Updating tasks…",
@@ -129,6 +131,7 @@ function minorSummary(name: string, output: unknown, running: boolean): string {
     const t = out.localTime ?? out.time ?? out.iso ?? out.formatted;
     if (typeof t === "string") return `Time · ${t}`;
   }
+  if (name === "load_tool_groups") return "Loaded tools";
   if (name === "remember") return "Saved to memory";
   if (name === "get_recent_memories" || name === "search_memories") {
     const count = Array.isArray(out?.memories)
