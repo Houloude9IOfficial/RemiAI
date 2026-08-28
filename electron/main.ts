@@ -74,30 +74,19 @@ let isQuittingApp = false;
 /**
  * Resolve the path to the Next.js CLI binary.
  *
- * In a standalone build, Next.js's CLI entry is at:
- *   .next/standalone/node_modules/next/dist/bin/next
- *
- * We try several locations in order of preference.
+ * Always uses the full `next` package from the project's node_modules: the
+ * standalone output (.next/standalone) only traces what the production
+ * server.js needs, so its CLI copy is incomplete (e.g. dist/cli/next-dev.js
+ * is missing after tracing/pruning) and `next dev` fails there with
+ * ERR_MODULE_NOT_FOUND. Production never uses the CLI anyway — it spawns
+ * .next/standalone/server.js directly (see getNextCommand).
  */
 function resolveNextCli(): string {
-  // 1. Standalone output (production)
-  const standaloneCli = path.join(
-    APP_ROOT,
-    ".next",
-    "standalone",
-    "node_modules",
-    "next",
-    "dist",
-    "bin",
-    "next",
-  );
-  if (fs.existsSync(standaloneCli)) return standaloneCli;
-
-  // 2. Root node_modules (dev or fallback)
+  // Root node_modules (dev, or a packaged fallback before standalone exists)
   const rootCli = path.join(APP_ROOT, "node_modules", "next", "dist", "bin", "next");
   if (fs.existsSync(rootCli)) return rootCli;
 
-  // 3. Resolve via node resolution
+  // Resolve via node resolution
   return "next";
 }
 
