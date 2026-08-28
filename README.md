@@ -35,7 +35,7 @@ Built with **Next.js 16**, **TypeScript**, **Drizzle ORM** (SQLite), and the **A
 ### Chat System
 
 - Conversational interface with streaming AI responses
-- **Multiple AI providers**: Anthropic (Claude), OpenAI (GPT), Ollama (local models), OpenAI-compatible endpoints
+- **Multiple AI providers**: Anthropic (Claude), OpenAI (GPT), Google (Gemini), Mistral, Groq, OpenRouter, Ollama (local models), OpenAI-compatible endpoints
 - **Per-conversation model picker** — switch models mid-conversation
 - **Centered composer** on new chats — a clean, focused input in the middle of the screen that smoothly expands to the full chat input
 - **Auto-generated chat titles** — new conversations are named for you in the background
@@ -196,7 +196,7 @@ RemiAI has a comprehensive settings system with dedicated pages for every aspect
 | Page | Description |
 |---|---|
 | **Profile** | Edit your personal information and AI personality |
-| **Providers** | Add/manage AI providers (Anthropic, OpenAI, Ollama, Custom) |
+| **Providers** | Add/manage AI providers (Anthropic, OpenAI, Gemini, Mistral, Groq, OpenRouter, Ollama, Custom) |
 | **Tools** | Configure external integrations with API keys |
 | **Directories** | Grant file system permissions and enable file watching |
 | **MCP Servers** | Add and test external MCP servers |
@@ -438,7 +438,7 @@ Once running, you'll be greeted by RemiAI in a new conversation. Here's what you
 
 ### Configuration
 
-1. **Add an AI provider** — go to Settings - Providers and add your API key (Anthropic, OpenAI, or Ollama for local models)
+1. **Add an AI provider** — go to Settings - Providers and add your API key (Anthropic, OpenAI, Gemini, Mistral, Groq, OpenRouter, or Ollama for local models)
 2. **Grant file access** — go to Settings - Directories to add folders the AI can read/write
 3. **Connect MCP servers** — go to Settings - MCP Servers to add external tool servers
 4. **Set up integrations** — go to Settings - Tools to enable and configure external services

@@ -9,6 +9,7 @@ import { availableModelsApi } from "@/lib/api/available-models";
 import { skillsApi } from "@/lib/api/skills";
 import { DEFAULT_CONTEXT_WINDOW } from "@/lib/providers/catalog";
 import { cn } from "@/lib/utils";
+import { ChatPersonalizationMenu } from "./ChatPersonalizationMenu";
 
 /**
  * Compact token/context readout — `used / context` with a thin progress bar.
@@ -76,6 +77,10 @@ export function ChatHeader({
   status,
   initialTotalTokens,
   actions,
+  isTemporary,
+  memoryEnabled,
+  onTemporaryChange,
+  onMemoryChange,
 }: {
   conversationId: number;
   title: string;
@@ -85,6 +90,11 @@ export function ChatHeader({
   /** Seed value from the initial conversation fetch (avoids a 0 flash). */
   initialTotalTokens: number;
   actions?: React.ReactNode;
+  /** Temporary-chat flag + per-chat memory switch (see ChatPersonalizationMenu). */
+  isTemporary?: boolean;
+  memoryEnabled?: boolean;
+  onTemporaryChange?: (value: boolean) => void;
+  onMemoryChange?: (value: boolean) => void;
 }) {
   const isStreaming = status === "submitted" || status === "streaming";
 
@@ -133,8 +143,16 @@ export function ChatHeader({
 
       <div className="flex-1" />
 
-      {/* Right — skills chip, live usage meter, then page actions */}
+      {/* Right — personalization, skills chip, live usage meter, page actions */}
       <div className="flex shrink-0 items-center gap-2">
+        {onTemporaryChange && onMemoryChange && (
+          <ChatPersonalizationMenu
+            isTemporary={isTemporary ?? false}
+            memoryEnabled={memoryEnabled ?? true}
+            onTemporaryChange={onTemporaryChange}
+            onMemoryChange={onMemoryChange}
+          />
+        )}
         {enabledSkillCount > 0 && (
           <Link
             href="/settings/skills"

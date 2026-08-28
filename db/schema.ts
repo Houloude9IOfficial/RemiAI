@@ -14,7 +14,16 @@ export const directories = sqliteTable("directories", {
 export const providers = sqliteTable("providers", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   kind: text("kind", {
-    enum: ["anthropic", "openai", "ollama", "openai-compatible"],
+    enum: [
+      "anthropic",
+      "openai",
+      "ollama",
+      "openai-compatible",
+      "google",
+      "mistral",
+      "groq",
+      "openrouter",
+    ],
   }).notNull(),
   isPreset: integer("is_preset", { mode: "boolean" }).notNull(),
   label: text("label").notNull(),
@@ -33,6 +42,12 @@ export const providerModels = sqliteTable(
       .references(() => providers.id, { onDelete: "cascade" }),
     modelId: text("model_id").notNull(),
     label: text("label"),
+    // Context-window size reported by the provider's models API (real source
+    // of truth, e.g. Anthropic `context_window`, Google `inputTokenLimit`,
+    // Mistral `max_context_length`, Groq/OpenRouter `context_length`). Null
+    // when the provider doesn't publish it — the UI falls back to the
+    // hardcoded {@link MODEL_CONTEXT_WINDOWS} heuristics.
+    contextWindow: integer("context_window"),
     enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
     isDefault: integer("is_default", { mode: "boolean" }).notNull().default(false),
   },
@@ -96,6 +111,15 @@ export const conversations = sqliteTable("conversations", {
   bashMode: text("bash_mode", { enum: ["sandboxed", "full"] })
     .notNull()
     .default("sandboxed"),
+  // Temporary chat (ChatGPT-style): looks "hacky/temporary" in the UI, can be
+  // converted to/from a normal chat, and is auto-deleted after a retention
+  // period (see lib/chat/temporary-chats.ts). Fully independent of memory.
+  isTemporary: integer("is_temporary", { mode: "boolean" }).notNull().default(false),
+  // Per-chat memory switch: when false the AI sees NO saved memories (nothing
+  // injected into the system prompt) and the memory tools (remember,
+  // search_memories, get_recent_memories) are not registered, so it cannot
+  // read or write memory snapshots from this chat.
+  memoryEnabled: integer("memory_enabled", { mode: "boolean" }).notNull().default(true),
   totalInputTokens: integer("total_input_tokens").notNull().default(0),
   totalOutputTokens: integer("total_output_tokens").notNull().default(0),
   // Rolling-conversation summary: a compact prose recap of the EARLIEST part

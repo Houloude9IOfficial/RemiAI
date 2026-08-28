@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ChatStatus } from "ai";
@@ -16,6 +15,8 @@ import {
 import { preferencesApi } from "@/lib/api/preferences";
 import { ChatInput, type ChatMode } from "./ChatInput";
 import type { QualityPolicy } from "@/lib/chat/quality-policy";
+import { Timer } from "lucide-react";
+import { TEMPORARY_CHAT_RETENTION_DAYS } from "@/lib/chat/temporary-chat-constants";
 
 const OUTCOME_SUGGESTIONS: Array<{
   label: string;
@@ -53,8 +54,8 @@ const OUTCOME_SUGGESTIONS: Array<{
  * Empty conversation state — code-editor style: a headline with a large,
  * centered composer instead of suggestion cards. When the first message is
  * sent, the page swaps this out for the regular messages + docked input; the
- * composer itself carries a shared `layoutId` so it smoothly glides down to
- * the bottom of the screen.
+ * docked composer fades in at its own position (it never animates this box's
+ * size or position).
  */
 export function EmptyChatState({
   conversationId,
@@ -71,6 +72,10 @@ export function EmptyChatState({
   onStop,
   onAiStart,
   isAiStarting,
+  isTemporary,
+  memoryEnabled,
+  onTemporaryChange,
+  onMemoryChange,
   children,
 }: {
   conversationId: number;
@@ -87,6 +92,11 @@ export function EmptyChatState({
   onStop: () => void;
   onAiStart?: () => void;
   isAiStarting?: boolean;
+  /** Temporary-chat flag + per-chat memory switch (fully independent). */
+  isTemporary?: boolean;
+  memoryEnabled?: boolean;
+  onTemporaryChange?: (value: boolean) => void;
+  onMemoryChange?: (value: boolean) => void;
   /** Extra content rendered below the composer (e.g. error card). */
   children?: ReactNode;
 }) {
@@ -127,15 +137,40 @@ export function EmptyChatState({
             </a>
           </div>
         )}
-        <div className="relative max-w-3xl text-center text-4xl font-semibold tracking-tight text-foreground/90 md:text-[2.75rem] md:leading-[1.15]">
-          {/**
-           * Reserved mascot slot — when a mascot/illustration exists it can
-           * drop in here next to the greeting. Renders nothing today: an
-           * empty, zero-size anchor so the layout is already prepared.
-           */}
-          <div aria-hidden="true" className="pointer-events-none select-none" />
-          <p dangerouslySetInnerHTML={{ __html: headline }} />
-        </div>
+        {isTemporary ? (
+          /* ChatGPT-style temporary-chat empty state — same composer, with a
+             hacky/temporary headline instead of the personal greeting. */
+          <div className="max-w-3xl text-center">
+            <div className="flex items-center justify-center gap-2 text-4xl font-semibold tracking-tight text-foreground/90 md:text-[2.75rem] md:leading-[1.15]">
+              <Timer className="h-8 w-8 text-status-warning md:h-10 md:w-10" aria-hidden="true" />
+              <h1 className="text-4xl font-semibold tracking-tight text-foreground/90 md:text-[2.75rem] md:leading-[1.15]">
+                Temporary chat
+              </h1>
+            </div>
+            <p className="mt-3 text-sm text-muted-foreground">
+              This chat will be deleted after {TEMPORARY_CHAT_RETENTION_DAYS}{" "}
+              days of inactivity. When memory is off it&apos;s fully isolated —
+              the AI knows nothing about you and can&apos;t access your files.
+            </p>
+            <button
+              type="button"
+              onClick={() => onTemporaryChange?.(false)}
+              className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-dashed border-status-warning/50 bg-status-warning/[0.06] px-3 py-1.5 text-xs font-medium text-foreground/80 transition-colors hover:bg-status-warning/10 hover:text-foreground"
+            >
+              Make this a normal chat
+            </button>
+          </div>
+        ) : (
+          <div className="relative max-w-3xl text-center text-4xl font-semibold tracking-tight text-foreground/90 md:text-[2.75rem] md:leading-[1.15]">
+            {/**
+             * Reserved mascot slot — when a mascot/illustration exists it can
+             * drop in here next to the greeting. Renders nothing today: an
+             * empty, zero-size anchor so the layout is already prepared.
+             */}
+            <div aria-hidden="true" className="pointer-events-none select-none" />
+            <p dangerouslySetInnerHTML={{ __html: headline }} />
+          </div>
+        )}
 
         <div
           className="flex w-full max-w-3xl flex-wrap justify-center gap-2 hidden"
@@ -155,15 +190,11 @@ export function EmptyChatState({
           ))}
         </div>
 
-        {/* Big centered composer — shares layoutId with the docked input so
-            the transition between the two states animates smoothly. Ease-out
-            tween (not a spring) so the flight never overshoots the dock and
-            flashes scrollbars. */}
-        <motion.div
-          layoutId="chat-input"
-          transition={{ type: "tween", duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-          className="w-full max-w-2xl"
-        >
+        {/* Big centered composer — stays exactly where it is while typing.
+            When the first message is sent the page swaps to the docked
+            composer, which fades in at its own position instead of animating
+            this box's size or position. */}
+        <div className="w-full max-w-2xl">
           <ChatInput
             conversationId={conversationId}
             status={status}
@@ -177,9 +208,13 @@ export function EmptyChatState({
             onModelChange={onModelChange}
             onSend={onSend}
             onStop={onStop}
+            isTemporary={isTemporary}
+            memoryEnabled={memoryEnabled}
+            onTemporaryChange={onTemporaryChange}
+            onMemoryChange={onMemoryChange}
             large
           />
-        </motion.div>
+        </div>
 
         {onAiStart && (
           <button

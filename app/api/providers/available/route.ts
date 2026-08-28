@@ -12,6 +12,9 @@ export async function GET() {
       providerKind: providers.kind,
       modelId: providerModels.modelId,
       modelLabel: providerModels.label,
+      // Provider-reported context window — the real value when the provider
+      // publishes it, null otherwise.
+      contextWindow: providerModels.contextWindow,
       isDefault: providerModels.isDefault,
     })
     .from(providers)
@@ -37,8 +40,10 @@ export async function GET() {
     }
     grouped.get(row.providerId)!.models.push({
       ...row,
-      // Approximate context-window size for the header usage meter.
-      contextWindow: contextWindowFor(row.modelId),
+      // Exact provider-reported context window when available; otherwise the
+      // approximate heuristic from the static catalog (e.g. OpenAI/Ollama,
+      // whose models APIs don't publish context sizes).
+      contextWindow: row.contextWindow ?? contextWindowFor(row.modelId),
     });
   }
 

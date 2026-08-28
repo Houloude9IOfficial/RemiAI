@@ -3,6 +3,10 @@ export const PROVIDER_MODEL_CATALOG: Record<string, { modelId: string; label: st
   openai: [],
   ollama: [],
   "openai-compatible": [],
+  google: [],
+  mistral: [],
+  groq: [],
+  openrouter: [],
 };
 
 export const PROVIDER_PRESET_DEFAULTS: Record<
@@ -13,6 +17,10 @@ export const PROVIDER_PRESET_DEFAULTS: Record<
   openai: { label: "OpenAI", baseUrl: null, requiresApiKey: true },
   ollama: { label: "Ollama", baseUrl: "http://localhost:11434/v1", requiresApiKey: false },
   "openai-compatible": { label: "Custom (OpenAI-compatible)", baseUrl: "", requiresApiKey: false },
+  google: { label: "Google (Gemini)", baseUrl: null, requiresApiKey: true },
+  mistral: { label: "Mistral", baseUrl: null, requiresApiKey: true },
+  groq: { label: "Groq", baseUrl: null, requiresApiKey: true },
+  openrouter: { label: "OpenRouter", baseUrl: null, requiresApiKey: true },
 };
 
 /**
@@ -33,6 +41,8 @@ export const MODEL_CONTEXT_WINDOWS: { prefix: string; tokens: number }[] = [
   { prefix: "o1", tokens: 200_000 },
   { prefix: "o3", tokens: 200_000 },
   { prefix: "o4", tokens: 200_000 },
+  // Google Gemini (1M context on 2.5+/3.x Pro and Flash)
+  { prefix: "gemini", tokens: 1_000_000 },
   // Ollama / open-weight families
   { prefix: "llama3.1", tokens: 128_000 },
   { prefix: "llama3", tokens: 8_192 },

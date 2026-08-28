@@ -239,6 +239,20 @@
       "when": 1787210800000,
       "tag": "0038_background_color",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1787929550470,
+      "tag": "0039_provider_models_context_window",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "6",
+      "when": 1787942548437,
+      "tag": "0040_temporary_chats",
+      "breakpoints": true
     }
   ]
 }

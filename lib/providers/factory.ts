@@ -1,5 +1,9 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
+import { createGoogle } from "@ai-sdk/google";
+import { createMistral } from "@ai-sdk/mistral";
+import { createGroq } from "@ai-sdk/groq";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import {
   extractReasoningMiddleware,
   wrapLanguageModel,
@@ -19,6 +23,20 @@ export function getLanguageModel(provider: ProviderRow, modelId: string): Langua
       // provider (incl. real OpenAI) implements — the default call signature
       // targets the Responses API, which is OpenAI-only.
       return createOpenAI({ apiKey: provider.apiKey ?? undefined }).chat(modelId);
+    case "google":
+      // Native Google Generative Language API (Gemini). Reasoning/thinking
+      // streams natively as reasoning parts for models that support it.
+      return createGoogle({ apiKey: provider.apiKey ?? undefined }).chat(modelId);
+    case "mistral":
+      return createMistral({ apiKey: provider.apiKey ?? undefined }).chat(modelId);
+    case "groq":
+      // The Groq provider exposes `languageModel` (no `chat` alias).
+      return createGroq({ apiKey: provider.apiKey ?? undefined }).languageModel(modelId);
+    case "openrouter":
+      // Native OpenRouter provider — handles `reasoning_details` deltas for
+      // reasoning models (DeepSeek, Qwen, etc.) and passes through provider
+      // metadata (model routing info) via providerOptions.
+      return createOpenRouter({ apiKey: provider.apiKey ?? undefined }).chat(modelId);
     case "ollama": {
       const model = createOpenAI({
         baseURL: provider.baseUrl ?? "http://localhost:11434/v1",

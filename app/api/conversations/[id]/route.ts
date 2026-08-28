@@ -15,6 +15,8 @@ const updateSchema = z.object({
   mode: z.enum(["chat", "goal", "plan", "build"]).optional(),
   qualityPolicy: z.enum(["fast", "balanced", "quality", "selected"]).optional(),
   bashMode: z.enum(["sandboxed", "full"]).optional(),
+  isTemporary: z.boolean().optional(),
+  memoryEnabled: z.boolean().optional(),
 });
 
 export async function GET(

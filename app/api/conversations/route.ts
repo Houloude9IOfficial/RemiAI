@@ -8,6 +8,8 @@ import { jsonError } from "@/lib/validation/api";
 const createSchema = z.object({
   providerId: z.number().int().optional().nullable(),
   modelId: z.string().optional().nullable(),
+  isTemporary: z.boolean().optional(),
+  memoryEnabled: z.boolean().optional(),
 });
 
 export async function GET() {
@@ -28,6 +30,10 @@ export async function POST(req: Request) {
     .values({
       providerId: body.providerId ?? null,
       modelId: body.modelId ?? null,
+      // Temporary chats default to memory ENABLED (the two toggles are fully
+      // independent — the user can flip either one from the chat menu).
+      isTemporary: body.isTemporary ?? false,
+      memoryEnabled: body.memoryEnabled ?? true,
       // Use ISO dates consistently — SQLite's CURRENT_TIMESTAMP lacks
       // timezone info and causes inconsistent sort/display behavior
       createdAt: new Date().toISOString(),

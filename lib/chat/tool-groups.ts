@@ -510,8 +510,17 @@ export function filterTools(
   return filtered;
 }
 
-/** Group labels that are genuinely always loaded (their tools are all core). */
-const ALWAYS_LOADED_LABELS = ["context", "memory", "file-index", "builtin"];
+/**
+ * Core groups that are advertised as "always loaded" — each checked against
+ * the actual toolset, so e.g. memory-disabled chats (no `remember` tool)
+ * don't get told memory is loaded.
+ */
+const ALWAYS_LOADED_CHECKS: Array<[label: string, tool: string]> = [
+  ["context", "get_time_details"],
+  ["memory", "remember"],
+  ["file-index", "query_recent_changes"],
+  ["builtin", "web_fetch"],
+];
 
 /**
  * Short availability note for the system prompt (only when filtering is
@@ -522,19 +531,23 @@ export function buildToolAvailabilityNote(
   tools: Record<string, unknown>,
   activeGroups: ReadonlySet<string>,
 ): string {
-  const loadedLabels: string[] = [];
+  const alwaysLoadedLabels: string[] = [];
+  for (const [label, tool] of ALWAYS_LOADED_CHECKS) {
+    if (tools[tool] !== undefined) alwaysLoadedLabels.push(label);
+  }
+  const loadedGroupLabels: string[] = [];
   const unloadedLabels: string[] = [];
   for (const [groupId, group] of Object.entries(CONDITIONAL_GROUPS)) {
     // Only mention groups whose tools actually exist in this build
     // (e.g. skip integrations with no API key configured).
     const present = group.tools.some((name) => tools[name] !== undefined);
     if (!present) continue;
-    if (activeGroups.has(groupId)) loadedLabels.push(group.label);
+    if (activeGroups.has(groupId)) loadedGroupLabels.push(group.label);
     else unloadedLabels.push(group.label);
   }
   if (unloadedLabels.length === 0) return ""; // nothing was filtered out
 
-  const loaded = [...ALWAYS_LOADED_LABELS, ...loadedLabels.sort()].join(", ");
+  const loaded = [...alwaysLoadedLabels, ...loadedGroupLabels.sort()].join(", ");
   return (
     `\n\n## Tool availability\n` +
     `Some tools are loaded on demand to save tokens. **Only call the tools listed above.**\n` +

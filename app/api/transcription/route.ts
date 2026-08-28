@@ -9,6 +9,7 @@ import {
   getTranscriptionConfig,
   listOfflineModelStatuses,
   listProviderTranscriptionModels,
+  providerSupportsTranscription,
   saveTranscriptionConfig,
   type OfflineWhisperModel,
   type TranscriptionConfig,
@@ -37,8 +38,8 @@ export async function GET() {
       kind: p.kind,
       label: p.label,
       baseUrl: p.baseUrl,
-      // Anthropic has no transcription endpoint.
-      supportsTranscription: p.kind !== "anthropic",
+      // Anthropic and OpenRouter have no transcription endpoint.
+      supportsTranscription: providerSupportsTranscription(p),
     })),
   });
 }

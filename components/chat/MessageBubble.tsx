@@ -55,6 +55,11 @@ const MARKDOWN_SYNTAX = new Set([
  * Characters that are part of markdown syntax (e.g. `*`, `#`, `` ` ``) are
  * left unwrapped so the markdown parser sees them natively.
  *
+ * Whitespace is ALSO left unwrapped: markdown-to-jsx silently drops space
+ * characters that sit inside an inline HTML tag (`<span> </span>` renders
+ * as an empty tag), which glued words together into "Hi,mynameis" while
+ * streaming. Plain-text whitespace between spans is preserved.
+ *
  * Returns a raw HTML string that markdown-to-jsx will pass through.
  */
 function wrapNewCharsWithFadeIn(text: string, prevLength: number): string {
@@ -66,8 +71,9 @@ function wrapNewCharsWithFadeIn(text: string, prevLength: number): string {
   let result = "";
   for (let i = 0; i < toWrap.length; i++) {
     const char = toWrap[i];
-    // Skip wrapping for markdown structural characters and newlines
-    if (MARKDOWN_SYNTAX.has(char) || char === "\n") {
+    // Skip wrapping for markdown structural characters and whitespace
+    // (spaces, tabs, newlines — `\s` covers all of them).
+    if (MARKDOWN_SYNTAX.has(char) || /\s/.test(char)) {
       result += char;
     } else {
       const delay = i * 12; // 12ms between each character
@@ -407,49 +413,6 @@ function mergeInRowToolSegments(segments: Segment[]): Segment[] {
 }
 
 /**
- * Tools whose standalone execution is pure bookkeeping (loading tool groups,
- * listing available tools, getting help) — they render nothing the user needs
- * to see when run alone. A tool segment made up ENTIRELY of these tools is
- * dropped; a segment that chains them with real work (e.g. load_tool_groups
- * followed by web_fetch) is kept. Names are matched against the bare tool
- * name (MCP-style `server__tool` prefixes are stripped).
- */
-const QUIET_TOOL_NAMES = new Set([
-  "load_tool_groups",
-  "list_available_tools",
-  "get_tool_help",
-  "get_tool_details",
-  "set_run_name",
-  "get_time_details",
-  "get_recent_memories",
-  "query_recent_changes"
-]);
-
-function isQuietToolPart(part: UIMessage["parts"][number]): boolean {
-  try {
-    const name = getToolName(part as Parameters<typeof getToolName>[0]);
-    const bare = name.toLowerCase().includes("__")
-      ? name.toLowerCase().split("__").slice(1).join("__")
-      : name.toLowerCase();
-    return QUIET_TOOL_NAMES.has(bare);
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Drop tool segments that contain ONLY quiet bookkeeping tools. A segment
- * mixing quiet tools with real work is kept so the real calls stay visible.
- */
-function dropQuietToolSegments(segments: Segment[]): Segment[] {
-  return segments.filter(
-    (seg) =>
-      seg.type !== "tool" ||
-      !seg.parts.every((part) => isQuietToolPart(part)),
-  );
-}
-
-/**
  * Combine EVERY reasoning segment in a message into a single reasoning block.
  * Multi-step runs emit one reasoning part per step (interleaved with tools),
  * so without this pass a message shows 2+ stacked "Reasoning..." disclosures.
@@ -588,9 +551,7 @@ function buildSegments(parts: UIMessage["parts"]): Segment[] {
     // Skip step-start, source, file parts
   }
 
-  return mergeReasoningSegments(
-    mergeInRowToolSegments(dropQuietToolSegments(segments)),
-  );
+  return mergeReasoningSegments(mergeInRowToolSegments(segments));
 }
 
 export function MessageBubble({

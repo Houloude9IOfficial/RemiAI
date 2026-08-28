@@ -11,8 +11,14 @@ import { conversationsApi } from "@/lib/api/conversations";
  * Reuses the last-selected model from localStorage (mirrors the old sidebar
  * behaviour) and navigates to the freshly created conversation. An optional
  * `onSuccess` callback runs after navigation (e.g. closing the mobile drawer).
+ *
+ * Pass `opts: { temporary: true }` for a hook that always starts temporary
+ * chats (used by the sidebar's "Temporary chat" button).
  */
-export function useNewChat(onSuccess?: () => void) {
+export function useNewChat(
+  onSuccess?: () => void,
+  opts?: { temporary?: boolean },
+) {
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -31,9 +37,10 @@ export function useNewChat(onSuccess?: () => void) {
           // Ignore corrupt localStorage value
         }
       }
-      return conversationsApi.create(
-        providerId && modelId ? { providerId, modelId } : undefined,
-      );
+      return conversationsApi.create({
+        ...(providerId && modelId ? { providerId, modelId } : {}),
+        isTemporary: opts?.temporary === true,
+      });
     },
     onSuccess: (conversation) => {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });

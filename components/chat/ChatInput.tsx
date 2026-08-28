@@ -19,8 +19,11 @@ import {
   Terminal,
   FolderOpen,
   Check,
+  Brain,
+  Timer,
   type LucideIcon,
 } from "lucide-react";
+import { TEMPORARY_CHAT_RETENTION_DAYS } from "@/lib/chat/temporary-chat-constants";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -185,6 +188,10 @@ export function ChatInput({
   onModelChange,
   onSend,
   onStop,
+  isTemporary,
+  memoryEnabled,
+  onTemporaryChange,
+  onMemoryChange,
   large,
 }: {
   conversationId: number;
@@ -199,6 +206,11 @@ export function ChatInput({
   onModelChange?: (providerId: number, modelId: string) => void;
   onSend: (text: string) => void;
   onStop: () => void;
+  /** Temporary-chat flag + per-chat memory switch (fully independent). */
+  isTemporary?: boolean;
+  memoryEnabled?: boolean;
+  onTemporaryChange?: (value: boolean) => void;
+  onMemoryChange?: (value: boolean) => void;
   /** Larger, centered "new chat" composer (code-editor style). */
   large?: boolean;
 }) {
@@ -905,40 +917,54 @@ export function ChatInput({
               </div>
             )} */}
 
-        {!isStreaming && (
-          <>
-            <div className="mb-1.5 flex items-center gap-2 px-1 text-[11px] text-muted-foreground">
-              <span className="font-medium text-foreground/80">
-                {mode === "goal"
-                  ? "Goal mode"
-                  : mode === "plan"
-                    ? "Plan mode"
-                    : mode === "build"
-                      ? "Build mode"
-                      : "Chat mode"}
+        {/* Always rendered — hiding this row while streaming would shrink the
+            composer and shift the box up ~22px on every send, then drop it
+            back down when the response finishes. Dimmed (not removed) while
+            streaming so the input box never changes size or position. */}
+        <div
+          className={cn(
+            "mb-1.5 flex items-center gap-2 px-1 text-[11px] text-muted-foreground transition-opacity duration-200",
+            isStreaming && "opacity-50",
+          )}
+        >
+          <span className="font-medium text-foreground/80">
+            {mode === "goal"
+              ? "Goal mode"
+              : mode === "plan"
+                ? "Plan mode"
+                : mode === "build"
+                  ? "Build mode"
+                  : "Chat mode"}
+          </span>
+          {isTemporary && (
+            <>
+              <span aria-hidden="true">·</span>
+              <span className="flex items-center gap-1 font-medium text-status-warning">
+                <Timer className="h-3 w-3" />
+                Temporary
               </span>
-              {/* <span aria-hidden="true">·</span>
+            </>
+          )}
+          {/* <span aria-hidden="true">·</span>
+          <span>
+            {mode === "goal"
+              ? "Autonomous multi-step work until the goal is complete"
+              : mode === "plan"
+                ? "Read-only planning; file writes stay disabled"
+                : mode === "build"
+                  ? "Change files, run checks, and report what was verified"
+                  : "Direct answer with minimal overhead"}
+          </span> */}
+          {onQualityPolicyChange && (
+            <>
+              <span aria-hidden="true">·</span>
               <span>
-                {mode === "goal"
-                  ? "Autonomous multi-step work until the goal is complete"
-                  : mode === "plan"
-                    ? "Read-only planning; file writes stay disabled"
-                    : mode === "build"
-                      ? "Change files, run checks, and report what was verified"
-                      : "Direct answer with minimal overhead"}
-              </span> */}
-              {onQualityPolicyChange && (
-                <>
-                  <span aria-hidden="true">·</span>
-                  <span>
-                    {qualityPolicyLabel(qualityPolicy)}
-                    {qualityPolicy === "quality" && " · Adaptive escalation"}
-                  </span>
-                </>
-              )}
-            </div>
-          </>
-        )}
+                {qualityPolicyLabel(qualityPolicy)}
+                {qualityPolicy === "quality" && " · Adaptive escalation"}
+              </span>
+            </>
+          )}
+        </div>
 
         <div
           className={cn(
@@ -998,7 +1024,9 @@ export function ChatInput({
                   ? "Pick a model to start chatting"
                   : isStreaming
                     ? "Remi is responding…"
-                    : "How can I help you today?"
+                    : isTemporary
+                      ? "Temporary chat"
+                      : "How can I help you today?"
               }
               disabled={disabled}
               className={cn(
@@ -1128,6 +1156,47 @@ export function ChatInput({
                         Selected model
                         {/* <span className="ml-auto text-[10px] text-muted-foreground">Pinned · No routing</span> */}
                       </DropdownMenuCheckboxItem>
+                    </DropdownMenuGroup>
+                  </>
+                )}
+
+                {(onTemporaryChange || onMemoryChange) && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuGroup>
+                      <DropdownMenuLabel>Chat settings</DropdownMenuLabel>
+                      {onMemoryChange && (
+                        <DropdownMenuCheckboxItem
+                          checked={memoryEnabled !== false}
+                          onCheckedChange={(checked) => onMemoryChange(checked === true)}
+                        >
+                          <Brain className="h-4 w-4" />
+                          <span>
+                            <span className="block">Memory</span>
+                            <span className="block text-[10px] font-normal text-muted-foreground">
+                              {memoryEnabled === false
+                                ? "Off — fully isolated: no memory, profile, preferences, or file access"
+                                : "Remembers you across conversations"}
+                            </span>
+                          </span>
+                        </DropdownMenuCheckboxItem>
+                      )}
+                      {onTemporaryChange && (
+                        <DropdownMenuCheckboxItem
+                          checked={isTemporary === true}
+                          onCheckedChange={(checked) => onTemporaryChange(checked === true)}
+                        >
+                          <Timer className="h-4 w-4" />
+                          <span>
+                            <span className="block">Temporary chat</span>
+                            <span className="block text-[10px] font-normal text-muted-foreground">
+                              {isTemporary === true
+                                ? `Deleted after ${TEMPORARY_CHAT_RETENTION_DAYS} days of inactivity`
+                                : "Make this chat temporary"}
+                            </span>
+                          </span>
+                        </DropdownMenuCheckboxItem>
+                      )}
                     </DropdownMenuGroup>
                   </>
                 )}

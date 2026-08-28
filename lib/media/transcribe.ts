@@ -1,6 +1,8 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import type { TranscriptionModel } from "ai";
+import type { ProviderOptions } from "@ai-sdk/provider-utils";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { conversations, providers, providerModels, toolConfigs } from "@/db/schema";
@@ -351,9 +353,26 @@ export interface ProviderTranscriptionResult {
   segments: Array<{ start: number; end: number; text: string }>;
 }
 
-/** Whisper endpoint is served by every OpenAI-compatible provider (incl. Ollama). */
-function providerSupportsTranscription(provider: typeof providers.$inferSelect): boolean {
-  return provider.kind !== "anthropic";
+/**
+ * Whether the provider has a transcription endpoint we can drive:
+ * OpenAI-compatible providers serve Whisper; Google, Mistral and Groq have
+ * native transcription models via their own SDKs. Anthropic and OpenRouter
+ * have no transcription endpoint.
+ */
+export function providerSupportsTranscription(
+  provider: typeof providers.$inferSelect,
+): boolean {
+  switch (provider.kind) {
+    case "openai":
+    case "ollama":
+    case "openai-compatible":
+    case "google":
+    case "mistral":
+    case "groq":
+      return true;
+    default:
+      return false;
+  }
 }
 
 /**
@@ -410,7 +429,7 @@ export async function listProviderTranscriptionModels(): Promise<
     .innerJoin(providers, eq(providerModels.providerId, providers.id))
     .all();
   const isTranscriptionModel = (id: string) =>
-    /whisper|transcri|audio/i.test(id) &&
+    /whisper|transcri|audio|voxtral/i.test(id) &&
     !/image|tts|speech|voice|realtime/i.test(id);
   return rows
     .filter((r) => isTranscriptionModel(r.modelId))
@@ -430,27 +449,58 @@ export async function transcribeWithProvider(
   language?: string,
 ): Promise<ProviderTranscriptionResult> {
   const { transcribe } = await import("ai");
-  const { createOpenAI } = await import("@ai-sdk/openai");
-  const { createCompatFetch } = await import("@/lib/providers/compat");
-
-  const baseUrl = provider.baseUrl ?? undefined;
   const apiKey = provider.apiKey ?? undefined;
-  const transcriptionModel =
-    baseUrl && provider.kind !== "openai"
-      ? createOpenAI({
-          baseURL: baseUrl,
-          apiKey: apiKey ?? (provider.kind === "ollama" ? "ollama" : undefined),
-          fetch: createCompatFetch(),
-        }).transcription(modelId)
-      : createOpenAI({ apiKey }).transcription(modelId);
+
+  let transcriptionModel: TranscriptionModel;
+  let providerOptions: ProviderOptions | undefined;
+
+  switch (provider.kind) {
+    case "google": {
+      const { createGoogle } = await import("@ai-sdk/google");
+      transcriptionModel = createGoogle({ apiKey }).transcription(modelId);
+      // Gemini transcription takes an array of language codes
+      // (e.g. "gemini-3.5-transcribe").
+      providerOptions = language ? { google: { languageCodes: [language] } } : undefined;
+      break;
+    }
+    case "mistral": {
+      const { createMistral } = await import("@ai-sdk/mistral");
+      transcriptionModel = createMistral({ apiKey }).transcription(modelId);
+      // e.g. voxtral-mini-latest
+      providerOptions = language ? { mistral: { language } } : undefined;
+      break;
+    }
+    case "groq": {
+      const { createGroq } = await import("@ai-sdk/groq");
+      transcriptionModel = createGroq({ apiKey }).transcription(modelId);
+      // e.g. whisper-large-v3-turbo
+      providerOptions = language ? { groq: { language } } : undefined;
+      break;
+    }
+    default: {
+      // OpenAI-compatible Whisper endpoints (OpenAI, Ollama, custom).
+      const { createOpenAI } = await import("@ai-sdk/openai");
+      const { createCompatFetch } = await import("@/lib/providers/compat");
+      const baseUrl = provider.baseUrl ?? undefined;
+      transcriptionModel =
+        baseUrl && provider.kind !== "openai"
+          ? createOpenAI({
+              baseURL: baseUrl,
+              apiKey: apiKey ?? (provider.kind === "ollama" ? "ollama" : undefined),
+              fetch: createCompatFetch(),
+            }).transcription(modelId)
+          : createOpenAI({ apiKey }).transcription(modelId);
+      providerOptions =
+        provider.kind === "openai" || provider.kind === "openai-compatible"
+          ? { openai: language ? { language } : {} }
+          : undefined;
+    }
+  }
 
   const result = await transcribe({
     model: transcriptionModel,
     audio: wavBytes,
-    providerOptions:
-      provider.kind === "openai" || provider.kind === "openai-compatible"
-        ? { openai: language ? { language } : {} }
-        : undefined,
+    providerOptions,
   });
 
   return {

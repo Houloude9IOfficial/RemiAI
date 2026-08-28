@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { motion, AnimatePresence } from "framer-motion";
-import { Files, Menu, Plus } from "lucide-react";
+import { Files, Menu, Plus, Timer } from "lucide-react";
 import { MessageList } from "@/components/chat/MessageList";
 import { EmptyChatState } from "@/components/chat/EmptyChatState";
 import { ActiveQuestionsPanel } from "@/components/chat/ActiveQuestionsPanel";
@@ -39,6 +39,7 @@ import {
 import { cn } from "@/lib/utils";
 import { errorToDisplayMessage } from "@/lib/chat/error-payload";
 import { userContextHeaders } from "@/lib/chat/user-context";
+import { TEMPORARY_CHAT_RETENTION_DAYS } from "@/lib/chat/temporary-chat-constants";
 
 // If the conversation fetch takes longer than this, abort it and surface an
 // error instead of leaving the user staring at an endless loading skeleton.
@@ -367,6 +368,14 @@ function ConversationChat({
   const [qualityPolicy, setQualityPolicy] = useState<QualityPolicy>(
     initialConversation.qualityPolicy ?? "balanced",
   );
+  // Temporary-chat flag + per-chat memory switch — fully independent toggles.
+  // Persisted to the conversation row on change (see effects below).
+  const [isTemporary, setIsTemporary] = useState<boolean>(
+    initialConversation.isTemporary ?? false,
+  );
+  const [memoryEnabled, setMemoryEnabled] = useState<boolean>(
+    initialConversation.memoryEnabled !== false,
+  );
   const queryClient = useQueryClient();
   const [panelOpen, setPanelOpen] = useState(false);
   // When the AI presents a single file (session_present_file), the panel
@@ -397,6 +406,46 @@ function ConversationChat({
     if (qualityPolicy === (initialConversation.qualityPolicy ?? "balanced")) return;
     conversationsApi.update(conversationId, { qualityPolicy }).catch(() => {});
   }, [qualityPolicy, conversationId, initialConversation]);
+
+  // Persist the temporary-chat flag + memory switch when they change, then
+  // invalidate the sidebar's conversation list so the Temporary badge (and
+  // any other list-derived UI) updates immediately instead of on reload.
+  //
+  // The guard compares against the LAST PERSISTED value (a ref), not the
+  // mount-time `initialConversation` prop: that prop never updates while the
+  // page is open, so comparing to it would make the FIRST toggle persist but
+  // silently skip toggling BACK to the initial value (e.g. un-making a
+  // temporary chat) — the sidebar would stay stale until reload.
+  const lastPersistedIsTemporary = useRef(initialConversation.isTemporary ?? false);
+  useEffect(() => {
+    const prev = lastPersistedIsTemporary.current;
+    if (isTemporary === prev) return;
+    lastPersistedIsTemporary.current = isTemporary;
+    conversationsApi
+      .update(conversationId, { isTemporary })
+      .then(() => {
+        queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      })
+      .catch(() => {
+        // Persist failed — roll the ref back so the next toggle retries.
+        lastPersistedIsTemporary.current = prev;
+      });
+  }, [isTemporary, conversationId, queryClient]);
+
+  const lastPersistedMemoryEnabled = useRef(initialConversation.memoryEnabled !== false);
+  useEffect(() => {
+    const prev = lastPersistedMemoryEnabled.current;
+    if (memoryEnabled === prev) return;
+    lastPersistedMemoryEnabled.current = memoryEnabled;
+    conversationsApi
+      .update(conversationId, { memoryEnabled })
+      .then(() => {
+        queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      })
+      .catch(() => {
+        lastPersistedMemoryEnabled.current = prev;
+      });
+  }, [memoryEnabled, conversationId, queryClient]);
 
   // ── Resume (reconnection) ──────────────────────────────────────
   // `resume` must be captured once on mount and never change at runtime.
@@ -820,6 +869,10 @@ function ConversationChat({
           (initialConversation.totalInputTokens ?? 0) +
           (initialConversation.totalOutputTokens ?? 0)
         }
+        isTemporary={isTemporary}
+        memoryEnabled={memoryEnabled}
+        onTemporaryChange={setIsTemporary}
+        onMemoryChange={setMemoryEnabled}
         actions={
           <>
             {messages.length > 0 && (
@@ -829,6 +882,25 @@ function ConversationChat({
           </>
         }
       />
+
+      {/* ── Temporary-chat banner — hacky/temporary look, with a one-click
+          way to make the chat permanent again. Only for temporary chats. */}
+      {isTemporary && (
+        <div className="flex items-center gap-2 border-b border-dashed border-status-warning/40 bg-status-warning/[0.06] px-4 py-1.5 text-xs text-foreground/80">
+          <Timer className="h-3.5 w-3.5 shrink-0 text-status-warning" />
+          <span className="min-w-0 flex-1 truncate">
+            Temporary chat · Memory {memoryEnabled ? "enabled" : "disabled"} · deleted after{" "}
+            {TEMPORARY_CHAT_RETENTION_DAYS} days of inactivity
+          </span>
+          <button
+            type="button"
+            onClick={() => setIsTemporary(false)}
+            className="shrink-0 rounded-md px-2 py-0.5 font-medium text-status-warning transition-colors hover:bg-status-warning/10"
+          >
+            Make permanent
+          </button>
+        </div>
+      )}
 
       {/* ── Todo progress ── */}
       <TodoProgressBar conversationId={conversationId} />
@@ -858,6 +930,10 @@ function ConversationChat({
                 onStop={stop}
                 onAiStart={handleAiStart}
                 isAiStarting={isAiStarting}
+                isTemporary={isTemporary}
+                memoryEnabled={memoryEnabled}
+                onTemporaryChange={setIsTemporary}
+                onMemoryChange={setMemoryEnabled}
               >
                 {handlerError && (
                   <div className="w-full max-w-2xl">
@@ -920,16 +996,12 @@ function ConversationChat({
                   )}
                 </AnimatePresence>
 
-                {/* Shared layoutId with the centered EmptyChatState composer —
-                    makes the input glide down to the dock when chat starts.
-                    Ease-out tween (not a spring): a spring overshoots past the
-                    target, briefly pushing the flying composer beyond the
-                    viewport edge and flashing scrollbars in <main>. */}
-                <motion.div
-                  layoutId="chat-input"
-                  transition={{ type: "tween", duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                  className="relative"
-                >
+                {/* Docked composer — fades in at its final position without
+                    ever animating the box's size or position on send. (A shared
+                    layoutId with the EmptyChatState composer used to fly the
+                    box from the center to the dock and morph its width while
+                    the inner controls snapped to the compact size — removed.) */}
+                <div className="relative animate-fade-in-opacity">
                   <ChatInput
                     conversationId={conversationId}
                     status={status}
@@ -943,8 +1015,12 @@ function ConversationChat({
                     onModelChange={handleModelChange}
                     onSend={handleSend}
                     onStop={stop}
+                    isTemporary={isTemporary}
+                    memoryEnabled={memoryEnabled}
+                    onTemporaryChange={setIsTemporary}
+                    onMemoryChange={setMemoryEnabled}
                   />
-                </motion.div>
+                </div>
               </div>
             </>
           )}

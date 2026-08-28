@@ -123,6 +123,22 @@ function repairSchemaCompatibility(): void {
         'ALTER TABLE "conversations" ADD COLUMN "quality_policy" TEXT NOT NULL DEFAULT \'balanced\'',
       );
     }
+    // Temporary-chat flag + per-chat memory switch (see migration 0040).
+    if (!columns.has("is_temporary")) {
+      sqlite.exec('ALTER TABLE "conversations" ADD COLUMN "is_temporary" INTEGER NOT NULL DEFAULT 0');
+    }
+    if (!columns.has("memory_enabled")) {
+      sqlite.exec('ALTER TABLE "conversations" ADD COLUMN "memory_enabled" INTEGER NOT NULL DEFAULT 1');
+    }
+  }
+
+  if (tableExists("provider_models")) {
+    const columns = tableColumns("provider_models");
+    // Provider-reported context-window size (per model). Null until the
+    // next model refresh populates it from the provider's models API.
+    if (!columns.has("context_window")) {
+      sqlite.exec('ALTER TABLE "provider_models" ADD COLUMN "context_window" INTEGER');
+    }
   }
 
   if (tableExists("artifacts")) {
@@ -364,6 +380,16 @@ export async function initializeApp(): Promise<void> {
       .catch((err) => console.error("[runs] Failed to recover stale runs:", err));
   }, 0);
 
+  // Delete temporary chats that outlived their retention period (30 days of
+  // inactivity). Best-effort and non-blocking — never gates boot.
+  setTimeout(() => {
+    import("@/lib/chat/temporary-chats")
+      .then(({ cleanupExpiredTemporaryChats }) => cleanupExpiredTemporaryChats())
+      .catch((err) =>
+        console.error("[temporary-chats] Failed to clean expired chats:", err),
+      );
+  }, 0);
+
   // Start the file watcher in the background (non-blocking).
   // It will index all watched directories and track live file changes.
   startFileWatcher(db);
@@ -374,6 +400,16 @@ export async function initializeApp(): Promise<void> {
     import("@/lib/scheduler")
       .then(({ startScheduler }) => startScheduler())
       .catch((err) => console.error("[scheduler] Failed to start:", err));
+  }, 0);
+
+  // Auto-refresh provider models every 5 minutes so newly released models
+  // appear (and removed ones drop out) without user action. Keeps each
+  // model's enabled state — only new models get enabled.
+  // Uses dynamic import to avoid circular dependency (refresh imports db).
+  setTimeout(() => {
+    import("@/lib/providers/refresh")
+      .then(({ startModelAutoRefresh }) => startModelAutoRefresh())
+      .catch((err) => console.error("[models] Failed to start auto-refresh:", err));
   }, 0);
 
   // Seed the preloaded skill repos and auto-check for skill updates.

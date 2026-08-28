@@ -16,6 +16,16 @@ import { providersApi, type Provider } from "@/lib/api/providers";
 import { PROVIDER_MODEL_CATALOG } from "@/lib/providers/catalog";
 import { cn } from "@/lib/utils";
 
+/** Compact token count (e.g. 200K, 1M) for the context-window badge. */
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) {
+    const m = n / 1_000_000;
+    return `${m % 1 === 0 ? m : m.toFixed(1)}M`;
+  }
+  if (n >= 1_000) return `${Math.round(n / 1_000)}K`;
+  return String(n);
+}
+
 export function ProviderModelList({ provider }: { provider: Provider }) {
   const queryClient = useQueryClient();
   const [newModelId, setNewModelId] = useState("");
@@ -146,6 +156,11 @@ export function ProviderModelList({ provider }: { provider: Provider }) {
               {model.label && (
                 <span className="text-[11px] text-muted-foreground">· {model.label}</span>
               )}
+              {model.contextWindow ? (
+                <span className="text-[11px] text-muted-foreground/70">
+                  · {formatTokens(model.contextWindow)} context
+                </span>
+              ) : null}
               <Button
                 size="icon-xs"
                 variant="ghost"

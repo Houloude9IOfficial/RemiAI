@@ -499,8 +499,9 @@
   font-style: italic;
 }
 
-/* Links */
-.markdown-body a {
+/* Links — exclude citation chips, which style themselves as pills
+   (.citation-chip in MarkdownRenderer.tsx) and must never show an underline. */
+.markdown-body a:not(.citation-chip) {
   color: oklch(0.41 0.15 265.76);
   text-decoration: underline;
   text-underline-offset: 2px;
@@ -508,7 +509,7 @@
   text-decoration-color: oklch(0.41 0.15 265.76 / 0.3);
   transition: text-decoration-color 0.15s ease;
 }
-.markdown-body a:hover {
+.markdown-body a:not(.citation-chip):hover {
   text-decoration-color: oklch(0.41 0.15 265.76);
 }
 

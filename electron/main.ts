@@ -34,6 +34,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import http from "node:http";
 import path from "node:path";
 import fs from "node:fs";
+import { autoUpdater } from "electron-updater";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -74,30 +75,19 @@ let isQuittingApp = false;
 /**
  * Resolve the path to the Next.js CLI binary.
  *
- * In a standalone build, Next.js's CLI entry is at:
- *   .next/standalone/node_modules/next/dist/bin/next
- *
- * We try several locations in order of preference.
+ * Always uses the full `next` package from the project's node_modules: the
+ * standalone output (.next/standalone) only traces what the production
+ * server.js needs, so its CLI copy is incomplete (e.g. dist/cli/next-dev.js
+ * is missing after tracing/pruning) and `next dev` fails there with
+ * ERR_MODULE_NOT_FOUND. Production never uses the CLI anyway — it spawns
+ * .next/standalone/server.js directly (see getNextCommand).
  */
 function resolveNextCli(): string {
-  // 1. Standalone output (production)
-  const standaloneCli = path.join(
-    APP_ROOT,
-    ".next",
-    "standalone",
-    "node_modules",
-    "next",
-    "dist",
-    "bin",
-    "next",
-  );
-  if (fs.existsSync(standaloneCli)) return standaloneCli;
-
-  // 2. Root node_modules (dev or fallback)
+  // Root node_modules (dev, or a packaged fallback before standalone exists)
   const rootCli = path.join(APP_ROOT, "node_modules", "next", "dist", "bin", "next");
   if (fs.existsSync(rootCli)) return rootCli;
 
-  // 3. Resolve via node resolution
+  // Resolve via node resolution
   return "next";
 }
 
@@ -438,66 +428,57 @@ ipcMain.handle(
 // ---------------------------------------------------------------------------
 
 function setupAutoUpdater(): void {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { autoUpdater } = require("electron-updater") as {
-      autoUpdater: import("electron-updater").AppUpdater;
-    };
+  autoUpdater.logger = console;
+  autoUpdater.autoDownload = false;
 
-    autoUpdater.logger = console;
-    autoUpdater.autoDownload = false;
+  autoUpdater.on("update-available", (info: { version: string }) => {
+    console.log("[auto-updater] Update available:", info.version);
 
-    autoUpdater.on("update-available", (info: { version: string }) => {
-      console.log("[auto-updater] Update available:", info.version);
+    // Notify the renderer so it can show a UI prompt
+    mainWindow?.webContents.send("update-available", info.version);
 
-      // Notify the renderer so it can show a UI prompt
-      mainWindow?.webContents.send("update-available", info.version);
-
-      // Also show a native notification
-      if (Notification.isSupported()) {
-        const notification = new Notification({
-          title: "Update Available",
-          body: `RemiAI ${info.version} is available. Downloading...`,
-        });
-        notification.show();
-      }
-
-      // Auto-download the update
-      autoUpdater.downloadUpdate();
-    });
-
-    autoUpdater.on("update-downloaded", (info: { version: string }) => {
-      console.log("[auto-updater] Update downloaded:", info.version);
-
-      mainWindow?.webContents.send("update-downloaded", info.version);
-
-      if (Notification.isSupported()) {
-        const notification = new Notification({
-          title: "Update Ready",
-          body: `RemiAI ${info.version} has been downloaded. Restart to install.`,
-        });
-        notification.show();
-      }
-    });
-
-    autoUpdater.on("error", (err: Error) => {
-      console.error("[auto-updater] Error:", err.message);
-    });
-
-    // Check for updates after a short delay (let the app settle first)
-    setTimeout(() => {
-      autoUpdater.checkForUpdates().catch((err: Error) => {
-        console.warn("[auto-updater] Check failed:", err.message);
+    // Also show a native notification
+    if (Notification.isSupported()) {
+      const notification = new Notification({
+        title: "Update Available",
+        body: `RemiAI ${info.version} is available. Downloading...`,
       });
-    }, 10_000);
+      notification.show();
+    }
 
-    // IPC handler for manual "install and restart"
-    ipcMain.handle("install-update", () => {
-      autoUpdater.quitAndInstall(false, true);
+    // Auto-download the update
+    autoUpdater.downloadUpdate();
+  });
+
+  autoUpdater.on("update-downloaded", (info: { version: string }) => {
+    console.log("[auto-updater] Update downloaded:", info.version);
+
+    mainWindow?.webContents.send("update-downloaded", info.version);
+
+    if (Notification.isSupported()) {
+      const notification = new Notification({
+        title: "Update Ready",
+        body: `RemiAI ${info.version} has been downloaded. Restart to install.`,
+      });
+      notification.show();
+    }
+  });
+
+  autoUpdater.on("error", (err: Error) => {
+    console.error("[auto-updater] Error:", err.message);
+  });
+
+  // Check for updates after a short delay (let the app settle first)
+  setTimeout(() => {
+    autoUpdater.checkForUpdates().catch((err: Error) => {
+      console.warn("[auto-updater] Check failed:", err.message);
     });
-  } catch (err) {
-    console.warn("[auto-updater] Not available (electron-updater not installed):", err);
-  }
+  }, 10_000);
+
+  // IPC handler for manual "install and restart"
+  ipcMain.handle("install-update", () => {
+    autoUpdater.quitAndInstall(false, true);
+  });
 }
 
 // ---------------------------------------------------------------------------

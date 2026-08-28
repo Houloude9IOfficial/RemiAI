@@ -1,0 +1,1 @@
+ALTER TABLE `provider_models` ADD `context_window` integer;

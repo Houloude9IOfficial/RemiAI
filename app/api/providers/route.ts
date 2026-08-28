@@ -52,6 +52,7 @@ export async function POST(req: Request) {
     : (PROVIDER_MODEL_CATALOG[row.kind] ?? []).map((m) => ({
         modelId: m.modelId,
         label: m.label,
+        contextWindow: null,
       }));
 
   for (const model of seedModels) {
@@ -61,6 +62,7 @@ export async function POST(req: Request) {
         providerId: row.id,
         modelId: model.modelId,
         label: model.label,
+        contextWindow: model.contextWindow,
       })
       .onConflictDoNothing({ target: [providerModels.providerId, providerModels.modelId] })
       .run();

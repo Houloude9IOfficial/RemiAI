@@ -3,7 +3,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 
 export const OG_SIZE = { width: 1200, height: 630 };
-export const OG_ALT = "RemiAI — Your Local AI Assistant";
+export const OG_ALT = "RemiAI - Your Local AI Assistant";
 
 /** Reads a public asset and returns it as a base64 data URI so ImageResponse
  *  can render it without network access at build time. */
@@ -27,7 +27,7 @@ type OgFont = {
 };
 
 /** Reads the vendored Inter TTFs from disk (deterministic, offline-safe).
- *  ImageResponse requires TTF/OTF — Google Fonts WOFF2 would fail. */
+ *  ImageResponse requires TTF/OTF; Google Fonts WOFF2 would fail. */
 function loadInterFonts(): OgFont[] {
   const weights: FontWeight[] = [400, 500, 600, 700, 800];
   return weights.map((weight) => {
@@ -146,7 +146,7 @@ export function renderOgImage(): ImageResponse {
               }}
             >
               Self-hosted. Private by design. Deep file system access,
-              persistent memory, and MCP tool support — all under your control.
+              persistent memory, and MCP tool support, all under your control.
             </div>
 
             <div
