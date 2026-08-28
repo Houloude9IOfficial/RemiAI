@@ -920,16 +920,12 @@ function ConversationChat({
                   )}
                 </AnimatePresence>
 
-                {/* Shared layoutId with the centered EmptyChatState composer —
-                    makes the input glide down to the dock when chat starts.
-                    Ease-out tween (not a spring): a spring overshoots past the
-                    target, briefly pushing the flying composer beyond the
-                    viewport edge and flashing scrollbars in <main>. */}
-                <motion.div
-                  layoutId="chat-input"
-                  transition={{ type: "tween", duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                  className="relative"
-                >
+                {/* Docked composer — fades in at its final position without
+                    ever animating the box's size or position on send. (A shared
+                    layoutId with the EmptyChatState composer used to fly the
+                    box from the center to the dock and morph its width while
+                    the inner controls snapped to the compact size — removed.) */}
+                <div className="relative animate-fade-in-opacity">
                   <ChatInput
                     conversationId={conversationId}
                     status={status}
@@ -944,7 +940,7 @@ function ConversationChat({
                     onSend={handleSend}
                     onStop={stop}
                   />
-                </motion.div>
+                </div>
               </div>
             </>
           )}

@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ChatStatus } from "ai";
@@ -53,8 +52,8 @@ const OUTCOME_SUGGESTIONS: Array<{
  * Empty conversation state — code-editor style: a headline with a large,
  * centered composer instead of suggestion cards. When the first message is
  * sent, the page swaps this out for the regular messages + docked input; the
- * composer itself carries a shared `layoutId` so it smoothly glides down to
- * the bottom of the screen.
+ * docked composer fades in at its own position (it never animates this box's
+ * size or position).
  */
 export function EmptyChatState({
   conversationId,
@@ -155,15 +154,11 @@ export function EmptyChatState({
           ))}
         </div>
 
-        {/* Big centered composer — shares layoutId with the docked input so
-            the transition between the two states animates smoothly. Ease-out
-            tween (not a spring) so the flight never overshoots the dock and
-            flashes scrollbars. */}
-        <motion.div
-          layoutId="chat-input"
-          transition={{ type: "tween", duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-          className="w-full max-w-2xl"
-        >
+        {/* Big centered composer — stays exactly where it is while typing.
+            When the first message is sent the page swaps to the docked
+            composer, which fades in at its own position instead of animating
+            this box's size or position. */}
+        <div className="w-full max-w-2xl">
           <ChatInput
             conversationId={conversationId}
             status={status}
@@ -179,7 +174,7 @@ export function EmptyChatState({
             onStop={onStop}
             large
           />
-        </motion.div>
+        </div>
 
         {onAiStart && (
           <button

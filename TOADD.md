@@ -285,4 +285,4 @@ add temporary chats and allow selecting whether it uses memory or not, and if no
 
 <!-- add native support for gemini, mistral, openrouter and groq -->
 
-on send/responding chatinput box does some kind of animation/transition that modifies it's size and position, and it should be smooth and not abrupt, and also it should not change the size and position of the chatinput box when sending/responding.
+<!-- on send/responding chatinput box does some kind of animation/transition that modifies it's size and position, and it should be smooth and not abrupt, and also it should not change the size and position of the chatinput box when sending/responding. -->

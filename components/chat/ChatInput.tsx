@@ -905,40 +905,45 @@ export function ChatInput({
               </div>
             )} */}
 
-        {!isStreaming && (
-          <>
-            <div className="mb-1.5 flex items-center gap-2 px-1 text-[11px] text-muted-foreground">
-              <span className="font-medium text-foreground/80">
-                {mode === "goal"
-                  ? "Goal mode"
-                  : mode === "plan"
-                    ? "Plan mode"
-                    : mode === "build"
-                      ? "Build mode"
-                      : "Chat mode"}
-              </span>
-              {/* <span aria-hidden="true">·</span>
+        {/* Always rendered — hiding this row while streaming would shrink the
+            composer and shift the box up ~22px on every send, then drop it
+            back down when the response finishes. Dimmed (not removed) while
+            streaming so the input box never changes size or position. */}
+        <div
+          className={cn(
+            "mb-1.5 flex items-center gap-2 px-1 text-[11px] text-muted-foreground transition-opacity duration-200",
+            isStreaming && "opacity-50",
+          )}
+        >
+          <span className="font-medium text-foreground/80">
+            {mode === "goal"
+              ? "Goal mode"
+              : mode === "plan"
+                ? "Plan mode"
+                : mode === "build"
+                  ? "Build mode"
+                  : "Chat mode"}
+          </span>
+          {/* <span aria-hidden="true">·</span>
+          <span>
+            {mode === "goal"
+              ? "Autonomous multi-step work until the goal is complete"
+              : mode === "plan"
+                ? "Read-only planning; file writes stay disabled"
+                : mode === "build"
+                  ? "Change files, run checks, and report what was verified"
+                  : "Direct answer with minimal overhead"}
+          </span> */}
+          {onQualityPolicyChange && (
+            <>
+              <span aria-hidden="true">·</span>
               <span>
-                {mode === "goal"
-                  ? "Autonomous multi-step work until the goal is complete"
-                  : mode === "plan"
-                    ? "Read-only planning; file writes stay disabled"
-                    : mode === "build"
-                      ? "Change files, run checks, and report what was verified"
-                      : "Direct answer with minimal overhead"}
-              </span> */}
-              {onQualityPolicyChange && (
-                <>
-                  <span aria-hidden="true">·</span>
-                  <span>
-                    {qualityPolicyLabel(qualityPolicy)}
-                    {qualityPolicy === "quality" && " · Adaptive escalation"}
-                  </span>
-                </>
-              )}
-            </div>
-          </>
-        )}
+                {qualityPolicyLabel(qualityPolicy)}
+                {qualityPolicy === "quality" && " · Adaptive escalation"}
+              </span>
+            </>
+          )}
+        </div>
 
         <div
           className={cn(
