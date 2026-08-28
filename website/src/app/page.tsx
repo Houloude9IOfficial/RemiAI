@@ -38,12 +38,12 @@ function Hero() {
     <section id="top" className="relative overflow-hidden pt-20 pb-16 md:pt-24 md:pb-20">
       {/* Grid backdrop */}
       <div
-        className="bg-grid absolute inset-0 -z-20 [mask-image:radial-gradient(70%_55%_at_50%_0%,black,transparent)]"
+        className="bg-grid absolute inset-0 -z-20 mask-[radial-gradient(70%_55%_at_50%_0%,black,transparent)]"
         aria-hidden
       />
       {/* Soft top glow */}
       <div
-        className="absolute inset-x-0 -top-40 -z-10 h-[520px] bg-gradient-to-b from-accent/60 to-transparent"
+        className="absolute inset-x-0 -top-40 -z-10 h-130 bg-linear-to-b from-accent/60 to-transparent"
         aria-hidden
       />
 
@@ -376,7 +376,7 @@ function CtaBand() {
       <div className="mx-auto max-w-6xl px-6">
         <div className="relative overflow-hidden rounded-2xl bg-zinc-950 px-6 py-16 text-center md:py-20">
           <div
-            className="absolute inset-x-0 -top-24 -z-0 h-72 bg-gradient-to-b from-blue-500/15 to-transparent"
+            className="absolute inset-x-0 -top-24 z-0 h-72 bg-linear-to-b from-blue-500/15 to-transparent"
             aria-hidden
           />
           <div className="relative">

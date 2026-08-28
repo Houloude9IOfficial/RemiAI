@@ -400,13 +400,13 @@ export function ConversationList() {
     });
   }, []);
 
-  const toggleSelectAll = useCallback(() => {
-    if (selectedIds.size === filteredConversations.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filteredConversations.map((c) => c.id)));
-    }
-  }, [filteredConversations, selectedIds]);
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) =>
+      prev.size === filteredConversations.length
+        ? new Set<number>()
+        : new Set(filteredConversations.map((c) => c.id)),
+    );
+  };
 
   const exitSelectMode = useCallback(() => {
     setSelectMode(false);
