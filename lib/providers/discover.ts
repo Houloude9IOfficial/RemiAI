@@ -75,8 +75,17 @@ async function discoverAnthropic(apiKey: string): Promise<DiscoveryResult> {
     });
     if (!res.ok) return { models: [], discovered: false };
 
+    // The Anthropic Models API publishes context-window size as
+    // `max_input_tokens` (not `context_window`). Keep `context_window` as a
+    // defensive fallback for proxies that re-map the field.
     const body = (await res.json()) as {
-      data?: { type: string; id: string; display_name?: string; context_window?: number }[];
+      data?: {
+        type: string;
+        id: string;
+        display_name?: string;
+        max_input_tokens?: number;
+        context_window?: number;
+      }[];
     };
     if (!body.data) return { models: [], discovered: false };
 
@@ -84,7 +93,7 @@ async function discoverAnthropic(apiKey: string): Promise<DiscoveryResult> {
       models: body.data.map((m) => ({
         modelId: m.id,
         label: m.display_name ?? null,
-        contextWindow: toInt(m.context_window),
+        contextWindow: toInt(m.max_input_tokens) ?? toInt(m.context_window),
       })),
       discovered: true,
     };

@@ -5,7 +5,7 @@
 export interface ExportResponse {
   /** Base64-encoded encrypted backup blob. */
   encrypted: string;
-  /** Size of the encrypted backup blob in bytes. */
+  /** Size of the encrypted blob in bytes. */
   size: number;
   stats: {
     tables: Record<string, number>;
@@ -43,10 +43,39 @@ export interface HistoryResponse {
   entries: HistoryEntry[];
 }
 
-async function unwrap<T>(res: Response): Promise<T> {
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error ?? "Request failed");
-  return data as T;
+/**
+ * Read a response body and parse it as JSON.
+ *
+ * Backup payloads are large, and on some deployments the server or an
+ * upstream proxy (Caddy, nginx, a hosting load balancer, body-size guards…)
+ * can reply with an HTML/plain-text error page or a truncated body that is
+ * not valid JSON. Calling `res.json()` directly in that case throws a
+ * cryptic "JSON.parse: unexpected character at line 1 column 1" error that
+ * hides what actually went wrong.
+ *
+ * This helper parses defensively and turns non-JSON responses into a clear,
+ * actionable Error containing the HTTP status, content-type, and a snippet of
+ * the body when available.
+ */
+async function parseJson<T>(res: Response, methodLabel: string): Promise<T> {
+  const text = await res.text();
+  try {
+    const data = JSON.parse(text) as T & { error?: string };
+    if (!res.ok) throw new Error(data.error ?? `${methodLabel} failed (${res.status})`);
+    return data;
+  } catch (err) {
+    // `res.ok` was already handled above; if we get here it means the body
+    // was not JSON at all.
+    if (err instanceof SyntaxError) {
+      let detail = `server returned a non-JSON response (${res.status}${
+        res.ok ? "" : " " + res.statusText
+      }, content-type: ${res.headers.get("content-type") ?? "unknown"})`;
+      const snippet = text.trim().slice(0, 300);
+      if (snippet) detail += `: ${JSON.stringify(snippet)}`;
+      throw new Error(`${methodLabel} failed — ${detail}`);
+    }
+    throw err;
+  }
 }
 
 export const backupApi = {
@@ -55,7 +84,7 @@ export const backupApi = {
    */
   history: async (limit: number = 20): Promise<HistoryResponse> => {
     const res = await fetch(`/api/backup/history?limit=${limit}`);
-    return unwrap<HistoryResponse>(res);
+    return parseJson<HistoryResponse>(res, "Loading backup history");
   },
 
   /**
@@ -71,9 +100,7 @@ export const backupApi = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ password, includeFiles }),
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error ?? "Export failed");
-    return data as ExportResponse;
+    return parseJson<ExportResponse>(res, "Exporting backup");
   },
 
   /**
@@ -96,8 +123,6 @@ export const backupApi = {
       },
       body: encrypted,
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error ?? "Import failed");
-    return data as ImportResponse;
+    return parseJson<ImportResponse>(res, "Restoring backup");
   },
 };

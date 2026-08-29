@@ -85,7 +85,7 @@ export async function refreshProviderModels(
       removed: 0,
       message: discovered
         ? "No models returned by the provider"
-        : "Auto-discovery unavailable, and no default models exist",
+        : "Auto-discovery unavailable; models unchanged",
     };
   }
 

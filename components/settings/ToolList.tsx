@@ -298,6 +298,16 @@ export function ToolList() {
         const arr = bySubgroup.get(sg);
         if (arr && arr.length) subgroups.push({ label: sg, tools: arr });
       }
+      // Any subgroup not in the curated display order (e.g. newly added tool
+      // groups) must still render — otherwise those tools are silently hidden
+      // from the page. Emit them sorted, after the ordered clusters.
+      const remaining = [...bySubgroup.keys()]
+        .filter((sg) => !SUBGROUP_ORDER.includes(sg))
+        .sort();
+      for (const sg of remaining) {
+        const arr = bySubgroup.get(sg);
+        if (arr && arr.length) subgroups.push({ label: sg, tools: arr });
+      }
       if (ungrouped.length) subgroups.push({ label: null, tools: ungrouped });
 
       out.push({ label: g.label, category: g.category, subgroups });

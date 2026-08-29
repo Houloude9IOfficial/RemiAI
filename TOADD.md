@@ -286,3 +286,7 @@ the ai users bash to write/edit/delete files, but it should use bash for command
 <!-- add native support for gemini, mistral, openrouter and groq -->
 
 <!-- on send/responding chatinput box does some kind of animation/transition that modifies it's size and position, and it should be smooth and not abrupt, and also it should not change the size and position of the chatinput box when sending/responding. -->
+
+<!-- when exporting backup for some setups: JSON.parse: unexpected character at line 1 column 1 of the JSON data -->
+
+<!-- fix anthropic provider not showing models (possibly failed fetching? idk) -->

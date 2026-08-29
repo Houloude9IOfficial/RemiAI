@@ -663,13 +663,19 @@ export async function readSessionFileMedia(
 // ---------------------------------------------------------------------------
 
 /**
- * Bundle the entire sandbox into a .zip archive (in-memory Buffer).
+ * Bundle a subfolder of the sandbox into a .zip archive.
+ * When `subfolder` is omitted the entire sandbox is zipped.
  * Directory structure is preserved using forward slashes.
  */
 export async function zipSessionFiles(
   conversationId: number,
+  subfolder?: string,
 ): Promise<Buffer> {
   const sandbox = getSessionDir(conversationId);
+  const startDir = subfolder
+    ? await resolveSessionPath(conversationId, subfolder)
+    : sandbox;
+  const stripPrefix = subfolder ? subfolder.replace(/\\/g, "/").replace(/^\/+/, "") + "/" : "";
   const files: Record<string, Uint8Array> = {};
 
   async function walk(dir: string) {
@@ -693,13 +699,25 @@ export async function zipSessionFiles(
 
   let exists = true;
   try {
-    await fs.access(sandbox);
+    await fs.access(startDir);
   } catch {
     exists = false;
   }
 
   if (exists) {
-    await walk(sandbox);
+    await walk(startDir);
+  }
+
+  // When zipping a subfolder, strip the prefix so the zip root is the
+  // subfolder itself (e.g. canvas/calculator/index.html → index.html).
+  if (stripPrefix) {
+    const stripped: Record<string, Uint8Array> = {};
+    for (const [k, v] of Object.entries(files)) {
+      if (k.startsWith(stripPrefix)) {
+        stripped[k.slice(stripPrefix.length)] = v;
+      }
+    }
+    Object.assign(files, stripped);
   }
 
   const zipped = zipSync(files, { level: 6 });

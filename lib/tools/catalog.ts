@@ -366,6 +366,18 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     togglable: false,
     requiresApiKey: false,
   },
+  // ── Canvas (builtin, always on) ──
+  {
+    id: "canvas_tools",
+    name: "Canvas",
+    description:
+      "Create interactive, buildable web projects — self-contained HTML/CSS/JS shown in a live preview + code editor panel the user can run and edit. Websites, apps, calculators, games, dashboards, interactive demos.",
+    toolNames: ["canvas_create", "canvas_add_file", "canvas_list", "canvas_open"],
+    category: "builtin",
+    subgroup: "Build",
+    togglable: false,
+    requiresApiKey: false,
+  },
   // ── ElevenLabs Voice (integration, togglable, needs API key) ──
   {
     id: "elevenlabs",

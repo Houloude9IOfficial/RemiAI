@@ -36,6 +36,14 @@ import {
   dispatchSessionFilesPresent,
   type SessionFilesPresentDetail,
 } from "@/lib/api/session-files";
+import {
+  ResizableCanvasPanel,
+  CanvasPanel,
+} from "@/components/chat/CanvasPanel";
+import {
+  CANVAS_PRESENT_EVENT,
+  type CanvasPresentDetail,
+} from "@/lib/api/canvas";
 import { cn } from "@/lib/utils";
 import { errorToDisplayMessage } from "@/lib/chat/error-payload";
 import { userContextHeaders } from "@/lib/chat/user-context";
@@ -381,6 +389,10 @@ function ConversationChat({
   // When the AI presents a single file (session_present_file), the panel
   // opens straight to that file in the viewer.
   const [panelFocusPath, setPanelFocusPath] = useState<string | null>(null);
+  // Canvas panel — an interactive web-project preview+editor that shares the
+  // same right-side slot as session files (they don't stack on narrow screens).
+  const [canvasOpen, setCanvasOpen] = useState(false);
+  const [canvasFocusSlug, setCanvasFocusSlug] = useState<string | null>(null);
   const { activeStreams, startStream, endStream } = useStreamingContext();
 
   // Auto-open the session files panel when the AI calls session_present_files
@@ -390,9 +402,25 @@ function ConversationChat({
       const detail = (event as CustomEvent<SessionFilesPresentDetail>).detail;
       if (detail?.focusPath) setPanelFocusPath(detail.focusPath);
       setPanelOpen(true);
+      // a canvas and session files share the slot — opening files closes canvas
+      setCanvasOpen(false);
     };
     window.addEventListener(SESSION_FILES_PRESENT_EVENT, handler);
     return () => window.removeEventListener(SESSION_FILES_PRESENT_EVENT, handler);
+  }, []);
+
+  // Auto-open the canvas panel when the AI presents a canvas (canvas_open).
+  // Closes the session files panel so the two never stack in the same slot.
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<CanvasPresentDetail>).detail;
+      setCanvasFocusSlug(detail?.slug ?? null);
+      setCanvasOpen(true);
+      setPanelOpen(false);
+      setPanelFocusPath(null);
+    };
+    window.addEventListener(CANVAS_PRESENT_EVENT, handler);
+    return () => window.removeEventListener(CANVAS_PRESENT_EVENT, handler);
   }, []);
 
   // Persist mode to DB whenever it changes
@@ -768,6 +796,12 @@ function ConversationChat({
   const closePanel = useCallback(() => {
     setPanelOpen(false);
     setPanelFocusPath(null);
+    setCanvasOpen(false);
+    setCanvasFocusSlug(null);
+  }, []);
+  const closeCanvasPanel = useCallback(() => {
+    setCanvasOpen(false);
+    setCanvasFocusSlug(null);
   }, []);
 
   // Fallback auto-present: when a finished assistant message created/edited
@@ -808,12 +842,14 @@ function ConversationChat({
       onClick={() => {
         if (panelOpen) setPanelFocusPath(null);
         setPanelOpen((o) => !o);
+        // canvas shares the slot — close it when toggling files
+        if (canvasOpen) closeCanvasPanel();
       }}
       aria-label="Toggle session files"
       title="Session files"
       className={cn(
         "inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-95",
-        panelOpen && "bg-primary/10 text-primary",
+        panelOpen && !canvasOpen && "bg-primary/10 text-primary",
       )}
     >
       <Files className="h-4 w-4" />
@@ -886,7 +922,7 @@ function ConversationChat({
       {/* ── Temporary-chat banner — hacky/temporary look, with a one-click
           way to make the chat permanent again. Only for temporary chats. */}
       {isTemporary && (
-        <div className="flex items-center gap-2 border-b border-dashed border-status-warning/40 bg-status-warning/[0.06] px-4 py-1.5 text-xs text-foreground/80">
+        <div className="flex items-center gap-2 border-b border-dashed border-status-warning/40 bg-status-warning/6 px-4 py-1.5 text-xs text-foreground/80">
           <Timer className="h-3.5 w-3.5 shrink-0 text-status-warning" />
           <span className="min-w-0 flex-1 truncate">
             Temporary chat · Memory {memoryEnabled ? "enabled" : "disabled"} · deleted after{" "}
@@ -1026,9 +1062,17 @@ function ConversationChat({
           )}
         </div>
 
-        {/* Desktop — inline right-side panel (user-resizable width) */}
+        {/* Desktop — inline right-side panel (user-resizable width). The canvas
+            and session-files panels share this slot; they never stack. */}
         <AnimatePresence>
-          {panelOpen && (
+          {canvasOpen && (
+            <ResizableCanvasPanel
+              conversationId={conversationId}
+              onClose={closeCanvasPanel}
+              focusSlug={canvasFocusSlug}
+            />
+          )}
+          {!canvasOpen && panelOpen && (
             <ResizableSessionFilesPanel
               conversationId={conversationId}
               onClose={closePanel}
@@ -1039,7 +1083,31 @@ function ConversationChat({
 
         {/* Mobile — full-height drawer over the chat */}
         <AnimatePresence>
-          {panelOpen && (
+          {canvasOpen && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setCanvasOpen(false)}
+                className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm md:hidden"
+              />
+              <motion.div
+                initial={{ x: "100%" }}
+                animate={{ x: 0 }}
+                exit={{ x: "100%" }}
+                transition={{ type: "spring", stiffness: 380, damping: 34 }}
+                className="fixed inset-y-0 right-0 z-50 w-[85vw] max-w-sm md:hidden"
+              >
+                <CanvasPanel
+                  conversationId={conversationId}
+                  onClose={closeCanvasPanel}
+                  focusSlug={canvasFocusSlug}
+                />
+              </motion.div>
+            </>
+          )}
+          {!canvasOpen && panelOpen && (
             <>
               <motion.div
                 initial={{ opacity: 0 }}

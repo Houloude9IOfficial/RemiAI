@@ -722,6 +722,31 @@ After writing or editing session files, **always** call \`session_present_file\`
 - The sandbox is **scoped to this conversation** — other chats can't see these files, and they don't touch the user's real directories.
 - Deleting a conversation removes its sandbox files.`,
 
+  "canvas": `## Canvas — interactive buildable web projects
+
+The **canvas** tool family creates a self-contained, runnable web project (HTML/CSS/JS) shown in a live **preview + code editor** panel. Use a canvas when the user wants something they can actually run and play with — a website, small app, calculator, game, quiz, dashboard, timer, interactive demo or prototype.
+
+A canvas is DIFFERENT from \`create_visual\` (a static inline chart/card) and from a plain session file — prefer a canvas for buildable, interactive output.
+
+### Tools
+| Tool | Parameters | Purpose |
+|---|---|---|
+| \`canvas_create\` | \`name\`, \`description?\`, \`entryFile?\` | Establish a canvas project (writes a starter \`index.html\` + manifest) and return its slug. |
+| \`canvas_add_file\` | \`slug\`, \`name\` | Scaffold a placeholder file inside an existing canvas. |
+| \`canvas_list\` | — | List every canvas in this conversation. |
+| \`canvas_open\` | \`slug\` | Open a canvas in the interactive panel (live preview + code editor). |
+
+### Standard workflow
+1. **\`canvas_create({ name, description, entryFile })\`** — establishes the project and returns the slug.
+2. **Write the project files** with \`session_file_write\` / \`session_file_edit\` under the **\`canvas/{slug}/\`** prefix (e.g. \`canvas/{slug}/index.html\`, \`canvas/{slug}/style.css\`, \`canvas/{slug}/script.js\`, plus any assets). Always forward slashes.
+3. **\`canvas_open({ slug })\`** — present it in the panel. **Always end by opening the canvas** so the user sees the live result.
+
+### Design guidance
+- Ground colors in the subject; 2-3 colors max; clean, intentional whitespace.
+- Make the entry file (default \`index.html\`) self-contained or reference the sibling files with relative paths (\`./style.css\`, \`./script.js\`).
+- Prioritize a working interactive experience (JS included) over long prose.
+- To iterate on an existing canvas: \`canvas_list\`, edit files with \`session_file_edit\` under the canvas prefix, then \`canvas_open\` again to refresh the preview.`,
+
   "elevenlabs": `## ElevenLabs Voice (when configured)
 
 ElevenLabs provides premium AI voice capabilities. When configured with an API key, it powers two features:
@@ -913,6 +938,13 @@ const KEYWORD_SYNONYMS: Record<string, string> = {
   website: "session-files",
   "generate website": "session-files",
   artifact: "session-files",
+  canvas: "canvas",
+  canvases: "canvas",
+  "interactive page": "canvas",
+  "web app": "canvas",
+  "build me a website": "canvas",
+  prototype: "canvas",
+  mockup: "canvas",
 };
 
 // ---------------------------------------------------------------------------
@@ -923,12 +955,10 @@ const TOPIC_NAMES = Object.keys(TOOL_HELP_DOCS).sort();
 
 function getAvailableTopicsText(): string {
   return TOPIC_NAMES.map((t) => `- \`${t}\``).join("\n");
-}
-
-// Use a shorter inline list for the tool description (the full list is in the
-// system prompt and is returned when the user asks for an invalid topic)
-const SHORT_TOPIC_LIST =
-  "filesystem, memory, profile, todo, file-index, ask-questions, suggest-followups, agent-spawner, scheduled-tasks, routines, delay, create-visual, session-files, newsapi, firecrawl, brave-search, notion, context7, elevenlabs, playwright, code-execution, document-reader, media, @FILE-references, scaffolding, absolute-paths, web-fetch, mcp-tools, file-attachments, start-of-conversation";
+}  // Use a shorter inline list for the tool description (the full list is in the
+  // system prompt and is returned when the user asks for an invalid topic)
+  const SHORT_TOPIC_LIST =
+    "filesystem, memory, profile, todo, file-index, ask-questions, suggest-followups, agent-spawner, scheduled-tasks, routines, delay, create-visual, session-files, canvas, newsapi, firecrawl, brave-search, notion, context7, elevenlabs, playwright, code-execution, document-reader, media, @FILE-references, scaffolding, absolute-paths, web-fetch, mcp-tools, file-attachments, start-of-conversation";
 
 // ---------------------------------------------------------------------------
 // Cached listing for list_available_tools — built once from TOOL_CATALOG
@@ -996,6 +1026,8 @@ const HELP_TOPIC_MAP: Record<string, string | null> = {
   elevenlabs: "elevenlabs",
   create_visual: "create-visual",
   session_files: "session-files",
+  canvas_tools: "canvas",
+  canvas: "canvas",
   firecrawl: "firecrawl",
   playwright: "playwright",
   media_tools: "media",

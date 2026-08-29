@@ -68,6 +68,7 @@ Every chat gets its own **sandboxed session folder** that the AI can read and wr
 - **Built-in code editor** — edit text and code files with a theme-aware editor featuring syntax highlighting (JS, Python, Markdown, JSON, SQL, HTML, CSS, YAML, and more)
 - **Media previews** — images, audio, and video render inline
 - **Resizable panel** — the session files panel in chat can be resized to your liking
+- **Canvas** — create and edit interactive multi-file web projects (HTML/CSS/JS) with a live preview panel and built-in code editor, directly from chat
 - **Chat-scoped artifacts** — presented session-file outputs are saved as versioned metadata on the originating chat and can be reopened after reload
 - **Artifact listing** — inspect saved outputs at `/api/conversations/{id}/artifacts`; file content remains in the chat's session sandbox
 
@@ -123,6 +124,7 @@ Spawn specialized sub-agents for complex tasks, keeping the main conversation fo
 - `get_time_details` — current date/time/timezone
 - `get_device_details` — browser, OS, and device info
 - `browser_open` / `browser_click` / `browser_fill` / `browser_extract` / `browser_screenshot` / `browser_interact` — native Playwright browser automation (headless Chromium; toggle in Settings > Tools > Browser Automation)
+- `canvas_create` / `canvas_add_file` / `canvas_list` / `canvas_open` — interactive multi-file web project creation with live preview panel
 
 **Optional external integrations (toggle on/off with API key management):**
 
@@ -361,7 +363,7 @@ The container listens on `0.0.0.0:3000` internally. TLS termination, firewall ru
 
 Every GitHub Release with a `v`-prefixed tag automatically builds the Docker image and pushes it to the GitHub Container Registry (GHCR) — your server does **not** need to build the image itself. The workflow lives in `.github/workflows/docker-release.yml` and runs on the `release: published` event only; pushes to `main` never trigger it.
 
-Two image tags are produced per release:
+Images are built for **both AMD64 and ARM64** architectures. Two image tags are produced per release:
 
 - `ghcr.io/houloude9iofficial/remiai:<tag>` — pinned to the release tag
 - `ghcr.io/houloude9iofficial/remiai:latest` — always points to the newest release
