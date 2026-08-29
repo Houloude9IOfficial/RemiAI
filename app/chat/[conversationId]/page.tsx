@@ -922,7 +922,7 @@ function ConversationChat({
       {/* ── Temporary-chat banner — hacky/temporary look, with a one-click
           way to make the chat permanent again. Only for temporary chats. */}
       {isTemporary && (
-        <div className="flex items-center gap-2 border-b border-dashed border-status-warning/40 bg-status-warning/[0.06] px-4 py-1.5 text-xs text-foreground/80">
+        <div className="flex items-center gap-2 border-b border-dashed border-status-warning/40 bg-status-warning/6 px-4 py-1.5 text-xs text-foreground/80">
           <Timer className="h-3.5 w-3.5 shrink-0 text-status-warning" />
           <span className="min-w-0 flex-1 truncate">
             Temporary chat · Memory {memoryEnabled ? "enabled" : "disabled"} · deleted after{" "}

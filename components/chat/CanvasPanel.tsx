@@ -145,7 +145,7 @@ export function CanvasPanel({
 
   if (!canvas) {
     return (
-      <div className="flex h-full w-full flex-col border-l border-border/60 bg-muted/[0.25]">
+      <div className="flex h-full w-full flex-col border-l border-border/60 bg-muted/25">
         <PanelHeader onClose={onClose} title="Canvas" subtitle="Interactive buildable projects" />
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-10 text-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted">
@@ -165,7 +165,7 @@ export function CanvasPanel({
   const fileCount = canvas.files.filter((f) => f.isFile).length;
 
   return (
-    <div className="flex h-full w-full flex-col border-l border-border/60 bg-muted/[0.25]">
+    <div className="flex h-full w-full flex-col border-l border-border/60 bg-muted/25">
       <PanelHeader
         onClose={onClose}
         title={canvas.name}
@@ -396,7 +396,7 @@ function CanvasPreview({
   if (error) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-        <div className="rounded-lg border border-destructive/20 bg-destructive/[0.04] p-4 text-sm text-destructive max-w-sm">
+        <div className="rounded-lg border border-destructive/20 bg-destructive/4 p-4 text-sm text-destructive max-w-sm">
           Preview failed: {error}
         </div>
         <button type="button" onClick={() => setRetryCount((v) => v + 1)}
@@ -553,7 +553,7 @@ function CanvasEditor({
         {isLoading ? (
           <div className="flex flex-1 items-center justify-center text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" /></div>
         ) : isEditableFile(entry?.name ?? "") ? (
-          <div className="min-h-0 flex-1 overflow-auto bg-muted/[0.15]">
+          <div className="min-h-0 flex-1 overflow-auto bg-muted/15">
             <CodeMirror theme={isDark ? "dark" : "light"} value={value} onChange={(v) => { if (selectedFile) setUserEdits((prev) => ({ ...prev, [selectedFile]: v })); }}
               extensions={extensions} height="100%" className="h-full"
               basicSetup={{ foldGutter: true, autocompletion: true, highlightActiveLine: true, highlightActiveLineGutter: false }} />
@@ -587,7 +587,7 @@ function FileTreeCanvas({
 
   if (files.length === 0) {
     return (
-      <div className="flex w-40 shrink-0 flex-col items-center justify-center gap-2 border-r border-border/60 bg-muted/[0.15] p-3 text-center">
+      <div className="flex w-40 shrink-0 flex-col items-center justify-center gap-2 border-r border-border/60 bg-muted/15 text-center">
         <Files className="h-5 w-5 text-muted-foreground/40" />
         <p className="text-[10px] text-muted-foreground">No editable files</p>
       </div>
@@ -595,7 +595,7 @@ function FileTreeCanvas({
   }
 
   return (
-    <div className="w-44 shrink-0 overflow-y-auto border-r border-border/60 bg-muted/[0.15] p-1.5 custom-scrollbar">
+    <div className="w-44 shrink-0 overflow-y-auto border-r border-border/60 bg-muted/15 p-1.5 custom-scrollbar">
       {tree.map((node) => <TreeRow key={node.path} node={node} depth={0} collapsed={collapsed} onToggleDir={toggleDir} selected={selected === node.path} onSelect={onSelect} />)}
     </div>
   );
