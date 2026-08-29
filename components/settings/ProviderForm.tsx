@@ -149,6 +149,15 @@ export function ProviderForm() {
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
               />
+              {kind === "anthropic" && (
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  Use a standard (legacy) API key from the Anthropic Console.{" "}
+                  <span className="font-medium text-foreground">Identity-linked</span> ({""}
+                  workspace-scoped) keys require an <code>anthropic-workspace-id</code> header and
+                  won&apos;t return models here. If you set one up and no models show up, this is
+                  why. Create a fresh "unlinked" key at console.anthropic.com and paste it above.
+                </p>
+              )}
             </div>
 
             {needsBaseUrl && (

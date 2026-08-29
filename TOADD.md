@@ -289,4 +289,4 @@ the ai users bash to write/edit/delete files, but it should use bash for command
 
 <!-- when exporting backup for some setups: JSON.parse: unexpected character at line 1 column 1 of the JSON data -->
 
-fix anthropic provider not showing models (possibly failed fetching? idk)
+<!-- fix anthropic provider not showing models (possibly failed fetching? idk) -->
