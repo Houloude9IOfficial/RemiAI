@@ -406,6 +406,8 @@ function getToolLabel(toolName: string): ToolLabel {
 
 function getGroupLabel(parts: AnyToolPart[]): ToolLabel {
   let best: ToolLabel | null = null;
+  let sessionWriteCount = 0;
+  let sessionWriteCreates = 0;
   for (const part of parts) {
     if (!part || typeof part !== "object") continue;
     let name: string;
@@ -414,8 +416,18 @@ function getGroupLabel(parts: AnyToolPart[]): ToolLabel {
     } catch {
       continue;
     }
+    const bare = bareToolName(name);
+    if (bare === "session_file_write") {
+      sessionWriteCount++;
+      const output = asRecord(getOutput(part));
+      if (output && output.created === true) sessionWriteCreates++;
+    }
     const label = getToolLabel(name);
     if (label !== FALLBACK_LABEL) best = label;
+  }
+  // If ALL session_file_write calls were updates (zero creates), show "Updated"
+  if (sessionWriteCount > 0 && sessionWriteCreates === 0 && best) {
+    return { present: "Updating session file", past: "Updated session file", icon: best.icon };
   }
   return best ?? FALLBACK_LABEL;
 }

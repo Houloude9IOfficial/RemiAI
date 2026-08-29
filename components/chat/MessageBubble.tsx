@@ -23,6 +23,10 @@ import {
   SessionFilesPresentCard,
   SessionFilesPresentLoading,
 } from "./SessionFilesPresentCard";
+import {
+  CanvasPresentCard,
+  CanvasPresentLoading,
+} from "./CanvasPresentCard";
 import { cn } from "@/lib/utils";
 import {
   AttachedFileCard,
@@ -345,6 +349,7 @@ type Segment =
   | { type: "tool"; parts: UIMessage["parts"] }
   | { type: "visual"; part: UIMessage["parts"][number] }
   | { type: "sessionPresent"; part: UIMessage["parts"][number] }
+  | { type: "canvasPresent"; part: UIMessage["parts"][number] }
   | { type: "suggestions"; data: unknown }
   | { type: "sources"; data: unknown };
 
@@ -539,6 +544,12 @@ function buildSegments(parts: UIMessage["parts"]): Segment[] {
         shortToolName === "session_present_file"
       ) {
         segments.push({ type: "sessionPresent", part });
+      } else if (
+        shortToolName === "canvas_create" ||
+        shortToolName === "canvas_open" ||
+        shortToolName === "canvas_add_file"
+      ) {
+        segments.push({ type: "canvasPresent", part });
       } else {
         const last = segments[segments.length - 1];
         if (last?.type === "tool") {
@@ -549,6 +560,14 @@ function buildSegments(parts: UIMessage["parts"]): Segment[] {
       }
     }
     // Skip step-start, source, file parts
+  }
+
+  // Deduplicate canvas present cards: keep only the LAST one so the user
+  // sees a single card at the end of the message, not one per canvas_* call.
+  const lastCanvasIdx = segments.findLastIndex((s) => s.type === "canvasPresent");
+  if (lastCanvasIdx >= 0) {
+    const deduped = segments.filter((s, i) => s.type !== "canvasPresent" || i === lastCanvasIdx);
+    return mergeReasoningSegments(mergeInRowToolSegments(deduped));
   }
 
   return mergeReasoningSegments(mergeInRowToolSegments(segments));
@@ -761,6 +780,8 @@ export function MessageBubble({
                 key={`present-${idx}`}
                 part={segment.part}
               />
+            ) : segment.type === "canvasPresent" ? (
+              <CanvasPresentSegment key={`canvas-${idx}`} part={segment.part} />
             ) : (
               <ToolCallGroup
                 key={`tool-${idx}`}
@@ -909,4 +930,37 @@ function SessionFilesPresentSegment({ part }: { part: UIMessage["parts"][number]
   }
 
   return <SessionFilesPresentCard data={output} />;
+}
+
+// ── Canvas present segment — extracts output from canvas_* tool parts ──
+
+function CanvasPresentSegment({ part }: { part: UIMessage["parts"][number] }) {
+  const partObj = part as Record<string, unknown>;
+  const state = (partObj.state as string) ?? "call-result";
+  const output = partObj.output;
+
+  const isComplete = state === "output-available" || state === "approval-responded";
+  const isError = state === "output-error";
+
+  if (isError) {
+    return (
+      <div className="overflow-hidden rounded-xl border border-destructive/20 bg-destructive/[0.04] p-4 text-sm text-destructive">
+        Canvas could not be prepared — the tool call encountered an error.
+      </div>
+    );
+  }
+
+  if (!isComplete) {
+    return <CanvasPresentLoading />;
+  }
+
+  if (!output || typeof output !== "object") {
+    return (
+      <div className="overflow-hidden rounded-xl border border-destructive/20 bg-destructive/[0.04] p-4 text-sm text-destructive">
+        Canvas could not be rendered — unexpected output format.
+      </div>
+    );
+  }
+
+  return <CanvasPresentCard data={output} />;
 }

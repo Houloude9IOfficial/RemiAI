@@ -28,6 +28,7 @@ import {
   SYSTEM_PROMPT_BASE,
   SYSTEM_PROMPT_BASE_NO_MEMORY,
   CREATE_VISUAL_SECTION,
+  CANVAS_SECTION,
   RESEARCH_SECTION,
   SESSION_FILES_SECTION,
 } from "@/lib/chat/system-prompt";
@@ -79,6 +80,7 @@ import {
   buildMainSpawnAgentTool,
   buildGetAgentResultTool,
 } from "@/lib/tools/agent-spawner";
+import { buildCanvasTools } from "@/lib/canvas/tools";
 import { buildTodoTools } from "@/lib/tools/todo";
 import { buildFileIndexTools } from "@/lib/tools/file-index";
 import { buildSessionFileTools } from "@/lib/session-files/tools";
@@ -511,6 +513,14 @@ export async function POST(req: Request) {
     sourceRunId: trace.traceId,
   });
 
+  // Canvas tools — named multi-file interactive web projects (HTML/CSS/JS) shown
+  // in a live preview + code editor panel. The project files themselves are
+  // written with the session_file_* tools (scoped under canvas/{slug}/), so
+  // plan mode also blocks the canvas write tools below.
+  const canvasToolSet = memoryEnabled
+    ? buildCanvasTools({ conversationId, sourceRunId: trace.traceId })
+    : {};
+
   // Skills tools (list_skills, load_skill) — the "plugins" analog; hidden in
   // fully isolated (memory-disabled) chats just like ChatGPT temp chats ignore
   // plugins.
@@ -528,6 +538,8 @@ export async function POST(req: Request) {
     "session_file_mkdir",
     "session_file_move",
     "session_file_delete",
+    "canvas_create",
+    "canvas_add_file",
   ];
   const effectiveFsToolSet =
     mode === "plan"
@@ -543,6 +555,14 @@ export async function POST(req: Request) {
           ),
         )
       : sessionFileToolSet;
+  const effectiveCanvasToolSet =
+    mode === "plan"
+      ? Object.fromEntries(
+          Object.entries(canvasToolSet).filter(
+            ([key]) => !writeBlocklist.includes(key),
+          ),
+        )
+      : canvasToolSet;
 
   // Build mode-specific system prompt instructions
   const planModePrompt =
@@ -610,6 +630,7 @@ Definition of done:
     ...routineToolSet,
     ...scheduleToolSet,
     ...effectiveSessionFileToolSet,
+    ...effectiveCanvasToolSet,
     ...skillsToolSet,
   };
 
@@ -921,9 +942,16 @@ Definition of done:
   // change mid-request).
   const qualityPolicyPrompt = `\n\n## Quality policy — ${qualityStrategy.label}\nTask complexity estimate: ${qualityStrategy.complexity}. ${qualityStrategy.verificationGuidance}\nSelected model: ${selectedRouteCandidate.providerLabel} / ${selectedRouteCandidate.modelId}. Active route: ${qualityRoute.active.providerLabel} / ${qualityRoute.active.modelId}. ${qualityRoute.reason} Routing is deterministic and bounded; never make another provider call unless the Quality-first verifier is eligible.`;
 
+  // Canvas guidance — only injected when the canvas group is loaded (it rides
+  // on session files for writing, but the workflow guidance is canvas-specific
+  // and must not steer ordinary chats). Part of the dynamic prompt because it
+  // depends on activeToolGroups, which can change mid-request via
+  // load_tool_groups.
+  const canvasSection = activeToolGroups.has("canvas") ? CANVAS_SECTION : "";
+
   const dynamicSystemPromptBase =
     systemTip + profileTip + memoryTip + fileChangeTip + summarySection +
-    planModePrompt + buildModePrompt + activeSkillsSection + qualityPolicyPrompt;
+    planModePrompt + buildModePrompt + canvasSection + activeSkillsSection + qualityPolicyPrompt;
 
   const dynamicSystemPrompt = dynamicSystemPromptBase + toolAvailabilityNote;
 

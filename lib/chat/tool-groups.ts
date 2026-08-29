@@ -203,6 +203,25 @@ export const CONDITIONAL_GROUPS: Record<string, ToolGroup> = {
       "visualization",
     ],
   },
+  canvas: {
+    label: "canvas",
+    tools: [
+      "canvas_create",
+      "canvas_add_file",
+      "canvas_list",
+      "canvas_open",
+    ],
+    keywords: [
+      // Interactive / buildable deliverables — a canvas is a runnable,
+      // editable web project, not just a static visual or file.
+      "interactive", "playable", "build a website", "create a website",
+      "build me a website", "make a website", "web app", "interactive page",
+      "canvas", "drag and drop", "quiz app", "game", "stopwatch", "timer",
+      "calculator", "habit tracker", "to-do app", "kanban", "prototype",
+      "mockup", "interactive demo", "simulation", "pomodoro", "snake",
+      "pong", "light/dark toggle", "theme switcher",
+    ],
+  },
   scheduling: {
     label: "scheduled-tasks",
     tools: [
@@ -488,6 +507,11 @@ export function computeActiveToolGroups(opts: {
   for (const group of stored.recent) {
     active.add(group);
   }
+
+  // A canvas is built with session_file_* tools under canvas/{slug}/, so
+  // activating the canvas group must also load session_files — otherwise the
+  // model could create a canvas but lack the tools to write its files.
+  if (active.has("canvas")) active.add("session_files");
 
   return active;
 }
