@@ -126,19 +126,44 @@ export function ActivityDisclosure({
             transition={{ duration: 0.35, ease: [0.32, 0.72, 0, 1] }}
             className="overflow-hidden"
           >
-            <div className="mt-1.5 flex flex-col gap-1.5">
-              {reasoning?.text.trim() && (
-                <div className="border-l border-border/70 pl-3 text-sm leading-6 text-muted-foreground">
-                  <MarkdownRenderer
-                    content={reasoning.text}
-                    isStreaming={reasoning.isStreaming}
-                    className="text-sm leading-6 [&_.markdown-body]:text-sm"
-                  />
-                </div>
+            <div className="relative mt-1.5">
+              {/* One continuous rail from the reasoning dot through every
+                  tool call, so the chain reads as a single connected line.
+                  The x-position matches the trace's connectors (its rows sit
+                  inside a p-1.5 container + left-1.5 = 12px) and each dot's
+                  bg-background masks the rail behind it. Only drawn when
+                  tools follow — a reasoning-only run has nothing to connect. */}
+              {hasTools && (
+                <span
+                  className="absolute bottom-3 left-3 top-2 w-px bg-border/60"
+                  aria-hidden="true"
+                />
               )}
-              {toolGroups.map((group, idx) => (
-                <ToolCallGroup key={`trace-${idx}`} parts={group.parts} headerless />
-              ))}
+              <div className="flex flex-col gap-1.5">
+                {reasoning?.text.trim() && (
+                  <div className="relative pl-5 ml-1.5">
+                    {/* Reasoning dot — same size/x-offset as the trace dots
+                        (ml-1.5 mirrors the trace's p-1.5), so the rail
+                        passes through it and continues down into the tools. */}
+                    <span
+                      className="absolute left-0 top-2 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-background text-muted-foreground"
+                      aria-hidden="true"
+                    >
+                      <Brain className="h-3 w-3" />
+                    </span>
+                    <div className="text-sm leading-6 text-muted-foreground">
+                      <MarkdownRenderer
+                        content={reasoning.text}
+                        isStreaming={reasoning.isStreaming}
+                        className="text-sm leading-6 [&_.markdown-body]:text-sm"
+                      />
+                    </div>
+                  </div>
+                )}
+                {toolGroups.map((group, idx) => (
+                  <ToolCallGroup key={`trace-${idx}`} parts={group.parts} headerless />
+                ))}
+              </div>
             </div>
           </motion.div>
         )}
