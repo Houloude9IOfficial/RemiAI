@@ -1422,7 +1422,7 @@ Definition of done:
               changedFiles,
               checks,
               summary: buildSummary,
-              error: capturedErrorPayload?.message ?? null,
+              error: capturedErrorPayload?.detail ?? capturedErrorPayload?.message ?? null,
               checkpoint: finalCheckpoint,
               resultArtifactId,
             });
@@ -1436,7 +1436,7 @@ Definition of done:
               changedFiles,
               checks,
               summary: buildSummary,
-              error: capturedErrorPayload?.message ?? null,
+              error: capturedErrorPayload?.detail ?? capturedErrorPayload?.message ?? null,
               checkpoint: finalCheckpoint,
               resultArtifactId,
             });

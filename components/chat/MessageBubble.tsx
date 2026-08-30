@@ -50,6 +50,20 @@ const MARKDOWN_SYNTAX = new Set([
   "*", "#", "`", ">", "-", "_", "[", "]", "(", ")", "!", "~", "|", "\\", "&",
 ]);
 
+// A single character waits at most this long before fading in. Without a
+// cap, every new character in a flush gets `i * 12ms` of delay — a 2,000-
+// char answer (common at the end of a big multi-tool run, or from buffered
+// proxy providers that emit huge deltas) would leave its tail invisible for
+// ~24 seconds with `animation-fill-mode: both` (opacity: 0 before start).
+// The chat then looks blank / partially rendered while streaming.
+const MAX_LETTER_FADE_DELAY_MS = 240;
+
+// Flushes larger than this skip the letter-by-letter treatment entirely and
+// render as plain text: thousands of individually animated spans freeze the
+// tab, and capping the delay alone would still flash hundreds of characters
+// on at once. Big chunks appear immediately instead.
+const MAX_FADE_CHARS_PER_FLUSH = 120;
+
 /**
  * Wraps each non-markdown-syntax character in the `newChars` portion of
  * `text` in an individually animated `<span>`. The `prevLength` is the
@@ -72,6 +86,10 @@ function wrapNewCharsWithFadeIn(text: string, prevLength: number): string {
   const before = text.slice(0, prevLength);
   const toWrap = text.slice(prevLength);
 
+  // Large single flushes render immediately — the typewriter effect is only
+  // worth its cost for small deltas (see MAX_FADE_CHARS_PER_FLUSH).
+  if (toWrap.length > MAX_FADE_CHARS_PER_FLUSH) return text;
+
   let result = "";
   for (let i = 0; i < toWrap.length; i++) {
     const char = toWrap[i];
@@ -80,7 +98,7 @@ function wrapNewCharsWithFadeIn(text: string, prevLength: number): string {
     if (MARKDOWN_SYNTAX.has(char) || /\s/.test(char)) {
       result += char;
     } else {
-      const delay = i * 12; // 12ms between each character
+      const delay = Math.min(i * 12, MAX_LETTER_FADE_DELAY_MS); // 12ms per char, capped
       // Escape HTML special characters to prevent injection
       const escaped = char === "&" ? "&amp;" : char === "<" ? "&lt;" : char === ">" ? "&gt;" : char === '"' ? "&quot;" : char;
       result += `<span class="animate-letter-fade-in" style="animation-delay:${delay}ms;color:inherit">${escaped}</span>`;
