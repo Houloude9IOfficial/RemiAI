@@ -188,7 +188,7 @@ function ChatLoadError({
       : "Couldn't load this conversation";
 
   return (
-    <div className="flex flex-1 flex-col h-full">
+    <div className="relative flex min-h-full flex-1 items-center justify-center overflow-hidden px-6 py-16">
       <ChatMobileHeader onToggleSidebar={onToggleSidebar} />
       <div className="flex flex-1 items-start justify-center overflow-y-auto p-6">
         <div className="w-full max-w-md pt-8">
