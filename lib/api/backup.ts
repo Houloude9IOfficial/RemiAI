@@ -97,6 +97,7 @@ export const backupApi = {
   ): Promise<ExportResponse> => {
     const res = await fetch("/api/backup/export", {
       method: "POST",
+      cache: "no-store",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ password, includeFiles }),
     });

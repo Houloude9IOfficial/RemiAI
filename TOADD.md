@@ -290,3 +290,7 @@ the ai users bash to write/edit/delete files, but it should use bash for command
 <!-- when exporting backup for some setups: JSON.parse: unexpected character at line 1 column 1 of the JSON data -->
 
 <!-- fix anthropic provider not showing models (possibly failed fetching? idk) -->
+
+<!-- backup export fails on a VPS setup: Exporting backup failed — server returned a non-JSON response (503 , content-type: text/plain; charset=utf-8): "no available server" -->
+
+allow / to be used as a command to allow running commands, e.g mcp tagging (and their specific tools), allow tool tagging, file tagging and other tags/commands.

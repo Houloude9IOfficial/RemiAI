@@ -56,6 +56,9 @@ export async function proxy(request: NextRequest) {
   // The public URL may not be reachable from inside the Docker container
   // (DNS resolution, TLS termination, or reverse proxy routing issues).
   try {
+    // In a container, PORT is the internal Next.js port. Do not use the
+    // host-published port here; that can point back at the reverse proxy and
+    // produce intermittent 502s during authenticated API requests.
     const port = process.env.PORT || "3000";
     const status = await fetch(`http://127.0.0.1:${port}/api/auth/status`, {
       headers: { cookie: request.headers.get("cookie") ?? "" },
