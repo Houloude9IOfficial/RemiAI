@@ -7,7 +7,7 @@ import {
 } from "@/lib/fs/access";
 import { SESSION_FILES_DIR } from "@/lib/paths";
 import { emitSessionFilesChanged } from "./events";
-import { buildBoundedLineDiff } from "@/lib/build/diff";
+import { buildBoundedLineDiff, countLineDiff } from "@/lib/build/diff";
 
 // ---------------------------------------------------------------------------
 // Session file sandbox storage
@@ -337,6 +337,7 @@ export async function writeSessionFile(
   });
 
   const linesWritten = content.length === 0 ? 0 : content.split("\n").length;
+  const afterContent = writeMode === "append" ? `${previousContent}${content}` : content;
   let linesAdded = 0;
   let linesRemoved = 0;
   if (writeMode === "append") {
@@ -344,11 +345,12 @@ export async function writeSessionFile(
   } else if (created || previousLines === null) {
     linesAdded = linesWritten;
   } else {
-    linesAdded = Math.max(0, linesWritten - previousLines);
-    linesRemoved = Math.max(0, previousLines - linesWritten);
+    // Git-style diff: a rewritten line counts as +1/−1, not 0/0.
+    ({ added: linesAdded, removed: linesRemoved } = countLineDiff(
+      previousContent,
+      afterContent,
+    ));
   }
-
-  const afterContent = writeMode === "append" ? `${previousContent}${content}` : content;
   return {
     wrote: Buffer.byteLength(content, "utf-8"),
     path: targetPath,
@@ -404,12 +406,13 @@ export async function editSessionFile(
     operation: "edit",
     path: normalizeSessionPath(relativePath),
   });
+  const { added, removed } = countLineDiff(content, updatedContent);
   return {
     path: targetPath,
     relativePath: normalizeSessionPath(relativePath),
     bytesChanged: Math.abs(Buffer.byteLength(newStr, "utf-8") - Buffer.byteLength(oldStr, "utf-8")),
-    linesAdded: Math.max(0, newStr.split("\n").length - oldStr.split("\n").length),
-    linesRemoved: Math.max(0, oldStr.split("\n").length - newStr.split("\n").length),
+    linesAdded: added,
+    linesRemoved: removed,
     diffPreview: buildBoundedLineDiff(content, updatedContent),
   };
 }

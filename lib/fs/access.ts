@@ -3,6 +3,7 @@ import path from "node:path";
 import type { Dirent } from "node:fs";
 import { spawnSync } from "node:child_process";
 import Fuse from "fuse.js";
+import { countLineDiff } from "@/lib/build/diff";
 import { db } from "@/db";
 import { directories } from "@/db/schema";
 import { UPLOAD_DIR } from "@/lib/paths";
@@ -1068,12 +1069,11 @@ export async function writeFile(
   const writeMode = mode === "append" ? "append" : "overwrite";
   const normalizedRel = normalizePath(relativePath);
 
-  // Snapshot prior line count for mixed-precision +/- summary
-  let previousLines: number | null = null;
+  // Snapshot prior content for a git-style +/- summary
+  let previousContent: string | null = null;
   let created = true;
   try {
-    const existing = await fs.readFile(targetPath, "utf-8");
-    previousLines = existing.split("\n").length;
+    previousContent = await fs.readFile(targetPath, "utf-8");
     created = false;
   } catch {
     // File does not exist yet — treat as create
@@ -1101,11 +1101,14 @@ export async function writeFile(
   let linesRemoved = 0;
   if (writeMode === "append") {
     linesAdded = linesWritten;
-  } else if (created || previousLines === null) {
+  } else if (created || previousContent === null) {
     linesAdded = linesWritten;
   } else {
-    linesAdded = Math.max(0, linesWritten - previousLines);
-    linesRemoved = Math.max(0, previousLines - linesWritten);
+    // Git-style diff: a rewritten line counts as +1/−1, not 0/0.
+    ({ added: linesAdded, removed: linesRemoved } = countLineDiff(
+      previousContent,
+      content,
+    ));
   }
 
   return {
@@ -1159,12 +1162,13 @@ export async function editFile(
   }
   const updated = content.replace(oldStr, newStr);
   await fs.writeFile(targetPath, updated, "utf-8");
+  const { added, removed } = countLineDiff(content, updated);
   return {
     path: targetPath,
     relativePath: normalizePath(relativePath),
     bytesChanged: Math.abs(Buffer.byteLength(newStr, "utf-8") - Buffer.byteLength(oldStr, "utf-8")),
-    linesAdded: Math.max(0, newStr.split("\n").length - oldStr.split("\n").length),
-    linesRemoved: Math.max(0, oldStr.split("\n").length - newStr.split("\n").length),
+    linesAdded: added,
+    linesRemoved: removed,
   };
 }
 

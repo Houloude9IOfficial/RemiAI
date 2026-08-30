@@ -36,6 +36,11 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { FilePickerDialog } from "./FilePickerDialog";
+import {
+  SlashCommandMenu,
+  type SlashLevel,
+  type SlashCommandMenuHandle,
+} from "./SlashCommandMenu";
 import { ChatModelSelector } from "./ChatModelSelector";
 import { dispatchSessionFilesChanged } from "@/lib/api/session-files";
 import { toast } from "sonner";
@@ -217,6 +222,16 @@ export function ChatInput({
   const [text, setText] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // -----------------------------------------------------------------------
+  // Slash-command menu (/mcp, /tool, /file, mode commands)
+  // -----------------------------------------------------------------------
+  const [slashLevel, setSlashLevel] = useState<SlashLevel | null>(null);
+  const [slashQuery, setSlashQuery] = useState("");
+  // Index of the "/" that started the active command token — the menu
+  // replaces everything from here up to the cursor when a marker is inserted.
+  const slashAnchorRef = useRef(-1);
+  const slashMenuRef = useRef<SlashCommandMenuHandle>(null);
   const [fileDialogOpen, setFileDialogOpen] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
@@ -320,19 +335,19 @@ export function ChatInput({
     }
   }, [disabled]);
 
-  // Auto-resize textarea
-  const resize = () => {
+  // Auto-resize textarea (stable identity so callbacks can depend on it)
+  const resize = useCallback(() => {
     const el = inputRef.current;
     if (!el) return;
     el.style.height = "auto";
     const next = Math.min(el.scrollHeight, MAX_HEIGHT);
     el.style.height = `${next}px`;
     el.style.overflowY = el.scrollHeight > MAX_HEIGHT ? "auto" : "hidden";
-  };
+  }, []);
 
   useEffect(() => {
     resize();
-  }, [text]);
+  }, [text, resize]);
 
   // Build history can request a safe continuation without sending anything.
   // Append to existing text rather than silently replacing a user's draft.
@@ -351,7 +366,7 @@ export function ChatInput({
     };
     window.addEventListener(CHAT_INPUT_PREFILL_EVENT, onPrefill);
     return () => window.removeEventListener(CHAT_INPUT_PREFILL_EVENT, onPrefill);
-  }, []);
+  }, [resize]);
 
   // -----------------------------------------------------------------------
   // File selection from dialog
@@ -378,7 +393,7 @@ export function ChatInput({
         resize();
       });
     },
-    [text],
+    [text, resize],
   );
 
   // -----------------------------------------------------------------------
@@ -667,7 +682,7 @@ export function ChatInput({
         resize();
       });
     },
-    [text],
+    [text, resize],
   );
 
   // -----------------------------------------------------------------------
@@ -793,6 +808,144 @@ export function ChatInput({
   );
 
   // -----------------------------------------------------------------------
+  // Slash commands
+  // -----------------------------------------------------------------------
+
+  const closeSlashMenu = useCallback(() => {
+    setSlashLevel(null);
+    setSlashQuery("");
+    slashAnchorRef.current = -1;
+  }, []);
+
+  /**
+   * Re-run slash detection after text/cursor changes. Typing a `/` at the
+   * start of a word opens the command menu; on sub-levels (server/tool
+   * pickers) whatever follows the command word filters the list.
+   */
+  const updateSlashDetection = useCallback(
+    (value: string, pos: number) => {
+      let start = pos;
+      while (
+        start > 0 &&
+        value[start - 1] !== " " &&
+        value[start - 1] !== "\n"
+      ) {
+        start--;
+      }
+      const token = value.slice(start, pos);
+
+      if (!slashLevel) {
+        if (token.startsWith("/")) {
+          slashAnchorRef.current = start;
+          setSlashLevel({ kind: "command" });
+          setSlashQuery(token.slice(1));
+        }
+        return;
+      }
+
+      if (slashLevel.kind === "command") {
+        if (token.startsWith("/") && start === slashAnchorRef.current) {
+          setSlashQuery(token.slice(1));
+        } else {
+          closeSlashMenu();
+        }
+        return;
+      }
+
+      // Sub-level: filter by everything after the command word.
+      const rest = value.slice(slashAnchorRef.current);
+      const sp = rest.indexOf(" ");
+      setSlashQuery(sp === -1 ? "" : rest.slice(sp + 1).trim());
+    },
+    [slashLevel, closeSlashMenu],
+  );
+
+  /**
+   * Move between menu levels. Entering any sub-level normalizes the composer
+   * to just the command word (`/mcp postgres` → `/mcp `) with the cursor after
+   * the space, so whatever the user types next filters that level's list. The
+   * picked server is carried in the level, not in the text.
+   */
+  const handleSlashNavigate = useCallback(
+    (level: SlashLevel) => {
+      const el = inputRef.current;
+      const anchor = slashAnchorRef.current;
+      // Backing out to the command list leaves the composer untouched.
+      if (el && anchor >= 0 && level.kind !== "command") {
+        const commandWord = level.kind === "tools" ? "tool" : "mcp";
+        const next = `${el.value.slice(0, anchor)}/${commandWord} `;
+        setText(next);
+        requestAnimationFrame(() => {
+          el.focus();
+          el.setSelectionRange(next.length, next.length);
+          resize();
+        });
+      }
+      setSlashLevel(level);
+      setSlashQuery("");
+    },
+    [resize],
+  );
+
+  /** Replace the typed `/command …` region with a final marker. */
+  const applySlashInsert = useCallback(
+    (marker: string) => {
+      const el = inputRef.current;
+      const anchor = slashAnchorRef.current;
+      const cursor = el?.selectionStart ?? 0;
+      setText((prev) => {
+        if (anchor < 0) {
+          return prev.trim() ? `${prev.trim()} ${marker}` : marker;
+        }
+        const end = Math.max(cursor, anchor);
+        return `${prev.slice(0, anchor)}${marker}${prev.slice(end)}`;
+      });
+      closeSlashMenu();
+      requestAnimationFrame(() => {
+        if (el && anchor >= 0) {
+          el.focus();
+          el.setSelectionRange(anchor + marker.length, anchor + marker.length);
+        }
+        resize();
+      });
+    },
+    [closeSlashMenu, resize],
+  );
+
+  /** `/plan` / `/build` / `/goal` / `/chat` — switch mode, drop the token. */
+  const applySlashMode = useCallback(
+    (mode: ChatMode) => {
+      const el = inputRef.current;
+      const anchor = slashAnchorRef.current;
+      const cursor = el?.selectionStart ?? 0;
+      setText((prev) => {
+        if (anchor < 0) return prev;
+        return `${prev.slice(0, anchor)}${prev.slice(Math.max(cursor, anchor))}`;
+      });
+      closeSlashMenu();
+      onModeChange?.(mode);
+      requestAnimationFrame(() => {
+        el?.focus();
+        resize();
+      });
+    },
+    [closeSlashMenu, onModeChange, resize],
+  );
+
+  /** `/file` — clear the token and open the directory/file picker. */
+  const openFilePickerFromSlash = useCallback(() => {
+    const el = inputRef.current;
+    const anchor = slashAnchorRef.current;
+    const cursor = el?.selectionStart ?? 0;
+    setText((prev) => {
+      if (anchor < 0) return prev;
+      return `${prev.slice(0, anchor)}${prev.slice(Math.max(cursor, anchor))}`;
+    });
+    closeSlashMenu();
+    setFileDialogOpen(true);
+  }, [closeSlashMenu]);
+
+  // -----------------------------------------------------------------------
   // Submit
   // -----------------------------------------------------------------------
 
@@ -804,6 +957,8 @@ export function ChatInput({
   const submit = useCallback(() => {
     // Never send while a response is in flight — stop is the only action then.
     if (disabled || isStreaming) return;
+
+    closeSlashMenu();
 
     const uploadedFiles = attachedFiles.filter((f) => f.status === "uploaded");
     const hasAttachments = uploadedFiles.length > 0;
@@ -841,16 +996,74 @@ export function ChatInput({
         inputRef.current?.focus();
       });
     }
-  }, [disabled, isStreaming, attachedFiles, text, onSend, resize]);
+  }, [disabled, isStreaming, attachedFiles, text, onSend, resize, closeSlashMenu]);
+
+  /** Text change — keep the composer state and slash-command detection in sync. */
+  const handleInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const value = e.target.value;
+      const pos = e.target.selectionStart ?? value.length;
+      setText(value);
+      updateSlashDetection(value, pos);
+    },
+    [updateSlashDetection],
+  );
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (slashLevel) {
+        // While a slash menu is open the arrows/enter/tab/escape drive it.
+        switch (e.key) {
+          case "ArrowDown":
+            e.preventDefault();
+            slashMenuRef.current?.move(1);
+            return;
+          case "ArrowUp":
+            e.preventDefault();
+            slashMenuRef.current?.move(-1);
+            return;
+          case "ArrowRight":
+            // Drill into the highlighted item (command → server → tool).
+            e.preventDefault();
+            slashMenuRef.current?.activate();
+            return;
+          case "ArrowLeft":
+            // Step back to the previous section.
+            e.preventDefault();
+            slashMenuRef.current?.back();
+            return;
+          case "Escape":
+            e.preventDefault();
+            slashMenuRef.current?.back();
+            return;
+          case "Tab":
+            e.preventDefault();
+            slashMenuRef.current?.activate();
+            return;
+          case "Enter":
+            e.preventDefault();
+            if (isStreaming) return;
+            if (
+              slashLevel.kind === "command" &&
+              (slashMenuRef.current?.getItemCount() ?? 0) === 0
+            ) {
+              // No matching command — treat Enter as a normal send.
+              closeSlashMenu();
+              submit();
+            } else {
+              slashMenuRef.current?.activate();
+            }
+            return;
+        }
+        return;
+      }
+
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         if (!isStreaming) submit();
       }
     },
-    [submit, isStreaming],
+    [slashLevel, isStreaming, submit, closeSlashMenu],
   );
 
   // -----------------------------------------------------------------------
@@ -968,7 +1181,10 @@ export function ChatInput({
 
         <div
           className={cn(
-            "relative flex flex-col rounded-3xl border border-border/70 bg-surface-1 transition-colors duration-200",
+            // While the slash menu is attached above, square the composer's
+            // top corners so the two sheets look like one unit.
+            "group relative flex flex-col border border-border/70 bg-surface-1 transition-colors duration-200",
+            slashLevel ? "rounded-b-3xl" : "rounded-3xl",
             large && "focus-within:border-primary/60",
             isDragging && "border-primary/45 bg-primary/[0.03]",
             isStreaming && "opacity-95",
@@ -977,6 +1193,21 @@ export function ChatInput({
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
+          {/* Slash-command popup — anchored flush to the composer so it sits
+              on top of the mode/status row, with only its top corners rounded */}
+          <SlashCommandMenu
+            ref={slashMenuRef}
+            open={!!slashLevel && !isStreaming && !disabled}
+            level={slashLevel}
+            query={slashQuery}
+            large={large}
+            onClose={closeSlashMenu}
+            onNavigate={handleSlashNavigate}
+            onInsert={applySlashInsert}
+            onFile={openFilePickerFromSlash}
+            onMode={applySlashMode}
+          />
+
           {/* Active capability chips — removable inline "X to clear" pattern */}
           {hasChips && (
             <div className="flex flex-wrap items-center gap-1.5 px-3 pt-3">
@@ -1016,7 +1247,7 @@ export function ChatInput({
             <Textarea
               ref={inputRef}
               value={text}
-              onChange={(e) => setText(e.target.value)}
+              onChange={handleInputChange}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
               placeholder={
