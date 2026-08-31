@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { Bot, ChevronDown, Settings2 } from "lucide-react";
@@ -17,6 +17,7 @@ import {
   SiNvidia,
   SiOpenrouter,
   SiGoogle,
+  SiMoonshotai,
 } from "react-icons/si";
 import { FaBrain } from "react-icons/fa";
 import { BsOpenai } from "react-icons/bs";
@@ -32,7 +33,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { availableModelsApi } from "@/lib/api/available-models";
+import { availableModelsApi, type AvailableProvider } from "@/lib/api/available-models";
 import type { ProviderKind } from "@/lib/api/providers";
 import { PROVIDER_KIND_META } from "@/components/settings/provider-kind";
 import { cn } from "@/lib/utils";
@@ -76,6 +77,10 @@ const MODEL_NAME_ICONS: Record<
   sonnet: SiClaude,
   opus: SiClaude,
   fable: SiClaude,
+  kimi: SiMoonshotai,
+  stral: SiMistralai,
+  xstral: SiMistralai,
+  perplexity: SiPerplexity,
   haiku: SiClaude,
   gpt: BsOpenai,
   openai: BsOpenai,
@@ -88,10 +93,10 @@ const MODEL_NAME_ICONS: Record<
   chatgpt: BsOpenai,
   o1: BsOpenai,
   o3: BsOpenai,
+  nemotron: SiNvidia,
   o4: BsOpenai,
   codex: BsOpenai,
   mixtral: SiMistralai,
-  perplexity: SiPerplexity,
   ollama: SiOllama,
   huggingface: SiHuggingface,
   hugging: SiHuggingface,
@@ -151,9 +156,16 @@ export function ChatModelSelector({
   const router = useRouter();
   const [open, setOpen] = useState(false);
 
-  const { data: availableProviders = [] } = useQuery({
+  const { data: availableProviders = [], refetch, isSuccess } = useQuery({
     queryKey: ["available-models"],
     queryFn: availableModelsApi.list,
+    // Keep the list in sync with Settings changes — models can be disabled or
+    // removed (or providers turned off) while this page is open, and the
+    // conversation's stored selection must not keep advertising them. This is
+    // the same shared query the header's model picker uses, so one poll
+    // refreshes both.
+    staleTime: 15_000,
+    refetchInterval: 30_000,
   });
 
   const value = providerId && modelId ? encode(providerId, modelId) : "";
@@ -168,10 +180,54 @@ export function ChatModelSelector({
 
   const nothingConfigured = availableProviders.length === 0;
 
+  // ── Stale-selection reconciliation ──────────────────────────────────
+  // The conversation remembers its model locally (its DB row, plus the
+  // `lastModel` localStorage entry reused for new chats). If that model was
+  // disabled or no longer exists in the active list, silently fall back to a
+  // valid one so the trigger never advertises (or sends with) a dead model.
+  // Fires at most once per stale value, only after the list has loaded, and
+  // re-evaluates on every refresh.
+  const healedRef = useRef<string | null>(null);
+  const selectionKey = value;
+  const selectionIsStale = !!selectionKey && !currentModel;
+
+  useEffect(() => {
+    if (!isSuccess || !selectionIsStale) return;
+    if (healedRef.current === selectionKey) return;
+    healedRef.current = selectionKey;
+
+    // Prefer the same provider's default (or first) model — its API key and
+    // custom base URL still apply. Otherwise fall back to any provider's
+    // default, then the very first available model.
+    const pickFirst = (providerList: AvailableProvider[]) => {
+      for (const p of providerList) {
+        const fallback = p.models.find((m) => m.isDefault) ?? p.models[0];
+        if (fallback) return { providerId: p.providerId, modelId: fallback.modelId };
+      }
+      return null;
+    };
+    const sameProvider = currentProvider ? [currentProvider] : [];
+    const candidate = pickFirst(sameProvider) ?? pickFirst(availableProviders);
+    if (!candidate) return;
+    onChange(candidate.providerId, candidate.modelId);
+  }, [
+    isSuccess,
+    selectionIsStale,
+    selectionKey,
+    currentProvider,
+    availableProviders,
+    onChange,
+  ]);
+
   return (
     <DropdownMenu
       open={open}
-      onOpenChange={(next) => setOpen(next)}
+      onOpenChange={(next) => {
+        setOpen(next);
+        // Refresh the active list the moment the user looks at it, so a model
+        // just disabled in Settings isn't still listed.
+        if (next) refetch();
+      }}
     >
       <DropdownMenuTrigger
         type="button"
@@ -179,7 +235,7 @@ export function ChatModelSelector({
         aria-label="Choose model"
         title={`Model: ${modelLabel}${currentProvider ? ` · ${currentProvider.label}` : ""}`}
         className={cn(
-          "flex cursor-pointer items-center gap-1.5 rounded-full border border-border/60 bg-muted/40 py-0 pr-2 pl-2.5 text-[13px] font-medium text-foreground/85 transition-colors select-none outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40",
+          "flex cursor-pointer items-center gap-1.5 rounded-full border border-border/60 py-0 pr-2 pl-2.5 text-[13px] font-medium text-foreground/85 transition-colors select-none outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40",
           large ? "h-9" : "h-8",
           disabled && "pointer-events-none opacity-40",
         )}

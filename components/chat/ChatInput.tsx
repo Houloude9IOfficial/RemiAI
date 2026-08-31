@@ -222,6 +222,10 @@ export function ChatInput({
   const [text, setText] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Highlight the composer border only while the textarea itself is focused.
+  // Using focus-within would light it up for toolbar buttons too (e.g. the
+  // dropdown triggers keep focus after their menus close), which isn't wanted.
+  const [inputFocused, setInputFocused] = useState(false);
 
   // -----------------------------------------------------------------------
   // Slash-command menu (/mcp, /tool, /file, mode commands)
@@ -1185,7 +1189,7 @@ export function ChatInput({
             // top corners so the two sheets look like one unit.
             "group relative flex flex-col border border-border/70 bg-surface-1 transition-colors duration-200",
             slashLevel ? "rounded-b-3xl" : "rounded-3xl",
-            large && "focus-within:border-primary/60",
+            // large && inputFocused && "border-primary/60", uncomment to border the composer when focused
             isDragging && "border-primary/45 bg-primary/[0.03]",
             isStreaming && "opacity-95",
           )}
@@ -1250,6 +1254,8 @@ export function ChatInput({
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
+              onFocus={() => setInputFocused(true)}
+              onBlur={() => setInputFocused(false)}
               placeholder={
                 disabled
                   ? "Pick a model to start chatting"
