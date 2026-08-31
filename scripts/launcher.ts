@@ -16,9 +16,28 @@
  * Desktop App option, so it degrades gracefully if Electron isn't available.
  */
 
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
 import path from "node:path";
 import fs from "node:fs";
+
+/**
+ * Spawn a command portably.
+ *
+ * On Windows, `npx` (and other npm bins) are `.cmd` shims that `spawn()`
+ * cannot execute directly — it raises `spawn npx ENOENT` unless the child
+ * runs through the shell (which resolves `.cmd` via PATHEXT).
+ */
+function spawnCommand(
+  command: string,
+  args: string[],
+  options: SpawnOptions & { stdio: "inherit" },
+): ChildProcess {
+  const isWindows = process.platform === "win32";
+  return spawn(isWindows ? `${command}.cmd` : command, args, {
+    ...options,
+    shell: isWindows,
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -119,7 +138,7 @@ function startWebServer(devMode: boolean): void {
   console.log(`\n🚀  Starting RemiAI as a web server...`);
   console.log(`📡  Listening at http://${host}:${port}\n`);
 
-  const child = spawn("npx", args, {
+  const child = spawnCommand("npx", args, {
     cwd: PROJECT_ROOT,
     stdio: "inherit",
     env: { ...process.env, PORT: port },
@@ -143,7 +162,7 @@ function startElectronApp(devMode: boolean): void {
   // ── Step 1: Compile Electron TypeScript to JS ───────────────────
   console.log(`\n🔧  Compiling Electron source files...\n`);
 
-  const tscResult = spawn(
+  const tscResult = spawnCommand(
     "npx",
     ["tsc", "-p", "electron/tsconfig.json"],
     {
@@ -167,7 +186,7 @@ function startElectronApp(devMode: boolean): void {
     // ── Step 2: Launch Electron with compiled output ──────────────
     console.log(`\n🖥️  Starting RemiAI as a desktop app...\n`);
 
-    const child = spawn(
+    const child = spawnCommand(
       "npx",
       ["electron", compiledEntry],
       {
