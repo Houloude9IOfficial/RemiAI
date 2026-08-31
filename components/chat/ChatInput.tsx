@@ -1257,7 +1257,12 @@ export function ChatInput({
                     ? "Remi is responding…"
                     : isTemporary
                       ? "Temporary chat"
-                      : "How can I help you today?"
+                      : // `large` is only set by EmptyChatState (the first-message
+                        // composer); the docked composer for follow-up messages
+                        // gets a plainer prompt with a slash-command hint.
+                        large
+                        ? "How can I help you today?"
+                        : "Write a message or / for commands"
               }
               disabled={disabled}
               className={cn(
