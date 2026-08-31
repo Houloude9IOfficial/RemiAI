@@ -13,7 +13,7 @@ const updateSchema = z.object({
   providerId: z.number().int().optional().nullable(),
   modelId: z.string().optional().nullable(),
   mode: z.enum(["chat", "goal", "plan", "build"]).optional(),
-  qualityPolicy: z.enum(["fast", "balanced", "quality", "selected"]).optional(),
+  qualityPolicy: z.enum(["minimal", "low", "medium", "high"]).optional(),
   bashMode: z.enum(["sandboxed", "full"]).optional(),
   isTemporary: z.boolean().optional(),
   memoryEnabled: z.boolean().optional(),

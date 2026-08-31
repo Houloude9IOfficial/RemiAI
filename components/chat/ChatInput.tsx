@@ -58,7 +58,10 @@ import {
   unregisterChatInput,
 } from "@/lib/chat-input-registry";
 import type { ChatStatus } from "ai";
-import type { QualityPolicy } from "@/lib/chat/quality-policy";
+import {
+  normalizeQualityPolicy,
+  type QualityPolicy,
+} from "@/lib/chat/quality-policy";
 
 /** Generate a descriptive filename for clipboard items that lack one. */
 function getClipboardFileName(file: File): string {
@@ -174,10 +177,11 @@ const CODE_CHIP_KEY = "remi-code-per-session";
 export type ChatMode = "chat" | "goal" | "plan" | "build";
 
 function qualityPolicyLabel(policy: QualityPolicy): string {
-  if (policy === "fast") return "Fast";
-  if (policy === "quality") return "Quality first";
-  if (policy === "selected") return "Selected model";
-  return "Balanced";
+  const normalized = normalizeQualityPolicy(policy);
+  if (normalized === "minimal") return "Minimal";
+  if (normalized === "low") return "Low";
+  if (normalized === "high") return "High";
+  return "Medium";
 }
 
 export function ChatInput({
@@ -186,7 +190,7 @@ export function ChatInput({
   disabled,
   mode,
   onModeChange,
-  qualityPolicy = "balanced",
+  qualityPolicy = "medium",
   onQualityPolicyChange,
   providerId,
   modelId,
@@ -250,6 +254,9 @@ export function ChatInput({
   const router = useRouter();
 
   const isStreaming = status === "streaming" || status === "submitted";
+  // Reasoning-effort policy, normalized so legacy stored values (fast,
+  // balanced, quality, selected) behave like their modern equivalents.
+  const activeQualityPolicy = normalizeQualityPolicy(qualityPolicy);
 
   // Real availability of the code-execution tool (enabled in Settings > Tools).
   // Read-only here — enabling it happens in Settings.
@@ -1176,8 +1183,8 @@ export function ChatInput({
             <>
               <span aria-hidden="true">·</span>
               <span>
-                {qualityPolicyLabel(qualityPolicy)}
-                {qualityPolicy === "quality" && " · Adaptive escalation"}
+                {qualityPolicyLabel(activeQualityPolicy)}
+                {activeQualityPolicy === "high" && " · Deep reasoning"}
               </span>
             </>
           )}
@@ -1369,34 +1376,55 @@ export function ChatInput({
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuGroup>
-                      <DropdownMenuLabel>Quality · Effort per request</DropdownMenuLabel>
+                      <DropdownMenuLabel>Reasoning effort</DropdownMenuLabel>
                       <DropdownMenuCheckboxItem
-                        checked={qualityPolicy === "fast"}
-                        onCheckedChange={(checked) => checked && onQualityPolicyChange("fast")}
+                        checked={activeQualityPolicy === "minimal"}
+                        onCheckedChange={(checked) => checked && onQualityPolicyChange("minimal")}
                       >
-                        Fast
-                        {/* <span className="ml-auto text-[10px] text-muted-foreground">Lowest latency</span> */}
+                        <span>
+                          <span className="block">Minimal</span>
+                          <span className="block text-[10px] font-normal text-muted-foreground">
+                            Least reasoning · fastest response
+                          </span>
+                        </span>
                       </DropdownMenuCheckboxItem>
                       <DropdownMenuCheckboxItem
-                        checked={qualityPolicy === "balanced"}
-                        onCheckedChange={(checked) => checked && onQualityPolicyChange("balanced")}
+                        checked={activeQualityPolicy === "low"}
+                        onCheckedChange={(checked) => checked && onQualityPolicyChange("low")}
                       >
-                        Balanced
-                        {/* <span className="ml-auto text-[10px] text-muted-foreground">Recommended</span> */}
+                        <span>
+                          <span className="block">Low</span>
+                          <span className="block text-[10px] font-normal text-muted-foreground">
+                            Light reasoning · quick responses
+                          </span>
+                        </span>
                       </DropdownMenuCheckboxItem>
                       <DropdownMenuCheckboxItem
-                        checked={qualityPolicy === "quality"}
-                        onCheckedChange={(checked) => checked && onQualityPolicyChange("quality")}
+                        checked={activeQualityPolicy === "medium"}
+                        onCheckedChange={(checked) => checked && onQualityPolicyChange("medium")}
                       >
-                        Quality first
-                        {/* <span className="ml-auto text-[10px] text-muted-foreground">Adaptive · May cost more</span> */}
+                        <span>
+                          <span className="block">
+                            Medium
+                            {/* <span className="ml-1.5 rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary">
+                              Recommended
+                            </span> */}
+                          </span>
+                          <span className="block text-[10px] font-normal text-muted-foreground">
+                            Balanced for most tasks
+                          </span>
+                        </span>
                       </DropdownMenuCheckboxItem>
                       <DropdownMenuCheckboxItem
-                        checked={qualityPolicy === "selected"}
-                        onCheckedChange={(checked) => checked && onQualityPolicyChange("selected")}
+                        checked={activeQualityPolicy === "high"}
+                        onCheckedChange={(checked) => checked && onQualityPolicyChange("high")}
                       >
-                        Selected model
-                        {/* <span className="ml-auto text-[10px] text-muted-foreground">Pinned · No routing</span> */}
+                        <span>
+                          <span className="block">High</span>
+                          <span className="block text-[10px] font-normal text-muted-foreground">
+                            Deep reasoning · slower · may cost more
+                          </span>
+                        </span>
                       </DropdownMenuCheckboxItem>
                     </DropdownMenuGroup>
                   </>

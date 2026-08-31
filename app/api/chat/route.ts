@@ -754,7 +754,7 @@ Definition of done:
     (routeProvider) => routeProvider.id === qualityRoute.active.providerId,
   ) ?? provider;
   const activeModelId = qualityRoute.active.modelId;
-  const model = getLanguageModel(activeProvider, activeModelId);
+  const model = getLanguageModel(activeProvider, activeModelId, qualityStrategy.policy);
   trace.metric("qualityPolicy", qualityStrategy.policy);
   trace.metric("taskComplexity", qualityStrategy.complexity);
   trace.metric("selectedProviderId", provider.id);
@@ -940,7 +940,7 @@ Definition of done:
   // instructions with a FRESH note once load_tool_groups enables a group
   // mid-stream (the note is the only part of the dynamic prompt that can
   // change mid-request).
-  const qualityPolicyPrompt = `\n\n## Quality policy — ${qualityStrategy.label}\nTask complexity estimate: ${qualityStrategy.complexity}. ${qualityStrategy.verificationGuidance}\nSelected model: ${selectedRouteCandidate.providerLabel} / ${selectedRouteCandidate.modelId}. Active route: ${qualityRoute.active.providerLabel} / ${qualityRoute.active.modelId}. ${qualityRoute.reason} Routing is deterministic and bounded; never make another provider call unless the Quality-first verifier is eligible.`;
+  const qualityPolicyPrompt = `\n\n## Reasoning effort — ${qualityStrategy.label}\nTask complexity estimate: ${qualityStrategy.complexity}. ${qualityStrategy.verificationGuidance}\nSelected model: ${selectedRouteCandidate.providerLabel} / ${selectedRouteCandidate.modelId}. Active route: ${qualityRoute.active.providerLabel} / ${qualityRoute.active.modelId}. ${qualityRoute.reason} Routing is deterministic and bounded; never make another provider call unless the High-effort verifier is eligible.`;
 
   // Canvas guidance — only injected when the canvas group is loaded (it rides
   // on session files for writing, but the workflow guidance is canvas-specific
@@ -1121,11 +1121,13 @@ Definition of done:
     ),
     messages: modelMessages,
     tools: cachedBaseTools as ToolSet,
-    // Only supported Anthropic reasoning families receive reasoning options.
-    // Unknown/local/OpenAI-compatible models stay on their normal stream.
+    // Supported reasoning families receive reasoning options driven by the
+    // conversation's effort policy (OpenAI reasoningEffort, Anthropic thinking
+    // budget/adaptive). Unknown/local/OpenAI-compatible models stay normal.
     providerOptions: streamingReasoningProviderOptions(
       activeProvider.kind,
       activeModelId,
+      qualityStrategy.policy,
     ),
     // Initial active set (core + classified + stored groups). prepareStep
     // re-evaluates it before every step, so load_tool_groups can add groups

@@ -8,6 +8,8 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { conversations, providers, userPreferences } from "@/db/schema";
 import { getLanguageModel } from "@/lib/providers/factory";
+import { streamingReasoningProviderOptions } from "@/lib/providers/reasoning";
+import { normalizeQualityPolicy } from "@/lib/chat/quality-policy";
 import { SYSTEM_PROMPT, SYSTEM_PROMPT_NO_MEMORY } from "@/lib/chat/system-prompt";
 import { delayTool } from "@/lib/tools/delay";
 import { webFetchTool } from "@/lib/tools/web-fetch";
@@ -62,7 +64,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Provider not found" }, { status: 404 });
   }
 
-  const model = getLanguageModel(provider, conversation.modelId);
+  const model = getLanguageModel(
+    provider,
+    conversation.modelId,
+    normalizeQualityPolicy(conversation.qualityPolicy),
+  );
 
   // ── No tools at all — all context is pre-gathered and injected ──
   // The AI should only write a greeting. No tool calls, no lookups.
@@ -219,6 +225,13 @@ ${timeContext}
     model,
     system: fullSystemPrompt,
     messages: [{ role: "user", content: "Go ahead and start the conversation." }],
+    // Respect the conversation's reasoning-effort policy here too, so goal
+    // mode's auto-started turns reason as hard as the user asked.
+    providerOptions: streamingReasoningProviderOptions(
+      provider.kind,
+      conversation.modelId,
+      normalizeQualityPolicy(conversation.qualityPolicy),
+    ),
     tools,
     stopWhen: stepCountIs(100),
     // Retry retryable provider failures up to 3 times before erroring out.

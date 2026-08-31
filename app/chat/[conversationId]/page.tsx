@@ -11,7 +11,10 @@ import { MessageList } from "@/components/chat/MessageList";
 import { EmptyChatState } from "@/components/chat/EmptyChatState";
 import { ActiveQuestionsPanel } from "@/components/chat/ActiveQuestionsPanel";
 import { ChatInput, type ChatMode } from "@/components/chat/ChatInput";
-import type { QualityPolicy } from "@/lib/chat/quality-policy";
+import {
+  normalizeQualityPolicy,
+  type QualityPolicy,
+} from "@/lib/chat/quality-policy";
 import { ChatSkeleton } from "@/components/chat/ChatSkeleton";
 import { TodoProgressBar } from "@/components/chat/TodoProgressBar";
 import { BuildRunHistory } from "@/components/chat/BuildRunHistory";
@@ -404,7 +407,7 @@ function ConversationChat({
     (initialConversation.mode as ChatMode | undefined) ?? "chat",
   );
   const [qualityPolicy, setQualityPolicy] = useState<QualityPolicy>(
-    initialConversation.qualityPolicy ?? "balanced",
+    normalizeQualityPolicy(initialConversation.qualityPolicy),
   );
   // Temporary-chat flag + per-chat memory switch — fully independent toggles.
   // Persisted to the conversation row on change (see effects below).
@@ -486,7 +489,7 @@ function ConversationChat({
 
   // Persist the per-conversation quality policy alongside the selected mode.
   useEffect(() => {
-    if (qualityPolicy === (initialConversation.qualityPolicy ?? "balanced")) return;
+    if (qualityPolicy === normalizeQualityPolicy(initialConversation.qualityPolicy)) return;
     conversationsApi.update(conversationId, { qualityPolicy }).catch(() => {});
   }, [qualityPolicy, conversationId, initialConversation]);
 
