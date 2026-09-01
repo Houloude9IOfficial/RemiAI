@@ -7,6 +7,7 @@ import { buildContext7Tool } from "./context7";
 import { buildFirecrawlTools } from "./firecrawl";
 import { buildNewsApiTool } from "./newsapi";
 import type { UserContext } from "@/lib/geo";
+import { isDemoMode } from "@/lib/demo-policy";
 
 /**
  * Build integration tools based on saved configs from the DB.
@@ -18,6 +19,7 @@ import type { UserContext } from "@/lib/geo";
 export async function buildIntegrationTools(
   userContext?: UserContext,
 ): Promise<Record<string, any>> {
+  if (isDemoMode()) return {};
   const configs = await db.select().from(toolConfigs).all();
   const tools: Record<string, any> = {};
 

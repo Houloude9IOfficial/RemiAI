@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isDemoMode } from "@/lib/demo-policy";
 
 const PUBLIC_AUTH_PATHS = new Set([
   "/api/auth/status",
@@ -26,7 +27,24 @@ function isWebhookDeliveryOrVerification(pathname: string, method: string): bool
   );
 }
 
+const DEMO_BLOCKED_PAGE_PREFIXES = [
+  "/settings",
+  "/games",
+  "/talk",
+  "/research",
+  "/news",
+  "/coding",
+  "/files",
+  "/runs",
+  "/artifacts",
+];
+
 export async function proxy(request: NextRequest) {
+  if (isDemoMode() && DEMO_BLOCKED_PAGE_PREFIXES.some((prefix) =>
+    request.nextUrl.pathname === prefix || request.nextUrl.pathname.startsWith(`${prefix}/`),
+  )) {
+    return NextResponse.redirect(new URL("/chat", request.url));
+  }
   if (!request.nextUrl.pathname.startsWith("/api/")) return NextResponse.next();
   if (isWebhookDeliveryOrVerification(request.nextUrl.pathname, request.method)) {
     return NextResponse.next();
@@ -46,6 +64,13 @@ export async function proxy(request: NextRequest) {
     }
   }
   if (PUBLIC_AUTH_PATHS.has(request.nextUrl.pathname)) return NextResponse.next();
+  if (isDemoMode() && request.nextUrl.pathname.startsWith("/api/auth/")) {
+    // The public demo uses the host-created shared account. Account mutation
+    // endpoints remain unreachable even for an authenticated visitor.
+    if (["/api/auth/password", "/api/auth/signup"].includes(request.nextUrl.pathname)) {
+      return NextResponse.json({ error: "This feature is unavailable in the public demo." }, { status: 403 });
+    }
+  }
   if (!request.cookies.has("remiai_session")) {
     return NextResponse.json({ error: "Authentication required." }, { status: 401 });
   }
@@ -56,6 +81,9 @@ export async function proxy(request: NextRequest) {
   // The public URL may not be reachable from inside the Docker container
   // (DNS resolution, TLS termination, or reverse proxy routing issues).
   try {
+    // In a container, PORT is the internal Next.js port. Do not use the
+    // host-published port here; that can point back at the reverse proxy and
+    // produce intermittent 502s during authenticated API requests.
     const port = process.env.PORT || "3000";
     const status = await fetch(`http://127.0.0.1:${port}/api/auth/status`, {
       headers: { cookie: request.headers.get("cookie") ?? "" },

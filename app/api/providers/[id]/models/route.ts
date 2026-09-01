@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { providerModels } from "@/db/schema";
 import { providerModelCreateSchema, providerModelsBatchUpdateSchema } from "@/lib/validation/schemas";
 import { jsonError } from "@/lib/validation/api";
+import { demoBlockedResponse, isDemoMode } from "@/lib/demo-policy";
 
 export async function GET(
   _req: Request,
@@ -21,6 +22,7 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  if (isDemoMode()) return demoBlockedResponse();
   const { id } = await params;
   let body: ReturnType<typeof providerModelsBatchUpdateSchema.parse>;
   try {
@@ -59,6 +61,7 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  if (isDemoMode()) return demoBlockedResponse();
   const { id } = await params;
   let body: ReturnType<typeof providerModelCreateSchema.parse>;
   try {

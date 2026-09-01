@@ -394,7 +394,11 @@ export function ErrorCard({
     return t
   })()
 
+  // Prefer the provider's ACTUAL error (decoded.detail) over the friendly
+  // category message — the real reason must reach the user, not a generic
+  // "provider service error" text derived from keyword detection.
   const displayMessage =
+    decoded?.detail ??
     decoded?.message ??
     dugBody ??
     (!rawLooksJson ? normalized.message : undefined) ??
@@ -406,10 +410,25 @@ export function ErrorCard({
   const isContinue = decoded?.shouldResume === true
 
   const handleCopy = useCallback(async () => {
-    await navigator.clipboard.writeText(serializeError(error))
+    // When the server sent a structured stream-error payload, copy the real
+    // provider message + raw response body first (the actual error JSON),
+    // followed by the full serialized error for debugging.
+    const decodedPayload = decoded
+      ? [
+          decoded.detail ? `Message: ${decoded.detail}` : decoded.message,
+          decoded.rawBody ? `Response Body:\n${decoded.rawBody}` : "",
+          decoded.technical ? `Technical: ${decoded.technical}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n\n")
+      : null
+    const text = decodedPayload
+      ? `${decodedPayload}\n\n---\n${serializeError(error)}`
+      : serializeError(error)
+    await navigator.clipboard.writeText(text)
     setCopied(true)
     setTimeout(() => setCopied(false), 2500)
-  }, [error])
+  }, [decoded, error])
 
   return (
     <Card

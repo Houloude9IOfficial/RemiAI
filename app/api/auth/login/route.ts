@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { authenticate, createSession } from "@/lib/auth/service";
 import { setSessionCookie } from "@/lib/auth/cookie";
 import { rateLimit, validateMutationOrigin } from "@/lib/security/request";
+import { isDemoMode } from "@/lib/demo-policy";
 
 export async function POST(req: NextRequest) {
   const originError = validateMutationOrigin(req);
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
   if (email.length > 254 || password.length > 256) {
     return NextResponse.json({ error: "Email or password is incorrect." }, { status: 401 });
   }
-  const remember = body.remember === true;
+  const remember = isDemoMode() ? false : body.remember === true;
   const account = authenticate(email, password);
   if (!account) return NextResponse.json({ error: "Email or password is incorrect." }, { status: 401 });
   const session = createSession(remember);

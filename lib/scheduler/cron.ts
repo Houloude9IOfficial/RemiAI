@@ -123,7 +123,7 @@ export function computeNextCronTime(
   const maxDate = new Date(start);
   maxDate.setFullYear(maxDate.getFullYear() + 2);
 
-  let candidate = new Date(start);
+  const candidate = new Date(start);
 
   while (candidate <= maxDate) {
     const month = candidate.getMonth() + 1; // 1-12

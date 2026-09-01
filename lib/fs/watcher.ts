@@ -59,7 +59,7 @@ interface ActiveWatch {
   debounceTimers: Map<string, NodeJS.Timeout>;
 }
 
-let activeWatches = new Map<number, ActiveWatch>();
+const activeWatches = new Map<number, ActiveWatch>();
 let configInterval: ReturnType<typeof setInterval> | null = null;
 let started = false;
 let scanningCount = 0;

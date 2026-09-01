@@ -11,7 +11,10 @@ import { MessageList } from "@/components/chat/MessageList";
 import { EmptyChatState } from "@/components/chat/EmptyChatState";
 import { ActiveQuestionsPanel } from "@/components/chat/ActiveQuestionsPanel";
 import { ChatInput, type ChatMode } from "@/components/chat/ChatInput";
-import type { QualityPolicy } from "@/lib/chat/quality-policy";
+import {
+  normalizeQualityPolicy,
+  type QualityPolicy,
+} from "@/lib/chat/quality-policy";
 import { ChatSkeleton } from "@/components/chat/ChatSkeleton";
 import { TodoProgressBar } from "@/components/chat/TodoProgressBar";
 import { BuildRunHistory } from "@/components/chat/BuildRunHistory";
@@ -42,6 +45,8 @@ import {
 } from "@/components/chat/CanvasPanel";
 import {
   CANVAS_PRESENT_EVENT,
+  dispatchCanvasClosed,
+  dispatchCanvasOpened,
   type CanvasPresentDetail,
 } from "@/lib/api/canvas";
 import { cn } from "@/lib/utils";
@@ -112,6 +117,34 @@ function sessionFilesTouchedByMessage(message: { parts: unknown[] }): {
   }
 
   return { paths, presented };
+}
+
+/**
+ * True when an assistant message presents a canvas (`canvas_create` /
+ * `canvas_open` / `canvas_add_file`) — the canvas card owns the panel slot,
+ * so session-files fallbacks must not fire for the same message.
+ */
+function messagePresentsCanvas(message: { parts: unknown[] }): boolean {
+  const canvasTools = new Set(["canvas_create", "canvas_open", "canvas_add_file"]);
+  for (const rawPart of message.parts ?? []) {
+    if (!rawPart || typeof rawPart !== "object") continue;
+    const part = rawPart as Record<string, unknown>;
+    if (
+      typeof part.type === "string" &&
+      part.type.startsWith("tool-") &&
+      part.type !== "tool-invocation"
+    ) {
+      if (canvasTools.has(part.type.slice("tool-".length))) return true;
+      continue;
+    }
+    if (part.type === "tool-invocation") {
+      const inv = (part.toolInvocation ?? {}) as Record<string, unknown>;
+      if (typeof inv.toolName === "string" && canvasTools.has(inv.toolName)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 // ── Reconnecting Banner ─────────────────────────────────────────────
@@ -188,7 +221,7 @@ function ChatLoadError({
       : "Couldn't load this conversation";
 
   return (
-    <div className="flex flex-1 flex-col h-full">
+    <div className="relative flex min-h-full flex-1 items-center justify-center overflow-hidden px-6 py-16">
       <ChatMobileHeader onToggleSidebar={onToggleSidebar} />
       <div className="flex flex-1 items-start justify-center overflow-y-auto p-6">
         <div className="w-full max-w-md pt-8">
@@ -374,7 +407,7 @@ function ConversationChat({
     (initialConversation.mode as ChatMode | undefined) ?? "chat",
   );
   const [qualityPolicy, setQualityPolicy] = useState<QualityPolicy>(
-    initialConversation.qualityPolicy ?? "balanced",
+    normalizeQualityPolicy(initialConversation.qualityPolicy),
   );
   // Temporary-chat flag + per-chat memory switch — fully independent toggles.
   // Persisted to the conversation row on change (see effects below).
@@ -393,17 +426,31 @@ function ConversationChat({
   // same right-side slot as session files (they don't stack on narrow screens).
   const [canvasOpen, setCanvasOpen] = useState(false);
   const [canvasFocusSlug, setCanvasFocusSlug] = useState<string | null>(null);
+  // Once the user manually closes a panel, later canvas_open /
+  // session_present_* calls in this page session no longer force it back open.
+  const canvasDismissedRef = useRef(false);
+  const filesDismissedRef = useRef(false);
+  // A canvas presentation in the current request wins the panel slot over any
+  // session-files presentation — models often call session_present_files after
+  // canvas_open (or the single-file fallback fires), which would otherwise
+  // open the wrong panel. Cleared when the user sends the next message.
+  const canvasWinsRef = useRef(false);
   const { activeStreams, startStream, endStream } = useStreamingContext();
 
   // Auto-open the session files panel when the AI calls session_present_files
   // or session_present_file; for the single-file variant, focus that file.
   useEffect(() => {
     const handler = (event: Event) => {
+      // User dismissed the panel — don't force it open again.
+      if (filesDismissedRef.current) return;
+      // A canvas was presented in this request — it owns the panel slot.
+      if (canvasWinsRef.current) return;
       const detail = (event as CustomEvent<SessionFilesPresentDetail>).detail;
       if (detail?.focusPath) setPanelFocusPath(detail.focusPath);
       setPanelOpen(true);
       // a canvas and session files share the slot — opening files closes canvas
       setCanvasOpen(false);
+      dispatchCanvasClosed();
     };
     window.addEventListener(SESSION_FILES_PRESENT_EVENT, handler);
     return () => window.removeEventListener(SESSION_FILES_PRESENT_EVENT, handler);
@@ -414,10 +461,21 @@ function ConversationChat({
   useEffect(() => {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<CanvasPresentDetail>).detail;
+      // A MANUAL "Open canvas" click always wins — the user explicitly asked
+      // for it, so re-arm the panel even if they dismissed it earlier.
+      if (detail?.manual) {
+        canvasDismissedRef.current = false;
+        filesDismissedRef.current = true;
+      }
+      // User dismissed the canvas panel — don't force it open again.
+      if (canvasDismissedRef.current) return;
+      canvasWinsRef.current = true;
       setCanvasFocusSlug(detail?.slug ?? null);
       setCanvasOpen(true);
       setPanelOpen(false);
       setPanelFocusPath(null);
+      // Confirm the open so cards show the "Opened canvas…" copy.
+      if (detail?.slug) dispatchCanvasOpened(detail.slug);
     };
     window.addEventListener(CANVAS_PRESENT_EVENT, handler);
     return () => window.removeEventListener(CANVAS_PRESENT_EVENT, handler);
@@ -431,7 +489,7 @@ function ConversationChat({
 
   // Persist the per-conversation quality policy alongside the selected mode.
   useEffect(() => {
-    if (qualityPolicy === (initialConversation.qualityPolicy ?? "balanced")) return;
+    if (qualityPolicy === normalizeQualityPolicy(initialConversation.qualityPolicy)) return;
     conversationsApi.update(conversationId, { qualityPolicy }).catch(() => {});
   }, [qualityPolicy, conversationId, initialConversation]);
 
@@ -673,6 +731,9 @@ function ConversationChat({
     (text: string) => {
       clearError();
       clearChatError();
+      // A fresh request starts a fresh present — the previous request's canvas
+      // no longer claims the panel slot.
+      canvasWinsRef.current = false;
       sendMessage({ text });
     },
     [clearError, clearChatError, sendMessage],
@@ -794,14 +855,18 @@ function ConversationChat({
   });
 
   const closePanel = useCallback(() => {
+    filesDismissedRef.current = true;
     setPanelOpen(false);
     setPanelFocusPath(null);
     setCanvasOpen(false);
     setCanvasFocusSlug(null);
   }, []);
   const closeCanvasPanel = useCallback(() => {
+    canvasDismissedRef.current = true;
     setCanvasOpen(false);
     setCanvasFocusSlug(null);
+    // Let canvas cards flip their copy back to the neutral label.
+    dispatchCanvasClosed();
   }, []);
 
   // Fallback auto-present: when a finished assistant message created/edited
@@ -820,6 +885,10 @@ function ConversationChat({
       if (lastAssistant.id && autoPresentedMessageRef.current === lastAssistant.id) {
         return;
       }
+      // A canvas presentation owns the panel slot (canvas_create / canvas_open
+      // / canvas_add_file) — never fall back to the session files panel for
+      // the same message, even if it touched exactly one canvas file.
+      if (messagePresentsCanvas(lastAssistant)) return;
       const { paths, presented } = sessionFilesTouchedByMessage(lastAssistant);
       // Only the single-file case: the user asked for the panel to open when
       // exactly one file was created. Multi-file runs rely on the AI calling
@@ -1089,7 +1158,11 @@ function ConversationChat({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                onClick={() => setCanvasOpen(false)}
+                onClick={() => {
+                  canvasDismissedRef.current = true;
+                  setCanvasOpen(false);
+                  dispatchCanvasClosed();
+                }}
                 className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm md:hidden"
               />
               <motion.div
@@ -1113,7 +1186,10 @@ function ConversationChat({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                onClick={() => setPanelOpen(false)}
+                onClick={() => {
+                  filesDismissedRef.current = true;
+                  setPanelOpen(false);
+                }}
                 className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm md:hidden"
               />
               <motion.div

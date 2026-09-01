@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 // electron-builder `afterPack` hook (configured in electron-builder.yml).
 //
 // The packaged app runs its Next.js standalone server with Electron's bundled

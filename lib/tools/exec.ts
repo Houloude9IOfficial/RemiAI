@@ -11,6 +11,7 @@ import {
 } from "./exec-sandbox";
 import { db } from "@/db";
 import { toolConfigs } from "@/db/schema";
+import { isDemoMode } from "@/lib/demo-policy";
 import { getPermittedRoots } from "@/lib/fs/access";
 
 // ---------------------------------------------------------------------------
@@ -659,6 +660,7 @@ export function buildBashExecuteTool(mode: "sandboxed" | "full") {
 export async function buildExecutionTools(
   bashMode: "sandboxed" | "full" = "sandboxed",
 ): Promise<Record<string, any>> {
+  if (isDemoMode()) return {};
   const config = await db
     .select()
     .from(toolConfigs)

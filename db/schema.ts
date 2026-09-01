@@ -104,10 +104,10 @@ export const conversations = sqliteTable("conversations", {
   modelId: text("model_id"),
   mode: text("mode", { enum: ["chat", "goal", "plan", "build"] }).notNull().default("chat"),
   qualityPolicy: text("quality_policy", {
-    enum: ["fast", "balanced", "quality", "selected"],
+    enum: ["minimal", "low", "medium", "high"],
   })
     .notNull()
-    .default("balanced"),
+    .default("medium"),
   bashMode: text("bash_mode", { enum: ["sandboxed", "full"] })
     .notNull()
     .default("sandboxed"),

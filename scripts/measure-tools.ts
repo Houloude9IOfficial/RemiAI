@@ -99,6 +99,9 @@ async function main() {
     ["python code", "run this python script to calculate the fibonacci sequence and show me a chart of it"],
     ["schedule + research", "schedule a reminder for tomorrow and research the best hiking trails near me"],
     ["read pdf", "summarize the attached pdf resume"],
+    ["canvas command", "/canvas build me a calculator"],
+    ["canvas design command", "/canvas a clean and modern instagram-like profile card for me"],
+    ["browser command", "/browser open the site and click the sign in button"],
   ];
 
   console.log("\n=== CLASSIFIER ===");

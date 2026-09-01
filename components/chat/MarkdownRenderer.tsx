@@ -146,15 +146,15 @@ export function MarkdownRenderer({ content, className, isStreaming, citations }:
 
             // -- Tables (clean, spacious, clearly separated grid)
             table: ({ children, ...props }: MarkdownTableProps) => (
-              <div className="custom-scrollbar overflow-x-auto">
-                <table className="w-full border-separate border-spacing-0 text-sm" {...props}>
+              <div className="markdown-table-scroll custom-scrollbar overflow-x-auto">
+                <table className="markdown-table w-max min-w-full border-separate border-spacing-0 text-sm" {...props}>
                   {children}
                 </table>
               </div>
             ),
             th: ({ children, ...props }: MarkdownTableCellProps) => (
               <th
-                className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground/80 bg-muted/75 border-b-2 border-border/50 border-r border-border/35 last:border-r-0 whitespace-normal"
+                className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground/80 bg-muted/75 border-b-2 border-border/50 border-r border-border/35 last:border-r-0 whitespace-nowrap"
                 {...props}
               >
                 {children}
@@ -169,7 +169,7 @@ export function MarkdownRenderer({ content, className, isStreaming, citations }:
               </tr>
             ),
             td: ({ children, ...props }: MarkdownDataCellProps) => (
-              <td className="px-5 py-3 border-b border-border/30 border-r border-border/25 last:border-r-0 leading-relaxed align-top whitespace-normal" {...props}>
+              <td className="px-5 py-3 border-b border-border/30 border-r border-border/25 last:border-r-0 leading-relaxed align-top whitespace-nowrap" {...props}>
                 {children}
               </td>
             ),

@@ -15,6 +15,7 @@ const emptyErrors: FormErrors = {};
 
 export function AuthWall({ children }: { children: React.ReactNode }) {
   const { loading, configured, account, refresh } = useAuth();
+  const [demo, setDemo] = useState(false);
   const [form, setForm] = useState({ email: "", password: "", displayName: "", code: "", remember: true });
   const [errors, setErrors] = useState<FormErrors>(emptyErrors);
   const [submitError, setSubmitError] = useState("");
@@ -22,7 +23,11 @@ export function AuthWall({ children }: { children: React.ReactNode }) {
   const emailRef = useRef<HTMLInputElement>(null);
 
   // When an account already exists, only show login. Otherwise show signup.
-  const mode: Mode = configured ? "login" : "signup";
+  const mode: Mode = demo || configured ? "login" : "signup";
+
+  useEffect(() => {
+    fetch("/api/auth/status", { cache: "no-store" }).then((response) => response.json()).then((data) => setDemo(data.demo === true)).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (!loading && !account) {
@@ -80,7 +85,7 @@ export function AuthWall({ children }: { children: React.ReactNode }) {
         <img src="/RemiAI-Light.png" alt="RemiAI" className="mx-auto mb-5 hidden h-9 w-auto dark:block" />
         {/* <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary"><LockKeyhole className="h-5 w-5" /></div> */}
         <h1 className="text-lg font-semibold">{mode === "login" ? "Sign in" : "Create your account"}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{mode === "login" ? "Continue to your private RemiAI workspace." : "One account keeps your RemiAI workspace private."}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{demo ? "Public demo — your workspace may be reset." : mode === "login" ? "Continue to your private RemiAI workspace." : "One account keeps your RemiAI workspace private."}</p>
       </div>
 
       <form key={mode} onSubmit={submit} noValidate className="space-y-4" aria-busy={pending}>
@@ -88,13 +93,13 @@ export function AuthWall({ children }: { children: React.ReactNode }) {
         <div className="space-y-1.5"><Label htmlFor="email">Email</Label><Input ref={emailRef} id="email" type="email" value={form.email} onChange={(e) => { setForm({ ...form, email: e.target.value }); setErrors({ ...errors, email: undefined }); }} autoComplete="email" aria-invalid={Boolean(fieldError("email"))} aria-describedby={fieldError("email") ? "email-error" : undefined} />{fieldError("email") && <FieldError id="email-error">{fieldError("email")}</FieldError>}</div>
         <div className="space-y-1.5"><Label htmlFor="password">Password</Label><Input id="password" type="password" value={form.password} onChange={(e) => { setForm({ ...form, password: e.target.value }); setErrors({ ...errors, password: undefined }); }} autoComplete={mode === "login" ? "current-password" : "new-password"} aria-invalid={Boolean(fieldError("password"))} aria-describedby={fieldError("password") ? "password-error" : "password-hint"} />{fieldError("password") ? <FieldError id="password-error">{fieldError("password")}</FieldError> : <p id="password-hint" className="text-xs text-muted-foreground">{mode === "signup" ? "At least 8 characters." : "Enter the password for this workspace."}</p>}</div>
         {mode === "signup" && <div className="space-y-1.5"><Label htmlFor="code">Signup code</Label><Input id="code" value={form.code} onChange={(e) => { setForm({ ...form, code: e.target.value.toUpperCase() }); setErrors({ ...errors, code: undefined }); }} autoComplete="one-time-code" spellCheck={false} className="font-mono tracking-[0.12em]" aria-invalid={Boolean(fieldError("code"))} aria-describedby={fieldError("code") ? "code-error" : "code-hint"} />{fieldError("code") ? <FieldError id="code-error">{fieldError("code")}</FieldError> : <p id="code-hint" className="text-xs text-muted-foreground">Printed in the server console on first run.</p>}</div>}
-        {mode === "login" && <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground"><input type="checkbox" checked={form.remember} onChange={(e) => setForm({ ...form, remember: e.target.checked })} className="accent-primary" /> Remember me for 30 days</label>}
+        {mode === "login" && !demo && <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground"><input type="checkbox" checked={form.remember} onChange={(e) => setForm({ ...form, remember: e.target.checked })} className="accent-primary" /> Remember me for 30 days</label>}
         <div aria-live="polite" className={cn("overflow-hidden transition-all duration-200 ease-out", submitError ? "max-h-20 pt-1 opacity-100" : "max-h-0 opacity-0")}>
           {submitError && <div role="alert" className="flex items-start gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /><span>{submitError}</span></div>}
         </div>
         <Button type="submit" className="h-9 w-full" disabled={pending}>{pending ? <><Loader2 className="animate-spin" /> {mode === "login" ? "Signing in…" : "Creating account…"}</> : mode === "login" ? "Sign in" : "Create account"}</Button>
       </form>
-      {configured && <p className="mt-5 text-center text-xs text-muted-foreground">Need to reset your password? Run <code className="rounded bg-muted px-1 py-0.5">npm run auth:reset</code> in the server terminal.</p>}
+      {configured && !demo && <p className="mt-5 text-center text-xs text-muted-foreground">Need to reset your password? Run <code className="rounded bg-muted px-1 py-0.5">npm run auth:reset</code> in the server terminal.</p>}
     </div>
   </main>;
 }

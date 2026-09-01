@@ -9,6 +9,7 @@ import {
   isPreloadedSource,
   seedPreloadedRepos,
 } from "@/lib/skills/manager";
+import { demoBlockedResponse, isDemoMode } from "@/lib/demo-policy";
 
 /**
  * GET /api/skills/repos — list repos with skill counts + installed skills.
@@ -16,6 +17,7 @@ import {
  * something to browse, even if the boot-time seeding hasn't run yet.
  */
 export async function GET() {
+  if (isDemoMode()) return NextResponse.json([]);
   await seedPreloadedRepos();
   const [repos, installed] = await Promise.all([listRepos(), listSkills()]);
 
@@ -54,6 +56,7 @@ const addRepoSchema = z.object({
  * installing.
  */
 export async function POST(req: Request) {
+  if (isDemoMode()) return demoBlockedResponse();
   const { source } = addRepoSchema.parse(await req.json());
 
   let resolved;

@@ -10,6 +10,44 @@ function splitLines(content: string): string[] {
 }
 
 /**
+ * Git-style line-change counts between two file contents: a modified line
+ * counts as ONE insertion + ONE deletion (git diff semantics), instead of a
+ * naive `newLineCount - oldLineCount` delta which reports 0/0 for a single-
+ * line rewrite. Uses the same prefix/suffix match as the bounded preview.
+ */
+export function countLineDiff(
+  before: string,
+  after: string,
+): { added: number; removed: number } {
+  const beforeLines = splitLines(before);
+  const afterLines = splitLines(after);
+
+  let prefix = 0;
+  while (
+    prefix < beforeLines.length &&
+    prefix < afterLines.length &&
+    beforeLines[prefix] === afterLines[prefix]
+  ) {
+    prefix++;
+  }
+
+  let suffix = 0;
+  while (
+    suffix < beforeLines.length - prefix &&
+    suffix < afterLines.length - prefix &&
+    beforeLines[beforeLines.length - 1 - suffix] ===
+      afterLines[afterLines.length - 1 - suffix]
+  ) {
+    suffix++;
+  }
+
+  return {
+    removed: beforeLines.length - prefix - suffix,
+    added: afterLines.length - prefix - suffix,
+  };
+}
+
+/**
  * Create a compact, bounded preview for a single text-file change.
  *
  * This intentionally shows the changed middle block rather than attempting a

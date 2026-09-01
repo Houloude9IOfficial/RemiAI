@@ -9,6 +9,7 @@ import { MobileSidebar } from "@/components/sidebar/MobileSidebar";
 import { SidebarProvider } from "@/components/sidebar/SidebarContext";
 import { ShortcutsProvider } from "@/components/sidebar/ShortcutsProvider";
 import { GlobalMobileHeader } from "@/components/GlobalMobileHeader";
+import { DemoBanner } from "@/components/demo/DemoBanner";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -124,6 +125,7 @@ export default function RootLayout({
                     <AppSidebar />
                     <MobileSidebar />
                     <main className="flex min-w-0 flex-1 flex-col overflow-y-auto overflow-x-clip">
+                      <DemoBanner />
                       <GlobalMobileHeader />
                       {children}
                     </main>

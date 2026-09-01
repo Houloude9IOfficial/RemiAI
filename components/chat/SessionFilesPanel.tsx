@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useDemoMode } from "@/components/demo/use-demo-mode";
 import {
   X,
   Download,
@@ -168,7 +169,9 @@ export function SessionFilesPanel({
     }
   };
 
+  const demo = useDemoMode();
   const handleDownloadZip = async () => {
+    if (demo) return;
     setZipping(true);
     try {
       // Hit the endpoint once to build the zip server-side, then download.
@@ -236,7 +239,7 @@ export function SessionFilesPanel({
 
       {/* ── Actions ── */}
       <div className="flex items-center gap-1.5 border-b border-border/60 px-3 py-2">
-        <button
+        {!demo && <button
           type="button"
           onClick={handleDownloadZip}
           disabled={fileCount === 0 || zipping}
@@ -248,7 +251,7 @@ export function SessionFilesPanel({
             <Archive className="h-3.5 w-3.5" />
           )}
           Download all
-        </button>
+        </button>}
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}

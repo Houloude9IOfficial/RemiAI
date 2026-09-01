@@ -5,11 +5,13 @@ import { providers, conversations } from "@/db/schema";
 import { providerUpdateSchema } from "@/lib/validation/schemas";
 import { jsonError } from "@/lib/validation/api";
 import { maskProvider } from "@/lib/providers/mask";
+import { demoBlockedResponse, isDemoMode } from "@/lib/demo-policy";
 
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  if (isDemoMode()) return demoBlockedResponse();
   const { id } = await params;
   let body: ReturnType<typeof providerUpdateSchema.parse>;
   try {
@@ -35,6 +37,8 @@ export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  if (isDemoMode()) return demoBlockedResponse();
+  if (isDemoMode()) return demoBlockedResponse();
   const { id } = await params;
   const providerId = Number(id);
 

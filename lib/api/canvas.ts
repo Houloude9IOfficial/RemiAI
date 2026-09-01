@@ -31,23 +31,52 @@ export type CanvasSummary = {
 // ---------------------------------------------------------------------------
 
 export const CANVAS_PRESENT_EVENT = "remi:canvas:present";
+export const CANVAS_OPENED_EVENT = "remi:canvas:opened";
+export const CANVAS_CLOSED_EVENT = "remi:canvas:closed";
 
 export type CanvasPresentDetail = {
   /** Canvas slug to open in the panel. */
   slug?: string;
   /** Optional short note shown with the canvas card. */
   message?: string | null;
+  /** True when the user explicitly clicked "Open canvas" — always honored,
+      even if they previously dismissed the panel in this page session. */
+  manual?: boolean;
 };
 
 /**
  * Dispatch the event that opens the canvas panel to a specific canvas.
- * Fired by the CanvasPresentCard once the canvas_open tool completes.
+ * Fired by the CanvasPresentCard once the canvas_open tool completes, and
+ * by the card's "Open canvas" button (with `manual: true`).
  */
 export function dispatchCanvasPresent(detail: CanvasPresentDetail = {}) {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
     new CustomEvent<CanvasPresentDetail>(CANVAS_PRESENT_EVENT, { detail }),
   );
+}
+
+/**
+ * Dispatch the event confirming the canvas panel actually OPENED. Sent by
+ * the page only when it honors a present (i.e. not when the user dismissed
+ * the panel) — the cards use it to show the "Opened canvas…" copy.
+ */
+export function dispatchCanvasOpened(slug: string) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent<{ slug: string }>(CANVAS_OPENED_EVENT, {
+      detail: { slug },
+    }),
+  );
+}
+
+/**
+ * Dispatch the event that the canvas panel was closed — lets the canvas
+ * cards switch their copy from "Opened canvas…" back to a neutral label.
+ */
+export function dispatchCanvasClosed() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(CANVAS_CLOSED_EVENT));
 }
 
 // ---------------------------------------------------------------------------

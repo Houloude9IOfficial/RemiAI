@@ -56,6 +56,11 @@ function DesktopSidebar() {
   const temporaryChatMutation = useNewChat(undefined, { temporary: true });
 
   const [extraExpanded, setExtraExpanded] = useState(false);
+  const [demo, setDemo] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/auth/status", { cache: "no-store" }).then((response) => response.json()).then((data) => setDemo(data.demo === true)).catch(() => undefined);
+  }, []);
 
   // Hydrate from localStorage after mount (avoids SSR mismatch)
   useEffect(() => {
@@ -196,7 +201,7 @@ function DesktopSidebar() {
             >
               <Timer className="h-4 w-4" />
             </Button>
-          {primaryLinks.slice(0, 4).map(({ href, label, icon: Icon }) => (
+          {(demo ? [] : primaryLinks).slice(0, 4).map(({ href, label, icon: Icon }) => (
             <Link
               key={href}
               href={href}
@@ -226,6 +231,7 @@ function DesktopSidebar() {
 
           <nav className="flex flex-col gap-0.5 border-t border-sidebar-border px-2 py-2.5">
 
+            {!demo && <>
             {/* More — expands secondary/admin links */}
             <button
               type="button"
@@ -290,6 +296,7 @@ function DesktopSidebar() {
             <div className="mt-2 border-t border-sidebar-border pt-2">
               <SidebarProfile />
             </div>
+            </>}
             <div className="mt-1 flex items-center justify-between px-2.5 py-1.5">
               <div className="flex items-center gap-0.5">
                 <AboutModal />
