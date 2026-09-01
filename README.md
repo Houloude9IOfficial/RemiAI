@@ -15,6 +15,9 @@
   <a href="https://www.producthunt.com/products/remiai">
     <img src="https://img.shields.io/badge/ProductHunt-RemiAI-da552f?style=flat-square&logo=producthunt" alt="ProductHunt">
   </a>
+  <a href="https://demo.remiai.crickdevs.com">
+    <img src="https://img.shields.io/badge/Live_Demo-Try_RemiAI-2ea44f?style=flat-square" alt="Live Demo">
+  </a>
   <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT License">
   <img src="https://img.shields.io/badge/Next.js-16-black?style=flat-square&logo=next.js" alt="Next.js 16">
   <img src="https://img.shields.io/badge/SQLite-better--sqlite3-003B57?style=flat-square&logo=sqlite" alt="SQLite">
@@ -253,6 +256,17 @@ Beyond coding tasks, RemiAI's tool-use and file-agent behavior is benchmarked wi
 | [Northfield Supply Co. Dataset](./TestRuns/Northfield%20Supply%20Co%20Dataset.md) | Messy multi-format company files (invoices, client records, meeting notes, chat logs) with planted data inconsistencies, tests file organization, cross-document reasoning, and grounded reporting | 5/5 planted errors found, 8/8 questions correct, zero fabricated claims |
 
 Each test run file includes the exact prompts used, expected vs. actual results, and an independently verified score.
+
+## Demo
+
+A live demo is available at [demo.remiai.crickdevs.com](https://demo.remiai.crickdevs.com).
+
+Demo credentials:
+
+- **Email:** `demo@example.com`
+- **Password:** `demo1234`
+
+---
 
 ## Getting Started
 
