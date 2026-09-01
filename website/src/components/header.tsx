@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import { IconBrandGithub, IconArrowRight } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
-import { GITHUB_URL, SITE_NAME } from "@/lib/constants";
+import { DEMO_ENABLED, GITHUB_URL, SITE_NAME } from "@/lib/constants";
+import { DemoButton } from "@/components/demo-button";
 
 const NAV_LINKS = [
   { href: "#features", label: "Features" },
@@ -54,7 +55,8 @@ export function Header() {
           ))}
         </nav>
 
-        <div className="flex items-center gap-2">
+        <div className="flex max-w-[calc(100%-8rem)] items-center justify-end gap-2 sm:max-w-none">
+          {DEMO_ENABLED && <DemoButton />}
           <a
             href={GITHUB_URL}
             target="_blank"
