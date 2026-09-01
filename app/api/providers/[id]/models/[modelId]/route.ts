@@ -4,11 +4,13 @@ import { db } from "@/db";
 import { providerModels } from "@/db/schema";
 import { providerModelUpdateSchema } from "@/lib/validation/schemas";
 import { jsonError } from "@/lib/validation/api";
+import { demoBlockedResponse, isDemoMode } from "@/lib/demo-policy";
 
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string; modelId: string }> },
 ) {
+  if (isDemoMode()) return demoBlockedResponse();
   const { id, modelId } = await params;
   let body: ReturnType<typeof providerModelUpdateSchema.parse>;
   try {
@@ -39,6 +41,7 @@ export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string; modelId: string }> },
 ) {
+  if (isDemoMode()) return demoBlockedResponse();
   const { id, modelId } = await params;
   await db
     .delete(providerModels)

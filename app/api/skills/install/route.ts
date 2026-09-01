@@ -5,6 +5,7 @@ import {
   isPreloadedSource,
   resolveRepoSkills,
 } from "@/lib/skills/manager";
+import { demoBlockedResponse, isDemoMode } from "@/lib/demo-policy";
 
 const installSchema = z.object({
   /** `owner/repo`, full URL, or `owner/repo@skill`. */
@@ -23,6 +24,7 @@ const installSchema = z.object({
  * Nothing is written to disk before that gate passes.
  */
 export async function POST(req: Request) {
+  if (isDemoMode()) return demoBlockedResponse();
   const body = installSchema.parse(await req.json());
 
   // Determine the repo part (strip `@skill` shorthand) for the gate.

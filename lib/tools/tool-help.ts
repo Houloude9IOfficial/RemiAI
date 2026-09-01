@@ -74,6 +74,36 @@ The user can reference files and directories using \`📄\` (file) or \`📁\` (
 
 If a file reference doesn't match any configured root, tell the user the referenced root doesn't exist.`,
 
+  "@MCP-references": `## @MCP references — MCP server & tool markers in user messages
+
+The user can tag MCP servers (and their specific tools) with \`@mcp\` markers:
+
+| User types | Meaning |
+|---|---|
+| \`@mcp postgres\` | Use tools from the "postgres" MCP server |
+| \`@mcp postgres query\` | Use the "query" tool from the "postgres" MCP server |
+
+### How to resolve:
+1. MCP tools are namespaced as \`serverName__toolName\` (e.g. \`postgres__query\`).
+2. For \`@mcp postgres\`, prefer tools whose name starts with \`postgres__\`.
+3. For \`@mcp postgres query\`, use exactly \`postgres__query\` when it exists — never invent a tool.
+
+If the referenced server isn't configured, tell the user it isn't available.`,
+
+  "@TOOL-references": `## @tool references — tool markers in user messages
+
+The user can tag which tools to use with \`@tool\` markers:
+
+| User types | Meaning |
+|---|---|
+| \`@tool bash_execute\` | Use the bash_execute tool |
+| \`@tool read_file, write_file\` | Use exactly these tools |
+
+### How to resolve:
+1. Extract the tool names after \`@tool\` (comma- or space-separated).
+2. Prefer those exact tool names when fulfilling the request.
+3. If a tagged tool is not in your current tool list, tell the user it isn't available (it may be disabled in Settings).`,
+
   "memory": `## Memory system — tools and usage
 
 **Tools available:**
@@ -794,6 +824,17 @@ const KEYWORD_SYNONYMS: Record<string, string> = {
   "@file": "@FILE-references",
   "emoji": "@FILE-references",
   "file reference": "@FILE-references",
+  "@mcp": "@MCP-references",
+  "mcp server": "@MCP-references",
+  "mcp marker": "@MCP-references",
+  "mcp tag": "@MCP-references",
+  "@tool": "@TOOL-references",
+  "tool reference": "@TOOL-references",
+  "tool marker": "@TOOL-references",
+  "tool tag": "@TOOL-references",
+  "@allow": "@TOOL-references",
+  "allow tool": "@TOOL-references",
+  "allowed tool": "@TOOL-references",
   schedule: "scheduled-tasks",
   scheduling: "scheduled-tasks",
   task: "scheduled-tasks",
@@ -958,7 +999,7 @@ function getAvailableTopicsText(): string {
 }  // Use a shorter inline list for the tool description (the full list is in the
   // system prompt and is returned when the user asks for an invalid topic)
   const SHORT_TOPIC_LIST =
-    "filesystem, memory, profile, todo, file-index, ask-questions, suggest-followups, agent-spawner, scheduled-tasks, routines, delay, create-visual, session-files, canvas, newsapi, firecrawl, brave-search, notion, context7, elevenlabs, playwright, code-execution, document-reader, media, @FILE-references, scaffolding, absolute-paths, web-fetch, mcp-tools, file-attachments, start-of-conversation";
+    "filesystem, memory, profile, todo, file-index, ask-questions, suggest-followups, agent-spawner, scheduled-tasks, routines, delay, create-visual, session-files, canvas, newsapi, firecrawl, brave-search, notion, context7, elevenlabs, playwright, code-execution, document-reader, media, @FILE-references, @MCP-references, @TOOL-references, scaffolding, absolute-paths, web-fetch, mcp-tools, file-attachments, start-of-conversation";
 
 // ---------------------------------------------------------------------------
 // Cached listing for list_available_tools — built once from TOOL_CATALOG

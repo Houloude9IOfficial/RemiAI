@@ -11,10 +11,25 @@ import {
 } from "ai";
 import type { providers } from "@/db/schema";
 import { createCompatFetch } from "./compat";
+import { nemotronChatTemplateKwargs } from "./reasoning";
+import type { QualityPolicy } from "@/lib/chat/quality-policy";
 
 type ProviderRow = typeof providers.$inferSelect;
 
-export function getLanguageModel(provider: ProviderRow, modelId: string): LanguageModel {
+export function getLanguageModel(
+  provider: ProviderRow,
+  modelId: string,
+  // Per-request reasoning-effort policy; consumed where the provider needs a
+  // request-body knob rather than provider options. NVIDIA Nemotron via the
+  // OpenAI-compatible API uses `chat_template_kwargs`; Ollama and plain
+  // OpenAI routing use providerOptions (see lib/providers/reasoning.ts).
+  effort: QualityPolicy = "medium",
+): LanguageModel {
+  // NVIDIA reasoning models (Nemotron 3) served through a direct OpenAI-
+  // compatible NIM endpoint control reasoning depth via chat_template_kwargs
+  // in the request body, keyed on the effort policy. Undefined for every other
+  // model, so the request body stays untouched.
+  const templateKwargs = nemotronChatTemplateKwargs(modelId, effort);
   switch (provider.kind) {
     case "anthropic":
       return createAnthropic({ apiKey: provider.apiKey ?? undefined })(modelId);
@@ -43,13 +58,16 @@ export function getLanguageModel(provider: ProviderRow, modelId: string): Langua
         apiKey: provider.apiKey ?? "ollama",
         // convertReasoningToThink folds Ollama's `delta.reasoning` stream field
         // into `<think>`-wrapped content (the @ai-sdk/openai provider drops the
-        // field otherwise, so no SDK middleware could ever see it).
+        // field otherwise, so no SDK middleware could ever see it). Reasoning
+        // effort itself rides providerOptions.openai.reasoningEffort, which the
+        // OpenAI-compatible endpoint maps to its internal think knob ("none"
+        // disables thinking for capable models).
         fetch: createCompatFetch(undefined, { convertReasoningToThink: true }),
       }).chat(modelId);
 
       // Ollama reasoning models stream thinking either as a `reasoning` delta
-      // field (converted to <think> content above) or as ordinary text already
-      // wrapped in <think>...</think> (older servers / models). extractReasoning-
+      // field (converted to  thinking content above) or as ordinary text already
+      // wrapped in `<think>...</think>` response (older servers / models). extractReasoning-
       // Middleware turns both into AI SDK reasoning parts. Models that emit
       // neither pass through unchanged.
       return wrapLanguageModel({
@@ -69,8 +87,13 @@ export function getLanguageModel(provider: ProviderRow, modelId: string): Langua
         // Reasoning models (OpenRouter, DeepSeek, etc.) stream thinking in a
         // `reasoning` / `reasoning_content` delta field that @ai-sdk/openai
         // drops. convertReasoningToThink folds it into `<think>` content so
-        // extractReasoningMiddleware below surfaces it in the UI.
-        fetch: createCompatFetch(undefined, { convertReasoningToThink: true }),
+        // extractReasoningMiddleware below surfaces it in the UI. NVIDIA NIM
+        // endpoints additionally receive chat_template_kwargs (injected into
+        // the request body) to honor the effort policy.
+        fetch: createCompatFetch(undefined, {
+          convertReasoningToThink: true,
+          ...(templateKwargs ? { injectBody: templateKwargs } : {}),
+        }),
       }).chat(modelId);
 
       return wrapLanguageModel({

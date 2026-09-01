@@ -79,18 +79,18 @@ function SuggestionsForm({ data }: { data: SuggestionsData }) {
       className="overflow-hidden rounded-xl from-muted/30 to-background"
     >
       {/* Header */}
-      <div className="flex items-center gap-2 border-b border-border/30 px-3.5 py-2.5">
+      <div className="flex items-center gap-2 border-none border-border/30 px-3.5">
         <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md">
-          <Lightbulb className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+          <Lightbulb className="h-3 w-3 text-primary" />
         </div>
         <span className="text-xs font-medium text-muted-foreground">
           Follow up
         </span>
-        {clickedIndex === null && (
+        {/* {clickedIndex === null && (
           <span className="ml-auto text-[10px] text-muted-foreground/50">
             {suggestions.length} suggestion{suggestions.length > 1 ? "s" : ""}
           </span>
-        )}
+        )} */}
       </div>
 
       {/* Suggestions */}

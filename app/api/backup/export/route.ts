@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { exportBackup } from "@/lib/backup/export";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 300;
+
 /**
  * POST /api/backup/export
  *

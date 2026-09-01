@@ -3,8 +3,28 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { providers, providerModels } from "@/db/schema";
 import { contextWindowFor } from "@/lib/providers/catalog";
+import { isDemoMode } from "@/lib/demo-policy";
+import { DEMO_PROVIDER_MODEL, ensureDemoProvider } from "@/lib/demo-provider";
 
 export async function GET() {
+  if (isDemoMode()) {
+    const demoProvider = ensureDemoProvider();
+    if (!demoProvider) return NextResponse.json([]);
+    return NextResponse.json([{
+      providerId: demoProvider.id,
+      label: demoProvider.label,
+      kind: demoProvider.kind,
+      models: [{
+        providerId: demoProvider.id,
+        providerLabel: demoProvider.label,
+        providerKind: demoProvider.kind,
+        modelId: DEMO_PROVIDER_MODEL!,
+        modelLabel: DEMO_PROVIDER_MODEL!,
+        contextWindow: contextWindowFor(DEMO_PROVIDER_MODEL!),
+        isDefault: true,
+      }],
+    }]);
+  }
   const rows = await db
     .select({
       providerId: providers.id,

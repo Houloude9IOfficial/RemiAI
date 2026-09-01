@@ -15,6 +15,9 @@
   <a href="https://www.producthunt.com/products/remiai">
     <img src="https://img.shields.io/badge/ProductHunt-RemiAI-da552f?style=flat-square&logo=producthunt" alt="ProductHunt">
   </a>
+  <a href="https://demo.remiai.crickdevs.com">
+    <img src="https://img.shields.io/badge/Live_Demo-Try_RemiAI-2ea44f?style=flat-square" alt="Live Demo">
+  </a>
   <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT License">
   <img src="https://img.shields.io/badge/Next.js-16-black?style=flat-square&logo=next.js" alt="Next.js 16">
   <img src="https://img.shields.io/badge/SQLite-better--sqlite3-003B57?style=flat-square&logo=sqlite" alt="SQLite">
@@ -254,6 +257,17 @@ Beyond coding tasks, RemiAI's tool-use and file-agent behavior is benchmarked wi
 
 Each test run file includes the exact prompts used, expected vs. actual results, and an independently verified score.
 
+## Demo
+
+A live demo is available at [demo.remiai.crickdevs.com](https://demo.remiai.crickdevs.com).
+
+Demo credentials:
+
+- **Email:** `demo@example.com`
+- **Password:** `demo1234`
+
+---
+
 ## Getting Started
 
 ### Prerequisites
@@ -412,6 +426,43 @@ docker run -d --name remiai \
   --cap-drop ALL \
   ghcr.io/houloude9iofficial/remiai:latest
 ```
+
+### Public Docker demo
+
+**There's absolutely no reason to use this image, but it's available for quick testing.**
+
+Pre-built demo images are available on [Docker Hub](https://hub.docker.com/r/houloude/remiai-demo).
+
+Run `npm run demo:setup` for an interactive setup. It configures the provider and creates server-only shared login variables, so the first demo visit goes directly to sign in with the credentials you entered. For a custom OpenAI-compatible provider, choose **Custom OpenAI-compatible endpoint**; the required value is `DEMO_PROVIDER_KIND=openai-compatible` (not `custom` or `openai`).
+
+The demo profile keeps the app bound to localhost, uses a separate volume, disables administration/integrations/execution, and allows only chat plus canvas/session-file functionality. Configure the host provider in an untracked `.env` file; never put credentials in Compose or source control:
+
+```dotenv
+DEMO_PROVIDER_KIND=anthropic
+DEMO_PROVIDER_MODEL=claude-sonnet-4-5
+DEMO_PROVIDER_API_KEY=replace-with-provider-key
+# DEMO_PROVIDER_BASE_URL=https://optional-compatible-endpoint.example
+```
+
+Build and start it behind a TLS reverse proxy:
+
+```bash
+docker compose --profile demo build remiai-demo
+docker compose --profile demo up -d remiai-demo
+docker compose --profile demo logs -f remiai-demo
+```
+
+The demo service is tagged as `houloude/remiai-demo:latest` and its Compose build targets both `linux/amd64` and `linux/arm64`. Docker Compose builds the platform matching the current host.
+
+The demo uses `remiai-demo-data`, not `remiai-data`. To reset only demo data, stop the demo and remove its volume:
+
+```bash
+docker compose --profile demo down
+# Confirm this is the demo volume before removing it:
+docker volume rm <project>_remiai-demo-data
+```
+
+`DEMO=true` is evaluated server-side. Provider credentials remain server-only, and malformed/missing provider settings should be corrected before public exposure. Do not publish the container directly over plain HTTP; use TLS, trusted proxy IP forwarding, and normal firewall controls.
 
 ### Manual Database Commands
 

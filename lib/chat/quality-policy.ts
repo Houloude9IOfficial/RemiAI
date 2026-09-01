@@ -1,4 +1,4 @@
-export const QUALITY_POLICIES = ["fast", "balanced", "quality", "selected"] as const;
+export const QUALITY_POLICIES = ["minimal", "low", "medium", "high"] as const;
 
 export type QualityPolicy = (typeof QUALITY_POLICIES)[number];
 export type TaskComplexity = "simple" | "moderate" | "complex";
@@ -12,10 +12,23 @@ export type QualityStrategy = {
   maxOutputTokens: number;
 };
 
+// Legacy policy values stored by older versions of the app (pre reasoning-effort
+// rename). Mapped so existing conversations keep their intent:
+//   fast → minimal, balanced → medium, quality → high, selected → medium
+const LEGACY_POLICY_MAP: Record<string, QualityPolicy> = {
+  fast: "minimal",
+  balanced: "medium",
+  quality: "high",
+  selected: "medium",
+};
+
 export function normalizeQualityPolicy(value: unknown): QualityPolicy {
-  return typeof value === "string" && QUALITY_POLICIES.includes(value as QualityPolicy)
-    ? (value as QualityPolicy)
-    : "balanced";
+  if (typeof value === "string") {
+    if (QUALITY_POLICIES.includes(value as QualityPolicy)) return value as QualityPolicy;
+    const legacy = LEGACY_POLICY_MAP[value];
+    if (legacy) return legacy;
+  }
+  return "medium";
 }
 
 /**
@@ -51,43 +64,43 @@ export function chooseQualityStrategy(
   complexity: TaskComplexity,
 ): QualityStrategy {
   const normalized = normalizeQualityPolicy(policy);
-  if (normalized === "fast") {
+  if (normalized === "minimal") {
     return {
       policy: normalized,
       complexity,
-      label: "Fast",
+      label: "Minimal",
       verificationGuidance: "Answer directly; use only the checks needed to avoid an obvious mistake.",
       maxRetries: 1,
       maxOutputTokens: complexity === "complex" ? 4096 : 2048,
     };
   }
 
-  if (normalized === "quality") {
+  if (normalized === "low") {
     return {
       policy: normalized,
       complexity,
-      label: "Quality first",
-      verificationGuidance: "Take the time to inspect assumptions, use deterministic checks where available, and disclose uncertainty.",
-      maxRetries: 3,
-      maxOutputTokens: complexity === "simple" ? 4096 : 16384,
+      label: "Low",
+      verificationGuidance: "Keep reasoning light; run only quick checks for obvious mistakes.",
+      maxRetries: 2,
+      maxOutputTokens: complexity === "complex" ? 8192 : 3072,
     };
   }
 
-  if (normalized === "selected") {
+  if (normalized === "high") {
     return {
       policy: normalized,
       complexity,
-      label: "Selected model",
-      verificationGuidance: "Use the selected model's normal effort; do not silently route to another model.",
+      label: "High",
+      verificationGuidance: "Take the time to inspect assumptions, use deterministic checks where available, and disclose uncertainty.",
       maxRetries: 3,
-      maxOutputTokens: complexity === "complex" ? 16384 : 4096,
+      maxOutputTokens: complexity === "simple" ? 8192 : 16384,
     };
   }
 
   return {
-    policy: "balanced",
+    policy: "medium",
     complexity,
-    label: "Balanced",
+    label: "Medium",
     verificationGuidance: "Use proportionate inspection and verification for the task.",
     maxRetries: 3,
     maxOutputTokens: complexity === "complex" ? 16384 : 4096,

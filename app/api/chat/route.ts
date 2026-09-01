@@ -133,6 +133,8 @@ import {
   withSourceProvenance,
 } from "@/lib/research/source-storage";
 import { saveBuildResultArtifact } from "@/lib/artifacts/storage";
+import { filterDemoTools, isDemoMode } from "@/lib/demo-policy";
+import { ensureDemoProvider } from "@/lib/demo-provider";
 
 // A response that ends with a commitment to take an action (e.g. "let me dig
 // deeper into the pages") while the run made ZERO tool calls is almost always
@@ -237,6 +239,8 @@ export async function POST(req: Request) {
   // The delta's `parts` are a JSON round-trip of UI parts — validated as a
   // generic array above, narrowed to the SDK's UIMessage shape here.
   const deltaMessages = parsed.data.messages as UIMessage[];
+
+  if (isDemoMode()) ensureDemoProvider();
 
   const conversationLookupStartedAt = performance.now();
   const conversation = await db
@@ -358,8 +362,10 @@ export async function POST(req: Request) {
 
   const promptAssemblyStartedAt = performance.now();
 
-  // Gather MCP tools from enabled servers
-  const enabledMcpServers = await db
+  // Public demo mode never loads persisted MCP servers or integrations.
+  const enabledMcpServers = isDemoMode()
+    ? []
+    : await db
     .select()
     .from(mcpServers)
     .where(eq(mcpServers.enabled, true))
@@ -403,7 +409,7 @@ export async function POST(req: Request) {
   const memoryToolSet = memoryEnabled ? buildMemoryTools() : {};
 
   // Gather integration tools (Brave Search, Notion, Context7) based on config
-  const integrationToolSet = await buildIntegrationTools(userContext);
+  const integrationToolSet = isDemoMode() ? {} : await buildIntegrationTools(userContext);
   const sourceProvenanceOptions = {
     conversationId,
     sourceRunId: trace.traceId,
@@ -435,14 +441,14 @@ export async function POST(req: Request) {
   // Gather code execution tools (python_exec, js_exec, bash_execute). Code
   // runs on the user's machine and can reach their data — excluded entirely
   // from fully isolated (memory-disabled) chats.
-  const executionToolSet = memoryEnabled
+  const executionToolSet = !isDemoMode() && memoryEnabled
     ? await buildExecutionTools(
         conversation.bashMode === "full" ? "full" : "sandboxed",
       )
     : {};
 
   // Gather native Playwright browser automation tools (browser_open, ...)
-  const playwrightToolSet = await buildPlaywrightTools(conversationId);
+  const playwrightToolSet = isDemoMode() ? {} : await buildPlaywrightTools(conversationId);
 
   // Gather document reader tools (read_document) and media tools. In fully
   // isolated (memory-disabled) chats these are restricted to chat-file URLs
@@ -503,10 +509,10 @@ export async function POST(req: Request) {
   const todoToolSet = buildTodoTools(conversationId);
 
   // Routine tools (create, run, list, update, delete routines)
-  const routineToolSet = await buildRoutinesTools(conversationId);
+  const routineToolSet = isDemoMode() ? {} : await buildRoutinesTools(conversationId);
 
   // Scheduled tasks tool (schedule future tasks)
-  const scheduleToolSet = await buildScheduleTool(conversationId);
+  const scheduleToolSet = isDemoMode() ? {} : await buildScheduleTool(conversationId);
 
   // Session files tools — per-conversation private file sandbox
   const sessionFileToolSet = buildSessionFileTools(conversationId, {
@@ -524,7 +530,7 @@ export async function POST(req: Request) {
   // Skills tools (list_skills, load_skill) — the "plugins" analog; hidden in
   // fully isolated (memory-disabled) chats just like ChatGPT temp chats ignore
   // plugins.
-  const skillsToolSet = memoryEnabled ? buildSkillsToolSet() : {};
+  const skillsToolSet = isDemoMode() ? {} : memoryEnabled ? buildSkillsToolSet() : {};
 
   // In plan mode, filter out write tools — AI can only read/plan, not modify files
   const writeBlocklist = [
@@ -542,7 +548,9 @@ export async function POST(req: Request) {
     "canvas_add_file",
   ];
   const effectiveFsToolSet =
-    mode === "plan"
+    isDemoMode()
+      ? {}
+      : mode === "plan"
       ? Object.fromEntries(
           Object.entries(fsToolSet).filter(([key]) => !writeBlocklist.includes(key)),
         )
@@ -754,7 +762,7 @@ Definition of done:
     (routeProvider) => routeProvider.id === qualityRoute.active.providerId,
   ) ?? provider;
   const activeModelId = qualityRoute.active.modelId;
-  const model = getLanguageModel(activeProvider, activeModelId);
+  const model = getLanguageModel(activeProvider, activeModelId, qualityStrategy.policy);
   trace.metric("qualityPolicy", qualityStrategy.policy);
   trace.metric("taskComplexity", qualityStrategy.complexity);
   trace.metric("selectedProviderId", provider.id);
@@ -811,7 +819,7 @@ Definition of done:
   // objects, e.g. in lib/tools/*.ts) — it also keeps the load_tool_groups
   // shape from breaking the ToolSet union.
   const baseTools: Record<string, unknown> = {
-    ...tools,
+    ...filterDemoTools(tools),
     // Appended LAST on purpose: markLastToolForCache puts the Anthropic
     // cache breakpoint on it, and since load_tool_groups is always active
     // and always last in the per-step filtered set, the tool-definitions
@@ -835,7 +843,9 @@ Definition of done:
 
   // The initial active set = core + classified + stored groups (identical to
   // the old filtered set). prepareStep re-derives it before every step.
-  const initialActiveToolNames = activeToolNames(tools, activeToolGroups);
+  const initialActiveToolNames = isDemoMode()
+    ? Object.keys(filterDemoTools(tools))
+    : activeToolNames(tools, activeToolGroups);
   const estimatedToolDefinitionChars = Object.entries(baseTools).reduce(
     (total, [name, tool]) => {
       const toolRecord = tool && typeof tool === "object"
@@ -847,7 +857,7 @@ Definition of done:
     0,
   );
   trace.metric("activeToolCount", initialActiveToolNames.length);
-  trace.metric("activeToolNames", initialActiveToolNames);
+  trace.metric("activeToolNames", initialActiveToolNames as string[]);
   trace.metric("estimatedToolDefinitionChars", estimatedToolDefinitionChars);
 
   // Inject recent file changes into the system prompt for freshness.
@@ -940,7 +950,7 @@ Definition of done:
   // instructions with a FRESH note once load_tool_groups enables a group
   // mid-stream (the note is the only part of the dynamic prompt that can
   // change mid-request).
-  const qualityPolicyPrompt = `\n\n## Quality policy — ${qualityStrategy.label}\nTask complexity estimate: ${qualityStrategy.complexity}. ${qualityStrategy.verificationGuidance}\nSelected model: ${selectedRouteCandidate.providerLabel} / ${selectedRouteCandidate.modelId}. Active route: ${qualityRoute.active.providerLabel} / ${qualityRoute.active.modelId}. ${qualityRoute.reason} Routing is deterministic and bounded; never make another provider call unless the Quality-first verifier is eligible.`;
+  const qualityPolicyPrompt = `\n\n## Reasoning effort — ${qualityStrategy.label}\nTask complexity estimate: ${qualityStrategy.complexity}. ${qualityStrategy.verificationGuidance}\nSelected model: ${selectedRouteCandidate.providerLabel} / ${selectedRouteCandidate.modelId}. Active route: ${qualityRoute.active.providerLabel} / ${qualityRoute.active.modelId}. ${qualityRoute.reason} Routing is deterministic and bounded; never make another provider call unless the High-effort verifier is eligible.`;
 
   // Canvas guidance — only injected when the canvas group is loaded (it rides
   // on session files for writing, but the workflow guidance is canvas-specific
@@ -1121,11 +1131,13 @@ Definition of done:
     ),
     messages: modelMessages,
     tools: cachedBaseTools as ToolSet,
-    // Only supported Anthropic reasoning families receive reasoning options.
-    // Unknown/local/OpenAI-compatible models stay on their normal stream.
+    // Supported reasoning families receive reasoning options driven by the
+    // conversation's effort policy (OpenAI reasoningEffort, Anthropic thinking
+    // budget/adaptive). Unknown/local/OpenAI-compatible models stay normal.
     providerOptions: streamingReasoningProviderOptions(
       activeProvider.kind,
       activeModelId,
+      qualityStrategy.policy,
     ),
     // Initial active set (core + classified + stored groups). prepareStep
     // re-evaluates it before every step, so load_tool_groups can add groups
@@ -1172,7 +1184,9 @@ Definition of done:
         ? `\n\n## BUILD REPAIR LOOP\n${buildRepairGuidance(Math.max(1, buildRepairState.attempt))}`
         : "";
       lastStepComputed = {
-        activeTools: activeToolNames(tools, freshActive),
+        activeTools: isDemoMode()
+          ? Object.keys(filterDemoTools(tools))
+          : activeToolNames(tools, freshActive),
         instructions: buildCachedInstructions(
           activeProvider,
           staticSystemPrompt,
@@ -1422,7 +1436,7 @@ Definition of done:
               changedFiles,
               checks,
               summary: buildSummary,
-              error: capturedErrorPayload?.message ?? null,
+              error: capturedErrorPayload?.detail ?? capturedErrorPayload?.message ?? null,
               checkpoint: finalCheckpoint,
               resultArtifactId,
             });
@@ -1436,7 +1450,7 @@ Definition of done:
               changedFiles,
               checks,
               summary: buildSummary,
-              error: capturedErrorPayload?.message ?? null,
+              error: capturedErrorPayload?.detail ?? capturedErrorPayload?.message ?? null,
               checkpoint: finalCheckpoint,
               resultArtifactId,
             });

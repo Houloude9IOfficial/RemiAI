@@ -1,5 +1,6 @@
 services:
   remiai:
+    profiles: [default]
     build: .
     restart: unless-stopped
     ports:
@@ -19,5 +20,40 @@ services:
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=256m
 
+  remiai-demo:
+    profiles: [demo]
+    image: houloude/remiai-demo:latest
+    build:
+      context: .
+      platforms:
+        - linux/amd64
+        - linux/arm64
+    restart: unless-stopped
+    ports:
+      # Keep the demo private to the host; terminate TLS in a reverse proxy.
+      - "127.0.0.1:3001:3000"
+    volumes:
+      - remiai-demo-data:/app/data
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+      DEMO: "true"
+      DEMO_PROVIDER_KIND: ${DEMO_PROVIDER_KIND:?Set DEMO_PROVIDER_KIND}
+      DEMO_PROVIDER_MODEL: ${DEMO_PROVIDER_MODEL:?Set DEMO_PROVIDER_MODEL}
+      DEMO_PROVIDER_API_KEY: ${DEMO_PROVIDER_API_KEY:?Set DEMO_PROVIDER_API_KEY}
+      DEMO_PROVIDER_BASE_URL: ${DEMO_PROVIDER_BASE_URL:-}
+      DEMO_AUTH_EMAIL: ${DEMO_AUTH_EMAIL:?Set DEMO_AUTH_EMAIL}
+      DEMO_AUTH_PASSWORD: ${DEMO_AUTH_PASSWORD:?Set DEMO_AUTH_PASSWORD}
+      DEMO_AUTH_DISPLAY_NAME: ${DEMO_AUTH_DISPLAY_NAME:-Demo Visitor}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+
 volumes:
   remiai-data:
+  remiai-demo-data:

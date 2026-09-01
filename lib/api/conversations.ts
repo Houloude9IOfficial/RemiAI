@@ -6,7 +6,7 @@ export type Conversation = {
   providerId: number | null;
   modelId: string | null;
   mode: string;
-  qualityPolicy: "fast" | "balanced" | "quality" | "selected";
+  qualityPolicy: "minimal" | "low" | "medium" | "high";
   bashMode: "sandboxed" | "full";
   /** Temporary chat (ChatGPT-style): hacky/temporary UI, auto-deleted after 30 days. */
   isTemporary: boolean;
@@ -71,7 +71,7 @@ export const conversationsApi = {
       providerId: number | null;
       modelId: string | null;
       mode: string;
-      qualityPolicy: "fast" | "balanced" | "quality" | "selected";
+      qualityPolicy: "minimal" | "low" | "medium" | "high";
       bashMode: "sandboxed" | "full";
       isTemporary: boolean;
       memoryEnabled: boolean;

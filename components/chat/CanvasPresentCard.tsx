@@ -1,9 +1,13 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { LayoutPanelTop } from "lucide-react";
-import { dispatchCanvasPresent } from "@/lib/api/canvas";
+import {
+  CANVAS_CLOSED_EVENT,
+  CANVAS_OPENED_EVENT,
+  dispatchCanvasPresent,
+} from "@/lib/api/canvas";
 
 /**
  * Renders the inline result of a `canvas_create` / `canvas_open` tool call
@@ -39,6 +43,31 @@ export function CanvasPresentCard({ data }: { data: unknown }) {
       ? Number((data as Record<string, unknown>).fileCount)
       : files.length) ?? 0;
 
+  // Whether this card's canvas is currently open in the panel. Drives the
+  // headline copy: "Opened canvas…" while open, a neutral label once closed.
+  const [isOpen, setIsOpen] = useState(false);
+
+  // Track open/close state so the card's copy matches reality. The page
+  // dispatches CANVAS_OPENED_EVENT only when it actually opens the panel
+  // (skipping it when the user dismissed it), so the "Opened canvas…" copy
+  // is never shown while the panel is really closed. A manual close flips
+  // it back to the neutral label.
+  useEffect(() => {
+    if (!isCanvas) return;
+    const onOpened = (event: Event) => {
+      const detail = (event as CustomEvent<{ slug: string }>).detail;
+      if (detail?.slug && detail.slug !== slug) return;
+      setIsOpen(true);
+    };
+    const onClosed = () => setIsOpen(false);
+    window.addEventListener(CANVAS_OPENED_EVENT, onOpened);
+    window.addEventListener(CANVAS_CLOSED_EVENT, onClosed);
+    return () => {
+      window.removeEventListener(CANVAS_OPENED_EVENT, onOpened);
+      window.removeEventListener(CANVAS_CLOSED_EVENT, onClosed);
+    };
+  }, [isCanvas, slug]);
+
   // Auto-open the panel once the card appears (no-op for non-canvas output).
   useEffect(() => {
     if (!slug) return;
@@ -64,18 +93,27 @@ export function CanvasPresentCard({ data }: { data: unknown }) {
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-foreground">
-            {message || (name ? `Canvas: ${name}` : "Canvas ready")}
+            {isOpen
+              ? message || (name ? `Canvas: ${name}` : "Canvas ready")
+              : name
+                ? `Canvas ready: ${name}`
+                : "Canvas ready"}
           </p>
           <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-            {description || `${fileCount} file${fileCount === 1 ? "" : "s"} · entry ${entryFile}`}
+            {isOpen
+              ? description ||
+                `${fileCount} file${fileCount === 1 ? "" : "s"} · entry ${entryFile}`
+              : description || `${fileCount} file${fileCount === 1 ? "" : "s"}`}
           </p>
         </div>
         <button
           type="button"
-          onClick={() => dispatchCanvasPresent({ slug, message })}
+          onClick={() =>
+            dispatchCanvasPresent({ slug, message, manual: true })
+          }
           className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground transition-all hover:bg-primary/90 active:scale-[0.97]"
         >
-          Open canvas
+          {isOpen ? "Reopen canvas" : "Open canvas"}
         </button>
       </div>
     </motion.div>

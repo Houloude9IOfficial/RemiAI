@@ -14,6 +14,8 @@ import { db } from "@/db";
 import { messages } from "@/db/schema";
 import type { UIMessage, UIMessageChunk } from "ai";
 import type { RunTrace } from "@/lib/observability/run-trace";
+import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import * as schema from "@/db/schema";
 
 
 const PERSIST_INTERVAL_MS = 2000;
@@ -24,7 +26,11 @@ export async function periodicallyPersistMessages(
   chunkStream: ReadableStream<UIMessageChunk>,
   onStreamEnd?: () => Promise<void>,
   trace?: RunTrace,
+  // Injectable for tests (mirrors `history-reconstruction.ts`); defaults to
+  // the app singleton so production callers pass nothing extra.
+  database?: BetterSQLite3Database<typeof schema>,
 ): Promise<void> {
+  const persistDb = database ?? db;
   const reader = chunkStream.getReader();
 
   // Track the current assistant message being built
@@ -32,19 +38,38 @@ export async function periodicallyPersistMessages(
   const parts: UIMessage["parts"] = [];
   const textById = new Map<string, number>(); // text/reasoning chunk ID → index in parts
   const toolById = new Map<string, number>(); // toolCallId → index in parts
+  // Tool-call ID → tool name. Populated by tool-input-start / -available;
+  // used to create a part if an output/error chunk ever arrives without a
+  // preceding input chunk (defensive — the UI would otherwise lose the call).
+  const toolNameById = new Map<string, string>();
 
   let lastPersistTime = Date.now();
 
   async function persistSnapshot() {
     const persistStartedAt = performance.now();
+    // Drop tool parts that only saw `tool-input-start`: they carry no input
+    // yet and would render as a permanently-stuck "loading" card after a
+    // refresh. Their full `tool-input-available` counterpart is a few chunks
+    // away and is captured by the next snapshot (or the final one).
+    const persistableParts = parts.filter((part) => {
+      if (
+        part &&
+        typeof part === "object" &&
+        "state" in part &&
+        (part as { state?: string }).state === "input-streaming"
+      ) {
+        return false;
+      }
+      return true;
+    });
     const snapshot: UIMessage = {
       id: messageId,
       role: "assistant",
-      parts: parts.slice(),
+      parts: persistableParts,
     };
 
     // Persist the assistant message (upsert — updates parts if already exists)
-    await db
+    await persistDb
       .insert(messages)
       .values({
         uiId: snapshot.id,
@@ -170,6 +195,7 @@ export async function periodicallyPersistMessages(
       case "tool-input-start": {
         const toolCallId = chunk.toolCallId as string;
         const toolName = chunk.toolName as string;
+        toolNameById.set(toolCallId, toolName);
         const part: Record<string, unknown> = {
           type: `tool-${toolName}`,
           toolCallId,
@@ -196,8 +222,10 @@ export async function periodicallyPersistMessages(
       case "tool-input-available": {
         const toolCallId = chunk.toolCallId as string;
         const idx = toolById.get(toolCallId);
+        const toolName = chunk.toolName as string;
+        toolNameById.set(toolCallId, toolName);
         const part: Record<string, unknown> = {
-          type: `tool-${chunk.toolName as string}`,
+          type: `tool-${toolName}`,
           toolCallId,
           state: "input-available",
           input: chunk.input,
@@ -222,12 +250,28 @@ export async function periodicallyPersistMessages(
       case "tool-input-error": {
         const toolCallId = chunk.toolCallId as string;
         const idx = toolById.get(toolCallId);
+        const toolName = (chunk.toolName as string) ?? toolNameById.get(toolCallId);
+        toolNameById.set(toolCallId, toolName);
         if (idx != null) {
           const part = parts[idx] as Record<string, unknown>;
           part.state = "output-error";
           part.errorText = chunk.errorText;
           if (chunk.providerMetadata != null)
             part.resultProviderMetadata = chunk.providerMetadata;
+        } else if (toolName) {
+          // Invalid/errored tool calls can surface without a preceding
+          // tool-input-start — never drop the call from the persisted message.
+          const part: Record<string, unknown> = {
+            type: `tool-${toolName}`,
+            toolCallId,
+            state: "output-error",
+            input: chunk.input,
+            errorText: chunk.errorText,
+          };
+          if (chunk.providerMetadata != null)
+            part.resultProviderMetadata = chunk.providerMetadata;
+          parts.push(part as never);
+          toolById.set(toolCallId, parts.length - 1);
         }
         break;
       }
@@ -242,6 +286,21 @@ export async function periodicallyPersistMessages(
           if (chunk.preliminary != null) part.preliminary = chunk.preliminary;
           if (chunk.providerMetadata != null)
             part.resultProviderMetadata = chunk.providerMetadata;
+        } else {
+          // Defensive: if the output arrives without a recorded input chunk
+          // (e.g. a resumed/replayed stream), keep the call visible anyway.
+          const toolName = toolNameById.get(toolCallId);
+          const part: Record<string, unknown> = {
+            type: `tool-${toolName ?? "unknown"}`,
+            toolCallId,
+            state: "output-available",
+            output: chunk.output,
+          };
+          if (chunk.preliminary != null) part.preliminary = chunk.preliminary;
+          if (chunk.providerMetadata != null)
+            part.resultProviderMetadata = chunk.providerMetadata;
+          parts.push(part as never);
+          toolById.set(toolCallId, parts.length - 1);
         }
         break;
       }
@@ -255,6 +314,18 @@ export async function periodicallyPersistMessages(
           part.errorText = chunk.errorText;
           if (chunk.providerMetadata != null)
             part.resultProviderMetadata = chunk.providerMetadata;
+        } else {
+          const toolName = toolNameById.get(toolCallId);
+          const part: Record<string, unknown> = {
+            type: `tool-${toolName ?? "unknown"}`,
+            toolCallId,
+            state: "output-error",
+            errorText: chunk.errorText,
+          };
+          if (chunk.providerMetadata != null)
+            part.resultProviderMetadata = chunk.providerMetadata;
+          parts.push(part as never);
+          toolById.set(toolCallId, parts.length - 1);
         }
         break;
       }
@@ -264,6 +335,15 @@ export async function periodicallyPersistMessages(
         const idx = toolById.get(toolCallId);
         if (idx != null) {
           (parts[idx] as Record<string, unknown>).state = "output-denied";
+        } else {
+          const toolName = toolNameById.get(toolCallId);
+          const part: Record<string, unknown> = {
+            type: `tool-${toolName ?? "unknown"}`,
+            toolCallId,
+            state: "output-denied",
+          };
+          parts.push(part as never);
+          toolById.set(toolCallId, parts.length - 1);
         }
         break;
       }

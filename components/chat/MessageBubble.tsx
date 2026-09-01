@@ -5,7 +5,8 @@ import { isTextUIPart, isToolUIPart, isReasoningUIPart, getToolName } from "ai";
 import { Component, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Copy, Check, RefreshCw } from "lucide-react";
-import { ToolCallGroup } from "./ToolCallGroup";
+import { ToolCallGroup, FileChangeDigest, extractFileChanges } from "./ToolCallGroup";
+import { ActivityDisclosure } from "./ActivityDisclosure";
 import { VisualCard } from "./VisualCard";
 import { GeneratingIndicator } from "./GeneratingIndicator";
 import { ReasoningBlock } from "./ReasoningBlock";
@@ -50,6 +51,20 @@ const MARKDOWN_SYNTAX = new Set([
   "*", "#", "`", ">", "-", "_", "[", "]", "(", ")", "!", "~", "|", "\\", "&",
 ]);
 
+// A single character waits at most this long before fading in. Without a
+// cap, every new character in a flush gets `i * 12ms` of delay — a 2,000-
+// char answer (common at the end of a big multi-tool run, or from buffered
+// proxy providers that emit huge deltas) would leave its tail invisible for
+// ~24 seconds with `animation-fill-mode: both` (opacity: 0 before start).
+// The chat then looks blank / partially rendered while streaming.
+const MAX_LETTER_FADE_DELAY_MS = 240;
+
+// Flushes larger than this skip the letter-by-letter treatment entirely and
+// render as plain text: thousands of individually animated spans freeze the
+// tab, and capping the delay alone would still flash hundreds of characters
+// on at once. Big chunks appear immediately instead.
+const MAX_FADE_CHARS_PER_FLUSH = 120;
+
 /**
  * Wraps each non-markdown-syntax character in the `newChars` portion of
  * `text` in an individually animated `<span>`. The `prevLength` is the
@@ -72,6 +87,10 @@ function wrapNewCharsWithFadeIn(text: string, prevLength: number): string {
   const before = text.slice(0, prevLength);
   const toWrap = text.slice(prevLength);
 
+  // Large single flushes render immediately — the typewriter effect is only
+  // worth its cost for small deltas (see MAX_FADE_CHARS_PER_FLUSH).
+  if (toWrap.length > MAX_FADE_CHARS_PER_FLUSH) return text;
+
   let result = "";
   for (let i = 0; i < toWrap.length; i++) {
     const char = toWrap[i];
@@ -80,7 +99,7 @@ function wrapNewCharsWithFadeIn(text: string, prevLength: number): string {
     if (MARKDOWN_SYNTAX.has(char) || /\s/.test(char)) {
       result += char;
     } else {
-      const delay = i * 12; // 12ms between each character
+      const delay = Math.min(i * 12, MAX_LETTER_FADE_DELAY_MS); // 12ms per char, capped
       // Escape HTML special characters to prevent injection
       const escaped = char === "&" ? "&amp;" : char === "<" ? "&lt;" : char === ">" ? "&gt;" : char === '"' ? "&quot;" : char;
       result += `<span class="animate-letter-fade-in" style="animation-delay:${delay}ms;color:inherit">${escaped}</span>`;
@@ -371,10 +390,10 @@ function isShortFiller(text: string): boolean {
 
 /**
  * Second pass over the raw segments: tool groups separated ONLY by short
- * filler text are merged into a single group (the filler is absorbed, so
- * the calls appear back-to-back). Text at the start or end of a message is
- * always preserved — only filler sitting *between* two tool groups is
- * dropped. Adjacent tool segments (e.g. after a real-text flush) merge too.
+ * filler text (or by interleaved reasoning, which gets consolidated first)
+ * are merged into a single group — the calls appear back-to-back as one
+ * chained card. Text at the start or end of a message is always preserved;
+ * only filler sitting *between* two tool groups is dropped.
  */
 function mergeInRowToolSegments(segments: Segment[]): Segment[] {
   const merged: Segment[] = [];
@@ -400,14 +419,16 @@ function mergeInRowToolSegments(segments: Segment[]): Segment[] {
         isShortFiller(filler.text)
       ) {
         // Filler sits between two tool groups — absorb it and merge them.
-        // (Adjacent tool segments can't otherwise occur: pass 1 already
-        // merges consecutive tool parts into one segment.)
         last.parts.push(...seg.parts);
       } else {
         merged.push(filler);
         merged.push(seg);
       }
       filler = null;
+    } else if (last?.type === "tool" && seg.type === "tool") {
+      // Adjacent tool groups — the reasoning that separated them was already
+      // consolidated into a single block above, so merge them into one chain.
+      last.parts.push(...seg.parts);
     } else {
       merged.push(seg);
     }
@@ -460,6 +481,38 @@ function mergeReasoningSegments(segments: Segment[]): Segment[] {
  * `mergeInRowToolSegments`).
  * All other part types (step-start, source, file) are skipped.
  */
+/**
+ * True for session-file writes/edits that scaffold a canvas's files (paths
+ * under canvas/{slug}/) during the creation request. On the first canvas
+ * message those cards are hidden — the canvas card already shows the result.
+ */
+function isCanvasScaffoldWrite(part: UIMessage["parts"][number]): boolean {
+  if (!isToolUIPart(part)) return false;
+  let name: string;
+  try {
+    name = getToolName(part);
+  } catch {
+    return false;
+  }
+  const short = name.toLowerCase().replace(/^.*__/, "");
+  if (
+    short !== "session_file_write" &&
+    short !== "session_file_edit" &&
+    short !== "session_file_mkdir"
+  ) {
+    return false;
+  }
+  const rec = part as Record<string, unknown>;
+  const input = rec.input as Record<string, unknown> | undefined;
+  const path =
+    typeof input?.path === "string"
+      ? input.path
+      : typeof input?.from === "string"
+        ? input.from
+        : "";
+  return path.replace(/\\/g, "/").startsWith("canvas/");
+}
+
 function buildSegments(parts: UIMessage["parts"]): Segment[] {
   const segments: Segment[] = [];
 
@@ -562,15 +615,43 @@ function buildSegments(parts: UIMessage["parts"]): Segment[] {
     // Skip step-start, source, file parts
   }
 
+  // Canvas creation scaffolding: on the FIRST canvas request the AI writes
+  // the project files with session-file writes under canvas/{slug}/. Hide
+  // those "Wrote/Updated session file" cards — the canvas card already
+  // communicates the result. Later iterations (canvas_open only, no
+  // canvas_create) keep their edit cards visible.
+  const createdCanvas = parts.some((p) => {
+    if (!isToolUIPart(p)) return false;
+    try {
+      const n = getToolName(p);
+      const short = n.toLowerCase().replace(/^.*__/, "");
+      return short === "canvas_create" || short === "canvas_add_file";
+    } catch {
+      return false;
+    }
+  });
+  const visibleSegments = createdCanvas
+    ? segments.filter(
+        (s) => s.type !== "tool" || !s.parts.every(isCanvasScaffoldWrite),
+      )
+    : segments;
+
   // Deduplicate canvas present cards: keep only the LAST one so the user
   // sees a single card at the end of the message, not one per canvas_* call.
-  const lastCanvasIdx = segments.findLastIndex((s) => s.type === "canvasPresent");
+  const lastCanvasIdx = visibleSegments.findLastIndex(
+    (s) => s.type === "canvasPresent",
+  );
   if (lastCanvasIdx >= 0) {
-    const deduped = segments.filter((s, i) => s.type !== "canvasPresent" || i === lastCanvasIdx);
-    return mergeReasoningSegments(mergeInRowToolSegments(deduped));
+    const deduped = visibleSegments.filter(
+      (s, i) => s.type !== "canvasPresent" || i === lastCanvasIdx,
+    );
+    // Reasoning is consolidated into ONE block before the tool pass, so tool
+    // calls that only had per-step reasoning between them chain into a single
+    // grouped card instead of appearing as standalone entries.
+    return mergeInRowToolSegments(mergeReasoningSegments(deduped));
   }
 
-  return mergeReasoningSegments(mergeInRowToolSegments(segments));
+  return mergeInRowToolSegments(mergeReasoningSegments(visibleSegments));
 }
 
 export function MessageBubble({
@@ -732,14 +813,78 @@ export function MessageBubble({
       s.type !== "suggestions" && s.type !== "sources",
   );
 
+  // Claude-style activity: the LEADING reasoning + tool run collapses into a
+  // single quiet line at the top; everything after it (text, visuals, present
+  // cards, mid-message tools) keeps flowing inline as before.
+  const activityEnd = renderableSegments.findIndex(
+    (s) => s.type !== "reasoning" && s.type !== "tool",
+  );
+  const leadingActivity =
+    activityEnd === -1 ? renderableSegments : renderableSegments.slice(0, activityEnd);
+  const flowSegments =
+    activityEnd === -1 ? [] : renderableSegments.slice(activityEnd);
+
+  const activityReasoning = leadingActivity
+    .filter((s): s is Segment & { type: "reasoning" } => s.type === "reasoning")
+    .at(-1);
+  const activityToolGroups = leadingActivity
+    .filter((s): s is Segment & { type: "tool" } => s.type === "tool")
+    .map((s) => ({
+      parts: s.parts as unknown as Parameters<typeof ToolCallGroup>[0]["parts"],
+    }));
+  const hasActivity =
+    leadingActivity.length > 0 &&
+    (activityReasoning !== undefined || activityToolGroups.length > 0);
+
+  // Canvas cards are hoisted to the BOTTOM of the message (next to the file
+  // digest) instead of interrupting the tool/answer flow.
+  const canvasSegments = flowSegments.filter(
+    (s): s is Segment & { type: "canvasPresent" } => s.type === "canvasPresent",
+  );
+  const bodySegments = flowSegments.filter((s) => s.type !== "canvasPresent");
+
+  // Aggregate ALL file changes across the message's tool segments into one
+  // standalone card at the END of the message (like the canvas box), instead
+  // of a per-group box buried under each tool group. Dedupe by path, keeping
+  // the most recent state for each file.
+  const messageFileChanges = (() => {
+    const all = renderableSegments
+      .filter((s): s is Extract<Segment, { type: "tool" }> => s.type === "tool")
+      .flatMap((s) =>
+        extractFileChanges(s.parts as unknown as Parameters<typeof extractFileChanges>[0]),
+      );
+    const byPath = new Map<string, (typeof all)[number]>();
+    for (const change of all) byPath.set(change.path, change);
+    return [...byPath.values()];
+  })();
+
   return (
     <div className="group flex justify-start">
       <div className="w-full text-[15px] leading-relaxed text-foreground">
-        {/* Render segments in their original interleaved order */}
         <div className="flex flex-col gap-3.5">
-          {/* Render non-suggestions/non-sources segments in their original
-              interleaved order */}
-          {renderableSegments.map((segment, idx) =>
+          {/* Claude-style activity — the leading reasoning + tool run is one
+              quiet collapsed line ("Edited session file · 5 calls"), expanding
+              to show the reasoning and the chained tool trace. */}
+          {hasActivity && (
+            <ActivityDisclosure
+              key="activity"
+              reasoning={
+                activityReasoning
+                  ? {
+                      text: activityReasoning.text,
+                      isStreaming: activityReasoning.isStreaming,
+                    }
+                  : null
+              }
+              toolGroups={activityToolGroups}
+              isStreaming={isStreaming ?? false}
+              responseStreaming={responseStreaming ?? false}
+            />
+          )}
+
+          {/* Everything after the leading run (text, visuals, present cards,
+              mid-message tools) renders in its original interleaved order. */}
+          {bodySegments.map((segment, idx) =>
             segment.type === "text" ? (
               <div
                 key={`text-${idx}`}
@@ -755,7 +900,7 @@ export function MessageBubble({
                       : segment.text
                   }
                   isStreaming={
-                    isStreaming && idx === renderableSegments.length - 1
+                    isStreaming && idx === bodySegments.length - 1
                   }
                   citations={messageSources.byUrl}
                 />
@@ -780,8 +925,6 @@ export function MessageBubble({
                 key={`present-${idx}`}
                 part={segment.part}
               />
-            ) : segment.type === "canvasPresent" ? (
-              <CanvasPresentSegment key={`canvas-${idx}`} part={segment.part} />
             ) : (
               <ToolCallGroup
                 key={`tool-${idx}`}
@@ -789,6 +932,15 @@ export function MessageBubble({
               />
             ),
           )}
+
+          {/* Canvas cards — hoisted to the bottom of the message, next to the
+              file digest, instead of interrupting the answer flow. */}
+          {canvasSegments.map((segment, idx) => (
+            <CanvasPresentSegment
+              key={`canvas-bottom-${idx}`}
+              part={segment.part}
+            />
+          ))}
 
           {/* Aggregated Sources card — the full numbered list behind the
               inline citation chips. The model's own trailing Sources section
@@ -798,6 +950,17 @@ export function MessageBubble({
               key="sources-card"
               data={{ sources: messageSources.list }}
               conversationId={conversationId}
+            />
+          )}
+
+          {/* File-change digest — ONE card at the end of the message (same
+              placement as the canvas box), covering every file touched across
+              all tool calls in this response. */}
+          {messageFileChanges.length > 0 && (
+            <FileChangeDigest
+              key="file-digest"
+              changes={messageFileChanges}
+              standalone
             />
           )}
 

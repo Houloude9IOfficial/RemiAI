@@ -404,10 +404,31 @@ function getToolLabel(toolName: string): ToolLabel {
   return TOOL_LABELS[bareToolName(toolName)] ?? FALLBACK_LABEL;
 }
 
+/**
+ * Claude-style summary of a tool run: the past-tense activity label, call
+ * count, run name, and live state. Used by the collapsed activity line at
+ * the top of a message.
+ */
+export function summarizeToolActivity(parts: AnyToolPart[]) {
+  const visibleParts = parts.filter((part) => !isRunNamePart(part));
+  const groupParts = visibleParts.length > 0 ? visibleParts : parts;
+  const { present, past } = getGroupLabel(groupParts);
+  return {
+    present,
+    past,
+    count: groupParts.length,
+    runName: getRunName(parts),
+    running: groupParts.some(isPartRunning),
+    hasError: groupParts.some(isPartError),
+    hasQuestions: groupParts.some(isQuestionsPart),
+  };
+}
+
 function getGroupLabel(parts: AnyToolPart[]): ToolLabel {
   let best: ToolLabel | null = null;
   let sessionWriteCount = 0;
   let sessionWriteCreates = 0;
+  let hasSessionEdit = false;
   for (const part of parts) {
     if (!part || typeof part !== "object") continue;
     let name: string;
@@ -422,12 +443,19 @@ function getGroupLabel(parts: AnyToolPart[]): ToolLabel {
       const output = asRecord(getOutput(part));
       if (output && output.created === true) sessionWriteCreates++;
     }
+    if (bare === "session_file_edit") hasSessionEdit = true;
     const label = getToolLabel(name);
     if (label !== FALLBACK_LABEL) best = label;
   }
   // If ALL session_file_write calls were updates (zero creates), show "Updated"
   if (sessionWriteCount > 0 && sessionWriteCreates === 0 && best) {
     return { present: "Updating session file", past: "Updated session file", icon: best.icon };
+  }
+  // A chain that reads AND edits session files is summarized by the edit —
+  // that's the significant action (reads are just prep work).
+  if (hasSessionEdit && best) {
+    const editLabel = TOOL_LABELS.session_file_edit;
+    return { present: editLabel.present, past: editLabel.past, icon: editLabel.icon };
   }
   return best ?? FALLBACK_LABEL;
 }
@@ -498,7 +526,7 @@ function pickPath(...candidates: unknown[]): string | null {
   return null;
 }
 
-function extractFileChanges(parts: AnyToolPart[]): FileChangeSummary[] {
+export function extractFileChanges(parts: AnyToolPart[]): FileChangeSummary[] {
   const changes: FileChangeSummary[] = [];
   const seen = new Set<string>();
 
@@ -593,7 +621,17 @@ function extractFileChanges(parts: AnyToolPart[]): FileChangeSummary[] {
 
 const FILE_PREVIEW_LIMIT = 4;
 
-function FileChangeDigest({ changes }: { changes: FileChangeSummary[] }) {
+/**
+ * File-change summary box. Rendered inline under a tool group by default, or
+ * as a standalone canvas-style card (used at the end of a message).
+ */
+export function FileChangeDigest({
+  changes,
+  standalone = false,
+}: {
+  changes: FileChangeSummary[];
+  standalone?: boolean;
+}) {
   const [showAll, setShowAll] = useState(false);
   if (changes.length === 0) return null;
 
@@ -601,12 +639,18 @@ function FileChangeDigest({ changes }: { changes: FileChangeSummary[] }) {
   const hidden = changes.length - visible.length;
 
   return (
-    <div className="px-2 pb-1.5">
-      <div className="mt-1 rounded-md border border-border/20 bg-surface-2/60 px-2.5 py-2">
+    <div className={standalone ? "" : "px-2 pb-1.5"}>
+      <div
+        className={
+          standalone
+            ? "overflow-hidden rounded-xl bg-primary/[0.04] px-3.5 py-3"
+            : "mt-1 rounded-md border border-border/20 bg-surface-2/60 px-2.5 py-2"
+        }
+      >
         <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">
           {changes.length === 1
-            ? "1 file changed"
-            : `${changes.length} files changed`}
+            ? "1 change"
+            : `${changes.length} changes`}
         </div>
         <ul className="flex flex-col gap-1">
           {visible.map((change) => {
@@ -736,8 +780,13 @@ function VerificationDigest({ checks }: { checks: BuildVerificationCheck[] }) {
 
 export function ToolCallGroup({
   parts,
+  headerless = false,
 }: {
   parts: AnyToolPart[];
+  /** Render only the execution trace — no header button or collapsible
+      wrapper. Used inside the Claude-style activity disclosure, which owns
+      the summary line and expand/collapse state. */
+  headerless?: boolean;
 }) {
   const visibleParts = parts.filter((part) => !isRunNamePart(part));
   const runName = getRunName(parts);
@@ -819,13 +868,79 @@ export function ToolCallGroup({
         ? present
         : past);
 
+  // Single unremarkable call — no grouping needed. In headerless mode we
+  // still show it as a plain card inside the disclosure's trace.
   if (
+    !headerless &&
     !isBatch &&
     !runName &&
     fileChanges.length === 0 &&
     verificationChecks.length === 0
   ) {
     return <ToolCallCard part={groupParts[0]} compact />;
+  }
+
+  const trace = (
+    <div className="flex flex-col gap-1 p-1.5 pt-0">
+      {groupParts.map((part, idx) => {
+              const runningPart = isPartRunning(part);
+              const errorPart = isPartError(part);
+              const completePart = isPartComplete(part);
+              let toolName = "tool";
+              try {
+                toolName = bareToolName(getToolName(part));
+              } catch {
+                // Keep a stable generic label for malformed/persisted parts.
+              }
+              const StepIcon = getToolLabel(toolName).icon ?? Wrench;
+              return (
+                <div
+                  key={part.toolCallId ?? idx}
+                  className="relative pl-5"
+                  aria-label={`${getToolLabel(toolName).past}: ${toolName}`}
+                >
+                  {idx < groupParts.length - 1 && (
+                    <span
+                      className="absolute left-1.5 top-4.5 bottom-[-0.25rem] w-px bg-border/60"
+                      aria-hidden="true"
+                    />
+                  )}
+                  <span
+                    className={cn(
+                      "absolute left-0 top-2 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-background",
+                      errorPart
+                        ? "text-status-danger"
+                        : runningPart
+                          ? "text-primary"
+                          : completePart
+                            ? "text-status-success"
+                            : "text-muted-foreground",
+                    )}
+                    aria-hidden="true"
+                  >
+                    {errorPart ? (
+                      <XCircle className="h-3 w-3" />
+                    ) : runningPart ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <StepIcon className="h-3 w-3" />
+                    )}
+                  </span>
+                  <ToolCallCard part={part} compact />
+                </div>
+              );
+            })}
+    </div>
+  );
+
+  // Headerless — just the trace (owned by the activity disclosure).
+  if (headerless) {
+    return (
+      <div className="animate-tool-slide-up">
+        {!running && <VerificationDigest checks={verificationChecks} />}
+        {trace}
+      </div>
+    );
   }
 
   return (
@@ -879,11 +994,6 @@ export function ToolCallGroup({
         />
       </button>
 
-      {/* File digest — rendered once in a stable spot below the header so it
-          never pops or remounts when the tool calls expand/collapse beneath it */}
-      {fileChanges.length > 0 && !running && (
-        <FileChangeDigest changes={fileChanges} />
-      )}
       {!running && <VerificationDigest checks={verificationChecks} />}
 
       {/* Collapsible execution trace — the connector makes sequential tool
@@ -894,58 +1004,7 @@ export function ToolCallGroup({
           isOpen ? "grid-rows-[1fr] mt-1.5" : "grid-rows-[0fr]",
         )}
       >
-        <div className="overflow-hidden">
-          <div className="flex flex-col gap-1 p-1.5 pt-0">
-            {groupParts.map((part, idx) => {
-              const runningPart = isPartRunning(part);
-              const errorPart = isPartError(part);
-              const completePart = isPartComplete(part);
-              let toolName = "tool";
-              try {
-                toolName = bareToolName(getToolName(part));
-              } catch {
-                // Keep a stable generic label for malformed/persisted parts.
-              }
-              const StepIcon = getToolLabel(toolName).icon ?? Wrench;
-              return (
-                <div
-                  key={part.toolCallId ?? idx}
-                  className="relative pl-5"
-                  aria-label={`${getToolLabel(toolName).past}: ${toolName}`}
-                >
-                  {idx < groupParts.length - 1 && (
-                    <span
-                      className="absolute left-1.5 top-4.5 bottom-[-0.25rem] w-px bg-border/60"
-                      aria-hidden="true"
-                    />
-                  )}
-                  <span
-                    className={cn(
-                      "absolute left-0 top-2 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-background",
-                      errorPart
-                        ? "text-status-danger"
-                        : runningPart
-                          ? "text-primary"
-                          : completePart
-                            ? "text-status-success"
-                            : "text-muted-foreground",
-                    )}
-                    aria-hidden="true"
-                  >
-                    {errorPart ? (
-                      <XCircle className="h-3 w-3" />
-                    ) : runningPart ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <StepIcon className="h-3 w-3" />
-                    )}
-                  </span>
-                  <ToolCallCard part={part} compact />
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <div className="overflow-hidden">{trace}</div>
       </div>
     </div>
   );

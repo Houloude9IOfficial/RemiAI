@@ -36,12 +36,18 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { FilePickerDialog } from "./FilePickerDialog";
+import {
+  SlashCommandMenu,
+  type SlashLevel,
+  type SlashCommandMenuHandle,
+} from "./SlashCommandMenu";
 import { ChatModelSelector } from "./ChatModelSelector";
 import { dispatchSessionFilesChanged } from "@/lib/api/session-files";
 import { toast } from "sonner";
 import { FileAttachmentPreview, type AttachedFile } from "./FileAttachmentPreview";
 import { formatFileSize } from "@/lib/file-types";
 import { conversationsApi } from "@/lib/api/conversations";
+import { useDemoMode } from "@/components/demo/use-demo-mode";
 import { toolsApi } from "@/lib/api/tools";
 import {
   downscaleImageFile,
@@ -53,7 +59,10 @@ import {
   unregisterChatInput,
 } from "@/lib/chat-input-registry";
 import type { ChatStatus } from "ai";
-import type { QualityPolicy } from "@/lib/chat/quality-policy";
+import {
+  normalizeQualityPolicy,
+  type QualityPolicy,
+} from "@/lib/chat/quality-policy";
 
 /** Generate a descriptive filename for clipboard items that lack one. */
 function getClipboardFileName(file: File): string {
@@ -169,10 +178,11 @@ const CODE_CHIP_KEY = "remi-code-per-session";
 export type ChatMode = "chat" | "goal" | "plan" | "build";
 
 function qualityPolicyLabel(policy: QualityPolicy): string {
-  if (policy === "fast") return "Fast";
-  if (policy === "quality") return "Quality first";
-  if (policy === "selected") return "Selected model";
-  return "Balanced";
+  const normalized = normalizeQualityPolicy(policy);
+  if (normalized === "minimal") return "Minimal";
+  if (normalized === "low") return "Low";
+  if (normalized === "high") return "High";
+  return "Medium";
 }
 
 export function ChatInput({
@@ -181,7 +191,7 @@ export function ChatInput({
   disabled,
   mode,
   onModeChange,
-  qualityPolicy = "balanced",
+  qualityPolicy = "medium",
   onQualityPolicyChange,
   providerId,
   modelId,
@@ -217,6 +227,20 @@ export function ChatInput({
   const [text, setText] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Highlight the composer border only while the textarea itself is focused.
+  // Using focus-within would light it up for toolbar buttons too (e.g. the
+  // dropdown triggers keep focus after their menus close), which isn't wanted.
+  const [inputFocused, setInputFocused] = useState(false);
+
+  // -----------------------------------------------------------------------
+  // Slash-command menu (/mcp, /tool, /file, mode commands)
+  // -----------------------------------------------------------------------
+  const [slashLevel, setSlashLevel] = useState<SlashLevel | null>(null);
+  const [slashQuery, setSlashQuery] = useState("");
+  // Index of the "/" that started the active command token — the menu
+  // replaces everything from here up to the cursor when a marker is inserted.
+  const slashAnchorRef = useRef(-1);
+  const slashMenuRef = useRef<SlashCommandMenuHandle>(null);
   const [fileDialogOpen, setFileDialogOpen] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
@@ -229,8 +253,12 @@ export function ChatInput({
   // never changes the server-side tool configuration.
   const [codeChipOn, setCodeChipOn] = useState(false);
   const router = useRouter();
+  const demo = useDemoMode();
 
   const isStreaming = status === "streaming" || status === "submitted";
+  // Reasoning-effort policy, normalized so legacy stored values (fast,
+  // balanced, quality, selected) behave like their modern equivalents.
+  const activeQualityPolicy = normalizeQualityPolicy(qualityPolicy);
 
   // Real availability of the code-execution tool (enabled in Settings > Tools).
   // Read-only here — enabling it happens in Settings.
@@ -240,7 +268,7 @@ export function ChatInput({
     staleTime: 60_000,
   });
 
-  const codeExecutionOn = !!toolConfigs?.find((t) => t.id === "code_execution")?.config.enabled;
+  const codeExecutionOn = !demo && !!toolConfigs?.find((t) => t.id === "code_execution")?.config.enabled;
 
   // Hydrate this conversation's chip preference after mount (avoids SSR
   // mismatch — the initial render always starts with the chip hidden).
@@ -320,19 +348,19 @@ export function ChatInput({
     }
   }, [disabled]);
 
-  // Auto-resize textarea
-  const resize = () => {
+  // Auto-resize textarea (stable identity so callbacks can depend on it)
+  const resize = useCallback(() => {
     const el = inputRef.current;
     if (!el) return;
     el.style.height = "auto";
     const next = Math.min(el.scrollHeight, MAX_HEIGHT);
     el.style.height = `${next}px`;
     el.style.overflowY = el.scrollHeight > MAX_HEIGHT ? "auto" : "hidden";
-  };
+  }, []);
 
   useEffect(() => {
     resize();
-  }, [text]);
+  }, [text, resize]);
 
   // Build history can request a safe continuation without sending anything.
   // Append to existing text rather than silently replacing a user's draft.
@@ -351,7 +379,7 @@ export function ChatInput({
     };
     window.addEventListener(CHAT_INPUT_PREFILL_EVENT, onPrefill);
     return () => window.removeEventListener(CHAT_INPUT_PREFILL_EVENT, onPrefill);
-  }, []);
+  }, [resize]);
 
   // -----------------------------------------------------------------------
   // File selection from dialog
@@ -378,7 +406,7 @@ export function ChatInput({
         resize();
       });
     },
-    [text],
+    [text, resize],
   );
 
   // -----------------------------------------------------------------------
@@ -667,7 +695,7 @@ export function ChatInput({
         resize();
       });
     },
-    [text],
+    [text, resize],
   );
 
   // -----------------------------------------------------------------------
@@ -793,6 +821,144 @@ export function ChatInput({
   );
 
   // -----------------------------------------------------------------------
+  // Slash commands
+  // -----------------------------------------------------------------------
+
+  const closeSlashMenu = useCallback(() => {
+    setSlashLevel(null);
+    setSlashQuery("");
+    slashAnchorRef.current = -1;
+  }, []);
+
+  /**
+   * Re-run slash detection after text/cursor changes. Typing a `/` at the
+   * start of a word opens the command menu; on sub-levels (server/tool
+   * pickers) whatever follows the command word filters the list.
+   */
+  const updateSlashDetection = useCallback(
+    (value: string, pos: number) => {
+      let start = pos;
+      while (
+        start > 0 &&
+        value[start - 1] !== " " &&
+        value[start - 1] !== "\n"
+      ) {
+        start--;
+      }
+      const token = value.slice(start, pos);
+
+      if (!slashLevel) {
+        if (token.startsWith("/")) {
+          slashAnchorRef.current = start;
+          setSlashLevel({ kind: "command" });
+          setSlashQuery(token.slice(1));
+        }
+        return;
+      }
+
+      if (slashLevel.kind === "command") {
+        if (token.startsWith("/") && start === slashAnchorRef.current) {
+          setSlashQuery(token.slice(1));
+        } else {
+          closeSlashMenu();
+        }
+        return;
+      }
+
+      // Sub-level: filter by everything after the command word.
+      const rest = value.slice(slashAnchorRef.current);
+      const sp = rest.indexOf(" ");
+      setSlashQuery(sp === -1 ? "" : rest.slice(sp + 1).trim());
+    },
+    [slashLevel, closeSlashMenu],
+  );
+
+  /**
+   * Move between menu levels. Entering any sub-level normalizes the composer
+   * to just the command word (`/mcp postgres` → `/mcp `) with the cursor after
+   * the space, so whatever the user types next filters that level's list. The
+   * picked server is carried in the level, not in the text.
+   */
+  const handleSlashNavigate = useCallback(
+    (level: SlashLevel) => {
+      const el = inputRef.current;
+      const anchor = slashAnchorRef.current;
+      // Backing out to the command list leaves the composer untouched.
+      if (el && anchor >= 0 && level.kind !== "command") {
+        const commandWord = level.kind === "tools" ? "tool" : "mcp";
+        const next = `${el.value.slice(0, anchor)}/${commandWord} `;
+        setText(next);
+        requestAnimationFrame(() => {
+          el.focus();
+          el.setSelectionRange(next.length, next.length);
+          resize();
+        });
+      }
+      setSlashLevel(level);
+      setSlashQuery("");
+    },
+    [resize],
+  );
+
+  /** Replace the typed `/command …` region with a final marker. */
+  const applySlashInsert = useCallback(
+    (marker: string) => {
+      const el = inputRef.current;
+      const anchor = slashAnchorRef.current;
+      const cursor = el?.selectionStart ?? 0;
+      setText((prev) => {
+        if (anchor < 0) {
+          return prev.trim() ? `${prev.trim()} ${marker}` : marker;
+        }
+        const end = Math.max(cursor, anchor);
+        return `${prev.slice(0, anchor)}${marker}${prev.slice(end)}`;
+      });
+      closeSlashMenu();
+      requestAnimationFrame(() => {
+        if (el && anchor >= 0) {
+          el.focus();
+          el.setSelectionRange(anchor + marker.length, anchor + marker.length);
+        }
+        resize();
+      });
+    },
+    [closeSlashMenu, resize],
+  );
+
+  /** `/plan` / `/build` / `/goal` / `/chat` — switch mode, drop the token. */
+  const applySlashMode = useCallback(
+    (mode: ChatMode) => {
+      const el = inputRef.current;
+      const anchor = slashAnchorRef.current;
+      const cursor = el?.selectionStart ?? 0;
+      setText((prev) => {
+        if (anchor < 0) return prev;
+        return `${prev.slice(0, anchor)}${prev.slice(Math.max(cursor, anchor))}`;
+      });
+      closeSlashMenu();
+      onModeChange?.(mode);
+      requestAnimationFrame(() => {
+        el?.focus();
+        resize();
+      });
+    },
+    [closeSlashMenu, onModeChange, resize],
+  );
+
+  /** `/file` — clear the token and open the directory/file picker. */
+  const openFilePickerFromSlash = useCallback(() => {
+    const el = inputRef.current;
+    const anchor = slashAnchorRef.current;
+    const cursor = el?.selectionStart ?? 0;
+    setText((prev) => {
+      if (anchor < 0) return prev;
+      return `${prev.slice(0, anchor)}${prev.slice(Math.max(cursor, anchor))}`;
+    });
+    closeSlashMenu();
+    setFileDialogOpen(true);
+  }, [closeSlashMenu]);
+
+  // -----------------------------------------------------------------------
   // Submit
   // -----------------------------------------------------------------------
 
@@ -804,6 +970,8 @@ export function ChatInput({
   const submit = useCallback(() => {
     // Never send while a response is in flight — stop is the only action then.
     if (disabled || isStreaming) return;
+
+    closeSlashMenu();
 
     const uploadedFiles = attachedFiles.filter((f) => f.status === "uploaded");
     const hasAttachments = uploadedFiles.length > 0;
@@ -841,16 +1009,74 @@ export function ChatInput({
         inputRef.current?.focus();
       });
     }
-  }, [disabled, isStreaming, attachedFiles, text, onSend, resize]);
+  }, [disabled, isStreaming, attachedFiles, text, onSend, resize, closeSlashMenu]);
+
+  /** Text change — keep the composer state and slash-command detection in sync. */
+  const handleInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const value = e.target.value;
+      const pos = e.target.selectionStart ?? value.length;
+      setText(value);
+      updateSlashDetection(value, pos);
+    },
+    [updateSlashDetection],
+  );
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (slashLevel) {
+        // While a slash menu is open the arrows/enter/tab/escape drive it.
+        switch (e.key) {
+          case "ArrowDown":
+            e.preventDefault();
+            slashMenuRef.current?.move(1);
+            return;
+          case "ArrowUp":
+            e.preventDefault();
+            slashMenuRef.current?.move(-1);
+            return;
+          case "ArrowRight":
+            // Drill into the highlighted item (command → server → tool).
+            e.preventDefault();
+            slashMenuRef.current?.activate();
+            return;
+          case "ArrowLeft":
+            // Step back to the previous section.
+            e.preventDefault();
+            slashMenuRef.current?.back();
+            return;
+          case "Escape":
+            e.preventDefault();
+            slashMenuRef.current?.back();
+            return;
+          case "Tab":
+            e.preventDefault();
+            slashMenuRef.current?.activate();
+            return;
+          case "Enter":
+            e.preventDefault();
+            if (isStreaming) return;
+            if (
+              slashLevel.kind === "command" &&
+              (slashMenuRef.current?.getItemCount() ?? 0) === 0
+            ) {
+              // No matching command — treat Enter as a normal send.
+              closeSlashMenu();
+              submit();
+            } else {
+              slashMenuRef.current?.activate();
+            }
+            return;
+        }
+        return;
+      }
+
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         if (!isStreaming) submit();
       }
     },
-    [submit, isStreaming],
+    [slashLevel, isStreaming, submit, closeSlashMenu],
   );
 
   // -----------------------------------------------------------------------
@@ -866,12 +1092,10 @@ export function ChatInput({
         large ? "max-w-2xl" : "max-w-3xl",
       )}
     >
-      {/* Fade blend above the box — only needed when docked over messages */}
-      {!large && (
-        <div className="pointer-events-none absolute inset-x-4 -top-5 z-10 h-5 bg-linear-to-b from-transparent to-background/90 md:inset-x-6" />
-      )}
+      {/* The composer sits below the message list; do not paint a fade over
+          the status row or the last message. */}
 
-      <div className="relative" onDragEnter={handleDragEnter}>
+      <div className="relative z-10" onDragEnter={handleDragEnter}>
         <input
           ref={fileInputRef}
           type="file"
@@ -955,12 +1179,12 @@ export function ChatInput({
                   ? "Change files, run checks, and report what was verified"
                   : "Direct answer with minimal overhead"}
           </span> */}
-          {onQualityPolicyChange && (
+          {!demo && onQualityPolicyChange && (
             <>
               <span aria-hidden="true">·</span>
               <span>
-                {qualityPolicyLabel(qualityPolicy)}
-                {qualityPolicy === "quality" && " · Adaptive escalation"}
+                {qualityPolicyLabel(activeQualityPolicy)}
+                {activeQualityPolicy === "high" && " · Deep reasoning"}
               </span>
             </>
           )}
@@ -968,8 +1192,11 @@ export function ChatInput({
 
         <div
           className={cn(
-            "relative flex flex-col rounded-3xl border border-border/70 bg-surface-1 transition-colors duration-200",
-            large && "focus-within:border-primary/60",
+            // While the slash menu is attached above, square the composer's
+            // top corners so the two sheets look like one unit.
+            "group relative flex flex-col border border-border/70 bg-surface-1 transition-colors duration-200",
+            slashLevel ? "rounded-b-3xl" : "rounded-3xl",
+            // large && inputFocused && "border-primary/60", uncomment to border the composer when focused
             isDragging && "border-primary/45 bg-primary/[0.03]",
             isStreaming && "opacity-95",
           )}
@@ -977,6 +1204,21 @@ export function ChatInput({
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
+          {/* Slash-command popup — anchored flush to the composer so it sits
+              on top of the mode/status row, with only its top corners rounded */}
+          <SlashCommandMenu
+            ref={slashMenuRef}
+            open={!!slashLevel && !isStreaming && !disabled}
+            level={slashLevel}
+            query={slashQuery}
+            large={large}
+            onClose={closeSlashMenu}
+            onNavigate={handleSlashNavigate}
+            onInsert={applySlashInsert}
+            onFile={openFilePickerFromSlash}
+            onMode={applySlashMode}
+          />
+
           {/* Active capability chips — removable inline "X to clear" pattern */}
           {hasChips && (
             <div className="flex flex-wrap items-center gap-1.5 px-3 pt-3">
@@ -1016,9 +1258,11 @@ export function ChatInput({
             <Textarea
               ref={inputRef}
               value={text}
-              onChange={(e) => setText(e.target.value)}
+              onChange={handleInputChange}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
+              onFocus={() => setInputFocused(true)}
+              onBlur={() => setInputFocused(false)}
               placeholder={
                 disabled
                   ? "Pick a model to start chatting"
@@ -1026,7 +1270,12 @@ export function ChatInput({
                     ? "Remi is responding…"
                     : isTemporary
                       ? "Temporary chat"
-                      : "How can I help you today?"
+                      : // `large` is only set by EmptyChatState (the first-message
+                        // composer); the docked composer for follow-up messages
+                        // gets a plainer prompt with a slash-command hint.
+                        large
+                        ? "How can I help you today?"
+                        : "Write a message or / for commands"
               }
               disabled={disabled}
               className={cn(
@@ -1123,44 +1372,65 @@ export function ChatInput({
                   </>
                 )}
 
-                {onQualityPolicyChange && (
+                {!demo && onQualityPolicyChange && (
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuGroup>
-                      <DropdownMenuLabel>Quality · Effort per request</DropdownMenuLabel>
+                      <DropdownMenuLabel>Reasoning effort</DropdownMenuLabel>
                       <DropdownMenuCheckboxItem
-                        checked={qualityPolicy === "fast"}
-                        onCheckedChange={(checked) => checked && onQualityPolicyChange("fast")}
+                        checked={activeQualityPolicy === "minimal"}
+                        onCheckedChange={(checked) => checked && onQualityPolicyChange("minimal")}
                       >
-                        Fast
-                        {/* <span className="ml-auto text-[10px] text-muted-foreground">Lowest latency</span> */}
+                        <span>
+                          <span className="block">Minimal</span>
+                          <span className="block text-[10px] font-normal text-muted-foreground">
+                            Least reasoning · fastest response
+                          </span>
+                        </span>
                       </DropdownMenuCheckboxItem>
                       <DropdownMenuCheckboxItem
-                        checked={qualityPolicy === "balanced"}
-                        onCheckedChange={(checked) => checked && onQualityPolicyChange("balanced")}
+                        checked={activeQualityPolicy === "low"}
+                        onCheckedChange={(checked) => checked && onQualityPolicyChange("low")}
                       >
-                        Balanced
-                        {/* <span className="ml-auto text-[10px] text-muted-foreground">Recommended</span> */}
+                        <span>
+                          <span className="block">Low</span>
+                          <span className="block text-[10px] font-normal text-muted-foreground">
+                            Light reasoning · quick responses
+                          </span>
+                        </span>
                       </DropdownMenuCheckboxItem>
                       <DropdownMenuCheckboxItem
-                        checked={qualityPolicy === "quality"}
-                        onCheckedChange={(checked) => checked && onQualityPolicyChange("quality")}
+                        checked={activeQualityPolicy === "medium"}
+                        onCheckedChange={(checked) => checked && onQualityPolicyChange("medium")}
                       >
-                        Quality first
-                        {/* <span className="ml-auto text-[10px] text-muted-foreground">Adaptive · May cost more</span> */}
+                        <span>
+                          <span className="block">
+                            Medium
+                            {/* <span className="ml-1.5 rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary">
+                              Recommended
+                            </span> */}
+                          </span>
+                          <span className="block text-[10px] font-normal text-muted-foreground">
+                            Balanced for most tasks
+                          </span>
+                        </span>
                       </DropdownMenuCheckboxItem>
                       <DropdownMenuCheckboxItem
-                        checked={qualityPolicy === "selected"}
-                        onCheckedChange={(checked) => checked && onQualityPolicyChange("selected")}
+                        checked={activeQualityPolicy === "high"}
+                        onCheckedChange={(checked) => checked && onQualityPolicyChange("high")}
                       >
-                        Selected model
-                        {/* <span className="ml-auto text-[10px] text-muted-foreground">Pinned · No routing</span> */}
+                        <span>
+                          <span className="block">High</span>
+                          <span className="block text-[10px] font-normal text-muted-foreground">
+                            Deep reasoning · slower · may cost more
+                          </span>
+                        </span>
                       </DropdownMenuCheckboxItem>
                     </DropdownMenuGroup>
                   </>
                 )}
 
-                {(onTemporaryChange || onMemoryChange) && (
+                {!demo && (onTemporaryChange || onMemoryChange) && (
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuGroup>
@@ -1202,7 +1472,7 @@ export function ChatInput({
                 )}
 
                 <DropdownMenuSeparator />
-                <DropdownMenuGroup>
+                {!demo && <DropdownMenuGroup>
                   <DropdownMenuLabel>Extra capabilities</DropdownMenuLabel>
                   <DropdownMenuItem
                     onClick={() => {
@@ -1252,7 +1522,7 @@ export function ChatInput({
                         : "Set up"}
                     </span>
                   </DropdownMenuItem>
-                </DropdownMenuGroup>
+                </DropdownMenuGroup>}
               </DropdownMenuContent>
             </DropdownMenu>
 

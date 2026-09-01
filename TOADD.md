@@ -290,3 +290,8 @@ the ai users bash to write/edit/delete files, but it should use bash for command
 <!-- when exporting backup for some setups: JSON.parse: unexpected character at line 1 column 1 of the JSON data -->
 
 <!-- fix anthropic provider not showing models (possibly failed fetching? idk) -->
+
+<!-- backup export fails on a VPS setup: Exporting backup failed — server returned a non-JSON response (503 , content-type: text/plain; charset=utf-8): "no available server" -->
+
+<!-- allow / to be used as a command to allow running commands, e.g mcp tagging (and their specific tools), allow tool tagging, file tagging and other tags/commands. (done) -->
+<!-- i tried on another pc setup and remi setup to run a big multi-tool request and it bugged a lot, made the chat blank and showed some parts and in the end on refresh it showed all text correctly but i believe not all tools we shown. -->

@@ -134,22 +134,13 @@ export function inferTaskCapabilities(
   return [...needs];
 }
 
-function capabilityScore(
-  candidate: ModelRouteCandidate,
-  needs: ModelCapability[],
-): number {
-  const info = modelCapabilityMetadata(candidate.providerKind, candidate.modelId);
-  const matches = needs.filter((need) => info.capabilities.includes(need)).length;
-  return info.tier * 3 + matches * 2 + Math.min(2, Math.floor(info.contextWindow / 100_000));
-}
-
 function sameCandidate(a: ModelRouteCandidate, b: ModelRouteCandidate): boolean {
   return a.providerId === b.providerId && a.modelId === b.modelId;
 }
 
 /**
- * Selects a stronger configured model only for Quality-first requests. The
- * other policies are deliberately pinned to the user's selected model.
+ * Keeps the user's selected model fixed while calculating the effort-specific
+ * reasoning behavior. Model selection belongs in the model picker.
  */
 export function chooseModelRoute(input: {
   policy: QualityPolicy;
@@ -164,42 +155,24 @@ export function chooseModelRoute(input: {
     input.selected.modelId,
   );
   const needs = inferTaskCapabilities(input.text, input.mode, input.complexity);
-  const selectedScore = capabilityScore(input.selected, needs);
-  const eligible = input.candidates
-    .filter((candidate) => !sameCandidate(candidate, input.selected))
-    .map((candidate) => ({
-      candidate,
-      metadata: modelCapabilityMetadata(candidate.providerKind, candidate.modelId),
-      score: capabilityScore(candidate, needs),
-    }))
-    .filter(({ score, metadata }) =>
-      score >= selectedScore + 2 && metadata.contextWindow >= selectedMetadata.contextWindow,
-    )
-    .sort((a, b) =>
-      b.score - a.score ||
-      (a.candidate.providerId === input.selected.providerId ? -1 : 1) -
-        (b.candidate.providerId === input.selected.providerId ? -1 : 1) ||
-      a.candidate.modelId.localeCompare(b.candidate.modelId),
-    );
-
-  const shouldEscalate =
-    input.policy === "quality" &&
-    (input.complexity === "complex" || selectedMetadata.tier <= 3) &&
-    eligible.length > 0;
-  const active = shouldEscalate ? eligible[0].candidate : input.selected;
+  // Effort controls the selected model. Do not silently replace it: users
+  // need to be able to compare Minimal/Low/Medium/High on the same model,
+  // and some compatible providers have different reasoning capabilities that
+  // our metadata cannot reliably infer. Model selection belongs in the model
+  // picker, not in this effort control.
+  const active = input.selected;
   const activeMetadata = modelCapabilityMetadata(active.providerKind, active.modelId);
   const escalated = !sameCandidate(active, input.selected);
-  const verifierEligible = input.policy === "quality" && input.complexity === "complex";
+  const verifierEligible = input.policy === "high" && input.complexity === "complex";
 
   let reason: string;
-  if (input.policy !== "quality") {
+  if (input.policy !== "high") {
     reason = `${policyLabel(input.policy)} keeps the selected model pinned.`;
   } else if (escalated) {
-    reason = `Quality first selected a stronger configured model for this ${input.complexity} task.`;
-  } else if (eligible.length === 0) {
-    reason = "Quality first found no safe stronger configured model, so it kept the selected model.";
+    // Kept for compatibility if routing is made opt-in later.
+    reason = `High effort selected a stronger configured model for this ${input.complexity} task.`;
   } else {
-    reason = "The selected model already meets the estimated task capability needs.";
+    reason = "High effort keeps the selected model and increases its reasoning effort.";
   }
 
   return {
@@ -210,21 +183,21 @@ export function chooseModelRoute(input: {
     needs,
     escalated,
     verifierEligible,
-    expectedLatency: escalated || verifierEligible ? "higher" : "normal",
-    expectedCost: escalated || verifierEligible ? "higher" : "normal",
+    expectedLatency: verifierEligible ? "higher" : "normal",
+    expectedCost: verifierEligible ? "higher" : "normal",
     reason,
   };
 }
 
 function policyLabel(policy: QualityPolicy): string {
   switch (policy) {
-    case "fast":
-      return "Fast";
-    case "quality":
-      return "Quality first";
-    case "selected":
-      return "Selected model";
+    case "minimal":
+      return "Minimal";
+    case "low":
+      return "Low";
+    case "high":
+      return "High";
     default:
-      return "Balanced";
+      return "Medium";
   }
 }

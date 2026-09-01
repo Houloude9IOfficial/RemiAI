@@ -394,10 +394,46 @@ for (const [groupId, group] of Object.entries(CONDITIONAL_GROUPS)) {
  * scoring. Generous on purpose: loading an extra group only costs tokens;
  * missing one could leave the model without a needed tool.
  */
+/**
+ * Slash commands are explicit user intent. They may be entered as a prefix
+ * (for example, `/canvas build me a calculator`), so classify the command
+ * independently of the natural-language request that follows it.
+ */
+const COMMAND_GROUPS: Record<string, string> = {
+  canvas: "canvas",
+  visual: "create_visual",
+  chart: "create_visual",
+  image: "create_visual",
+  files: "session_files",
+  file: "session_files",
+  document: "document_reader",
+  docs: "document_reader",
+  browser: "playwright",
+  automate: "playwright",
+  run: "exec",
+  execute: "exec",
+  code: "exec",
+  schedule: "scheduling",
+  reminder: "scheduling",
+  todo: "todo",
+  todos: "todo",
+  routine: "routines",
+  research: "web_search",
+  search: "web_search",
+};
+
 export function classifyToolGroups(text: string): Set<string> {
   const active = new Set<string>();
   const lower = text.toLowerCase();
   if (!lower.trim()) return active;
+
+  // Only treat a leading slash token as a command. This avoids accidentally
+  // interpreting ordinary prose such as "use the /canvas element" as a mode.
+  const command = lower.match(/^\s*\/([a-z][a-z0-9_-]*)\b/)?.[1];
+  if (command) {
+    const group = COMMAND_GROUPS[command];
+    if (group) active.add(group);
+  }
 
   for (const [groupId, matchers] of Object.entries(GROUP_MATCHERS)) {
     for (const matcher of matchers) {

@@ -459,21 +459,14 @@
   border: 1px solid var(--border);
   padding: 10px;
   text-align: left;
-  word-break: break-word;
-  overflow-wrap: break-word;
-  white-space: normal;
+  word-break: normal;
+  overflow-wrap: normal;
+  white-space: nowrap;
 }
 
 .markdown-body th {
   background-color: var(--muted);
   font-weight: 600;
-}
-
-.markdown-body th,
-.markdown-body td {
-  word-break: break-word;
-  overflow-wrap: break-word;
-  white-space: normal;
 }
 
 .markdown-body td code,
@@ -485,6 +478,25 @@
   content: "—";
   color: var(--muted-foreground);
   opacity: 0.4;
+}
+
+/* Keep table cells on one line. The table itself grows to its content width,
+   while the outer scroller handles genuinely wide tables. */
+.markdown-table-scroll {
+  container-type: inline-size;
+}
+
+.markdown-table {
+  /* Scale only typography as the available table viewport gets narrower;
+     cells never wrap, so row heights remain predictable. */
+  font-size: clamp(0.68rem, 1.05cqw, 0.875rem);
+}
+
+.markdown-table th,
+.markdown-table td {
+  white-space: nowrap;
+  word-break: normal;
+  overflow-wrap: normal;
 }
 
 /* NOTE: no entrance animation on tables — during streaming, markdown-to-jsx

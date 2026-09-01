@@ -74,6 +74,11 @@ export function MobileSidebar() {
   const temporaryChatMutation = useNewChat(onClose, { temporary: true });
 
   const [extraExpanded, setExtraExpanded] = useState(false);
+  const [demo, setDemo] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/auth/status", { cache: "no-store" }).then((response) => response.json()).then((data) => setDemo(data.demo === true)).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     try {
@@ -191,16 +196,18 @@ export function MobileSidebar() {
         </div>
 
         {/* Scrollable content: conversations + navigation */}
-        <PullToRefresh
-          onRefresh={() => queryClient.invalidateQueries({ queryKey: ["conversations"] })}
-          className="flex-1 px-2 py-2 text-sm text-sidebar-foreground/80"
-        >
-          <ConversationList />
+        <div className="flex min-h-0 flex-1 flex-col">
+          <PullToRefresh
+            onRefresh={() => queryClient.invalidateQueries({ queryKey: ["conversations"] })}
+            className="min-h-0 flex-1 px-2 py-2 text-sm text-sidebar-foreground/80"
+          >
+            <ConversationList />
+          </PullToRefresh>
 
           {/* Navigation links */}
-          <nav className="mt-4 flex flex-col gap-0.5 border-t border-sidebar-border pt-3">
+          <nav className="flex shrink-0 flex-col gap-0.5 border-t border-sidebar-border px-2 pt-3">
             {/* Primary links */}
-            {primaryLinks.slice(0, 3).map(({ href, label, icon: Icon }) => (
+            {primaryLinks.filter(({ href }) => !demo && href !== "/files").slice(0, 3).map(({ href, label, icon: Icon }) => (
               <Link
                 key={href}
                 href={href}
@@ -215,6 +222,7 @@ export function MobileSidebar() {
               </Link>
             ))}
 
+            {!demo && <>
             {/* Collapse toggle */}
             <button
               type="button"
@@ -259,6 +267,8 @@ export function MobileSidebar() {
               </div>
             </div>
 
+            </>}
+
             {/* Profile */}
             <div className="mt-2 border-t border-sidebar-border pt-2">
               <SidebarProfile />
@@ -273,7 +283,7 @@ export function MobileSidebar() {
               <ThemeToggle />
             </div>
           </nav>
-        </PullToRefresh>
+        </div>
       </div>
     </>
   );

@@ -1,5 +1,10 @@
-import CenteredLayout from '@/components/layout/CenteredLayout';
+import { redirect } from "next/navigation";
+
+export const dynamic = "force-dynamic";
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
-  return <CenteredLayout>{children}</CenteredLayout>;
+  if (process.env.DEMO?.trim().toLowerCase() === "true") {
+    redirect("/chat");
+  }
+  return children;
 }

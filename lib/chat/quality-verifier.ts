@@ -37,7 +37,7 @@ function parseVerifierText(text: string): QualityVerificationResult {
 }
 
 /**
- * Run only for explicitly selected Quality-first, complex requests. The
+ * Run only for explicitly selected High-effort, complex requests. The
  * verifier never edits files or changes the streamed answer; it records a
  * conservative verdict for observability and later UI/reporting.
  */

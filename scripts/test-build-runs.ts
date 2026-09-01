@@ -15,7 +15,7 @@ import {
   advanceBuildRepairState,
   MAX_BUILD_REPAIR_ATTEMPTS,
 } from "../lib/chat/build-repair";
-import { buildBoundedLineDiff } from "../lib/build/diff";
+import { buildBoundedLineDiff, countLineDiff } from "../lib/build/diff";
 
 async function main() {
   const steps = [
@@ -68,6 +68,13 @@ async function main() {
   assert.match(preview ?? "", /- old line/);
   assert.match(preview ?? "", /\+ new line/);
   assert.equal(buildBoundedLineDiff("same", "same"), undefined);
+
+  // Git-style counts: a single rewritten line is +1/−1, not the naive 0/0.
+  assert.deepEqual(countLineDiff("a\nb\nc", "a\nB\nc"), { added: 1, removed: 1 });
+  assert.deepEqual(countLineDiff("a\nb\nc", "a\nb\nc\nd"), { added: 1, removed: 0 });
+  assert.deepEqual(countLineDiff("a\nb\nc", "a\nc"), { added: 0, removed: 1 });
+  assert.deepEqual(countLineDiff("same", "same"), { added: 0, removed: 0 });
+  assert.deepEqual(countLineDiff("", "hello"), { added: 1, removed: 0 });
 
   const sessionFiles = summarizeChangedFiles([
     ...parts,

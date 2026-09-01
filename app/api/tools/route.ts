@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { toolConfigs } from "@/db/schema";
+import { demoBlockedResponse, isDemoMode } from "@/lib/demo-policy";
 import { eq } from "drizzle-orm";
 import { TOOL_CATALOG, type ToolDefinition } from "@/lib/tools/catalog";
 
@@ -21,6 +22,7 @@ function maskKey(key: string | null): string | null {
 }
 
 export async function GET() {
+  if (isDemoMode()) return NextResponse.json([]);
   const configs = await db.select().from(toolConfigs).all();
   const configMap = new Map(configs.map((c) => [c.toolId, c]));
 
@@ -42,6 +44,7 @@ export async function GET() {
 }
 
 export async function PATCH(req: Request) {
+  if (isDemoMode()) return demoBlockedResponse();
   const body = (await req.json()) as {
     toolId: string;
     enabled?: boolean;

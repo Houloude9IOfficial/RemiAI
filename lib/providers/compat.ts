@@ -24,6 +24,12 @@
 export interface CompatFetchOptions {
   /** Fold reasoning delta fields into `delta.content` wrapped in `<think>` tags. */
   convertReasoningToThink?: boolean;
+  /**
+   * Extra JSON keys merged into outgoing POST bodies (e.g. NVIDIA's
+   * `chat_template_kwargs` for reasoning-effort control). Undefined or empty
+   * bodies are left untouched.
+   */
+  injectBody?: Record<string, unknown>;
 }
 
 export function createCompatFetch(
@@ -31,7 +37,25 @@ export function createCompatFetch(
   options: CompatFetchOptions = {},
 ): typeof fetch {
   return async function compatFetch(input, init) {
-    const response = await baseFetch(input, init);
+    let requestInit = init;
+    if (options.injectBody) {
+      const body = init?.body;
+      if (typeof body === "string") {
+        try {
+          const json = JSON.parse(body);
+          if (json && typeof json === "object" && !Array.isArray(json)) {
+            for (const [key, value] of Object.entries(options.injectBody)) {
+              json[key] = value;
+            }
+            requestInit = { ...init, body: JSON.stringify(json) };
+          }
+        } catch {
+          // Not a JSON body — pass through untouched.
+        }
+      }
+    }
+
+    const response = await baseFetch(input, requestInit);
 
     // Only patch streaming JSON responses from chat completions endpoints
     if (
