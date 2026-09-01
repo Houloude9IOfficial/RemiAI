@@ -22,7 +22,12 @@ services:
 
   remiai-demo:
     profiles: [demo]
-    build: .
+    image: houloude/remiai-demo:latest
+    build:
+      context: .
+      platforms:
+        - linux/amd64
+        - linux/arm64
     restart: unless-stopped
     ports:
       # Keep the demo private to the host; terminate TLS in a reverse proxy.

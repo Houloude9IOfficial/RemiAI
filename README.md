@@ -415,6 +415,10 @@ docker run -d --name remiai \
 
 ### Public Docker demo
 
+**There's absolutely no reason to use this image, but it's available for quick testing.**
+
+Pre-built demo images are available on [Docker Hub](https://hub.docker.com/r/houloude/remiai-demo).
+
 Run `npm run demo:setup` for an interactive setup. It configures the provider and creates server-only shared login variables, so the first demo visit goes directly to sign in with the credentials you entered. For a custom OpenAI-compatible provider, choose **Custom OpenAI-compatible endpoint**; the required value is `DEMO_PROVIDER_KIND=openai-compatible` (not `custom` or `openai`).
 
 The demo profile keeps the app bound to localhost, uses a separate volume, disables administration/integrations/execution, and allows only chat plus canvas/session-file functionality. Configure the host provider in an untracked `.env` file; never put credentials in Compose or source control:
@@ -426,12 +430,15 @@ DEMO_PROVIDER_API_KEY=replace-with-provider-key
 # DEMO_PROVIDER_BASE_URL=https://optional-compatible-endpoint.example
 ```
 
-Start it behind a TLS reverse proxy:
+Build and start it behind a TLS reverse proxy:
 
 ```bash
-docker compose --profile demo up --build -d remiai-demo
+docker compose --profile demo build remiai-demo
+docker compose --profile demo up -d remiai-demo
 docker compose --profile demo logs -f remiai-demo
 ```
+
+The demo service is tagged as `houloude/remiai-demo:latest` and its Compose build targets both `linux/amd64` and `linux/arm64`. Docker Compose builds the platform matching the current host.
 
 The demo uses `remiai-demo-data`, not `remiai-data`. To reset only demo data, stop the demo and remove its volume:
 
