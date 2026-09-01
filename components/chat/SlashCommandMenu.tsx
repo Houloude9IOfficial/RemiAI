@@ -13,6 +13,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Cable,
   ChevronLeft,
+  FileText,
   ChevronRight,
   FolderOpen,
   Globe,
@@ -78,7 +79,29 @@ export interface SlashCommandMenuHandle {
 // Commands
 // ---------------------------------------------------------------------------
 
-type CommandId = "mcp" | "tool" | "file" | "plan" | "build" | "goal" | "chat";
+type CommandId =
+  | "mcp"
+  | "tool"
+  | "file"
+  | "canvas"
+  | "visual"
+  | "document"
+  | "browser"
+  | "automate"
+  | "run"
+  | "execute"
+  | "code"
+  | "schedule"
+  | "reminder"
+  | "todo"
+  | "todos"
+  | "routine"
+  | "research"
+  | "search"
+  | "plan"
+  | "build"
+  | "goal"
+  | "chat";
 
 const COMMANDS: Array<{
   id: CommandId;
@@ -107,6 +130,111 @@ const COMMANDS: Array<{
     label: "File reference",
     description: "Tag a file or folder from your directories",
     icon: FolderOpen,
+  },
+  {
+    id: "canvas",
+    trigger: "canvas",
+    label: "Canvas",
+    description: "Build an interactive web project in Canvas",
+    icon: Hammer,
+  },
+  {
+    id: "document",
+    trigger: "document",
+    label: "Document",
+    description: "Read and work with a document such as PDF or DOCX",
+    icon: FileText,
+  },
+  {
+    id: "visual",
+    trigger: "visual",
+    label: "Visual",
+    description: "Create a chart, graph, diagram, or other visual",
+    icon: Sparkles,
+  },
+  {
+    id: "browser",
+    trigger: "browser",
+    label: "Browser",
+    description: "Use browser automation to interact with a website",
+    icon: Globe,
+  },
+  {
+    id: "automate",
+    trigger: "automate",
+    label: "Automate",
+    description: "Automate browser or web interactions",
+    icon: Globe,
+  },
+  {
+    id: "run",
+    trigger: "run",
+    label: "Run code",
+    description: "Run commands or code in the configured environment",
+    icon: Hammer,
+  },
+  {
+    id: "execute",
+    trigger: "execute",
+    label: "Execute code",
+    description: "Execute a script or code snippet",
+    icon: Hammer,
+  },
+  {
+    id: "code",
+    trigger: "code",
+    label: "Code execution",
+    description: "Use the code execution tools",
+    icon: Wrench,
+  },
+  {
+    id: "schedule",
+    trigger: "schedule",
+    label: "Schedule",
+    description: "Schedule a task or notification",
+    icon: ListChecks,
+  },
+  {
+    id: "reminder",
+    trigger: "reminder",
+    label: "Reminder",
+    description: "Set a reminder or scheduled notification",
+    icon: ListChecks,
+  },
+  {
+    id: "todo",
+    trigger: "todo",
+    label: "Todo",
+    description: "Create or manage a task list",
+    icon: ListChecks,
+  },
+  {
+    id: "todos",
+    trigger: "todos",
+    label: "Todos",
+    description: "Create or manage a task list",
+    icon: ListChecks,
+  },
+  {
+    id: "routine",
+    trigger: "routine",
+    label: "Routine",
+    description: "Create or run a reusable routine",
+    icon: Sparkles,
+  },
+  {
+    id: "research",
+    trigger: "research",
+    label: "Research",
+    description: "Research a topic using web search",
+    icon: Globe,
+  },
+  {
+    id: "search",
+    trigger: "search",
+    label: "Search",
+    description: "Search the web for current information",
+    icon: Globe,
   },
   {
     id: "plan",
@@ -353,6 +481,26 @@ export const SlashCommandMenu = forwardRef<
       case "command":
         if (item.command.id === "file") {
           onFile();
+          return;
+        }
+        if (
+          item.command.id === "canvas" ||
+          item.command.id === "visual" ||
+          item.command.id === "document" ||
+          item.command.id === "browser" ||
+          item.command.id === "automate" ||
+          item.command.id === "run" ||
+          item.command.id === "execute" ||
+          item.command.id === "code" ||
+          item.command.id === "schedule" ||
+          item.command.id === "reminder" ||
+          item.command.id === "todo" ||
+          item.command.id === "todos" ||
+          item.command.id === "routine" ||
+          item.command.id === "research" ||
+          item.command.id === "search"
+        ) {
+          onInsert(`/${item.command.trigger} `);
           return;
         }
         const mode = MODE_BY_COMMAND[item.command.id];

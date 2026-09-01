@@ -1,6 +1,13 @@
 # syntax=docker/dockerfile:1
 
 FROM node:22-bookworm-slim AS build
+
+# Python is required by the python_exec tool and is installed in both stages
+# so it is available during builds and at runtime.
+RUN apt-get update && apt-get install -y --no-install-recommends python3 \
+    && ln -s /usr/bin/python3 /usr/local/bin/python \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY package.json package-lock.json ./
@@ -22,6 +29,13 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 FROM node:22-bookworm-slim AS runtime
+
+# Keep Python available for python_exec. The explicit symlink guarantees the
+# `python` command works even though Debian installs the binary as python3.
+RUN apt-get update && apt-get install -y --no-install-recommends python3 \
+    && ln -s /usr/bin/python3 /usr/local/bin/python \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
