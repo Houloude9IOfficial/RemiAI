@@ -5,6 +5,7 @@ import {
   checkRepoForUpdates,
   removeRepo,
 } from "@/lib/skills/manager";
+import { demoBlockedResponse, isDemoMode } from "@/lib/demo-policy";
 
 const paramsSchema = z.object({ id: z.coerce.number().int().positive() });
 
@@ -13,6 +14,7 @@ export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  if (isDemoMode()) return demoBlockedResponse();
   const { id } = paramsSchema.parse(await params);
   const removed = await removeRepo(id);
   return NextResponse.json({ ok: true, removedSkills: removed });
@@ -23,6 +25,7 @@ export async function POST(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  if (isDemoMode()) return demoBlockedResponse();
   const { id } = paramsSchema.parse(await params);
 
   let applied: number;

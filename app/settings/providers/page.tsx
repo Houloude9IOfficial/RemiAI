@@ -1,8 +1,13 @@
 import { ProviderForm } from "@/components/settings/ProviderForm";
 import { ProviderList } from "@/components/settings/ProviderList";
 import CenteredLayout from '@/components/layout/CenteredLayout';
+import { redirect } from "next/navigation";
+
+export const dynamic = "force-dynamic";
 
 export default function ProvidersSettingsPage() {
+  if (process.env.DEMO?.trim().toLowerCase() === "true") redirect("/chat");
+
   return (
     <CenteredLayout>
       <div className="flex max-w-3xl w-full flex-col gap-8">

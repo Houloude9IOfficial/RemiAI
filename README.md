@@ -413,6 +413,36 @@ docker run -d --name remiai \
   ghcr.io/houloude9iofficial/remiai:latest
 ```
 
+### Public Docker demo
+
+Run `npm run demo:setup` for an interactive setup. It configures the provider and creates server-only shared login variables, so the first demo visit goes directly to sign in with the credentials you entered. For a custom OpenAI-compatible provider, choose **Custom OpenAI-compatible endpoint**; the required value is `DEMO_PROVIDER_KIND=openai-compatible` (not `custom` or `openai`).
+
+The demo profile keeps the app bound to localhost, uses a separate volume, disables administration/integrations/execution, and allows only chat plus canvas/session-file functionality. Configure the host provider in an untracked `.env` file; never put credentials in Compose or source control:
+
+```dotenv
+DEMO_PROVIDER_KIND=anthropic
+DEMO_PROVIDER_MODEL=claude-sonnet-4-5
+DEMO_PROVIDER_API_KEY=replace-with-provider-key
+# DEMO_PROVIDER_BASE_URL=https://optional-compatible-endpoint.example
+```
+
+Start it behind a TLS reverse proxy:
+
+```bash
+docker compose --profile demo up --build -d remiai-demo
+docker compose --profile demo logs -f remiai-demo
+```
+
+The demo uses `remiai-demo-data`, not `remiai-data`. To reset only demo data, stop the demo and remove its volume:
+
+```bash
+docker compose --profile demo down
+# Confirm this is the demo volume before removing it:
+docker volume rm <project>_remiai-demo-data
+```
+
+`DEMO=true` is evaluated server-side. Provider credentials remain server-only, and malformed/missing provider settings should be corrected before public exposure. Do not publish the container directly over plain HTTP; use TLS, trusted proxy IP forwarding, and normal firewall controls.
+
 ### Manual Database Commands
 
 ```bash

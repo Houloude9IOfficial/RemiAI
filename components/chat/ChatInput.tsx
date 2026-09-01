@@ -47,6 +47,7 @@ import { toast } from "sonner";
 import { FileAttachmentPreview, type AttachedFile } from "./FileAttachmentPreview";
 import { formatFileSize } from "@/lib/file-types";
 import { conversationsApi } from "@/lib/api/conversations";
+import { useDemoMode } from "@/components/demo/use-demo-mode";
 import { toolsApi } from "@/lib/api/tools";
 import {
   downscaleImageFile,
@@ -252,6 +253,7 @@ export function ChatInput({
   // never changes the server-side tool configuration.
   const [codeChipOn, setCodeChipOn] = useState(false);
   const router = useRouter();
+  const demo = useDemoMode();
 
   const isStreaming = status === "streaming" || status === "submitted";
   // Reasoning-effort policy, normalized so legacy stored values (fast,
@@ -266,7 +268,7 @@ export function ChatInput({
     staleTime: 60_000,
   });
 
-  const codeExecutionOn = !!toolConfigs?.find((t) => t.id === "code_execution")?.config.enabled;
+  const codeExecutionOn = !demo && !!toolConfigs?.find((t) => t.id === "code_execution")?.config.enabled;
 
   // Hydrate this conversation's chip preference after mount (avoids SSR
   // mismatch — the initial render always starts with the chip hidden).
@@ -1090,12 +1092,10 @@ export function ChatInput({
         large ? "max-w-2xl" : "max-w-3xl",
       )}
     >
-      {/* Fade blend above the box — only needed when docked over messages */}
-      {!large && (
-        <div className="pointer-events-none absolute inset-x-4 -top-5 z-10 h-5 bg-linear-to-b from-transparent to-background/90 md:inset-x-6" />
-      )}
+      {/* The composer sits below the message list; do not paint a fade over
+          the status row or the last message. */}
 
-      <div className="relative" onDragEnter={handleDragEnter}>
+      <div className="relative z-10" onDragEnter={handleDragEnter}>
         <input
           ref={fileInputRef}
           type="file"
@@ -1179,7 +1179,7 @@ export function ChatInput({
                   ? "Change files, run checks, and report what was verified"
                   : "Direct answer with minimal overhead"}
           </span> */}
-          {onQualityPolicyChange && (
+          {!demo && onQualityPolicyChange && (
             <>
               <span aria-hidden="true">·</span>
               <span>
@@ -1372,7 +1372,7 @@ export function ChatInput({
                   </>
                 )}
 
-                {onQualityPolicyChange && (
+                {!demo && onQualityPolicyChange && (
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuGroup>
@@ -1430,7 +1430,7 @@ export function ChatInput({
                   </>
                 )}
 
-                {(onTemporaryChange || onMemoryChange) && (
+                {!demo && (onTemporaryChange || onMemoryChange) && (
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuGroup>
@@ -1472,7 +1472,7 @@ export function ChatInput({
                 )}
 
                 <DropdownMenuSeparator />
-                <DropdownMenuGroup>
+                {!demo && <DropdownMenuGroup>
                   <DropdownMenuLabel>Extra capabilities</DropdownMenuLabel>
                   <DropdownMenuItem
                     onClick={() => {
@@ -1522,7 +1522,7 @@ export function ChatInput({
                         : "Set up"}
                     </span>
                   </DropdownMenuItem>
-                </DropdownMenuGroup>
+                </DropdownMenuGroup>}
               </DropdownMenuContent>
             </DropdownMenu>
 

@@ -7,6 +7,9 @@ import { authAccounts, authBootstrap, authSessions } from "@/db/schema";
 export const SESSION_COOKIE = "remiai_session";
 const ACCOUNT_ID = 1;
 const SESSION_DAYS = 30;
+const DEMO_EMAIL = process.env.DEMO_AUTH_EMAIL?.trim().toLowerCase();
+const DEMO_PASSWORD = process.env.DEMO_AUTH_PASSWORD;
+const DEMO_DISPLAY_NAME = process.env.DEMO_AUTH_DISPLAY_NAME?.trim() || "Demo Visitor";
 const PASSWORD_COST = 16384;
 const PASSWORD_BLOCK_SIZE = 8;
 const PASSWORD_PARALLELISM = 1;
@@ -49,6 +52,22 @@ function publicAccount(row: typeof authAccounts.$inferSelect): AuthAccount {
 
 export function hasAccount() {
   return Boolean(db.select({ id: authAccounts.id }).from(authAccounts).where(eq(authAccounts.id, ACCOUNT_ID)).get());
+}
+
+export function ensureDemoAccount() {
+  if (process.env.DEMO?.trim().toLowerCase() !== "true") return;
+  if (!DEMO_EMAIL || !DEMO_PASSWORD || DEMO_PASSWORD.length < 8) {
+    throw new Error("Demo authentication requires DEMO_AUTH_EMAIL and DEMO_AUTH_PASSWORD (minimum 8 characters).");
+  }
+  if (hasAccount()) return;
+  const passwordData = hashPassword(DEMO_PASSWORD);
+  db.insert(authAccounts).values({
+    id: ACCOUNT_ID,
+    email: DEMO_EMAIL,
+    displayName: DEMO_DISPLAY_NAME,
+    passwordHash: passwordData.hash,
+    passwordSalt: passwordData.salt,
+  }).run();
 }
 
 export function ensureBootstrapCode() {

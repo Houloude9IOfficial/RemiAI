@@ -46,7 +46,8 @@
     "db:studio": "drizzle-kit studio",
     "watch:standalone": "npx tsx scripts/file-watcher.ts",
     "auth:reset": "npx tsx scripts/auth-reset.ts",
-    "signing:secrets": "node scripts/setup-signing-secrets.mjs"
+    "signing:secrets": "node scripts/setup-signing-secrets.mjs",
+    "demo:setup": "node scripts/demo-setup.js"
   },
   "main": "electron-dist/main.js",
   "dependencies": {

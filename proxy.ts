@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isDemoMode } from "@/lib/demo-policy";
 
 const PUBLIC_AUTH_PATHS = new Set([
   "/api/auth/status",
@@ -26,7 +27,24 @@ function isWebhookDeliveryOrVerification(pathname: string, method: string): bool
   );
 }
 
+const DEMO_BLOCKED_PAGE_PREFIXES = [
+  "/settings",
+  "/games",
+  "/talk",
+  "/research",
+  "/news",
+  "/coding",
+  "/files",
+  "/runs",
+  "/artifacts",
+];
+
 export async function proxy(request: NextRequest) {
+  if (isDemoMode() && DEMO_BLOCKED_PAGE_PREFIXES.some((prefix) =>
+    request.nextUrl.pathname === prefix || request.nextUrl.pathname.startsWith(`${prefix}/`),
+  )) {
+    return NextResponse.redirect(new URL("/chat", request.url));
+  }
   if (!request.nextUrl.pathname.startsWith("/api/")) return NextResponse.next();
   if (isWebhookDeliveryOrVerification(request.nextUrl.pathname, request.method)) {
     return NextResponse.next();
@@ -46,6 +64,13 @@ export async function proxy(request: NextRequest) {
     }
   }
   if (PUBLIC_AUTH_PATHS.has(request.nextUrl.pathname)) return NextResponse.next();
+  if (isDemoMode() && request.nextUrl.pathname.startsWith("/api/auth/")) {
+    // The public demo uses the host-created shared account. Account mutation
+    // endpoints remain unreachable even for an authenticated visitor.
+    if (["/api/auth/password", "/api/auth/signup"].includes(request.nextUrl.pathname)) {
+      return NextResponse.json({ error: "This feature is unavailable in the public demo." }, { status: 403 });
+    }
+  }
   if (!request.cookies.has("remiai_session")) {
     return NextResponse.json({ error: "Authentication required." }, { status: 401 });
   }

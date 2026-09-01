@@ -6,13 +6,17 @@ import { jsonError } from "@/lib/validation/api";
 import { maskProvider } from "@/lib/providers/mask";
 import { discoverModels } from "@/lib/providers/discover";
 import { PROVIDER_MODEL_CATALOG } from "@/lib/providers/catalog";
+import { demoBlockedResponse, isDemoMode } from "@/lib/demo-policy";
+import { ensureDemoProvider } from "@/lib/demo-provider";
 
 export async function GET() {
+  if (isDemoMode()) return demoBlockedResponse();
   const rows = await db.select().from(providers).orderBy(providers.createdAt);
   return NextResponse.json(rows.map(maskProvider));
 }
 
 export async function POST(req: Request) {
+  if (isDemoMode()) return demoBlockedResponse();
   let body: ReturnType<typeof providerCreateSchema.parse>;
   try {
     body = providerCreateSchema.parse(await req.json());

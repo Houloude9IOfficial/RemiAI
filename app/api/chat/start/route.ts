@@ -20,6 +20,7 @@ import { estimateTokenCount } from "@/lib/utils";
 import { retrieveRelevantMemories } from "@/lib/chat/memories";
 import { getTimeDetails } from "@/lib/time";
 import { createRunTrace } from "@/lib/observability/run-trace";
+import { isDemoMode, filterDemoTools } from "@/lib/demo-policy";
 
 export async function POST(req: Request) {
   const trace = createRunTrace({ kind: "chat-start" });
@@ -72,10 +73,9 @@ export async function POST(req: Request) {
 
   // ── No tools at all — all context is pre-gathered and injected ──
   // The AI should only write a greeting. No tool calls, no lookups.
-  const tools = {
-    delay: delayTool,
-    web_fetch: webFetchTool,
-  };
+  const tools = isDemoMode()
+    ? filterDemoTools({ delay: delayTool })
+    : { delay: delayTool, web_fetch: webFetchTool };
 
   // ── Pre-gather ALL context server-side ──────────────────────────
 

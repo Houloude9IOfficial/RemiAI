@@ -10,6 +10,7 @@ import {
   setSkillEnabled,
 } from "@/lib/skills/manager";
 import { listSkillFiles } from "@/lib/skills/github";
+import { demoBlockedResponse, isDemoMode } from "@/lib/demo-policy";
 
 // Ids must be numeric — anything else (e.g. a deleted route path that falls
 // through to [id]) is a clean 404, never a 500.
@@ -27,6 +28,7 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  if (isDemoMode()) return demoBlockedResponse();
   const id = await parseId(await params);
   if (id === null) {
     return NextResponse.json({ error: "Skill not found" }, { status: 404 });
@@ -70,6 +72,7 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  if (isDemoMode()) return demoBlockedResponse();
   const id = await parseId(await params);
   if (id === null) {
     return NextResponse.json({ error: "Skill not found" }, { status: 404 });
@@ -90,6 +93,7 @@ export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  if (isDemoMode()) return demoBlockedResponse();
   const id = await parseId(await params);
   if (id === null) {
     return NextResponse.json({ error: "Skill not found" }, { status: 404 });

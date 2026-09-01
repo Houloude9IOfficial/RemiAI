@@ -4,6 +4,8 @@ import { z } from "zod";
 import { db } from "@/db";
 import { conversations } from "@/db/schema";
 import { jsonError } from "@/lib/validation/api";
+import { DEMO_PROVIDER_MODEL, ensureDemoProvider } from "@/lib/demo-provider";
+import { isDemoMode } from "@/lib/demo-policy";
 
 const createSchema = z.object({
   providerId: z.number().int().optional().nullable(),
@@ -25,11 +27,12 @@ export async function POST(req: Request) {
     return jsonError(err);
   }
 
+  const demoProvider = isDemoMode() ? ensureDemoProvider() : null;
   const row = await db
     .insert(conversations)
     .values({
-      providerId: body.providerId ?? null,
-      modelId: body.modelId ?? null,
+      providerId: demoProvider?.id ?? body.providerId ?? null,
+      modelId: demoProvider ? DEMO_PROVIDER_MODEL ?? null : body.modelId ?? null,
       // Temporary chats default to memory ENABLED (the two toggles are fully
       // independent — the user can flip either one from the chat menu).
       isTemporary: body.isTemporary ?? false,

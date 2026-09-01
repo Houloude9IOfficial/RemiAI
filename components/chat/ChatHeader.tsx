@@ -10,6 +10,7 @@ import { skillsApi } from "@/lib/api/skills";
 import { DEFAULT_CONTEXT_WINDOW } from "@/lib/providers/catalog";
 import { cn } from "@/lib/utils";
 import { ChatPersonalizationMenu } from "./ChatPersonalizationMenu";
+import { useEffect, useState } from "react";
 
 /**
  * Compact token/context readout — `used / context` with a thin progress bar.
@@ -97,6 +98,10 @@ export function ChatHeader({
   onMemoryChange?: (value: boolean) => void;
 }) {
   const isStreaming = status === "submitted" || status === "streaming";
+  const [demo, setDemo] = useState(false);
+  useEffect(() => {
+    fetch("/api/auth/status", { cache: "no-store" }).then((response) => response.json()).then((data) => setDemo(data.demo === true)).catch(() => undefined);
+  }, []);
 
   // Reuse the sidebar's conversation-list query so the meter shows the real
   // accumulated totals. While a response streams in, poll at a modest cadence
@@ -118,8 +123,9 @@ export function ChatHeader({
     queryKey: ["skills"],
     queryFn: skillsApi.list,
     staleTime: 30_000,
+    enabled: !demo,
   });
-  const enabledSkillCount = installedSkills.filter((s) => s.enabled).length;
+  const enabledSkillCount = demo ? 0 : installedSkills.filter((s) => s.enabled).length;
 
   const conversation = conversations?.find((c) => c.id === conversationId);
   const usedTokens =
@@ -145,7 +151,7 @@ export function ChatHeader({
 
       {/* Right — personalization, skills chip, live usage meter, page actions */}
       <div className="flex shrink-0 items-center gap-2">
-        {onTemporaryChange && onMemoryChange && (
+        {!demo && onTemporaryChange && onMemoryChange && (
           <ChatPersonalizationMenu
             isTemporary={isTemporary ?? false}
             memoryEnabled={memoryEnabled ?? true}
@@ -153,7 +159,7 @@ export function ChatHeader({
             onMemoryChange={onMemoryChange}
           />
         )}
-        {enabledSkillCount > 0 && (
+        {!demo && enabledSkillCount > 0 && (
           <Link
             href="/settings/skills"
             title={`${enabledSkillCount} skill${enabledSkillCount === 1 ? "" : "s"} active`}

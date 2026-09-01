@@ -271,7 +271,7 @@ export function ChatModelSelector({
               variant="outline"
               size="sm"
               className="h-7 text-xs"
-              onClick={() => router.push("/settings/providers")}
+              onClick={() => router.push("/chat")}
             >
               Open model settings
             </Button>
@@ -324,7 +324,7 @@ export function ChatModelSelector({
           <>
             <DropdownMenuSeparator className="my-1" />
             <DropdownMenuItem
-              onClick={() => router.push("/settings/providers")}
+              onClick={() => router.push("/chat")}
               className="justify-center gap-1.5 rounded-lg py-1.5 text-xs text-muted-foreground"
             >
               <Settings2 className="h-3.5 w-3.5" />
