@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { providers, providerModels } from "@/db/schema";
 import { discoverModels } from "./discover";
 import { PROVIDER_MODEL_CATALOG } from "./catalog";
+import { shouldEnableNewModels } from "./model-preferences";
 
 /**
  * Shared provider-model refresh logic (used by both the manual
@@ -12,7 +13,7 @@ import { PROVIDER_MODEL_CATALOG } from "./catalog";
  * enabled), a refresh here:
  *   - keeps models that were already enabled enabled,
  *   - keeps models that were disabled disabled,
- *   - enables NEW models discovered from the provider,
+ *   - applies the global new-model preference to NEW models discovered from the provider,
  *   - removes models the provider no longer offers,
  *   - refreshes labels from discovery.
  */
@@ -97,6 +98,7 @@ export async function refreshProviderModels(
 
   const existingByModelId = new Map(existing.map((m) => [m.modelId, m]));
   const seedIds = new Set(seedModels.map((m) => m.modelId));
+  const enableNewModels = await shouldEnableNewModels();
 
   const toRemove = existing
     .filter((m) => !seedIds.has(m.modelId))
@@ -133,14 +135,15 @@ export async function refreshProviderModels(
           )
           .run();
       } else {
-        // New model — enabled by default so it shows up in the picker.
+        // New models follow the global preference; existing model choices are
+        // deliberately left untouched during refresh.
         tx.insert(providerModels)
           .values({
             providerId,
             modelId: model.modelId,
             label: model.label,
             contextWindow: model.contextWindow,
-            enabled: true,
+            enabled: enableNewModels,
           })
           .run();
         added++;

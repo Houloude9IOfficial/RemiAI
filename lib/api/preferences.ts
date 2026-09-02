@@ -13,6 +13,7 @@ export type UserPreferences = {
   links: Record<string, string>;
   accentColor: string;
   backgroundColor: string;
+  enableNewModels: boolean;
 };
 
 async function get(): Promise<UserPreferences> {

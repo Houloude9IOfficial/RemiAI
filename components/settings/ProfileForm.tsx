@@ -59,6 +59,7 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   links: {},
   accentColor: "",
   backgroundColor: "",
+  enableNewModels: true,
 };
 
 interface LinkEntry {
@@ -110,6 +111,7 @@ function preferencesEqual(a: UserPreferences, b: UserPreferences): boolean {
     a.birthday === b.birthday &&
     a.accentColor === b.accentColor &&
     a.backgroundColor === b.backgroundColor &&
+    a.enableNewModels === b.enableNewModels &&
     linksEqual(a.links || {}, b.links || {})
   );
 }

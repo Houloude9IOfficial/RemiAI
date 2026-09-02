@@ -39,7 +39,7 @@
     "dist:win": "npm run clean:dist && npm run icons && npm run build && npm run build:electron && npm run playwright:browsers && electron-builder --win",
     "dist:linux": "npm run clean:dist && npm run icons && npm run build && npm run build:electron && npm run playwright:browsers && electron-builder --linux",
     "lint": "eslint",
-    "test": "npx tsx scripts/test-ollama-reasoning-middleware.ts && npx tsx scripts/test-chat-reconstruction.ts && npx tsx scripts/test-persist-interval.ts && npx tsx scripts/test-error-payload.ts && npx tsx scripts/test-observability.ts && npx tsx scripts/test-artifacts.ts && npx tsx scripts/test-canvas.ts && npx tsx scripts/test-research-sources.ts && npx tsx scripts/test-build-verification.ts && npx tsx scripts/test-build-runs.ts && npx tsx scripts/test-quality-policy.ts && npx tsx scripts/test-automation-runs.ts && npx tsx scripts/test-notifications.ts",
+    "test": "npx tsx scripts/test-model-preferences.ts && npx tsx scripts/test-ollama-reasoning-middleware.ts && npx tsx scripts/test-chat-reconstruction.ts && npx tsx scripts/test-persist-interval.ts && npx tsx scripts/test-error-payload.ts && npx tsx scripts/test-observability.ts && npx tsx scripts/test-artifacts.ts && npx tsx scripts/test-canvas.ts && npx tsx scripts/test-research-sources.ts && npx tsx scripts/test-build-verification.ts && npx tsx scripts/test-build-runs.ts && npx tsx scripts/test-quality-policy.ts && npx tsx scripts/test-automation-runs.ts && npx tsx scripts/test-notifications.ts",
     "postinstall": "drizzle-kit migrate || echo '(Migration skipped - it will run on app startup)'",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",

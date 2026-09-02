@@ -132,6 +132,13 @@ function repairSchemaCompatibility(): void {
     }
   }
 
+  if (tableExists("user_preferences")) {
+    const columns = tableColumns("user_preferences");
+    if (!columns.has("enable_new_models")) {
+      sqlite.exec('ALTER TABLE "user_preferences" ADD COLUMN "enable_new_models" INTEGER NOT NULL DEFAULT 1');
+    }
+  }
+
   if (tableExists("provider_models")) {
     const columns = tableColumns("provider_models");
     // Provider-reported context-window size (per model). Null until the
@@ -404,7 +411,7 @@ export async function initializeApp(): Promise<void> {
 
   // Auto-refresh provider models every 5 minutes so newly released models
   // appear (and removed ones drop out) without user action. Keeps each
-  // model's enabled state — only new models get enabled.
+  // existing model's enabled state; new models follow the global preference.
   // Uses dynamic import to avoid circular dependency (refresh imports db).
   setTimeout(() => {
     import("@/lib/providers/refresh")

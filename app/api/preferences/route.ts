@@ -18,6 +18,7 @@ const DEFAULT_PREFERENCES = {
   links: {} as Record<string, string>,
   accentColor: "",
   backgroundColor: "",
+  enableNewModels: true,
 };
 
 export async function GET() {
@@ -47,6 +48,7 @@ export async function GET() {
     links: prefs!.links,
     accentColor: prefs!.accentColor,
     backgroundColor: prefs!.backgroundColor,
+    enableNewModels: prefs!.enableNewModels,
   });
 }
 
@@ -66,6 +68,7 @@ export async function PUT(req: Request) {
     links?: Record<string, string>;
     accentColor?: string;
     backgroundColor?: string;
+    enableNewModels?: boolean;
   };
 
   const existing = await db.select().from(userPreferences).get();
@@ -85,6 +88,7 @@ export async function PUT(req: Request) {
     links: body.links ?? existing?.links ?? {},
     accentColor: body.accentColor ?? existing?.accentColor ?? "",
     backgroundColor: body.backgroundColor ?? existing?.backgroundColor ?? "",
+    enableNewModels: body.enableNewModels ?? existing?.enableNewModels ?? true,
     updatedAt: new Date().toISOString(),
   };
 

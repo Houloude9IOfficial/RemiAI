@@ -253,6 +253,13 @@
       "when": 1787942548437,
       "tag": "0040_temporary_chats",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1788000000000,
+      "tag": "0041_new_model_preference",
+      "breakpoints": true
     }
   ]
 }
