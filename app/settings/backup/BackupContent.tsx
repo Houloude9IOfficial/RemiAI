@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import CenteredLayout from "@/components/layout/CenteredLayout";
 
 // ── Format helpers ─────────────────────────────────────────────────────────
 
@@ -212,8 +213,9 @@ export default function BackupContent() {
 
   // ── Render ──────────────────────────────────────────────────────────────
   return (
-    <div className="flex max-w-3xl flex-col gap-8">
-      {/* Header */}
+    <CenteredLayout>
+      <div className="flex max-w-3xl flex-col gap-8">
+        {/* Header */}
       <div>
         <h1 className="text-lg font-semibold">Backup & Restore</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -502,7 +504,8 @@ export default function BackupContent() {
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
-    </div>
+        </Dialog>
+      </div>
+    </CenteredLayout>
   );
 }
