@@ -149,10 +149,7 @@ export default function BackupContent() {
 
     try {
       const result = await backupApi.export(exportPassword, includeFiles);
-
-      const blob = new Blob([result.encrypted], {
-        type: "application/octet-stream",
-      });
+      const blob = await backupApi.download(result.downloadUrl);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -206,7 +203,7 @@ export default function BackupContent() {
     setIsImporting(true);
 
     try {
-      const result = await backupApi.import(importFile, importPassword);
+      await backupApi.import(importFile, importPassword);
       toast.success("Backup restored successfully!", { duration: 8000 });
       setImportFile(null);
       setImportPassword("");

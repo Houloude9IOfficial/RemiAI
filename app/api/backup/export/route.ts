@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { exportBackup } from "@/lib/backup/export";
+import { exportBackup, stageExportBackup } from "@/lib/backup/export";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -8,15 +8,16 @@ export const maxDuration = 300;
 /**
  * POST /api/backup/export
  *
- * Creates an encrypted backup of all user data.
+ * Creates and stages an encrypted backup of all user data.
  *
  * Request body:
  *   { password: string, includeFiles: boolean }
  *
  * Response (JSON):
- *   encrypted: string     — base64-encoded encrypted blob
+ *   downloadUrl: string    — single-use URL for the encrypted backup
+ *   history: object         — metadata used after the download succeeds
  *   stats: { tables, uploads, avatars }
- *   size: number          — byte size of the encrypted blob
+ *   size: number            — byte size of the staged encrypted backup
  */
 export async function POST(req: NextRequest) {
   try {
@@ -31,14 +32,14 @@ export async function POST(req: NextRequest) {
     }
 
     const includeFiles = body.includeFiles ?? true;
-
     const result = await exportBackup(body.password, includeFiles);
+    const staged = await stageExportBackup(result.encrypted);
 
     return NextResponse.json({
-      encrypted: result.encrypted,
-      history: result.history,
+      downloadUrl: `/api/backup/download/${staged.token}`,
+      history: { ...result.history, totalSize: staged.size },
       stats: result.stats,
-      size: result.encrypted.length,
+      size: staged.size,
     });
   } catch (err) {
     const message =

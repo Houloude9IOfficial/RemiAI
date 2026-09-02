@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { backupHistory } from "@/db/schema";
 import { UPLOAD_DIR, AVATAR_DIR, SESSION_FILES_DIR, SKILLS_DIR } from "@/lib/paths";
+import { stageBackup } from "./download";
 import { encryptBackup } from "./crypto";
 import { getAllTables } from "./schema";
 import { BACKUP_VERSION, type BackupFiles } from "./types";
@@ -100,6 +101,17 @@ export interface ExportResult {
  */
 export async function recordBackupHistory(data: BackupHistoryData): Promise<void> {
   await db.insert(backupHistory).values(data);
+}
+
+/**
+ * Stage an encrypted backup for download without putting the backup contents
+ * in the export JSON response. The token is intentionally separate from the
+ * history metadata so it cannot expose the backup or its password.
+ */
+export async function stageExportBackup(
+  encrypted: string,
+): Promise<{ token: string; size: number }> {
+  return stageBackup(encrypted);
 }
 
 export async function exportBackup(

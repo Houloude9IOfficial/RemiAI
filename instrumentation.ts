@@ -18,6 +18,10 @@ export async function register() {
   // SQLite/native modules cannot be bundled. Only initialize in Node.
   if (process.env.NEXT_RUNTIME === "edge") return;
 
-  const { initializeApp } = await import("./db");
+  const [{ initializeApp }, { cleanupExpiredBackupDownloads }] = await Promise.all([
+    import("./db"),
+    import("./lib/backup/download"),
+  ]);
   await initializeApp();
+  await cleanupExpiredBackupDownloads();
 }
