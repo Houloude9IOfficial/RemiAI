@@ -1,7 +1,7 @@
 {
   "name": "remiai",
   "description": "RemiAI is a self-hosted, privacy-first AI assistant that brings chat, file management, web search, and automation together in one extensible workspace fully under your control.",
-  "version": "2.6.0",
+  "version": "2.7.0",
   "author": {
     "name": "CrickDevs",
     "email": "support@crickdevs.com"
