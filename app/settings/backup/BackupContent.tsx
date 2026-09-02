@@ -204,10 +204,9 @@ export default function BackupContent() {
 
     try {
       await backupApi.import(importFile, importPassword);
-      toast.success("Backup restored successfully!", { duration: 8000 });
-      setImportFile(null);
-      setImportPassword("");
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      // Restoring revokes all existing sessions, so reload the root page and
+      // let the auth wall show the login screen when required.
+      window.location.href = "/";
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Import failed");
     } finally {
