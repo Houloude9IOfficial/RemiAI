@@ -163,6 +163,14 @@ export default function BackupContent() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
+      try {
+        await backupApi.recordHistory(result.history);
+        refetchHistory();
+      } catch (historyError) {
+        console.warn("[backup] Failed to record backup history:", historyError);
+        toast.warning("Backup downloaded, but history could not be updated.");
+      }
+
       setExportResult({
         stats: result.stats.tables,
         uploads: result.stats.uploads,
@@ -170,7 +178,6 @@ export default function BackupContent() {
         size: result.size,
       });
 
-      refetchHistory();
       toast.success("Backup downloaded successfully!");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Export failed");

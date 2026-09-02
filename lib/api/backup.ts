@@ -2,9 +2,22 @@
 // Client-side API for backup export / import
 // ---------------------------------------------------------------------------
 
+export interface BackupHistoryData {
+  exportedAt: string;
+  totalSize: number;
+  includesFiles: boolean;
+  tableStats: Record<string, number>;
+  uploadCount: number;
+  avatarCount: number;
+  skillCount: number;
+  appVersion: string;
+}
+
 export interface ExportResponse {
   /** Base64-encoded encrypted backup blob. */
   encrypted: string;
+  /** Metadata recorded after the client receives the complete response. */
+  history: BackupHistoryData;
   /** Size of the encrypted blob in bytes. */
   size: number;
   stats: {
@@ -85,6 +98,19 @@ export const backupApi = {
   history: async (limit: number = 20): Promise<HistoryResponse> => {
     const res = await fetch(`/api/backup/history?limit=${limit}`);
     return parseJson<HistoryResponse>(res, "Loading backup history");
+  },
+
+  /**
+   * Record a backup after the complete export response has reached the client.
+   */
+  recordHistory: async (data: BackupHistoryData): Promise<void> => {
+    const res = await fetch("/api/backup/history", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    await parseJson<{ success: true }>(res, "Recording backup history");
   },
 
   /**

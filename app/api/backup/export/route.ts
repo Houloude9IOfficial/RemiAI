@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       encrypted: result.encrypted,
+      history: result.history,
       stats: result.stats,
       size: result.encrypted.length,
     });

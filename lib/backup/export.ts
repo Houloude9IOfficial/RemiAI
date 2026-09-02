@@ -70,8 +70,20 @@ async function collectFiles(
 // Export: gather all data, encrypt, return base64
 // ---------------------------------------------------------------------------
 
+export interface BackupHistoryData {
+  exportedAt: string;
+  totalSize: number;
+  includesFiles: boolean;
+  tableStats: Record<string, number>;
+  uploadCount: number;
+  avatarCount: number;
+  skillCount: number;
+  appVersion: string;
+}
+
 export interface ExportResult {
   encrypted: string;
+  history: BackupHistoryData;
   stats: {
     tables: Record<string, number>;
     uploads: number;
@@ -79,6 +91,15 @@ export interface ExportResult {
     sessionFiles: number;
     skills: number;
   };
+}
+
+/**
+ * Record a backup only after the client has received the complete export
+ * response. Keeping this separate from exportBackup prevents an upstream
+ * proxy failure from leaving a successful-looking history row behind.
+ */
+export async function recordBackupHistory(data: BackupHistoryData): Promise<void> {
+  await db.insert(backupHistory).values(data);
 }
 
 export async function exportBackup(
@@ -136,9 +157,9 @@ export async function exportBackup(
   const plaintext = JSON.stringify(payload);
   const encrypted = encryptBackup(plaintext, password);
 
-  // ── Log backup history ────────────────────────────────────────────────
-  try {
-    await db.insert(backupHistory).values({
+  return {
+    encrypted,
+    history: {
       exportedAt: payload.exportedAt,
       totalSize: encrypted.length,
       includesFiles: includeFiles,
@@ -147,13 +168,7 @@ export async function exportBackup(
       avatarCount: Object.keys(files.avatars).length,
       skillCount: Object.keys(files.skills).length,
       appVersion: APP_VERSION,
-    });
-  } catch (err) {
-    console.warn("[backup] Failed to log backup history:", err);
-  }
-
-  return {
-    encrypted,
+    },
     stats: {
       tables: tableStats,
       uploads: Object.keys(files.uploads).length,
