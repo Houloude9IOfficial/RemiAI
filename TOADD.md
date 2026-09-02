@@ -298,4 +298,4 @@ the ai users bash to write/edit/delete files, but it should use bash for command
 
 <!-- backup page styling is broken -->
 
-backup still says: Exporting backup failed — server returned a non-JSON response (502 , content-type: unknown): "Bad Gateway" but says that it exported successfully in history
+<!-- backup still says: Exporting backup failed — server returned a non-JSON response (502 , content-type: unknown): "Bad Gateway" but says that it exported successfully in history -->
