@@ -90,6 +90,7 @@ import { buildScheduleTool } from "@/lib/tools/schedule";
 import { buildToolHelpTool, buildListAvailableToolsTool } from "@/lib/tools/tool-help";
 import { buildSkillsToolSet } from "@/lib/skills/tools";
 import { buildActiveSkillsSection } from "@/lib/skills/system-prompt";
+import { buildTaggedSkillsSection } from "@/lib/skills/tagged-skill";
 import { userContextFromHeaders } from "@/lib/geo";
 import { queryRecentChanges } from "@/lib/fs/file-index";
 import { estimateTokenCount, normaliseTool } from "@/lib/utils";
@@ -1022,6 +1023,15 @@ Definition of done:
     ? await buildActiveSkillsSection(isLowCapability)
     : "";
 
+  // Tagged skill section — when the user tags a skill with @skill (the /skill
+  // slash command inserts "@skill <name>@<repo>"), the tagged skill's FULL
+  // instructions are inlined here so the model is guaranteed to follow them
+  // for this request instead of having to discover the skill itself.
+  const taggedSkillsSection =
+    memoryEnabled && !isDemoMode()
+      ? await buildTaggedSkillsSection(lastUserText)
+      : "";
+
   // Split off the availability note so prepareStep can rebuild the
   // instructions with a FRESH note once load_tool_groups enables a group
   // mid-stream (the note is the only part of the dynamic prompt that can
@@ -1037,7 +1047,8 @@ Definition of done:
 
   const dynamicSystemPromptBase =
     systemTip + profileTip + memoryTip + fileChangeTip + summarySection +
-    planModePrompt + buildModePrompt + canvasSection + activeSkillsSection + qualityPolicyPrompt;
+    planModePrompt + buildModePrompt + canvasSection + activeSkillsSection +
+    taggedSkillsSection + qualityPolicyPrompt;
 
   const dynamicSystemPrompt = dynamicSystemPromptBase + toolAvailabilityNote;
 

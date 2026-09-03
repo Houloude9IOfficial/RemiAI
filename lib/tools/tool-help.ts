@@ -104,6 +104,19 @@ The user can tag which tools to use with \`@tool\` markers:
 2. Prefer those exact tool names when fulfilling the request.
 3. If a tagged tool is not in your current tool list, tell the user it isn't available (it may be disabled in Settings).`,
 
+  "@SKILL-references": `## @skill references — skill markers in user messages
+
+The user can tag an installed skill to force it onto the current request with a \`@skill\` marker (the \`/skill\` command inserts it):
+
+| User types | Meaning |
+|---|---|
+| \`@skill react-best-practices@vercel-labs/agent-skills\` | Follow this skill's instructions for the request |
+
+### How to resolve:
+1. When a request contains \`@skill <ref>\`, the tagged skill's full instruction file is ALREADY inlined in the \`## Tagged skill\` section of your system prompt — follow it exactly; do not re-discover it with \`load_skill\` unless you need to read its supporting files.
+2. Ref may be \`name@repo\`, a bare name, or a numeric skill id.
+3. If the tagged skill is disabled or not installed, tell the user it isn't available and how to enable/install it (Settings > Skills).`,
+
   "memory": `## Memory system — tools and usage
 
 **Tools available:**
@@ -840,6 +853,10 @@ const KEYWORD_SYNONYMS: Record<string, string> = {
   "@allow": "@TOOL-references",
   "allow tool": "@TOOL-references",
   "allowed tool": "@TOOL-references",
+  "@skill": "@SKILL-references",
+  "skill tag": "@SKILL-references",
+  "skill marker": "@SKILL-references",
+  "tagged skill": "@SKILL-references",
   schedule: "scheduled-tasks",
   scheduling: "scheduled-tasks",
   task: "scheduled-tasks",
@@ -1005,7 +1022,7 @@ function getAvailableTopicsText(): string {
 }  // Use a shorter inline list for the tool description (the full list is in the
   // system prompt and is returned when the user asks for an invalid topic)
   const SHORT_TOPIC_LIST =
-    "filesystem, memory, profile, todo, file-index, ask-questions, suggest-followups, agent-spawner, scheduled-tasks, routines, delay, create-visual, session-files, canvas, newsapi, web-search, firecrawl, brave-search, notion, context7, elevenlabs, playwright, code-execution, document-reader, media, @FILE-references, @MCP-references, @TOOL-references, scaffolding, absolute-paths, web-fetch, mcp-tools, file-attachments, start-of-conversation";
+    "filesystem, memory, profile, todo, file-index, ask-questions, suggest-followups, agent-spawner, scheduled-tasks, routines, delay, create-visual, session-files, canvas, newsapi, web-search, firecrawl, brave-search, notion, context7, elevenlabs, playwright, code-execution, document-reader, media, @FILE-references, @MCP-references, @TOOL-references, @SKILL-references, scaffolding, absolute-paths, web-fetch, mcp-tools, file-attachments, start-of-conversation";
 
 // ---------------------------------------------------------------------------
 // Cached listing for list_available_tools — built once from TOOL_CATALOG

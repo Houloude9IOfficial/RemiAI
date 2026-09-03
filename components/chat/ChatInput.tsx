@@ -885,7 +885,8 @@ export function ChatInput({
       const anchor = slashAnchorRef.current;
       // Backing out to the command list leaves the composer untouched.
       if (el && anchor >= 0 && level.kind !== "command") {
-        const commandWord = level.kind === "tools" ? "tool" : "mcp";
+        const commandWord =
+          level.kind === "tools" ? "tool" : level.kind === "skills" ? "skill" : "mcp";
         const next = `${el.value.slice(0, anchor)}/${commandWord} `;
         setText(next);
         requestAnimationFrame(() => {
