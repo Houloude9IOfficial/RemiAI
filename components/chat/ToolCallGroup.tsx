@@ -307,25 +307,10 @@ const TOOL_LABELS: Record<string, ToolLabel> = {
     past: "Saved to memory",
     icon: Brain,
   },
-  fc_search: {
-    present: "Searching web",
-    past: "Searched web",
-    icon: Search,
-  },
   web_search: {
     present: "Searching web",
     past: "Searched web",
     icon: Search,
-  },
-  brave_web_search: {
-    present: "Searching web",
-    past: "Searched web",
-    icon: Search,
-  },
-  brave_image_search: {
-    present: "Searching images",
-    past: "Searched images",
-    icon: Image,
   },
   web_fetch: {
     present: "Fetching content",

@@ -28,6 +28,11 @@ import {
   MAX_DELTA_MESSAGES,
 } from "../lib/chat/history-reconstruction";
 import { asStringArray, normaliseTool } from "../lib/utils";
+import {
+  CORE_TOOLS,
+  buildToolAvailabilityNote,
+  filterTools,
+} from "../lib/chat/tool-groups";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -429,6 +434,59 @@ async function main() {
       assert.equal(normaliseTool(v7), v7);
     });
   }
+
+  // ── Dynamic tool loading ─────────────────────────────────────────────
+
+  console.log("\ncore tools");
+  ok("keeps required context, search, and utility tools in simple chats", () => {
+    const required = [
+      "web_search",
+      "web_fetch",
+      "get_time_details",
+      "get_device_details",
+      "get_tool_help",
+      "list_available_tools",
+      "load_tool_groups",
+      "ask_questions",
+      "suggest_followups",
+    ];
+    const tools = Object.fromEntries([
+      ...required.map((name) => [name, {}]),
+      ["remember", {}],
+      ["query_recent_changes", {}],
+      ["list_permitted_roots", {}],
+      ["read_file", {}],
+      ["search_files", {}],
+      ["write_file", {}],
+      ["list_skills", {}],
+      ["fc_scrape", {}],
+    ]);
+    const filtered = filterTools(tools, new Set());
+    for (const name of required) assert.ok(name in filtered, `${name} was filtered out`);
+    for (const name of [
+      "remember",
+      "query_recent_changes",
+      "list_permitted_roots",
+      "read_file",
+      "search_files",
+      "write_file",
+      "list_skills",
+      "fc_scrape",
+    ]) {
+      assert.equal(name in filtered, false, `${name} was unexpectedly loaded`);
+    }
+    assert.ok(CORE_TOOLS.has("web_search"));
+    assert.equal(CORE_TOOLS.size, 9);
+  });
+
+  ok("reports web search as loaded", () => {
+    const note = buildToolAvailabilityNote(
+      { web_search: {}, web_fetch: {}, get_time_details: {}, write_file: {} },
+      new Set(),
+    );
+    assert.match(note, /Loaded:.*web-search/);
+    assert.doesNotMatch(note, /Not loaded:.*web-search/);
+  });
 
   // ── Const sanity ─────────────────────────────────────────────────────
 

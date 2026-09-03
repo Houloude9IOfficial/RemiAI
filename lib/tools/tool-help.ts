@@ -324,45 +324,45 @@ Results are already localized automatically: the \`country\` for top headlines a
 
 Note: \`country\` and \`sources\` cannot be used together. \`category\` and \`sources\` also cannot be used together.`,
 
-  "firecrawl": `## Firecrawl tools (when configured)
+  "web-search": `## Unified web search
 
-If the user has configured a Firecrawl API key, you have access to:
+Use \`web_search\` for all internet searches. It tries providers sequentially:
+1. Self-hosted SearXNG (\`SEARXNG_URL\`, default \`http://127.0.0.1:3105\`)
+2. Brave Search, only when configured and enabled
+3. Firecrawl, only when configured and enabled
+
+The tool stops at the first provider that returns usable results. It does not issue parallel requests, which keeps resource usage low on small servers.
+
+| Parameter | Purpose |
+|---|---|
+| \`query\` | Specific search query |
+| \`count\` | 1–20 results, default 10 |
+| \`category\` | \`general\`, \`news\`, or \`images\` |
+| \`language\` | Language code such as \`en\` or \`en-US\` |
+| \`page\` | Result page, 1–5 |
+| \`timeRange\` | \`day\`, \`month\`, or \`year\` |
+| \`safeSearch\` | 0 off, 1 moderate, 2 strict |
+
+Use \`web_fetch\` afterward when the answer requires the full content of a returned page.
+
+### Firecrawl page tools (when configured)
+\`fc_scrape\`, \`fc_crawl\`, \`fc_interact\`, and \`fc_stop_interaction\` remain available for advanced extraction and browser interaction.`,
+
+  "firecrawl": `## Firecrawl page tools (when configured)
+
+Firecrawl is no longer a separate search tool. Its remaining tools are:
 | Tool | Parameters | Purpose |
 |---|---|---|
-| \`fc_search\` | \`query\`, \`limit\`, \`sources\` | Web search using Firecrawl. |
 | \`fc_scrape\` | \`url\`, \`formats\`, \`onlyMainContent\` | Scrape a single URL as markdown. |
 | \`fc_crawl\` | \`url\`, \`maxPages\`, \`includePaths\`/ \`excludePaths\` | Crawl a multi-page website. |
 | \`fc_interact\` | \`scrapeId\`, \`prompt\` or \`code\` | Interact with a live browser session. |
 | \`fc_stop_interaction\` | \`scrapeId\` | Stop an active browser interaction. |
 
-### Firecrawl interaction workflow:
-1. Call \`fc_scrape\` on a URL to get a \`scrapeId\`.
-2. Call \`fc_interact\` with that \`scrapeId\` and a prompt or code.
-3. Chain multiple interactions — the session persists.
-4. Call \`fc_stop_interaction\` when done to clean up.`,
+Search requests should use \`web_search\`, which automatically falls back to Firecrawl after SearXNG and Brave.`,
 
-  "brave-search": `## Brave Search tool (when configured)
+  "brave-search": `## Brave Search fallback
 
-If the user has configured a Brave Search API key, you have access to:
-| Tool | Parameters | Purpose |
-|---|---|---|
-| \`brave_web_search\` | \`query\` (required), \`count\` (optional, default 10, max 20) | Search the web using Brave Search. |
-| \`brave_image_search\` | \`query\` (required), \`count\` (optional, default 10, max 20) | Search for images across the web using Brave Search. |
-
-### When to use:
-- **General web search** — Use \`brave_web_search\` when you need current information from the web.
-- **Images / pictures / visual examples** — Use \`brave_image_search\` when the user wants to SEE something (\"show me pictures of X\", \"what does X look like\", \"find photos of Y\"). Each result includes a clickable thumbnail that opens the full image in a new tab, plus the source page URL. Only call it when images are actually relevant — not for ordinary text/web searches.
-- **Complement with web_fetch** — After getting search results, use \`web_fetch\` to read specific pages.
-- **Compare with Firecrawl** — If Firecrawl is also configured, use Firecrawl (\`fc_search\`/\`fc_scrape\`) for more advanced scraping and crawling. Use Brave for quick, simple web searches.
-
-### Localization:
-Results are automatically localized to the user's country and language (derived from their browser locale/timezone), so searches return results relevant to their region.
-
-### Example:
-\`\`\`
-brave_web_search({ query: "React 19 release date features", count: 5 })
-brave_image_search({ query: "Art Nouveau architecture", count: 10 })
-\`\`\``,
+Brave is not called directly by the model. When configured and enabled, it is used automatically by \`web_search\` only after SearXNG fails. Its API key is stored under Settings > Tools > Brave Search Fallback.`,
 
   "notion": `## Notion tools (when configured)
 
@@ -586,15 +586,11 @@ MCP tools are automatically loaded when you start a conversation and available a
 
   "start-of-conversation": `## Start of conversation — gather context before responding
 
-When the user sends their **first message** in a new conversation, call these tools **together** (in parallel):
+On a new conversation, use the always-loaded \`get_time_details\` tool when the answer needs the current date, time, or timezone. Use \`get_device_details\` when the user asks about their device or environment.
 
-1. **\`get_time_details\`** — Find out current date, time, timezone. Tailor time-aware responses.
-2. **\`query_recent_changes\`** — See what files the user has been working on.
-3. **\`get_recent_memories\`** — Remind yourself of saved facts about the user.
+Memory, file-index, and filesystem tools are loaded on demand. If the first message needs one of them, call \`load_tool_groups({ groups: ["memory"] })\`, \`load_tool_groups({ groups: ["file_index"] })\`, or \`load_tool_groups({ groups: ["fs_read"] })\` first, then continue with the relevant tool. Do not call an unloaded tool.
 
-Then use what you learned to craft a personalized, context-aware response.
-
-**Note:** If the user's message is very urgent (e.g. "Help!"), skip context gathering and reply directly.`,
+Then use what you learned to craft the response. If the user's message is very urgent (e.g. "Help!"), skip context gathering and reply directly.`,
 
   "file-attachments": `## File attachments — how to handle uploaded files
 
@@ -840,7 +836,8 @@ const KEYWORD_SYNONYMS: Record<string, string> = {
   task: "scheduled-tasks",
   "news api": "newsapi",
   news: "newsapi",
-  "web search": "firecrawl",
+  "web search": "web-search",
+  search: "web-search",
   scraping: "firecrawl",
   crawl: "firecrawl",
   brave: "brave-search",
@@ -999,7 +996,7 @@ function getAvailableTopicsText(): string {
 }  // Use a shorter inline list for the tool description (the full list is in the
   // system prompt and is returned when the user asks for an invalid topic)
   const SHORT_TOPIC_LIST =
-    "filesystem, memory, profile, todo, file-index, ask-questions, suggest-followups, agent-spawner, scheduled-tasks, routines, delay, create-visual, session-files, canvas, newsapi, firecrawl, brave-search, notion, context7, elevenlabs, playwright, code-execution, document-reader, media, @FILE-references, @MCP-references, @TOOL-references, scaffolding, absolute-paths, web-fetch, mcp-tools, file-attachments, start-of-conversation";
+    "filesystem, memory, profile, todo, file-index, ask-questions, suggest-followups, agent-spawner, scheduled-tasks, routines, delay, create-visual, session-files, canvas, newsapi, web-search, firecrawl, brave-search, notion, context7, elevenlabs, playwright, code-execution, document-reader, media, @FILE-references, @MCP-references, @TOOL-references, scaffolding, absolute-paths, web-fetch, mcp-tools, file-attachments, start-of-conversation";
 
 // ---------------------------------------------------------------------------
 // Cached listing for list_available_tools — built once from TOOL_CATALOG
@@ -1025,7 +1022,8 @@ const CATEGORY_LABELS: Record<string, string> = {
   document_reader: "Document reader",
   memory: "Memory & recall",
   profile: "User profile",
-  brave_search: "Web search (Brave)",
+  web_search: "Unified web search",
+  brave_search: "Web search fallback (Brave)",
   notion: "Notion workspace",
   context7: "Library documentation (Context7)",
   file_index: "File index lookup",
@@ -1040,7 +1038,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   elevenlabs: "ElevenLabs voice",
   create_visual: "Dynamic visuals (SVG / HTML)",
   session_files: "Session files (per-chat sandbox)",
-  firecrawl: "Web scraping (Firecrawl)",
+  firecrawl: "Web scraping / search fallback (Firecrawl)",
   playwright: "Browser automation (Playwright)",
   media_tools: "Media processing (ffmpeg)",
 };
@@ -1052,6 +1050,7 @@ const HELP_TOPIC_MAP: Record<string, string | null> = {
   document_reader: "document-reader",
   memory: "memory",
   profile: "profile",
+  web_search: "web-search",
   brave_search: "brave-search",
   notion: "notion",
   context7: "context7",

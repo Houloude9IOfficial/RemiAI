@@ -12,6 +12,8 @@ services:
       NODE_ENV: production
       PORT: "3000"
       HOSTNAME: 0.0.0.0
+      SEARXNG: ${SEARXNG:-true}
+      SEARXNG_URL: ${SEARXNG_URL:-http://searxng:8080}
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -19,6 +21,36 @@ services:
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=256m
+
+  # Optional local metasearch backend. It uses very little memory compared
+  # with a crawler/indexer and is not exposed on the host.
+  searxng:
+    # The profile name is derived from SEARXNG. The launcher activates the
+    # `true` profile only when the backend is enabled.
+    profiles: ["${SEARXNG:-true}"]
+    image: searxng/searxng:latest
+    environment:
+      SEARXNG_SECRET: ${SEARXNG_SECRET:-remiai-local-search-secret-change-me}
+    volumes:
+      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
+    ports:
+      - "127.0.0.1:${SEARXNG_PORT:-3105}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    # The official image initializes its CA certificates and cache at startup.
+    # Keep those paths writable and retain only the capability needed by its
+    # entrypoint to prepare the cache directory.
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+      - /var/cache/searxng:rw,noexec,nosuid,size=64m
 
   remiai-demo:
     profiles: [demo]
@@ -38,13 +70,15 @@ services:
       NODE_ENV: production
       PORT: "3000"
       HOSTNAME: 0.0.0.0
+      SEARXNG: ${SEARXNG:-true}
+      SEARXNG_URL: ${SEARXNG_URL:-http://searxng:8080}
       DEMO: "true"
-      DEMO_PROVIDER_KIND: ${DEMO_PROVIDER_KIND:?Set DEMO_PROVIDER_KIND}
-      DEMO_PROVIDER_MODEL: ${DEMO_PROVIDER_MODEL:?Set DEMO_PROVIDER_MODEL}
-      DEMO_PROVIDER_API_KEY: ${DEMO_PROVIDER_API_KEY:?Set DEMO_PROVIDER_API_KEY}
+      DEMO_PROVIDER_KIND: ${DEMO_PROVIDER_KIND:-}
+      DEMO_PROVIDER_MODEL: ${DEMO_PROVIDER_MODEL:-}
+      DEMO_PROVIDER_API_KEY: ${DEMO_PROVIDER_API_KEY:-}
       DEMO_PROVIDER_BASE_URL: ${DEMO_PROVIDER_BASE_URL:-}
-      DEMO_AUTH_EMAIL: ${DEMO_AUTH_EMAIL:?Set DEMO_AUTH_EMAIL}
-      DEMO_AUTH_PASSWORD: ${DEMO_AUTH_PASSWORD:?Set DEMO_AUTH_PASSWORD}
+      DEMO_AUTH_EMAIL: ${DEMO_AUTH_EMAIL:-}
+      DEMO_AUTH_PASSWORD: ${DEMO_AUTH_PASSWORD:-}
       DEMO_AUTH_DISPLAY_NAME: ${DEMO_AUTH_DISPLAY_NAME:-Demo Visitor}
     security_opt:
       - no-new-privileges:true

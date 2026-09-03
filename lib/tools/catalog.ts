@@ -179,14 +179,26 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     togglable: false,
     requiresApiKey: false,
   },
-  // ── Brave Search (integration, togglable, needs API key) ──
+  // ── Unified Web Search (builtin, always on) ──
+  {
+    id: "web_search",
+    name: "Web Search",
+    description:
+      "Searches through self-hosted SearXNG first, then optionally falls back to Brave Search and Firecrawl. Configure SearXNG with the SEARXNG_URL environment variable; API keys are optional fallbacks.",
+    toolNames: ["web_search"],
+    category: "builtin",
+    subgroup: "Web & Research",
+    togglable: false,
+    requiresApiKey: false,
+  },
+  // ── Brave Search fallback (integration, togglable, needs API key) ──
   {
     id: "brave_search",
-    name: "Brave Search",
+    name: "Brave Search Fallback",
     icon: "https://upload.wikimedia.org/wikipedia/commons/5/51/Brave_icon_lionface.png",
     description:
-      "Search the web using Brave Search. Get up-to-date information, news, answers, and image results from the internet.",
-    toolNames: ["brave_web_search", "brave_image_search"],
+      "Optional fallback for the unified Web Search tool when SearXNG is unavailable. The key is never used unless SearXNG fails.",
+    toolNames: [],
     category: "integration",
     togglable: true,
     requiresApiKey: true,
@@ -427,12 +439,11 @@ export const TOOL_CATALOG: ToolDefinition[] = [
   // ── Firecrawl (integration, togglable, needs API key) ──
   {
     id: "firecrawl",
-    name: "Firecrawl",
+    name: "Firecrawl Fallback & Scraping",
     icon: "https://firecrawl.dev/logo.png",
     description:
-      "Powerful web scraping, crawling, searching, and browser interaction powered by Firecrawl. Includes fc_search (web search), fc_scrape (single page scrape), fc_crawl (multi-page crawl), fc_interact (browser interaction), and fc_stop_interaction.",
+      "Optional final fallback for the unified Web Search tool, plus advanced page scraping, crawling, and browser interaction. Search is only attempted after SearXNG and Brave fail.",
     toolNames: [
-      "fc_search",
       "fc_scrape",
       "fc_crawl",
       "fc_interact",

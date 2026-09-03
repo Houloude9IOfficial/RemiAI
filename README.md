@@ -119,6 +119,7 @@ Spawn specialized sub-agents for complex tasks, keeping the main conversation fo
 
 **Built-in tools:**
 - `delay` — wait between calls (rate limiting)
+- `web_search` — search through SearXNG, then optional Brave and Firecrawl fallbacks
 - `web_fetch` — fetch URLs and read web content; successful and failed fetches are recorded as sanitized chat-scoped source provenance
 - `read_document` — extract text from PDF, DOCX, etc.
 - `python_exec` — execute Python code in a subprocess
@@ -133,8 +134,9 @@ Spawn specialized sub-agents for complex tasks, keeping the main conversation fo
 
 | Integration | Capabilities |
 |---|---|
-| **Firecrawl** | Web search, scraping, crawling, browser interaction |
-| **Brave Search** | Web search with Brave's search index |
+| **SearXNG** | Primary self-hosted web, news, and image search backend |
+| **Brave Search** | Optional fallback for `web_search` |
+| **Firecrawl** | Optional final search fallback, scraping, crawling, browser interaction |
 | **NewsAPI** | News search and top headlines across thousands of sources |
 | **ElevenLabs** | Premium text-to-speech and speech-to-text |
 | **Notion** | Notion integration |
@@ -320,20 +322,27 @@ npm run build
 npm start
 ```
 
-The built-in launcher keeps the web server on `127.0.0.1` by default. Set `PORT` to change the local port:
+The built-in launcher keeps the web server on `127.0.0.1` by default. `npm run dev` and `npm start` also start or reuse the local SearXNG Docker service before launching RemiAI. SearXNG uses host port `3105` by default. Set `PORT` and `SEARXNG_PORT`, or pass `--port` and `--searxng-port`, to change either port:
 
 ```bash
-PORT=3001 npm start
+PORT=3001 SEARXNG_PORT=3106 npm start
+npm run dev -- --port 3001 --searxng-port 3106
 ```
 
 ### Docker deployment
 
 Docker is the recommended way to run the web application on a server. The image runs Next.js in standalone production mode as a non-root user and persists application data in `/app/data`. (The image bundles headless Chromium for the Browser Automation tool — it adds roughly 350 MB to the image.)
 
+The Compose setup includes a small private SearXNG service for `web_search`. It is queried first, followed by Brave and Firecrawl only when those fallback integrations are configured. SearXNG is published on loopback only (`127.0.0.1:3105`) so the npm launcher can connect to it; it is not publicly exposed. The launcher waits for SearXNG's `/healthz` endpoint before reporting it ready. Set `SEARXNG=false` to disable SearXNG in both the launcher and the container. For a separate host-level SearXNG instance, set `SEARXNG_URL` to its reachable URL instead.
+
 With Docker Compose:
 
 ```bash
-docker compose up --build -d
+# Start RemiAI and its private SearXNG backend
+docker compose --profile default --profile true up --build -d
+
+# Disable SearXNG for the container deployment
+SEARXNG=false docker compose --profile default up --build -d
 docker compose logs -f remiai
 ```
 
@@ -368,10 +377,31 @@ docker run -d --name remiai \
   --volume remiai-data:/app/data \
   --security-opt no-new-privileges:true \
   --cap-drop ALL \
+  --add-host host.docker.internal:host-gateway \
+  -e SEARXNG_URL=http://host.docker.internal:3105 \
   remiai
 ```
 
+The direct `docker run` example does not start SearXNG. Use Compose for the included private SearXNG service, or set `SEARXNG_URL` to an endpoint reachable from the container. The Compose service supplies a required non-default `SEARXNG_SECRET` and keeps the writable paths needed by the official SearXNG entrypoint. When using `npm run dev` or `npm start` outside Docker, Docker must be installed and running for the launcher to start SearXNG automatically; if it is unavailable, RemiAI still starts and uses configured fallback providers.
+
 The container listens on `0.0.0.0:3000` internally. TLS termination, firewall rules, DNS, and authentication at the reverse proxy remain the operator's responsibility.
+
+For a non-Docker install, run SearXNG separately and point RemiAI at it:
+
+```dotenv
+SEARXNG=true
+SEARXNG_URL=http://127.0.0.1:3105
+```
+
+To disable SearXNG entirely, put this in `.env`:
+
+```dotenv
+SEARXNG=false
+```
+
+The launcher then skips SearXNG on `npm run dev` and `npm start`, and the `web_search` tool skips it when the app is started directly.
+
+The SearXNG JSON response format must be enabled in its `settings.yml` (`search.formats` must include `json`). This repository includes a minimal example at `searxng/settings.yml`.
 
 #### Deploying a released image from GHCR
 

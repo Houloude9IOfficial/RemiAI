@@ -207,7 +207,6 @@ function operationSummary(name: string, running: boolean): string {
     list_directory: "Listed directory",
     web_fetch: "Fetched page",
     web_search: "Searched web",
-    brave_web_search: "Searched web",
   };
   return labels[name] ?? name.replace(/_/g, " ");
 }
@@ -799,7 +798,7 @@ function AgentResultCard({
   return null;
 }
 
-/* ---- Web search results (Brave web search) ---- */
+/* ---- Unified web search results ---- */
 
 interface WebSearchItem {
   title: string;

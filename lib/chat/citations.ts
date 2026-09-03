@@ -4,7 +4,7 @@ import type { UIMessage } from "ai";
 // Client-side citation helpers.
 //
 // The server attaches a `sources` array to the output of provenance-tracked
-// tools (web_fetch, brave_web_search, … — see lib/research/source-storage.ts).
+// tools (web_fetch, web_search, … — see lib/research/source-storage.ts).
 // These helpers collect those sources per assistant message, number them in
 // order of first appearance, and annotate the answer text so inline links to
 // retrieved URLs render as numbered chips (Nexus-style).

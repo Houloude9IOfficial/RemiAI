@@ -1,0 +1,20 @@
+# Minimal private configuration for RemiAI's internal SearXNG service.
+# Keep this instance reachable only through the Docker network; do not publish
+# port 8080 unless you add authentication and a TLS reverse proxy.
+use_default_settings: true
+
+server:
+  bind_address: "0.0.0.0"
+  # SearXNG rejects its built-in placeholder key. SEARXNG_SECRET from the
+  # Compose environment overrides this value when one is configured.
+  secret_key: "remiai-local-6e3d7b1f9a4c2e8d5f0b7a1c9e6d3f8"
+
+search:
+  # RemiAI consumes the JSON endpoint. Keep HTML for occasional diagnostics.
+  formats:
+    - html
+    - json
+  safe_search: 1
+  max_page: 3
+  ban_time_on_fail: 5
+  max_ban_time_on_fail: 120

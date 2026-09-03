@@ -38,32 +38,15 @@ import { asStringArray } from "@/lib/utils";
 
 /** Tool names that are always available, even on the simplest chat. */
 export const CORE_TOOLS: ReadonlySet<string> = new Set([
-  // context
+  "web_search",
+  "web_fetch",
   "get_time_details",
   "get_device_details",
-  // memory
-  "remember",
-  "get_recent_memories",
-  "search_memories",
-  // file index
-  "query_recent_changes",
-  "query_file_index",
-  // filesystem read basics (URL-capable + root discovery)
-  "list_permitted_roots",
-  "read_file",
-  // builtins
-  "delay",
-  "web_fetch",
-  "ask_questions",
-  "suggest_followups",
-  "send_notification",
-  "set_run_name",
   "get_tool_help",
   "list_available_tools",
   "load_tool_groups",
-  // skills (cheap, always available)
-  "list_skills",
-  "load_skill",
+  "ask_questions",
+  "suggest_followups",
 ]);
 
 interface ToolGroup {
@@ -107,6 +90,8 @@ export const CONDITIONAL_GROUPS: Record<string, ToolGroup> = {
   fs_read: {
     label: "filesystem-read",
     tools: [
+      "list_permitted_roots",
+      "read_file",
       "list_directory",
       "search_files",
       "glob_files",
@@ -118,6 +103,49 @@ export const CONDITIONAL_GROUPS: Record<string, ToolGroup> = {
       "image", "screenshot", "photo", "media", "folder", "directory",
       "project", "codebase", "file",
     ],
+  },
+  memory: {
+    label: "memory",
+    tools: ["remember", "get_recent_memories", "search_memories"],
+    keywords: [
+      "memory", "memories", "remember", "remember this", "save this about me",
+      "what do you know about me", "saved facts", "recall about me", "forget that",
+      "personal context", "my preferences",
+    ],
+  },
+  file_index: {
+    label: "file-index",
+    tools: ["query_recent_changes", "query_file_index"],
+    keywords: [
+      "recent file changes", "recent changes", "what have i been working on",
+      "file index", "indexed files", "files i changed", "what changed",
+    ],
+  },
+  skills: {
+    label: "skills",
+    tools: ["list_skills", "load_skill"],
+    keywords: [
+      "skill", "skills", "install a skill", "agent skill", "skill instructions",
+      "load the skill", "available skills",
+    ],
+  },
+  notifications: {
+    label: "notifications",
+    tools: ["send_notification"],
+    keywords: [
+      "send me a notification", "notify me", "notification", "desktop notification",
+      "alert me",
+    ],
+  },
+  delay: {
+    label: "delay",
+    tools: ["delay"],
+    keywords: ["wait before", "wait between", "rate limit", "throttle", "delay"],
+  },
+  run_name: {
+    label: "run-name",
+    tools: ["set_run_name"],
+    keywords: ["name this chat", "rename this chat", "set the chat name", "conversation name"],
   },
   document_reader: {
     label: "document-reader",
@@ -280,7 +308,7 @@ export const CONDITIONAL_GROUPS: Record<string, ToolGroup> = {
   },
   web_search: {
     label: "web-search",
-    tools: ["brave_web_search", "brave_image_search"],
+    tools: ["web_search"],
     keywords: [
       // Explicit search requests
       "search the web", "search online", "google", "look it up", "look this up",
@@ -328,7 +356,6 @@ export const CONDITIONAL_GROUPS: Record<string, ToolGroup> = {
   firecrawl: {
     label: "firecrawl",
     tools: [
-      "fc_search",
       "fc_scrape",
       "fc_crawl",
       "fc_interact",
@@ -577,9 +604,10 @@ export function filterTools(
  */
 const ALWAYS_LOADED_CHECKS: Array<[label: string, tool: string]> = [
   ["context", "get_time_details"],
-  ["memory", "remember"],
-  ["file-index", "query_recent_changes"],
-  ["builtin", "web_fetch"],
+  ["context", "get_device_details"],
+  ["web-search", "web_search"],
+  ["web-fetch", "web_fetch"],
+  ["assistant", "get_tool_help"],
 ];
 
 /**
@@ -602,7 +630,10 @@ export function buildToolAvailabilityNote(
     // (e.g. skip integrations with no API key configured).
     const present = group.tools.some((name) => tools[name] !== undefined);
     if (!present) continue;
-    if (activeGroups.has(groupId)) loadedGroupLabels.push(group.label);
+    const hasCoreTool = group.tools.some(
+      (name) => tools[name] !== undefined && CORE_TOOLS.has(name),
+    );
+    if (activeGroups.has(groupId) || hasCoreTool) loadedGroupLabels.push(group.label);
     else unloadedLabels.push(group.label);
   }
   if (unloadedLabels.length === 0) return ""; // nothing was filtered out

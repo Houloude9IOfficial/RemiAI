@@ -7,6 +7,8 @@ import { estimateTokenCount } from "../lib/utils";
 import { buildFilesystemTools } from "../lib/fs/tools";
 import { buildContextTools } from "../lib/tools/context";
 import { buildMemoryTools } from "../lib/tools/memories";
+import { buildSkillsToolSet } from "../lib/skills/tools";
+import { listSkills } from "../lib/skills/manager";
 import { buildIntegrationTools } from "../lib/tools/integrations";
 import { buildExecutionTools } from "../lib/tools/exec";
 import { buildDocumentReaderTools } from "../lib/tools/document-reader";
@@ -47,25 +49,26 @@ async function safe<T>(name: string, fn: () => Promise<T> | T): Promise<T | unde
 async function main() {
   const tools: Record<string, any> = {
     ...((await safe("fs", () => buildFilesystemTools())) ?? {}),
-    ...((safe("context", () => buildContextTools("test", userContext.timezone, userContext.language)) as any) ?? {}),
-    ...((safe("memory", () => buildMemoryTools()) as any) ?? {}),
+    ...((await safe("context", () => buildContextTools("test", userContext.timezone, userContext.language))) ?? {}),
+    ...((await safe("memory", () => buildMemoryTools())) ?? {}),
+    ...((await safe("skills", () => buildSkillsToolSet())) ?? {}),
     ...((await safe("integrations", () => buildIntegrationTools(userContext))) ?? {}),
     ...((await safe("exec", () => buildExecutionTools("sandboxed"))) ?? {}),
     ...((await safe("docreader", () => buildDocumentReaderTools())) ?? {}),
-    ...((safe("media", () => buildMediaTools(1)) as any) ?? {}),
+    ...((await safe("media", () => buildMediaTools(1))) ?? {}),
     delay: delayTool,
     web_fetch: webFetchTool,
     ask_questions: askQuestionsTool,
     suggest_followups: suggestFollowupsTool,
     set_run_name: setRunNameTool,
     ...((await safe("createvisual", () => buildCreateVisualTool())) ?? {}),
-    ...((safe("toolhelp", () => buildToolHelpTool()) as any) ?? {}),
-    ...((safe("listtools", () => buildListAvailableToolsTool()) as any) ?? {}),
+    ...((await safe("toolhelp", () => buildToolHelpTool())) ?? {}),
+    ...((await safe("listtools", () => buildListAvailableToolsTool())) ?? {}),
     ...(((await safe("spawnagent", () => buildMainSpawnAgentTool(provider, "claude-sonnet-4-5", 1, userContext))) ?? {}) as any),
-    ...((safe("getagentresult", () => buildGetAgentResultTool()) as any) ?? {}),
-    ...((safe("fileindex", () => buildFileIndexTools()) as any) ?? {}),
-    ...((safe("profile", () => buildProfileTools()) as any) ?? {}),
-    ...((safe("todo", () => buildTodoTools(1)) as any) ?? {}),
+    ...((await safe("getagentresult", () => buildGetAgentResultTool())) ?? {}),
+    ...((await safe("fileindex", () => buildFileIndexTools())) ?? {}),
+    ...((await safe("profile", () => buildProfileTools())) ?? {}),
+    ...((await safe("todo", () => buildTodoTools(1))) ?? {}),
     ...((await safe("routines", () => buildRoutinesTools())) ?? {}),
     ...((await safe("schedule", () => buildScheduleTool(1))) ?? {}),
     ...((safe("sessionfiles", () => buildSessionFileTools(1)) as any) ?? {}),
@@ -77,9 +80,9 @@ async function main() {
       const t = tool as any;
       let params = "{}";
       try {
-        params = JSON.stringify(toJSONSchema(t.parameters as z.ZodType));
+        params = JSON.stringify(toJSONSchema((t.inputSchema ?? t.parameters) as z.ZodType));
       } catch {
-        params = JSON.stringify(t.parameters ?? {});
+        params = JSON.stringify(t.inputSchema ?? t.parameters ?? {});
       }
       lines.push(JSON.stringify({ type: "function", name, description: t.description ?? "", parameters: JSON.parse(params) }));
     }
@@ -91,6 +94,19 @@ async function main() {
   console.log("=== TOOL PAYLOAD: full vs dynamic ===");
   const full = measure(tools, "full set (all tools)");
   const coreOnly = measure(filterTools(tools, new Set()), "core set (simple chat)");
+  const memoryTools = Object.fromEntries(
+    Object.entries(tools).filter(([name]) =>
+      ["remember", "get_recent_memories", "search_memories"].includes(name),
+    ),
+  );
+  const skillsTools = Object.fromEntries(
+    Object.entries(tools).filter(([name]) => ["list_skills", "load_skill"].includes(name)),
+  );
+  measure(memoryTools, "memory group (3 tools)");
+  measure(skillsTools, "skills group (2 tools)");
+  const installedSkills = await safe("skill count", () => listSkills());
+  const enabledSkills = installedSkills?.filter((skill) => skill.enabled) ?? [];
+  console.log(`  installed skills: ${installedSkills?.length ?? "unavailable"}; enabled: ${enabledSkills.length}; prompt listing cap: 10`);
 
   const cases: Array<[string, string]> = [
     ["simple chat", "hi, how are you? what can you do?"],

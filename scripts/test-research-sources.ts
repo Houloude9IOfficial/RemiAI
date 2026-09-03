@@ -16,7 +16,7 @@ async function main() {
   );
 
   const candidates = extractSourceCandidates(
-    "brave_web_search",
+    "web_search",
     { query: "RemiAI" },
     {
       results: [
