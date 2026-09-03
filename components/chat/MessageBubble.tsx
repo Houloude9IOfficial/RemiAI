@@ -4,7 +4,7 @@ import type { UIMessage } from "ai";
 import { isTextUIPart, isToolUIPart, isReasoningUIPart, getToolName } from "ai";
 import { Component, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Copy, Check, RefreshCw } from "lucide-react";
+import { Copy, Check, RefreshCw, Pencil, X } from "lucide-react";
 import { ToolCallGroup, FileChangeDigest, extractFileChanges } from "./ToolCallGroup";
 import { ActivityDisclosure } from "./ActivityDisclosure";
 import { VisualCard } from "./VisualCard";
@@ -276,6 +276,56 @@ function MessageActionsRow({
 }
 
 // ── User message text — plain text, images only ────────────────────────
+
+function EditMessageForm({
+  initialText,
+  onCancel,
+  onSave,
+}: {
+  initialText: string;
+  onCancel: () => void;
+  onSave: (text: string) => void;
+}) {
+  const [text, setText] = useState(initialText);
+
+  return (
+    <div className="flex w-full min-w-0 flex-col gap-2">
+      <textarea
+        autoFocus
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") onCancel();
+          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+            event.preventDefault();
+            onSave(text);
+          }
+        }}
+        aria-label="Edit message"
+        className="min-h-24 w-full resize-y rounded-2xl border border-primary/40 bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
+      />
+      <div className="flex items-center justify-end gap-1.5">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <X className="h-3.5 w-3.5" />
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={() => onSave(text)}
+          disabled={!text.trim()}
+          className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Check className="h-3.5 w-3.5" />
+          Save & resend
+        </button>
+      </div>
+    </div>
+  );
+}
 
 /**
  * Renders a user's message as plain text — no markdown formatting, so
@@ -654,61 +704,54 @@ function buildSegments(parts: UIMessage["parts"]): Segment[] {
   return mergeInRowToolSegments(mergeReasoningSegments(visibleSegments));
 }
 
-export function MessageBubble({
+function UserMessageBubble({
   message,
-  isStreaming,
-  onRegenerate,
-  messagesAfter,
-  conversationId,
+  onEdit,
 }: {
   message: UIMessage;
-  isStreaming?: boolean;
-  /** Called with the message id to regenerate (AI messages only). */
-  onRegenerate?: (messageId: string) => void;
-  /** Number of messages that come after this one (used by the regenerate confirm). */
-  messagesAfter?: number;
-  /** Conversation id used by chat-scoped evidence export actions. */
-  conversationId?: number;
+  onEdit?: (messageId: string, text: string) => void;
 }) {
-  // ---- User messages ----
-  if (message.role === "user") {
-    const inlineText = message.parts
-      .filter(isTextUIPart)
-      .map((p) => p.text)
-      .join("");
-    if (!inlineText) return null;
+  const [isEditing, setIsEditing] = useState(false);
+  const inlineText = message.parts
+    .filter(isTextUIPart)
+    .map((p) => p.text)
+    .join("");
+  if (!inlineText) return null;
 
-    // Parse file attachments from markdown
-    const attachments = parseAttachments(inlineText);
-    const cleanText = stripAttachmentMarkdown(inlineText);
-    const hasText = cleanText.length > 0;
+  const attachments = parseAttachments(inlineText);
+  const cleanText = stripAttachmentMarkdown(inlineText);
+  const hasText = cleanText.length > 0;
+  const imageAttachments = attachments.filter((a) => a.isImage);
+  const fileAttachments = attachments.filter((a) => !a.isImage);
 
-    // Images go in a side-by-side grid; other files stay stacked below.
-    const imageAttachments = attachments.filter((a) => a.isImage);
-    const fileAttachments = attachments.filter((a) => !a.isImage);
-
-    return (
-      <div className="group flex justify-end">
-        <div className="flex max-w-[min(85%,36rem)] flex-col items-end gap-1">
+  return (
+    <div className="group flex justify-end">
+      <div className="flex max-w-[min(85%,36rem)] flex-col items-end gap-1">
+        {isEditing ? (
+          <EditMessageForm
+            initialText={inlineText}
+            onCancel={() => setIsEditing(false)}
+            onSave={(nextText) => {
+              if (!onEdit) return;
+              setIsEditing(false);
+              onEdit(message.id, nextText);
+            }}
+          />
+        ) : (
           <div
             className={cn(
               "flex flex-col gap-2",
-              // When there's text, wrap it in a rounded bubble
               hasText &&
                 "rounded-4xl bg-primary px-3.5 py-2.5 text-[15px] leading-relaxed text-primary-foreground",
             )}
           >
-            {/* Text content (if any) — plain text, only images render */}
             {hasText && <UserMessageText text={cleanText} />}
 
-            {/* Image attachments — side-by-side grid when multiple */}
             {imageAttachments.length > 0 && (
               <div
                 className={cn(
                   "grid gap-2",
-                  imageAttachments.length > 1
-                    ? "grid-cols-2"
-                    : "grid-cols-1",
+                  imageAttachments.length > 1 ? "grid-cols-2" : "grid-cols-1",
                 )}
               >
                 {imageAttachments.map((att, idx) => (
@@ -724,7 +767,6 @@ export function MessageBubble({
               </div>
             )}
 
-            {/* Other file attachments as cards */}
             {fileAttachments.length > 0 && (
               <div className="flex flex-col gap-2">
                 {fileAttachments.map((att, idx) => (
@@ -739,19 +781,53 @@ export function MessageBubble({
               </div>
             )}
 
-            {/* No text, no attachments — shouldn't happen, but handle gracefully */}
             {!hasText && attachments.length === 0 && (
               <span className="text-sm text-primary-foreground/60">Sent a file</span>
             )}
           </div>
-          {hasText && (
-            <MessageActionsRow align="right">
-              <CopyButton text={cleanText} ariaLabel="Copy message" />
-            </MessageActionsRow>
-          )}
-        </div>
+        )}
+        {!isEditing && (hasText || onEdit) && (
+          <MessageActionsRow align="right">
+            {hasText && <CopyButton text={cleanText} ariaLabel="Copy message" />}
+            {onEdit && (
+              <button
+                type="button"
+                onClick={() => setIsEditing(true)}
+                aria-label="Edit message"
+                title="Edit message"
+                className="flex h-6.5 w-6.5 items-center justify-center rounded-md text-muted-foreground/55 transition-colors hover:bg-muted hover:text-foreground active:scale-90"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </MessageActionsRow>
+        )}
       </div>
-    );
+    </div>
+  );
+}
+
+export function MessageBubble({
+  message,
+  isStreaming,
+  onRegenerate,
+  onEdit,
+  messagesAfter,
+  conversationId,
+}: {
+  message: UIMessage;
+  isStreaming?: boolean;
+  /** Called with the message id to regenerate (AI messages only). */
+  onRegenerate?: (messageId: string) => void;
+  /** Called with the message id and replacement text to edit it. */
+  onEdit?: (messageId: string, text: string) => void;
+  /** Number of messages that come after this one (used by the regenerate confirm). */
+  messagesAfter?: number;
+  /** Conversation id used by chat-scoped evidence export actions. */
+  conversationId?: number;
+}) {
+  if (message.role === "user") {
+    return <UserMessageBubble message={message} onEdit={onEdit} />;
   }
 
   // ---- Assistant messages ----

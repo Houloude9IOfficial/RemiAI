@@ -577,7 +577,13 @@ function ConversationChat({
           ...body,
           trigger,
           messageId,
-          messages: messages.slice(-3),
+          // User edits replace a message that may be far back in the
+          // conversation. Include that exact message instead of relying on
+          // the bounded tail; regeneration still uses the normal tail.
+          messages:
+            trigger === "submit-message" && messageId
+              ? messages.filter((message) => message.id === messageId)
+              : messages.slice(-3),
         },
       }),
     }),
@@ -739,11 +745,36 @@ function ConversationChat({
     [clearError, clearChatError, sendMessage],
   );
 
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const handleEdit = useCallback(
+    async (messageId: string, text: string) => {
+      if (isRegenerating || status === "submitted" || status === "streaming") return;
+      const trimmed = text.trim();
+      if (!trimmed) {
+        toast.error("Message cannot be empty");
+        return;
+      }
+      setIsRegenerating(true);
+      clearError();
+      clearChatError();
+      canvasWinsRef.current = false;
+      try {
+        // The SDK replaces this user message locally and submits it with the
+        // messageId, allowing the server to trim the stale branch.
+        await sendMessage({ text: trimmed, messageId });
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to edit message");
+      } finally {
+        setIsRegenerating(false);
+      }
+    },
+    [isRegenerating, status, clearError, clearChatError, sendMessage],
+  );
+
   /**
    * Regenerate an assistant message: truncate the persisted messages at that
    * point (deleting it and everything after), then re-run the generation.
    */
-  const [isRegenerating, setIsRegenerating] = useState(false);
   const handleRegenerate = useCallback(
     async (messageId: string) => {
       if (isRegenerating || status === "submitted" || status === "streaming") return;
@@ -1058,6 +1089,7 @@ function ConversationChat({
                 status={status}
                 onSend={(text) => sendMessage({ text })}
                 onRegenerate={handleRegenerate}
+                onEdit={handleEdit}
                 conversationId={conversationId}
               />
             )}

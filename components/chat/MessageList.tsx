@@ -13,6 +13,7 @@ export function MessageList({
   status,
   onSend,
   onRegenerate,
+  onEdit,
   conversationId,
 }: {
   messages: UIMessage[];
@@ -20,6 +21,8 @@ export function MessageList({
   onSend?: (text: string) => void;
   /** Called with a message id to regenerate it (deleting messages after it). */
   onRegenerate?: (messageId: string) => void;
+  /** Called with a message id and replacement text to edit it. */
+  onEdit?: (messageId: string, text: string) => void;
   conversationId?: number;
 }) {
   // Defensive safety net: the AI SDK merges streamed assistant messages into
@@ -73,6 +76,7 @@ export function MessageList({
                       idx === deduped.length - 1 && status === "streaming"
                     }
                     onRegenerate={onRegenerate}
+                    onEdit={canSend ? onEdit : undefined}
                     messagesAfter={deduped.length - idx - 1}
                     conversationId={conversationId}
                   />

@@ -314,7 +314,40 @@ async function main() {
     assert.equal(convRow[0].summaryMessageCount, 0);
   });
 
-  // 8. Regenerate on a clean DB (client already deleted): no-op truncate +
+  // 8. Editing a user message replaces its persisted content under the same
+  //    uiId and removes the stale assistant/user branch after it.
+  await okAsync("editing a user message replaces it and trims the stale branch", async () => {
+    const env = makeDb();
+    const db = env.db;
+    const conv = 5;
+    seedConversation(env, conv, "covers old branch", 4);
+    seedRow(db, conv, user("u1", "original request"), 0);
+    seedRow(db, conv, assistant("a1"), 1);
+    seedRow(db, conv, user("u2", "follow-up"), 2);
+    seedRow(db, conv, assistant("a2"), 3);
+
+    const history = await reconstructConversationHistory(db, {
+      conversationId: conv,
+      deltaMessages: [user("u1", "edited request")],
+      trigger: "submit-message",
+      messageId: "u1",
+    });
+
+    assert.deepEqual(history.map((m) => m.id), ["u1"]);
+    assert.equal((history[0].parts[0] as { text: string }).text, "edited request");
+    const rows = await db
+      .select({ uiId: schema.messages.uiId, role: schema.messages.role, parts: schema.messages.parts, orderIndex: schema.messages.orderIndex })
+      .from(schema.messages)
+      .orderBy(schema.messages.orderIndex)
+      .all();
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].uiId, "u1");
+    assert.equal(rows[0].orderIndex, 0);
+    const storedParts = rows[0].parts as Array<{ text?: unknown }>;
+    assert.equal(storedParts[0]?.text, "edited request");
+  });
+
+  // 9. Regenerate on a clean DB (client already deleted): no-op truncate +
   //    delta dedupe → same history as the UI.
   await okAsync("regenerate on an already-trimmed DB is stable", async () => {
     const env = makeDb();
