@@ -233,11 +233,11 @@ async function buildAgentTools(
 ): Promise<Record<string, unknown>> {
   const [fsTools, memoryTools, integrationTools, executionTools, docTools, mediaTools, routineTools] =
     await Promise.all([
-      buildFilesystemTools(),
+      buildFilesystemTools(conversationId),
       buildMemoryTools(),
       buildIntegrationTools(userContext),
       buildExecutionTools(),
-      buildDocumentReaderTools(),
+      buildDocumentReaderTools(conversationId),
       // Sub-agents can analyze/process media too; outputs land in the parent
       // conversation's session sandbox (conversationId is always present for
       // spawned agents).

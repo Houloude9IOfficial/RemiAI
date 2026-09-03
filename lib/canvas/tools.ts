@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { truncateToolResult } from "@/lib/utils";
+import { buildSessionFileUrl } from "@/lib/session-files/storage";
 import {
   createCanvas,
   getCanvas,
@@ -32,7 +33,7 @@ export interface BuildCanvasToolsOptions {
 }
 
 /** Compact serialisation of a canvas for the model + present card. */
-function toModelCanvas(info: CanvasInfo) {
+function toModelCanvas(info: CanvasInfo, conversationId: number) {
   return {
     type: "canvas" as const,
     slug: info.slug,
@@ -45,6 +46,10 @@ function toModelCanvas(info: CanvasInfo) {
       name: f.name,
       isDirectory: f.isDirectory,
       size: f.isDirectory ? null : f.size,
+      // Canonical /api/chat/{conversationId}/session-files/{path} URL so the
+      // model can pass it straight to read_file / web_fetch / read_media
+      // (bare canvas/… paths are NOT valid URL inputs).
+      url: f.isDirectory ? null : buildSessionFileUrl(conversationId, f.path),
     })),
   };
 }
@@ -88,7 +93,7 @@ export function buildCanvasTools(opts: BuildCanvasToolsOptions) {
           entryFile,
         });
         return truncateToolResult({
-          ...toModelCanvas(info),
+          ...toModelCanvas(info, conversationId),
           message: `Created canvas "${info.name}".`,
           note:
             "Write the project files with session_file_write / session_file_edit under the canvas/" +
@@ -161,7 +166,7 @@ export function buildCanvasTools(opts: BuildCanvasToolsOptions) {
           });
         }
         return truncateToolResult({
-          ...toModelCanvas(info),
+          ...toModelCanvas(info, conversationId),
           message: `Opened canvas "${info.name}" in the panel.`,
         });
       },

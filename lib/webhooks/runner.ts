@@ -212,12 +212,12 @@ export async function processWebhookEvent(opts: {
 
     const [fsToolSet, contextToolSet, memoryToolSet, integrationToolSet, executionToolSet, docToolSet, mediaToolSet, fileIndexToolSet, todoToolSet, profileToolSet, routineToolSet, scheduleToolSet] =
       await Promise.all([
-        buildFilesystemTools(),
+        buildFilesystemTools(conversation.id),
         Promise.resolve(buildContextTools()),
         buildMemoryTools(),
         buildIntegrationTools(),
         buildExecutionTools(),
-        buildDocumentReaderTools(),
+        buildDocumentReaderTools(conversation.id),
         Promise.resolve(buildMediaTools(conversation.id)),
         Promise.resolve(buildFileIndexTools()),
         Promise.resolve(buildTodoTools(conversation.id)),

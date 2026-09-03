@@ -51,6 +51,19 @@ export function estimateTaskComplexity(text: string, mode?: string): TaskComplex
   if (/\b(file|files|repo|repository|directory|source|citation|database|api|browser|script|code)\b/.test(normalized)) {
     score += 1;
   }
+  // Multi-file creation intent (canvas, websites, apps, dashboards…). These
+  // look short ("/canvas create me a movie db") but are multi-step agentic
+  // builds — labeling them "simple" would cap their output budget and truncate
+  // the run mid-write. Never let a short prompt starve real work.
+  if (/^\s*\/(canvas|visual)\b/.test(normalized)) score += 2;
+  else if (/^\s*\/(build|chart|image|browser|research|report|web|site)\b/.test(normalized)) score += 1;
+  if (
+    /\b(create|build|generate|make|design|implement|write|set up)\b[\s\S]{0,80}\b(canvas|website|web ?app|web ?page|landing page|dashboard|portfolio|movie ?db|database|calculator|to-?do app|quiz|game|prototype|mockup)\b/.test(
+      normalized,
+    )
+  ) {
+    score += 1;
+  }
   if (mode === "build" || mode === "goal") score += 1;
   if (mode === "plan" && score > 0) score -= 1;
 
@@ -64,6 +77,19 @@ export function chooseQualityStrategy(
   complexity: TaskComplexity,
 ): QualityStrategy {
   const normalized = normalizeQualityPolicy(policy);
+  // Output-token budgets are per model call. Reasoning models (Nemotron,
+  // DeepSeek, o-series…) spend a large share of that budget on thinking
+  // BEFORE they emit a tool call — a call that is cut short mid-reasoning
+  // (finishReason "length") ends the whole agentic run as "step limit reached".
+  // The non-complex tiers used to be tiny (2048–4096): any slightly-above-
+  // trivial request ("/canvas create me a movie db…") could be classified
+  // "simple" and silently starved. Floors are raised so a low classification
+  // never truncates real work. 16384 is the ceiling the chat route already
+  // forces for goal/build/agentic runs, so it is the safe cap for every
+  // provider this app talks to (higher values can 400 on models with a lower
+  // max output). The remaining differentiators between effort levels are
+  // maxRetries, reasoning effort, routing and verification — not a ceiling
+  // that truncates the model mid-task.
   if (normalized === "minimal") {
     return {
       policy: normalized,
@@ -71,7 +97,7 @@ export function chooseQualityStrategy(
       label: "Minimal",
       verificationGuidance: "Answer directly; use only the checks needed to avoid an obvious mistake.",
       maxRetries: 1,
-      maxOutputTokens: complexity === "complex" ? 4096 : 2048,
+      maxOutputTokens: complexity === "complex" ? 8192 : 4096,
     };
   }
 
@@ -82,7 +108,7 @@ export function chooseQualityStrategy(
       label: "Low",
       verificationGuidance: "Keep reasoning light; run only quick checks for obvious mistakes.",
       maxRetries: 2,
-      maxOutputTokens: complexity === "complex" ? 8192 : 3072,
+      maxOutputTokens: complexity === "complex" ? 16384 : 8192,
     };
   }
 
@@ -93,7 +119,7 @@ export function chooseQualityStrategy(
       label: "High",
       verificationGuidance: "Take the time to inspect assumptions, use deterministic checks where available, and disclose uncertainty.",
       maxRetries: 3,
-      maxOutputTokens: complexity === "simple" ? 8192 : 16384,
+      maxOutputTokens: 16384,
     };
   }
 
@@ -103,6 +129,9 @@ export function chooseQualityStrategy(
     label: "Medium",
     verificationGuidance: "Use proportionate inspection and verification for the task.",
     maxRetries: 3,
-    maxOutputTokens: complexity === "complex" ? 16384 : 4096,
+    // Flat: a "simple"-looking prompt that is really an agentic build (canvas,
+    // session files, code execution…) must never be starved by its label —
+    // the route further raises runs whose write/canvas tools are active.
+    maxOutputTokens: 16384,
   };
 }

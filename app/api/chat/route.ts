@@ -157,6 +157,44 @@ function titleFromMessage(message: UIMessage): string {
 }
 
 /**
+ * Tool names whose `url` argument is normalized before execution: bare
+ * session-relative paths (e.g. `canvas/movie-db/style.css`) get rewritten to
+ * their canonical /api/chat/{id}/session-files/{path} form.
+ */
+const URL_BASED_TOOL_NAMES = new Set([
+  "read_file",
+  "read_media",
+  "read_document",
+  "web_fetch",
+]);
+
+/**
+ * True when a string looks like a bare session-sandbox-relative path (no
+ * scheme, no leading slash) rather than an absolute URL. AI models that get
+ * a file path from a canvas/session tool result sometimes pass it straight
+ * to url-based read tools; those tools can't resolve it without knowing
+ * which conversation's sandbox it lives in.
+ */
+function isBareSessionRelativePath(value: unknown): boolean {
+  if (typeof value !== "string" || !value.trim()) return false;
+  const v = value.trim().replace(/\\/g, "/");
+  if (/^[a-z][a-z0-9+.-]*:/i.test(v)) return false; // has a scheme
+  if (v.startsWith("/")) return false; // absolute (/api/…, /media/…)
+  return true;
+}
+
+/**
+ * Rewrite a bare session-relative path to the canonical session-file URL for
+ * this conversation. Used for chat-generated canvas/session paths like
+ * `canvas/{slug}/style.css` — the sandbox containment checks still apply when
+ * the URL is later resolved server-side.
+ */
+function toSessionFileUrlForConversation(relativePath: string, conversationId: number): string {
+  const normalized = relativePath.replace(/\\/g, "/").replace(/^\/+/, "");
+  return `/api/chat/${conversationId}/session-files/${normalized.split("/").map((s) => encodeURIComponent(s)).join("/")}`;
+}
+
+/**
  * Wrap tools so directory-based (`rootId` / `relativePath`) access is
  * rejected, keeping only chat-file `url` access. Used for fully isolated
  * (memory-disabled) chats: read_document / media tools may still read files
@@ -175,7 +213,10 @@ function restrictToChatUrls(tools: Record<string, unknown>): Record<string, unkn
       ? {
           ...t,
           execute: (args: Record<string, unknown>) => {
-            if (args && (args.rootId !== undefined || args.relativePath !== undefined)) {
+            // Directory access = rootId-based. A bare relativePath (no rootId)
+            // resolves inside THIS conversation's session sandbox (e.g.
+            // canvas/... files), which is chat-scoped and therefore allowed.
+            if (args && args.rootId !== undefined) {
               return "Directory access is disabled in this chat (memory is off — fully isolated). Attach the file to the chat and read it via its `url` instead.";
             }
             return originalExecute(args);
@@ -386,7 +427,9 @@ export async function POST(req: Request) {
   // Gather filesystem tools from configured directories. Fully isolated
   // (memory-disabled) chats get NO filesystem access — the AI cannot read or
   // write the user's directories at all.
-  const fsToolSet = memoryEnabled ? await buildFilesystemTools() : {};
+  const fsToolSet = memoryEnabled
+    ? await buildFilesystemTools(conversationId)
+    : {};
 
   // User context sent by the browser (timezone + locale). Used to report the
   // user's LOCAL time in get_time_details and to localize web search results.
@@ -453,8 +496,8 @@ export async function POST(req: Request) {
   // only — rootId-based directory access is rejected (the tool sets stay so
   // files the user explicitly attaches in THIS chat still work).
   const documentToolSet = memoryEnabled
-    ? await buildDocumentReaderTools()
-    : restrictToChatUrls(await buildDocumentReaderTools());
+    ? await buildDocumentReaderTools(conversationId)
+    : restrictToChatUrls(await buildDocumentReaderTools(conversationId));
 
   // Gather media tools (get_media_metadata, convert_media, extract_audio,
   // extract_video_frames, transcribe_audio, manage_transcription_models) —
@@ -649,6 +692,34 @@ Definition of done:
   tools.list_available_tools = buildListAvailableToolsTool(
     new Set(Object.keys(tools)),
   )["list_available_tools"];
+
+  // URL-based read tools accept bare session-relative paths (e.g.
+  // "canvas/movie-db/style.css") that models copy from canvas/session tool
+  // results. Without the conversation prefix those are NOT valid chat-file
+  // URLs and resolution fails with "Invalid file URL". Rewrite such paths to
+  // the canonical /api/chat/{id}/session-files/{path} form before execute
+  // (resolution then reuses the sandbox's normal containment checks). Full
+  // URLs and absolute paths pass through untouched.
+  for (const name of URL_BASED_TOOL_NAMES) {
+    const tool = tools[name] as Record<string, unknown> | undefined;
+    if (!tool || typeof tool !== "object" || typeof tool.execute !== "function") {
+      continue;
+    }
+    const originalExecute = tool.execute as (args: Record<string, unknown>) => unknown;
+    tools[name] = {
+      ...tool,
+      execute: async (args: Record<string, unknown>) => {
+        const url = args?.url;
+        if (isBareSessionRelativePath(url)) {
+          return originalExecute({
+            ...args,
+            url: toSessionFileUrlForConversation(url as string, conversationId),
+          });
+        }
+        return originalExecute(args);
+      },
+    };
+  }
 
   // Build combined system prompt with user preferences
   const prefs = await db.select().from(userPreferences).get();
@@ -1199,9 +1270,20 @@ Definition of done:
     // 3 times with exponential backoff before surfacing the error.
     maxRetries: qualityStrategy.maxRetries,
     // The quality policy adjusts effort without creating hidden provider calls.
-    // Complex Goal/Build tasks retain the larger execution budget.
+    // Complex Goal/Build tasks retain the larger execution budget. Chat-mode
+    // requests that loaded WRITE/agentic tool groups (canvas builds, session
+    // files, filesystem writes, code execution) get the same larger budget:
+    // a reasoning model that is cut off mid-thought (finishReason "length")
+    // ends the whole run as "step limit reached" right before it would have
+    // called its next tool. Never let a "simple"-classified prompt starve the
+    // run that actually does the work.
     maxOutputTokens:
-      mode === "goal" || mode === "build"
+      mode === "goal" ||
+        mode === "build" ||
+        activeToolGroups.has("canvas") ||
+        activeToolGroups.has("session_files") ||
+        activeToolGroups.has("fs_write") ||
+        activeToolGroups.has("exec")
         ? Math.max(qualityStrategy.maxOutputTokens, 16_384)
         : qualityStrategy.maxOutputTokens,
     // Allow up to 100 steps normally (chat/plan), or 500 in goal mode

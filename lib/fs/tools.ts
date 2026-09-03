@@ -103,11 +103,13 @@ export const listDirectoryTool = {
 
 /**
  * Read a file's text content with optional pagination.
- * Supports either a chat upload URL or a root file path.
+ * Supports either a chat upload URL, a bare session sandbox path
+ * (e.g. `canvas/movie-db/style.css` — resolved against this conversation's
+ * sandbox), or a root file path.
  */
 export const readFileTool = {
   description:
-    "Read a file's text content (max 100KB per read). Pass `url` for chat/session files, or `rootId` + `relativePath` for directory files. Supports byte offset/limit pagination.",
+    "Read a file's text content (max 100KB per read). Pass `url` for chat/session files, a bare `relativePath` (no rootId) for a session sandbox file like `canvas/movie-db/style.css`, or `rootId` + `relativePath` for directory files. Supports byte offset/limit pagination.",
   parameters: z
     .object({
       rootId: z
@@ -115,11 +117,11 @@ export const readFileTool = {
         .int()
         .positive()
         .optional()
-        .describe("Permitted root ID (omit if using `url`)"),
+        .describe("Permitted root ID (omit if using `url` or a bare session `relativePath`)"),
       relativePath: z
         .string()
         .optional()
-        .describe("Path within the root (omit if using `url`)"),
+        .describe("Path within the root when combined with rootId, OR a bare session sandbox path (e.g. `canvas/movie-db/style.css`) when rootId is omitted"),
       url: z
         .string()
         .optional()
@@ -140,12 +142,13 @@ export const readFileTool = {
     })
     .refine(
       (data) => {
+        // url alone, rootId+relativePath, or a bare session relativePath are all valid
         if (data.url) return true;
-        return Boolean(data.rootId && data.relativePath);
+        return Boolean(data.relativePath);
       },
       {
         message:
-          "Either `url` (for chat file URLs) or both `rootId` and `relativePath` (for directory files) are required.",
+          "Either `url` (for chat file URLs), a bare `relativePath` (for a session sandbox file like `canvas/movie-db/style.css`), or both `rootId` and `relativePath` (for directory files) are required.",
       },
     ),
   execute: async ({
@@ -154,12 +157,14 @@ export const readFileTool = {
     url,
     offset,
     limit,
+    _conversationId,
   }: {
     rootId?: number;
     relativePath?: string;
     url?: string;
     offset?: number | null;
     limit?: number | null;
+    _conversationId?: number;
   }) => {
     if (url) {
       // Read from chat file URL
@@ -194,14 +199,33 @@ export const readFileTool = {
       }
     }
 
-    if (!rootId || !relativePath) {
-      throw new Error(
-        "Either `url` (for uploaded files) or both `rootId` and `relativePath` (for directory files) are required.",
-      );
+    if (rootId) {
+      if (!relativePath) {
+        throw new Error(
+          "`rootId` requires a `relativePath` — pass the path within the root.",
+        );
+      }
+      await ensureRoots();
+      const root = await getRootById(rootId);
+      return await readFile(root, relativePath, offset, limit);
     }
-    await ensureRoots();
-    const root = await getRootById(rootId);
-    return await readFile(root, relativePath, offset, limit);
+
+    // Bare relativePath (no rootId, no url) → a file in THIS conversation's
+    // session sandbox (e.g. a canvas file like canvas/movie-db/style.css).
+    // The conversation id is injected by buildFilesystemTools.
+    if (relativePath) {
+      if (!_conversationId) {
+        throw new Error(
+          "A bare `relativePath` refers to a session sandbox file, but no conversation is available here. Pass the file's `url` (e.g. /api/chat/{id}/session-files/...) or both `rootId` and `relativePath` instead.",
+        );
+      }
+      const { readSessionFile } = await import("@/lib/session-files/storage");
+      return await readSessionFile(_conversationId, relativePath, offset, limit);
+    }
+
+    throw new Error(
+      "Either `url` (for chat file URLs), a bare `relativePath` (for a session sandbox file like `canvas/movie-db/style.css`), or both `rootId` and `relativePath` (for directory files) are required.",
+    );
   },
 };
 
@@ -269,7 +293,7 @@ export const globFilesTool = {
  */
 export const readMediaTool = {
   description:
-    "Read a media file (image/video) and return a `dataUrl` (base64 pixels) you can examine. NOTE: chat-uploaded images are already visible to you natively — do NOT use this for those. Use for media in directory roots (rootId+relativePath); for sandbox images use session_file_read_media instead. Images: .jpg/.png/.gif/.webp/.svg/.avif; videos: .mp4/.webm/.mov/.avi/.mkv. Max 20MB.",
+    "Read a media file (image/video) and return a `dataUrl` (base64 pixels) you can examine. NOTE: chat-uploaded images are already visible to you natively — do NOT use this for those. Use for media in directory roots (rootId+relativePath), session sandbox files (bare `relativePath` like `canvas/movie-db/logo.png`, or `url`). Images: .jpg/.png/.gif/.webp/.svg/.avif; videos: .mp4/.webm/.mov/.avi/.mkv. Max 20MB.",
   parameters: z
     .object({
       rootId: z
@@ -277,11 +301,11 @@ export const readMediaTool = {
         .int()
         .positive()
         .optional()
-        .describe("Permitted root ID (omit if using `url`)"),
+        .describe("Permitted root ID (omit if using `url` or a bare session `relativePath`)"),
       relativePath: z
         .string()
         .optional()
-        .describe("Path to the media file within the root (omit if using `url`)"),
+        .describe("Path to the media file within the root when combined with rootId, OR a bare session sandbox path (e.g. `canvas/movie-db/logo.png`) when rootId is omitted"),
       url: z
         .string()
         .optional()
@@ -289,36 +313,53 @@ export const readMediaTool = {
     })
     .refine(
       (data) => {
-        // Must provide either `url` OR both `rootId`+`relativePath`
+        // url alone, rootId+relativePath, or a bare session relativePath are all valid
         if (data.url) return true;
-        return Boolean(data.rootId && data.relativePath);
+        return Boolean(data.relativePath);
       },
       {
         message:
-          "Either `url` (for chat file URLs) or both `rootId` and `relativePath` (for directory files) are required.",
+          "Either `url` (for chat file URLs), a bare `relativePath` (for a session sandbox file like `canvas/movie-db/logo.png`), or both `rootId` and `relativePath` (for directory files) are required.",
       },
     ),
   execute: async ({
     rootId,
     relativePath,
     url,
+    _conversationId,
   }: {
     rootId?: number;
     relativePath?: string;
     url?: string;
+    _conversationId?: number;
   }) => {
     if (url) {
       // Read from chat file URL
       return await readMediaFromUrl(url);
     }
-    if (!rootId || !relativePath) {
-      throw new Error(
-        "Either `url` (for uploaded files) or both `rootId` and `relativePath` (for directory files) are required.",
-      );
+    if (rootId) {
+      if (!relativePath) {
+        throw new Error(
+          "`rootId` requires a `relativePath` — pass the path within the root.",
+        );
+      }
+      await ensureRoots();
+      const root = await getRootById(rootId);
+      return await readMedia(root, relativePath);
     }
-    await ensureRoots();
-    const root = await getRootById(rootId);
-    return await readMedia(root, relativePath);
+    // Bare relativePath (no rootId, no url) → session sandbox file
+    if (relativePath) {
+      if (!_conversationId) {
+        throw new Error(
+          "A bare `relativePath` refers to a session sandbox file, but no conversation is available here. Pass the file's `url` (e.g. /api/chat/{id}/session-files/...) or both `rootId` and `relativePath` instead.",
+        );
+      }
+      const { readSessionFileMedia } = await import("@/lib/session-files/storage");
+      return await readSessionFileMedia(_conversationId, relativePath);
+    }
+    throw new Error(
+      "Either `url` (for chat file URLs), a bare `relativePath` (for a session sandbox file like `canvas/movie-db/logo.png`), or both `rootId` and `relativePath` (for directory files) are required.",
+    );
   },
 };
 
@@ -534,16 +575,38 @@ function withTruncation(tool: {
  * Build the filesystem tool set from the current DB configuration.
  * `list_permitted_roots` is always included so the model can discover
  * available roots (or find out none are configured).
+ *
+ * When a `conversationId` is provided, URL-based read tools (read_file,
+ * read_media) get the conversation id injected into their args so a bare
+ * session-relative path (e.g. `canvas/movie-db/style.css`) can be resolved
+ * against THIS conversation's sandbox.
  */
-export async function buildFilesystemTools(): Promise<Record<string, any>> {
+export async function buildFilesystemTools(
+  conversationId?: number,
+): Promise<Record<string, any>> {
   const roots = await getPermittedRoots();
+
+  // Inject the conversation id so bare session-relative paths resolve inside
+  // the right sandbox. Mirrors buildMediaTools' withConversation pattern.
+  const withConversation = <T extends {
+    description: string;
+    parameters: any;
+    execute: (...args: any[]) => any;
+  }>(tool: T): T =>
+    conversationId
+      ? {
+          ...tool,
+          execute: (args: Record<string, unknown>) =>
+            tool.execute({ ...args, _conversationId: conversationId }),
+        }
+      : tool;
 
   const tools: Record<string, any> = {
     list_permitted_roots: withTruncation(listPermittedRootsTool),
   };
 
   // read_file is always included because it now supports URL-based usage
-  tools.read_file = withTruncation(readFileTool);
+  tools.read_file = withTruncation(withConversation(readFileTool));
 
   // Only expose root-dependent tools if at least one root is configured
   if (roots.length > 0) {
@@ -551,7 +614,7 @@ export async function buildFilesystemTools(): Promise<Record<string, any>> {
     // read_media intentionally skips truncation — the AI needs the full base64
     // dataUrl to examine image content. Truncation would produce an invalid
     // data URL that neither the AI nor the UI can render.
-    tools.read_media = readMediaTool;
+    tools.read_media = withConversation(readMediaTool);
     tools.search_files = withTruncation(searchFilesTool);
     tools.glob_files = withTruncation(globFilesTool);
     tools.write_file = withTruncation(writeFileTool);

@@ -276,12 +276,12 @@ export async function executeTask(task: ScheduledTaskRow) {
 
     const [fsToolSet, contextToolSet, memoryToolSet, integrationToolSet, executionToolSet, docToolSet, mediaToolSet, fileIndexToolSet, todoToolSet, profileToolSet, routineToolSet, scheduleToolSet] =
       await Promise.all([
-        buildFilesystemTools(),
+        buildFilesystemTools(task.conversationId),
         Promise.resolve(buildContextTools()),
         buildMemoryTools(),
         buildIntegrationTools(),
         buildExecutionTools(),
-        buildDocumentReaderTools(),
+        buildDocumentReaderTools(task.conversationId),
         Promise.resolve(buildMediaTools(task.conversationId)),
         Promise.resolve(buildFileIndexTools()),
         Promise.resolve(buildTodoTools(task.conversationId)),

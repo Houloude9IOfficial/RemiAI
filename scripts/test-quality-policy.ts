@@ -33,7 +33,10 @@ assert.equal(
 
 const minimal = chooseQualityStrategy("minimal", "simple");
 assert.equal(minimal.maxRetries, 1);
-assert.equal(minimal.maxOutputTokens, 2048);
+// Budget floors were raised so a low effort/complexity label never truncates
+// a run mid-task (reasoning models burn output tokens on thinking before
+// their first tool call — see lib/chat/quality-policy.ts).
+assert.equal(minimal.maxOutputTokens, 4096);
 
 const high = chooseQualityStrategy("high", "complex");
 assert.equal(high.maxRetries, 3);

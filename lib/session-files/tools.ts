@@ -254,6 +254,9 @@ export function buildSessionFileTools(
         );
         return {
           path: result.relativePath,
+          // Canonical URL so the model can embed/link/read the file back
+          // (e.g. via read_file({ url })) without guessing the path format.
+          url: sandbox.url(result.relativePath),
           bytesChanged: result.wrote,
           created: result.created,
           linesAdded: result.linesAdded,
@@ -271,6 +274,7 @@ export function buildSessionFileTools(
         if ("relativePath" in result) {
           return {
             path: result.relativePath,
+            url: sandbox.url(result.relativePath),
             bytesChanged: result.bytesChanged,
             linesAdded: result.linesAdded,
             linesRemoved: result.linesRemoved,

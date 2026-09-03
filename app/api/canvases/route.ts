@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { conversations } from "@/db/schema";
 import { listCanvases } from "@/lib/canvas/storage";
+import { buildSessionFileUrl } from "@/lib/session-files/storage";
 
 /** GET /api/canvases?conversationId={id} — list canvas projects for a conversation. */
 export async function GET(req: Request) {
@@ -41,7 +42,12 @@ export async function GET(req: Request) {
       entryFile: c.entryFile,
       updatedAt: c.updatedAt,
       previewUrl: c.previewUrl,
-      files: c.files,
+      files: c.files.map((f) => ({
+        ...f,
+        // Canonical URL so the panel can link/open/download each file
+        // (mirrors the canvas tool result serialisation).
+        url: f.isDirectory ? null : buildSessionFileUrl(conversationId, f.path),
+      })),
     })),
   });
 }

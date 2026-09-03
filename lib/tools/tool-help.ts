@@ -767,6 +767,10 @@ A canvas is DIFFERENT from \`create_visual\` (a static inline chart/card) and fr
 2. **Write the project files** with \`session_file_write\` / \`session_file_edit\` under the **\`canvas/{slug}/\`** prefix (e.g. \`canvas/{slug}/index.html\`, \`canvas/{slug}/style.css\`, \`canvas/{slug}/script.js\`, plus any assets). Always forward slashes.
 3. **\`canvas_open({ slug })\`** — present it in the panel. **Always end by opening the canvas** so the user sees the live result.
 
+### Reading / re-reading canvas files while editing
+- The write/edit tool results and the \`canvas_open\` / \`canvas_create\` file listings include a **\`url\`** for every file: \`/api/chat/{conversationId}/session-files/canvas/{slug}/{file}\`. Use these canonical URLs when you need to pass a file to a URL-based tool — e.g. \`read_file({ url })\`, \`read_media({ url })\`, \`web_fetch({ url })\` — or to embed/link it in your reply.
+- **Bare sandbox paths also work**: \`read_file\`, \`read_media\`, and \`read_document\` accept the bare relative path (no rootId) — e.g. \`read_file({ relativePath: "canvas/movie-db/style.css" })\` — and resolve it inside this conversation's sandbox automatically. The sandbox tool \`session_file_read({ path: "canvas/{slug}/{file}" })\` works too.
+
 ### Design guidance
 - Ground colors in the subject; 2-3 colors max; clean, intentional whitespace.
 - Make the entry file (default \`index.html\`) self-contained or reference the sibling files with relative paths (\`./style.css\`, \`./script.js\`).
