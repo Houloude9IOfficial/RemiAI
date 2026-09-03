@@ -384,7 +384,13 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     name: "Canvas",
     description:
       "Create interactive, buildable web projects — self-contained HTML/CSS/JS shown in a live preview + code editor panel the user can run and edit. Websites, apps, calculators, games, dashboards, interactive demos.",
-    toolNames: ["canvas_create", "canvas_add_file", "canvas_list", "canvas_open"],
+    toolNames: [
+      "canvas_create",
+      "canvas_add_file",
+      "canvas_list",
+      "canvas_open",
+      "canvas_review",
+    ],
     category: "builtin",
     subgroup: "Build",
     togglable: false,

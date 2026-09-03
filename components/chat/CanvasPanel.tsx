@@ -378,6 +378,41 @@ function CanvasPreview({
           }
         }
 
+        // Point relative URLs at the canvas's canonical entry-file URL. The
+        // srcdoc document has no URL of its own, so without this it inherits
+        // the host app page as its base: a hash-only link like
+        // <a href="#specs"> navigates to the APP's URL (localhost:3000#specs)
+        // instead of the canvas, and relative fetches/images in canvas JS
+        // escape the project too. With a <base> to the real entry file,
+        // "#specs" resolves to …/canvas/{slug}/index.html#specs and sibling
+        // files load from the canvas folder.
+        const entryUrl = `${window.location.origin}${baseUrl}${canvas.entryFile}`;
+        result = result.replace(/<head([^>]*)>/i, `<head$1><base href="${entryUrl}">`);
+
+        // Smooth-scroll hash links within the page instead of letting them
+        // fall through to a full document load (with a <base>, a fragment
+        // link is a navigation to the entry URL). Only handles plain in-page
+        // anchors: links with a target, modified clicks (new tab), clicks a
+        // canvas script already handled (e.defaultPrevented), and ids that
+        // don't exist in the page are left alone (those fall back to the
+        // <base> navigation, which lands on the canvas URL + hash).
+        // (kept as plain ASCII/`"`-free JS so no escaping hazards)
+        const hashScrollScript =
+          "<script>document.addEventListener('click',function(e){" +
+          "var a=null,n=e.target;while(n&&n!==document){if(n.tagName==='A'){a=n;break;}n=n.parentNode;}" +
+          "if(!a)return;" +
+          "var h=a.getAttribute('href')||'';if(h.charAt(0)!=='#')return;" +
+          "if(a.getAttribute('target')||e.defaultPrevented||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;" +
+          "var id=h.slice(1);if(!id)return;" +
+          "var el=document.getElementById(id)||(document.getElementsByName(id)||[])[0];if(!el)return;" +
+          "e.preventDefault();el.scrollIntoView({behavior:'smooth',block:'start'});" +
+          "});</script>";
+        if (/<\/body>/i.test(result)) {
+          result = result.replace(/<\/body>/i, hashScrollScript + "</body>");
+        } else {
+          result += hashScrollScript;
+        }
+
         setHtml(result);
         setError(null);
       } catch (err) {

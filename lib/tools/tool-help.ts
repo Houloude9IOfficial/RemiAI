@@ -760,12 +760,15 @@ A canvas is DIFFERENT from \`create_visual\` (a static inline chart/card) and fr
 | \`canvas_create\` | \`name\`, \`description?\`, \`entryFile?\` | Establish a canvas project (writes a starter \`index.html\` + manifest) and return its slug. |
 | \`canvas_add_file\` | \`slug\`, \`name\` | Scaffold a placeholder file inside an existing canvas. |
 | \`canvas_list\` | — | List every canvas in this conversation. |
+| \`canvas_review\` | \`slug?\`, \`saveScreenshot?\`, \`fullPage?\` | Render the canvas headlessly and report broken images, console errors, failed requests, and overflow. With \`saveScreenshot: true\` it also saves a timestamped PNG and ATTACHES it to the result as an image you can SEE — use that to judge the visual design, not just brokenness. **The render is a point-in-time snapshot: call it AFTER your final edits, and re-run it after any further edit — never show an earlier review's screenshot as the current state.** |
 | \`canvas_open\` | \`slug\` | Open a canvas in the interactive panel (live preview + code editor). |
 
 ### Standard workflow
 1. **\`canvas_create({ name, description, entryFile })\`** — establishes the project and returns the slug.
 2. **Write the project files** with \`session_file_write\` / \`session_file_edit\` under the **\`canvas/{slug}/\`** prefix (e.g. \`canvas/{slug}/index.html\`, \`canvas/{slug}/style.css\`, \`canvas/{slug}/script.js\`, plus any assets). Always forward slashes.
-3. **\`canvas_open({ slug })\`** — present it in the panel. **Always end by opening the canvas** so the user sees the live result.
+3. **\`canvas_review({ slug })\`** — render it headlessly and fix everything it flags (broken images, JS errors, 404s, overflow). Re-run until it reports clean. **Run it as the LAST canvas tool call — the render reflects the files at call time, so any edit after a review requires another review before presenting.**
+4. **\`canvas_review({ slug, saveScreenshot: true })\`** — once the report is clean, capture the page: the tool saves a timestamped PNG (session sandbox \`browser/…\`) and ATTACHES it to the result as an image you can see. **Look at it** and judge the real design against the request — layout, spacing, visual hierarchy, richness (a "Netflix-like" page must not be a bare text grid). Pass \`fullPage: true\` for long pages. Fix what falls short with \`session_file_edit\`, then re-review with a fresh screenshot until it genuinely looks the part.
+5. **\`canvas_open({ slug })\`** — present it in the panel, and embed the LATEST review screenshot URL as \`![review screenshot](url)\` in your final reply. **Always end by opening the canvas** so the user sees the live result.
 
 ### Reading / re-reading canvas files while editing
 - The write/edit tool results and the \`canvas_open\` / \`canvas_create\` file listings include a **\`url\`** for every file: \`/api/chat/{conversationId}/session-files/canvas/{slug}/{file}\`. Use these canonical URLs when you need to pass a file to a URL-based tool — e.g. \`read_file({ url })\`, \`read_media({ url })\`, \`web_fetch({ url })\` — or to embed/link it in your reply.
@@ -775,7 +778,9 @@ A canvas is DIFFERENT from \`create_visual\` (a static inline chart/card) and fr
 - Ground colors in the subject; 2-3 colors max; clean, intentional whitespace.
 - Make the entry file (default \`index.html\`) self-contained or reference the sibling files with relative paths (\`./style.css\`, \`./script.js\`).
 - Prioritize a working interactive experience (JS included) over long prose.
-- To iterate on an existing canvas: \`canvas_list\`, edit files with \`session_file_edit\` under the canvas prefix, then \`canvas_open\` again to refresh the preview.`,
+- **Never hotlink placeholder-image services** (via.placeholder.com is OFFLINE; many others are unreliable) for visuals the design depends on — a broken image ruins the page. Prefer self-contained visuals: CSS gradients, inline SVG, canvas-drawn art, or emoji. If real photos are required, use a stable host the user can reach.
+- When the user says something like “Netflix-like”, that means hero/backdrop sections, rows or a rich grid with real-looking poster visuals, hover states, search/filters — build the full experience they describe, not a bare text grid.
+- To iterate on an existing canvas: \`canvas_list\`, edit files with \`session_file_edit\` under the canvas prefix, run \`canvas_review\` (add \`saveScreenshot: true\` so you can SEE the rendered result) to verify, then \`canvas_open\` again to refresh the preview.`,
 
   "elevenlabs": `## ElevenLabs Voice (when configured)
 

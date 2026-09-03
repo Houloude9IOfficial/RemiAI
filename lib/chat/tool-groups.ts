@@ -238,6 +238,7 @@ export const CONDITIONAL_GROUPS: Record<string, ToolGroup> = {
       "canvas_add_file",
       "canvas_list",
       "canvas_open",
+      "canvas_review",
     ],
     keywords: [
       // Interactive / buildable deliverables — a canvas is a runnable,

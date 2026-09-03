@@ -5,9 +5,13 @@ use_default_settings: true
 
 server:
   bind_address: "0.0.0.0"
-  # SearXNG rejects its built-in placeholder key. SEARXNG_SECRET from the
-  # Compose environment overrides this value when one is configured.
-  secret_key: "remiai-local-6e3d7b1f9a4c2e8d5f0b7a1c9e6d3f8"
+  # Dev-only placeholder — NOT a real secret. SearXNG requires a key other
+  # than its built-in default, but in the Compose setup SEARXNG_SECRET (see
+  # docker-compose.yml) overrides this at runtime, so the value here only
+  # matters for runs without that env var. Generate a real one with
+  # `openssl rand -hex 32` and put it in .env as SEARXNG_SECRET=… — never
+  # commit a real secret here.
+  secret_key: "dev-placeholder-change-via-SEARXNG_SECRET-env"
 
 search:
   # RemiAI consumes the JSON endpoint. Keep HTML for occasional diagnostics.

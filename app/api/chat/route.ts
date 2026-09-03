@@ -565,7 +565,14 @@ export async function POST(req: Request) {
   // written with the session_file_* tools (scoped under canvas/{slug}/), so
   // plan mode also blocks the canvas write tools below.
   const canvasToolSet = memoryEnabled
-    ? buildCanvasTools({ conversationId, sourceRunId: trace.traceId })
+    ? buildCanvasTools({
+        conversationId,
+        sourceRunId: trace.traceId,
+        // canvas_review renders the canvas through its real HTTP URL, which
+        // sits behind the proxy's session-cookie wall — forward the caller's
+        // cookie so the headless render can load it.
+        authCookie: req.headers.get("cookie"),
+      })
     : {};
 
   // Skills tools (list_skills, load_skill) — the "plugins" analog; hidden in

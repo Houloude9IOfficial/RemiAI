@@ -308,6 +308,49 @@ async function pageSnapshot(page: Page): Promise<{
   };
 }
 
+// ---------------------------------------------------------------------------
+// Fresh-page helper (used by non-browser tools that need one-off rendering,
+// e.g. canvas_review). A throwaway browser is launched, `fn` runs against a
+// brand-new page, and the browser is always closed — no shared session, so
+// callers can't clobber another tool's browser state.
+// ---------------------------------------------------------------------------
+
+export async function withFreshPage<T>(
+  fn: (page: Page) => Promise<T>,
+  opts: { viewport?: { width: number; height: number }; cookieHeader?: string | null } = {},
+): Promise<T> {
+  const { viewport = { width: 1280, height: 900 }, cookieHeader } = opts;
+  const browser = await launchBrowser();
+  try {
+    const context = await browser.newContext({ viewport });
+    // Carry the caller's session cookie into the fresh page so requests to
+    // the app's own authenticated endpoints (e.g. the canvas file URLs behind
+    // the proxy session wall) succeed. Only plain name=value pairs are copied.
+    if (cookieHeader) {
+      const cookies = cookieHeader
+        .split(";")
+        .map((part) => part.trim())
+        .filter((part) => part.includes("="))
+        .map((part) => {
+          const idx = part.indexOf("=");
+          return {
+            name: part.slice(0, idx).trim(),
+            value: decodeURIComponent(part.slice(idx + 1).trim()),
+          };
+        })
+        .filter((c) => c.name)
+        .map((c) => ({ ...c, domain: "127.0.0.1", path: "/" }));
+      if (cookies.length > 0) {
+        await context.addCookies(cookies).catch(() => {});
+      }
+    }
+    const page = await context.newPage();
+    return await fn(page);
+  } finally {
+    await browser.close().catch(() => {});
+  }
+}
+
 const timeoutSchema = (defaultMs: number, maxMs = 120_000) =>
   z
     .number()
