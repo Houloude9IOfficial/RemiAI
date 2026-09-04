@@ -300,4 +300,4 @@ the ai users bash to write/edit/delete files, but it should use bash for command
 
 <!-- backup still says: Exporting backup failed — server returned a non-JSON response (502 , content-type: unknown): "Bad Gateway" but says that it exported successfully in history -->
 
-make notify tool actually send web push and electron notifications.
+<!-- make notify tool actually send web push and electron notifications. -->
