@@ -1,4 +1,9 @@
 import type { AutomationRunRow } from "./automation";
+import { sendWebPush } from "@/lib/notifications/web-push";
+
+function chatUrl(conversationId: number): string {
+  return `/chat/${conversationId}`;
+}
 
 export type AutomationNotification = {
   type: "automation_run_completed" | "automation_run_failed" | "automation_run_cancelled";
@@ -23,6 +28,7 @@ export type UserNotification = {
     title: string;
     body: string;
     requireInteraction: boolean;
+    url: string;
     createdAt: string;
   };
 };
@@ -42,6 +48,9 @@ export function publishUserNotification(input: {
   title: string;
   body: string;
   requireInteraction?: boolean;
+  url?: string;
+  showWhenVisible?: boolean;
+  sendPush?: boolean;
 }): UserNotification["notification"] {
   const notification = {
     id: crypto.randomUUID(),
@@ -49,6 +58,7 @@ export function publishUserNotification(input: {
     title: input.title.trim().slice(0, 120),
     body: input.body.trim().slice(0, 1_000),
     requireInteraction: input.requireInteraction ?? false,
+    url: input.url ?? chatUrl(input.conversationId),
     createdAt: new Date().toISOString(),
   };
   const event: UserNotification = { type: "user_notification", notification };
@@ -58,6 +68,16 @@ export function publishUserNotification(input: {
     } catch {
       subscribers.delete(subscriber);
     }
+  }
+  if (input.sendPush !== false) {
+    void sendWebPush({
+      title: notification.title,
+      body: notification.body,
+      url: notification.url,
+      requireInteraction: notification.requireInteraction,
+      tag: `user-notification-${notification.id}`,
+      showWhenVisible: input.showWhenVisible,
+    }).catch((error) => console.warn("[notifications] Web Push failed:", error));
   }
   return notification;
 }

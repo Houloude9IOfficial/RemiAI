@@ -2,6 +2,12 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import {
+  enableWebPushNotifications,
+  getElectronNotificationApi,
+  isElectronNotificationSupported,
+} from "@/lib/notifications/client";
+import { useAuth } from "@/components/auth/AuthProvider";
 
 interface TaskEvent {
   type: "scheduled_task_completed";
@@ -23,11 +29,12 @@ interface UserNotification {
   title: string;
   body: string;
   requireInteraction: boolean;
+  url: string;
   createdAt: string;
 }
 
 type ElectronNotificationBridge = {
-  sendNotification: (payload: { title: string; body: string }) => Promise<void>;
+  sendNotification: (payload: { title: string; body: string; url?: string; requireInteraction?: boolean }) => Promise<boolean>;
 };
 
 /**
@@ -46,6 +53,7 @@ const notifiedIds = new Set<number>();
  */
 export function NotificationListener() {
   const queryClient = useQueryClient();
+  const { account } = useAuth();
   const permissionRequested = useRef(false);
   const hasPermission = useRef(false);
 
@@ -60,27 +68,35 @@ export function NotificationListener() {
     return result === "granted";
   }, []);
 
-  const showUserNotification = useCallback((notification: UserNotification) => {
+  const showNativeNotification = useCallback((input: {
+    title: string;
+    body: string;
+    url: string;
+    requireInteraction?: boolean;
+    tag?: string;
+  }) => {
     if (!hasPermission.current) return;
 
-    const targetUrl = `/chat/${notification.conversationId}`;
     const electronApi = (window as Window & {
       electronAPI?: ElectronNotificationBridge;
     }).electronAPI;
-
     if (electronApi) {
       void electronApi.sendNotification({
-        title: notification.title,
-        body: notification.body,
+        title: input.title,
+        body: input.body,
+        url: input.url,
+        requireInteraction: input.requireInteraction,
       });
       return;
     }
 
+    const targetUrl = input.url;
+
     const options: NotificationOptions & { tag?: string } = {
-      body: notification.body,
+      body: input.body,
       icon: "/RemiAI.png",
-      tag: `user-notification-${notification.id}`,
-      requireInteraction: notification.requireInteraction,
+      tag: input.tag ?? "remiai-notification",
+      requireInteraction: input.requireInteraction ?? false,
       data: { targetUrl },
     };
 
@@ -88,10 +104,10 @@ export function NotificationListener() {
     // PWAs can display the notification through their registered worker.
     if ("serviceWorker" in navigator) {
       void navigator.serviceWorker.ready
-        .then((registration) => registration.showNotification(notification.title, options))
+        .then((registration) => registration.showNotification(input.title, options))
         .catch(() => {
           try {
-            const native = new Notification(notification.title, options);
+            const native = new Notification(input.title, options);
             native.onclick = () => {
               window.focus();
               window.location.href = targetUrl;
@@ -105,7 +121,7 @@ export function NotificationListener() {
     }
 
     try {
-      const native = new Notification(notification.title, options);
+      const native = new Notification(input.title, options);
       native.onclick = () => {
         window.focus();
         window.location.href = targetUrl;
@@ -116,13 +132,21 @@ export function NotificationListener() {
     }
   }, []);
 
+  const showUserNotification = useCallback((notification: UserNotification) => {
+    showNativeNotification({
+      title: notification.title,
+      body: notification.body,
+      url: notification.url || `/chat/${notification.conversationId}`,
+      requireInteraction: notification.requireInteraction,
+      tag: `user-notification-${notification.id}`,
+    });
+  }, [showNativeNotification]);
+
   const showNotification = useCallback(
     (task: TaskEvent["task"]) => {
       // Skip if already notified
       if (notifiedIds.has(task.id)) return;
       notifiedIds.add(task.id);
-
-      if (!hasPermission.current) return;
 
       const isSuccess = task.status === "completed";
       const title = isSuccess
@@ -133,27 +157,15 @@ export function NotificationListener() {
           ? `${task.task.slice(0, 120)}...`
           : task.task
         : `"${task.task.slice(0, 80)}" — ${task.error ?? "Unknown error"}`;
-
-      try {
-        const notif = new Notification(title, {
-          body,
-          icon: "/RemiAI.png",
-          tag: `scheduled-task-${task.id}`,
-          requireInteraction: true,
-        });
-
-        notif.onclick = () => {
-          window.focus();
-          window.location.href = `/chat/${task.conversationId}`;
-          notif.close();
-        };
-
-        setTimeout(() => notif.close(), 15_000);
-      } catch {
-        // Notification may fail in some contexts
-      }
+      showNativeNotification({
+        title,
+        body,
+        url: `/chat/${task.conversationId}`,
+        requireInteraction: true,
+        tag: `scheduled-task-${task.id}`,
+      });
     },
-    [],
+    [showNativeNotification],
   );
 
   const showAutomationNotification = useCallback(
@@ -167,7 +179,7 @@ export function NotificationListener() {
       result: string | null;
       error: string | null;
     }) => {
-      if (!hasPermission.current || run.status === "waiting") return;
+      if (run.status === "waiting") return;
       const title = run.status === "completed"
         ? `✅ ${run.name} complete`
         : run.status === "cancelled"
@@ -176,27 +188,23 @@ export function NotificationListener() {
       const body = run.status === "completed"
         ? run.task.slice(0, 140)
         : `${run.task.slice(0, 90)} — ${run.error ?? "Needs attention"}`;
-      try {
-        const notification = new Notification(title, {
-          body,
-          icon: "/RemiAI.png",
-          tag: `automation-run-${run.id}`,
-          requireInteraction: true,
-        });
-        notification.onclick = () => {
-          window.focus();
-          window.location.href = `/chat/${run.conversationId}`;
-          notification.close();
-        };
-        setTimeout(() => notification.close(), 15_000);
-      } catch {
-        // Browser notifications may be unavailable in some contexts.
-      }
+      showNativeNotification({
+        title,
+        body,
+        url: `/chat/${run.conversationId}`,
+        requireInteraction: true,
+        tag: `automation-run-${run.id}`,
+      });
     },
-    [],
+    [showNativeNotification],
   );
 
   useEffect(() => {
+    // AuthProvider resolves asynchronously. Do not open the SSE stream before
+    // the session cookie is available, otherwise the initial 401 can leave
+    // this notification channel disconnected for the rest of the session.
+    if (!account) return;
+
     const eventSource = new EventSource("/api/notifications/stream");
     eventSource.onmessage = (event) => {
       try {
@@ -219,7 +227,7 @@ export function NotificationListener() {
       }
     };
     return () => eventSource.close();
-  }, [queryClient, showAutomationNotification, showUserNotification]);
+  }, [account, queryClient, showAutomationNotification, showUserNotification]);
 
   /**
    * Poll for newly completed tasks as a fallback.
@@ -254,35 +262,41 @@ export function NotificationListener() {
                 : task.task
               : `"${task.task.slice(0, 80)}" — ${task.error ?? "Unknown error"}`;
 
-            try {
-              const notif = new Notification(title, {
-                body,
-                icon: "/RemiAI.png",
-                tag: `scheduled-task-${task.id}`,
-                requireInteraction: true,
-              });
-              notif.onclick = () => {
-                window.focus();
-                window.location.href = `/chat/${task.conversationId}`;
-                notif.close();
-              };
-              setTimeout(() => notif.close(), 15_000);
-            } catch {
-              // Notification may fail
-            }
+            showNativeNotification({
+              title,
+              body,
+              url: `/chat/${task.conversationId}`,
+              requireInteraction: true,
+              tag: `scheduled-task-${task.id}`,
+            });
           }
         }
       }
     } catch {
       // Poll failures are non-critical
     }
-  }, [queryClient]);
+  }, [queryClient, showNativeNotification]);
 
   useEffect(() => {
-    // Request notification permission
-    requestNotificationPermission().then((granted) => {
-      hasPermission.current = granted;
-    });
+    if (!account) return;
+
+    // Electron uses native OS notifications through the main process. Do not
+    // ask Chromium for Web Notification permission or attempt Web Push there.
+    const electronApi = getElectronNotificationApi();
+    if (electronApi) {
+      void isElectronNotificationSupported().then((supported) => {
+        hasPermission.current = supported;
+      });
+    } else {
+      requestNotificationPermission().then((granted) => {
+        hasPermission.current = granted;
+        if (granted) {
+        // Keep the existing automatic permission flow, but also register this
+        // browser/PWA with the VPS so notifications work after the page closes.
+          void enableWebPushNotifications(false);
+        }
+      });
+    }
 
     // Connect to SSE endpoint
     const eventSource = new EventSource("/api/scheduled-tasks/events");
@@ -318,7 +332,7 @@ export function NotificationListener() {
       eventSource.close();
       clearInterval(pollInterval);
     };
-  }, [queryClient, requestNotificationPermission, showNotification, pollForCompletedTasks]);
+  }, [account, queryClient, requestNotificationPermission, showNotification, pollForCompletedTasks]);
 
   return null;
 }

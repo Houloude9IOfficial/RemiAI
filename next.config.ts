@@ -36,6 +36,7 @@ const nextConfig: NextConfig = {
     "better-sqlite3",
     "@huggingface/transformers",
     "onnxruntime-node",
+    "web-push",
   ],
   // Encrypted backups may contain uploaded files and exceed Next's default
   // 10 MB proxy body limit. The backup route still validates the encrypted

@@ -1,14 +1,11 @@
-// RemiAI Service Worker — Minimal for PWA installability
-// No offline caching, just enables the "Add to Home Screen" prompt.
+// RemiAI Service Worker — PWA installability and background Web Push.
 
 const CACHE_NAME = "remiai-v1";
 const STATIC_ASSETS = ["/", "/manifest.json"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
-    })
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
   );
   self.skipWaiting();
 });
@@ -26,9 +23,43 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+self.addEventListener("push", (event) => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    payload = { body: event.data ? event.data.text() : "" };
+  }
+
+  const title = payload.title || "RemiAI";
+  const options = {
+    body: payload.body || "You have an update from RemiAI.",
+    icon: "/RemiAI.png",
+    badge: "/favicon-32x32.png",
+    tag: payload.tag || "remiai-notification",
+    requireInteraction: payload.requireInteraction === true,
+    data: {
+      targetUrl: payload.url || "/",
+      showWhenVisible: payload.showWhenVisible === true,
+    },
+  };
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      // The SSE listener displays notifications immediately while the app is
+      // visible. Avoid showing a duplicate Web Push notification in that case.
+      const appIsVisible = clients.some((client) => client.visibilityState === "visible");
+      if (appIsVisible && payload.showWhenVisible !== true) return undefined;
+      return self.registration.showNotification(title, options);
+    })
+  );
+});
+
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data?.targetUrl || "/";
+  const targetUrl = new URL(
+    event.notification.data?.targetUrl || "/",
+    self.location.origin
+  ).href;
 
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
@@ -45,7 +76,11 @@ self.addEventListener("notificationclick", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
-  // Network-first strategy for navigation requests
+  if (new URL(event.request.url).pathname === "/sw.js") {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
   if (event.request.mode === "navigate") {
     event.respondWith(
       fetch(event.request).catch(() =>
@@ -55,7 +90,6 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Cache-first for static assets
   if (event.request.url.includes("/_next/static")) {
     event.respondWith(
       caches.match(event.request).then((cached) => cached ?? fetch(event.request))
@@ -63,7 +97,6 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // For manifest and other static files
   event.respondWith(
     caches.match(event.request).then((cached) => cached ?? fetch(event.request))
   );

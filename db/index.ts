@@ -228,6 +228,23 @@ function repairSchemaCompatibility(): void {
     `);
   }
 
+  if (!tableExists("push_subscriptions")) {
+    sqlite.exec(`
+      CREATE TABLE "push_subscriptions" (
+        "id" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+        "account_id" INTEGER NOT NULL,
+        "endpoint" TEXT NOT NULL UNIQUE,
+        "p256dh" TEXT NOT NULL,
+        "auth" TEXT NOT NULL,
+        "user_agent" TEXT,
+        "created_at" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updated_at" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY ("account_id") REFERENCES "auth_accounts"("id") ON DELETE CASCADE
+      );
+      CREATE INDEX "push_subscriptions_account_id_idx" ON "push_subscriptions" ("account_id");
+    `);
+  }
+
   if (!tableExists("automation_runs")) {
     sqlite.exec(`
       CREATE TABLE "automation_runs" (

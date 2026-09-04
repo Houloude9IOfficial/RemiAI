@@ -378,13 +378,32 @@ function createTray(): void {
 // Notifications
 // ---------------------------------------------------------------------------
 
+ipcMain.handle("notifications-supported", () => Notification.isSupported());
+
 ipcMain.handle(
   "send-notification",
-  (_event: Electron.IpcMainInvokeEvent, { title, body }: { title: string; body: string }) => {
-    if (Notification.isSupported()) {
-      const notification = new Notification({ title, body });
-      notification.show();
+  (
+    _event: Electron.IpcMainInvokeEvent,
+    {
+      title,
+      body,
+      url,
+    }: { title: string; body: string; url?: string; requireInteraction?: boolean },
+  ) => {
+    if (!Notification.isSupported()) {
+      throw new Error("Native notifications are not supported on this system");
     }
+
+    const notification = new Notification({ title, body });
+    if (url) {
+      notification.on("click", () => {
+        mainWindow?.show();
+        mainWindow?.focus();
+        void mainWindow?.loadURL(new URL(url, NEXTJS_URL).toString());
+      });
+    }
+    notification.show();
+    return true;
   },
 );
 

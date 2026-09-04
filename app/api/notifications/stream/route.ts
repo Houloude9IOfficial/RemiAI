@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import { subscribeAutomationNotifications } from "@/lib/runs/notifications";
+import { getCurrentAccount } from "@/lib/auth/service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET() {
+  const account = await getCurrentAccount();
+  if (!account) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     start(controller) {

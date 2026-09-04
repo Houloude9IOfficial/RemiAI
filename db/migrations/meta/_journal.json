@@ -260,6 +260,13 @@
       "when": 1788000000000,
       "tag": "0041_new_model_preference",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "6",
+      "when": 1788003600000,
+      "tag": "0042_push_subscriptions",
+      "breakpoints": true
     }
   ]
 }

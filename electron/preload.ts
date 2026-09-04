@@ -38,8 +38,15 @@ const electronAPI = {
     ipcRenderer.invoke("open-directory-dialog", options),
 
   // ── Notifications ────────────────────────────────────────────────
-  sendNotification: (payload: { title: string; body: string }): Promise<void> =>
-    ipcRenderer.invoke("send-notification", payload),
+  isNotificationSupported: (): Promise<boolean> =>
+    ipcRenderer.invoke("notifications-supported"),
+
+  sendNotification: (payload: {
+    title: string;
+    body: string;
+    url?: string;
+    requireInteraction?: boolean;
+  }): Promise<boolean> => ipcRenderer.invoke("send-notification", payload),
 
   // ── Auto-update listeners ────────────────────────────────────────
   onUpdateAvailable: (callback: (version: string) => void): (() => void) => {
