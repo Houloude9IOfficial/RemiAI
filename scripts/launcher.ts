@@ -31,7 +31,7 @@ import fs from "node:fs";
 function spawnCommand(
   command: string,
   args: string[],
-  options: SpawnOptions & { stdio: "inherit" },
+  options: SpawnOptions,
 ): ChildProcess {
   const isWindows = process.platform === "win32";
   return spawn(isWindows ? `${command}.cmd` : command, args, {
@@ -332,6 +332,43 @@ function getSearxngUrl(): string {
   return process.env.SEARXNG_URL?.trim() || `http://127.0.0.1:${getSearxngPort()}`;
 }
 
+function clearConsole(): void {
+  process.stdout.write("\x1b[2J\x1b[0f");
+}
+
+async function promptSearxngFailure(): Promise<boolean> {
+  const inquirer = await import("inquirer");
+  const inq = (inquirer.default ?? inquirer) as unknown as typeof inquirer.default;
+  const { action } = await inq.prompt([
+    {
+      type: "select",
+      name: "action",
+      message: "What would you like to do?",
+      choices: [
+        {
+          name: "Try again",
+          value: "retry",
+          short: "Try again",
+        },
+        {
+          name: "Continue",
+          value: "continue",
+          short: "Continue",
+        },
+      ],
+      default: "retry",
+    },
+  ]);
+
+  clearConsole();
+  if (action === "continue") {
+    console.log("\n🔎  Starting without SearXNG and continuing...\n");
+    return false;
+  }
+
+  return true;
+}
+
 /** Start the local SearXNG container without making it a launcher hard dependency. */
 async function waitForSearxng(url: string): Promise<boolean> {
   const deadline = Date.now() + SEARXNG_STARTUP_TIMEOUT_MS;
@@ -364,42 +401,40 @@ async function startSearxng(): Promise<void> {
   }
 
   if (process.env.SEARXNG_URL?.trim()) {
-    console.log(`\\n🔎  Using configured SearXNG at ${getSearxngUrl()}\\n`);
-    return Promise.resolve();
+    console.log(`\n🔎  Using configured SearXNG at ${getSearxngUrl()}\n`);
+    return;
   }
 
   const port = getSearxngPort();
-  console.log(`\\n🔎  Starting SearXNG on http://127.0.0.1:${port}...`);
 
-  return new Promise((resolve) => {
-    const child = spawnCommand(
-      "docker",
-      ["compose", "--profile", "true", "up", "-d", "searxng"],
-      {
-        cwd: PROJECT_ROOT,
-        stdio: "inherit",
-        env: { ...process.env, SEARXNG: "true", SEARXNG_PORT: port },
-      },
-    );
+  while (true) {
+    console.log(`\n🔎  Starting SearXNG on http://127.0.0.1:${port}...`);
 
-    child.once("error", (error) => {
-      console.warn(`⚠️  Could not start SearXNG: ${error.message}`);
-      console.warn("    Continuing without local search; configured fallbacks can still be used.");
-      resolve();
+    const started = await new Promise<boolean>((resolve) => {
+      const child = spawnCommand(
+        "docker",
+        ["compose", "--profile", "true", "up", "-d", "searxng"],
+        {
+          cwd: PROJECT_ROOT,
+          stdio: "ignore",
+          env: { ...process.env, SEARXNG: "true", SEARXNG_PORT: port },
+        },
+      );
+
+      child.once("error", () => resolve(false));
+      child.once("exit", async (code) => {
+        resolve(code === 0 && await waitForSearxng(getSearxngUrl()));
+      });
     });
-    child.once("exit", async (code) => {
-      if (code === 0 && await waitForSearxng(getSearxngUrl())) {
-        console.log(`✅  SearXNG passed its health check at ${getSearxngUrl()}\n`);
-      } else if (code === 0) {
-        console.warn(`⚠️  SearXNG did not pass its health check within ${SEARXNG_STARTUP_TIMEOUT_MS / 1000}s.`);
-        console.warn("    The container may be restarting; continuing with configured fallbacks.");
-      } else {
-        console.warn(`⚠️  SearXNG startup failed (exit code: ${code ?? "unknown"}).`);
-        console.warn("    Continuing without local search; configured fallbacks can still be used.");
-      }
-      resolve();
-    });
-  });
+
+    if (started) {
+      console.log(`✅  SearXNG passed its health check at ${getSearxngUrl()}\n`);
+      return;
+    }
+
+    console.warn("Docker is not running or not found, SearXNG will not start.");
+    if (!await promptSearxngFailure()) return;
+  }
 }
 
 function getPackageVersion(): string {
@@ -413,7 +448,19 @@ function getPackageVersion(): string {
   }
 }
 
-main().catch((err) => {
+main().catch((err: unknown) => {
+  // Inquirer throws ExitPromptError when the user presses Ctrl+C. Check the
+  // error name without instanceof because the ESM runtime may use a separate
+  // Error constructor from the launcher.
+  const errorName =
+    typeof err === "object" && err !== null && "name" in err
+      ? String((err as { name?: unknown }).name)
+      : "";
+  if (errorName === "ExitPromptError") {
+    clearConsole();
+    process.exit(0);
+  }
+
   console.error("❌  Launcher error:", err);
   process.exit(1);
 });
