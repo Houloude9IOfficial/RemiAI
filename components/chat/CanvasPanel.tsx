@@ -254,7 +254,7 @@ function CanvasBuildingState() {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-4 bg-background">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/assets/building.gif" alt="Building…" className="h-24 w-24 object-contain" />
+      <img src="/assets/building-2xspeed.gif" alt="Building…" className="h-24 w-24 object-contain" />
       <div className="text-center">
         <p className="text-sm font-medium">Building your canvas…</p>
         <p className="mt-1 text-xs text-muted-foreground">The AI is writing HTML, CSS, and JavaScript.</p>
