@@ -1,6 +1,6 @@
 // RemiAI Service Worker — PWA installability and background Web Push.
 
-const CACHE_NAME = "remiai-v1";
+const CACHE_NAME = "remiai-v2";
 const STATIC_ASSETS = ["/", "/manifest.json"];
 
 self.addEventListener("install", (event) => {
@@ -90,12 +90,11 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (event.request.url.includes("/_next/static")) {
-    event.respondWith(
-      caches.match(event.request).then((cached) => cached ?? fetch(event.request))
-    );
-    return;
-  }
+  // Next.js hashes development and production chunks differently. Do not
+  // intercept them at all. Calling respondWith(fetch(...)) here is unnecessary
+  // and can throw in Firefox for encoded App Router chunk URLs; leaving the
+  // event untouched lets the browser request the asset directly from Next.js.
+  if (new URL(event.request.url).pathname.startsWith("/_next/")) return;
 
   event.respondWith(
     caches.match(event.request).then((cached) => cached ?? fetch(event.request))

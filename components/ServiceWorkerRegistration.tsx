@@ -8,21 +8,15 @@ import { useEffect } from "react";
  */
 export function ServiceWorkerRegistration() {
   useEffect(() => {
-    if (
-      typeof window !== "undefined" &&
-      "serviceWorker" in navigator &&
-      // Only register in production — dev mode Turbopack HMR conflicts with SW caching
-      process.env.NODE_ENV === "production"
-    ) {
-      navigator.serviceWorker
-        .register("/sw.js")
-        .then(() => {
-          // Service worker registered
-        })
-        .catch(() => {
-          // Registration failed silently — PWA install just won't be available
-        });
-    }
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+
+    if (process.env.NODE_ENV !== "production") return;
+
+    navigator.serviceWorker
+      .register("/sw.js", { updateViaCache: "none" })
+      .catch(() => {
+        // Registration failed silently — PWA install just won't be available
+      });
   }, []);
 
   return null;

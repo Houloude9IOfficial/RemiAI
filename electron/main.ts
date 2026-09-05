@@ -101,7 +101,9 @@ function getNextCommand(): NextCommand {
   if (isDev) {
     return {
       script: resolveNextCli(),
-      args: ["dev", "-p", String(PORT), "-H", "127.0.0.1"],
+      // Webpack is more reliable for this app's development HMR graph than
+      // Turbopack, which can repeatedly request stale/missing HMR chunks.
+      args: ["dev", "--webpack", "-p", String(PORT), "-H", "127.0.0.1"],
       cwd: APP_ROOT,
     };
   }

@@ -201,7 +201,7 @@ function startWebServer(devMode: boolean): void {
   const host = "127.0.0.1";
 
   const args = devMode
-    ? ["next", "dev", "-H", host, "-p", port]
+    ? ["next", "dev", "--webpack", "-H", host, "-p", port]
     : ["next", "start", "-H", host, "-p", port];
 
   console.log(`\n🚀  Starting RemiAI as a web server...`);
