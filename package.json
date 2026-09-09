@@ -29,7 +29,7 @@
     "build:electron": "npx tsc -p electron/tsconfig.json",
     "playwright:install": "playwright install chromium",
     "playwright:browsers": "node scripts/install-playwright-browsers.mjs",
-    "start": "npx tsx scripts/launcher.ts",
+    "start": "npm run build && npx tsx scripts/launcher.ts",
     "start:web": "next start -H 127.0.0.1",
     "start:electron": "NODE_ENV=production npx electron electron-dist/main.js",
     "icons": "node scripts/generate-icons.mjs",
