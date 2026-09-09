@@ -365,7 +365,9 @@ export async function initializeApp(): Promise<void> {
   // Auto-run migrations on startup so the app works out of the box
   // without requiring a separate `npm run db:migrate` step.
   try {
-    migrate(db, { migrationsFolder: path.join(process.cwd(), "db/migrations") });
+    migrate(db, {
+      migrationsFolder: path.join(/*turbopackIgnore: true*/ process.cwd(), "db/migrations"),
+    });
   } catch (e) {
     // If the migration table is out of sync, the compatibility repair below
     // still creates/adds the current app's required structures without

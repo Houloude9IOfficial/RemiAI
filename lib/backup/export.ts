@@ -17,7 +17,10 @@ import { BACKUP_VERSION, type BackupFiles } from "./types";
 const APP_VERSION = (() => {
   try {
     const pkg = JSON.parse(
-      fs.readFileSync(path.join(process.cwd(), "package.json"), "utf8"),
+      fs.readFileSync(
+        path.join(/*turbopackIgnore: true*/ process.cwd(), "package.json"),
+        "utf8",
+      ),
     );
     return pkg.version ?? "0.0.0";
   } catch {

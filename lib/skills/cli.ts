@@ -43,7 +43,7 @@ export async function runSkillsCli(
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   const isWin = process.platform === "win32";
-  const localBin = path.join(process.cwd(), "node_modules", ".bin");
+  const localBin = path.join(/*turbopackIgnore: true*/ process.cwd(), "node_modules", ".bin");
   const npxCandidates = isWin
     ? [
         path.join(localBin, "npx.cmd"),

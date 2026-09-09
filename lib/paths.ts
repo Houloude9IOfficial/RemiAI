@@ -11,7 +11,11 @@ import path from "node:path";
  * - Dev / web / CI (`next build`): falls back to `<cwd>/data`.
  */
 export const DATA_DIR = process.env.REMI_DATA_DIR
-  ? path.resolve(process.env.REMI_DATA_DIR)
+  ? path.resolve(
+      // turbopackIgnore: runtime-controlled location (Electron user-data
+      // dir); never trace it into the standalone output.
+      /* turbopackIgnore: true */ process.env.REMI_DATA_DIR,
+    )
   : path.join(
       // turbopackIgnore: never trace the local data dir into the standalone
       // output — it contains the user's SQLite DB, uploads and files.
