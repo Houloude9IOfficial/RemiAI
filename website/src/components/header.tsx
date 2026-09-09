@@ -13,6 +13,20 @@ const NAV_LINKS = [
   { href: "#faq", label: "FAQ" },
 ];
 
+export function usePrefersDark() {
+  const [dark, setDark] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const update = () => setDark(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  return dark;
+}
+
 export function Header() {
   const [scrolled, setScrolled] = useState(false);
 
@@ -31,15 +45,15 @@ export function Header() {
     >
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
         <a href="#top" className="group flex items-center gap-2.5" aria-label={`${SITE_NAME} home`}>
-          {/* <span className="relative">
+          <span className="relative">
             <Image
-              src="/RemiAI.png"
+              src={`/${!usePrefersDark() ? "RemiAI" : "RemiAI-Light"}.png`}
               alt=""
               width={26}
               height={26}
-              className="rounded-[7px] transition-transform duration-200 group-hover:scale-105"
+              className="rounded-[7px] transition-transform duration-200"
             />
-          </span> */}
+          </span>
           <span className="text-[15px] font-semibold tracking-tight">{SITE_NAME}</span>
         </a>
 
@@ -72,7 +86,7 @@ export function Header() {
           <a href="#quickstart" aria-label="Get started">
             <Button size="sm" className="gap-1.5">
               Get started
-              <IconArrowRight className="h-3.5 w-3.5" />
+              {/* <IconArrowRight className="h-3.5 w-3.5" /> */}
             </Button>
           </a>
         </div>

@@ -229,10 +229,7 @@
 }
 
 .dark .shell-canvas {
-  background:
-    radial-gradient(1000px 560px at 50% -14%, color-mix(in oklab, var(--primary) 10%, transparent), transparent 72%),
-    radial-gradient(900px 700px at 90% 120%, color-mix(in oklab, var(--primary) 7%, transparent), transparent 68%),
-    var(--background);
+  background: var(--background);
 }
 
 @layer base {

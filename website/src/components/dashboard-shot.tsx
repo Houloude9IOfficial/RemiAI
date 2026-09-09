@@ -7,7 +7,7 @@ import { SITE_NAME } from "@/lib/constants";
 
 const ease: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
-function usePrefersDark() {
+export function usePrefersDark() {
   const [dark, setDark] = useState(false);
 
   useEffect(() => {

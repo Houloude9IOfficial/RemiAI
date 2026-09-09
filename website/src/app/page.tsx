@@ -49,11 +49,11 @@ function Hero() {
 
       <div className="mx-auto max-w-6xl px-6">
         <div className="mx-auto max-w-3xl text-center">
-          <Reveal>
+          {/* <Reveal>
             <p className="inline-flex items-center rounded-full border border-border bg-background/80 px-3.5 py-1.5 font-mono text-[11px] tracking-wide text-muted-foreground">
               Self-hosted · Open source
             </p>
-          </Reveal>
+          </Reveal> */}
 
           <Reveal delay={0.08}>
             <h1 className="mt-7 text-balance text-4xl font-semibold leading-[1.06] tracking-[-0.02em] sm:text-5xl lg:text-6xl">
