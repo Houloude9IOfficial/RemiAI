@@ -31,7 +31,7 @@ export function Header() {
     >
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
         <a href="#top" className="group flex items-center gap-2.5" aria-label={`${SITE_NAME} home`}>
-          <span className="relative">
+          {/* <span className="relative">
             <Image
               src="/RemiAI.png"
               alt=""
@@ -39,7 +39,7 @@ export function Header() {
               height={26}
               className="rounded-[7px] transition-transform duration-200 group-hover:scale-105"
             />
-          </span>
+          </span> */}
           <span className="text-[15px] font-semibold tracking-tight">{SITE_NAME}</span>
         </a>
 
