@@ -31,7 +31,10 @@ import {
   CANVAS_SECTION,
   RESEARCH_SECTION,
   SESSION_FILES_SECTION,
+  REMI_CARDS_SECTION,
+  REMI_CARD_PRESENTATION_RULES,
 } from "@/lib/chat/system-prompt";
+import { buildRemiCardTools, setRemiApiOverride, setRemiCardDisplayModes, setRemiLocationFallback } from "@/lib/tools/remi-cards";
 import { PERSISTENCE_GUIDANCE } from "@/lib/chat/persistence-guidance";
 import {
   buildCachedInstructions,
@@ -729,8 +732,32 @@ Definition of done:
     };
   }
 
-  // Build combined system prompt with user preferences
-  const prefs = await db.select().from(userPreferences).get();
+  // Build combined system prompt with user preferences (self-heal if the
+  // Remi columns from 0043 haven't landed yet on this DB).
+  let prefs: (typeof userPreferences.$inferSelect) | undefined;
+  try {
+    prefs = await db.select().from(userPreferences).get();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message.toLowerCase() : String(e).toLowerCase();
+    const missing = msg.includes("no such column") || msg.includes("has no column");
+    if (!missing) throw e;
+    const { ensureRemiPrefsColumns } = await import("@/db");
+    ensureRemiPrefsColumns();
+    prefs = await db.select().from(userPreferences).get();
+  }
+  const _prefsRec = prefs as unknown as Record<string, unknown> | null;
+  const _remiApiUrl = (_prefsRec?.remiApiUrl as string | undefined) ?? "";
+  const _remiApiEnabled = (_prefsRec?.remiApiEnabled as boolean | undefined) ?? true;
+  const _remiCardDisplayModes = (_prefsRec?.cardDisplayModes as Record<string, string> | undefined) ?? {};
+  setRemiApiOverride(_remiApiUrl);
+  setRemiCardDisplayModes(_remiCardDisplayModes);
+  setRemiLocationFallback(req.headers.get("x-user-latitude"), req.headers.get("x-user-longitude"));
+  const _remiCardToolSet: Record<string, unknown> = _remiApiEnabled ? (buildRemiCardTools() as Record<string, unknown>) : {};
+  if (Object.keys(_remiCardToolSet).length) {
+    Object.assign(tools, _remiCardToolSet);
+    tools.list_available_tools = buildListAvailableToolsTool(new Set(Object.keys(tools)))["list_available_tools"];
+  }
+  const _remiCardsSection = Object.keys(_remiCardToolSet).length ? REMI_CARDS_SECTION : "";
   const prefParts: string[] = [];
   if (prefs?.preferredName) {
     prefParts.push(`The user's preferred name is "${prefs.preferredName}". Address them by this name.`);
@@ -1047,7 +1074,7 @@ Definition of done:
 
   const dynamicSystemPromptBase =
     systemTip + profileTip + memoryTip + fileChangeTip + summarySection +
-    planModePrompt + buildModePrompt + canvasSection + activeSkillsSection +
+    planModePrompt + buildModePrompt + canvasSection + _remiCardsSection + (Object.keys(_remiCardToolSet).length ? REMI_CARD_PRESENTATION_RULES : "") + activeSkillsSection +
     taggedSkillsSection + qualityPolicyPrompt;
 
   const dynamicSystemPrompt = dynamicSystemPromptBase + toolAvailabilityNote;

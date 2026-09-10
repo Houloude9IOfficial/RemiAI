@@ -319,8 +319,17 @@ export async function executeTask(task: ScheduledTaskRow) {
     const toolNames = Object.keys(tools);
     console.log(`[scheduler] Task #${task.id} has ${toolNames.length} tool(s): ${toolNames.join(", ")}`);
 
-    // ── Build system prompt with context ──
-    const prefs = await db.select().from(userPreferences).get();
+    // ── Build system prompt with context (automigrate 0043 if needed) ──
+    let prefs: (typeof userPreferences.$inferSelect) | undefined;
+    try {
+      prefs = await db.select().from(userPreferences).get();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message.toLowerCase() : String(e).toLowerCase();
+      if (!msg.includes("no such column") && !msg.includes("has no column")) throw e;
+      const { ensureRemiPrefsColumns } = await import("@/db");
+      ensureRemiPrefsColumns();
+      prefs = await db.select().from(userPreferences).get();
+    }
     const prefParts: string[] = [];
     if (prefs?.preferredName) {
       prefParts.push(`The user's preferred name is "${prefs.preferredName}".`);

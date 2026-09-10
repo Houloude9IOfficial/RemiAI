@@ -94,6 +94,14 @@ export const userPreferences = sqliteTable("user_preferences", {
   backgroundColor: text("background_color").notNull().default(""),
   // Controls whether models discovered or manually added in the future are enabled.
   enableNewModels: integer("enable_new_models", { mode: "boolean" }).notNull().default(true),
+  // RemiAPI (Cloudflare Worker caching proxy for zero-cost cards)
+  remiApiUrl: text("remi_api_url").notNull().default(""),
+  remiApiEnabled: integer("remi_api_enabled", { mode: "boolean" }).notNull().default(true),
+  // Per-card display mode: "card" vs "text" (and future). Key is card id.
+  cardDisplayModes: text("card_display_modes", { mode: "json" })
+    .$type<Record<string, string>>()
+    .notNull()
+    .default({}),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 

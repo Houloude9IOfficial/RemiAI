@@ -250,8 +250,17 @@ export async function processWebhookEvent(opts: {
       Object.entries(rawTools).map(([name, tool]) => [name, normaliseTool(tool)]),
     );
 
-    // ── Build the system prompt ─────────────────────────────────────
-    const prefs = await db.select().from(userPreferences).get();
+    // ── Build the system prompt (automigrate 0043 if needed) ──────
+    let prefs: (typeof userPreferences.$inferSelect) | undefined;
+    try {
+      prefs = await db.select().from(userPreferences).get();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message.toLowerCase() : String(e).toLowerCase();
+      if (!msg.includes("no such column") && !msg.includes("has no column")) throw e;
+      const { ensureRemiPrefsColumns } = await import("@/db");
+      ensureRemiPrefsColumns();
+      prefs = await db.select().from(userPreferences).get();
+    }
     const prefParts: string[] = [];
     if (prefs?.preferredName) {
       prefParts.push(`The user's preferred name is "${prefs.preferredName}".`);

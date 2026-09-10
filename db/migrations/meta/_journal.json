@@ -267,6 +267,13 @@
       "when": 1788003600000,
       "tag": "0042_push_subscriptions",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1788100000000,
+      "tag": "0043_remiapi_prefs",
+      "breakpoints": true
     }
   ]
 }

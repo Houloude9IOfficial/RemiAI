@@ -319,6 +319,8 @@ export const CONDITIONAL_GROUPS: Record<string, ToolGroup> = {
       "pictures of", "photos of", "images of", "picture of", "photo of",
       "image of", "show me a picture", "show me pictures", "show me photos",
       "show me images", "find images", "image search", "what does it look like",
+      // Place lookups benefit from one map card plus a small image result set.
+      "where is", "show me where", "location of", "locate", "directions to",
       // Current / time-sensitive / verifiable information
       "latest", "newest", "most recent", "as of", "right now", "nowadays",
       "this week", "this month", "this year", "today",
@@ -391,6 +393,27 @@ export const CONDITIONAL_GROUPS: Record<string, ToolGroup> = {
       "subtitles", "transcript", "what did they say", "what was said",
       "what does the audio say", "caption this", "trim the", "trim video",
       "trim audio", "cut the video", "cut the audio",
+    ],
+  },
+  remi_cards: {
+    label: "remi-cards",
+    tools: [
+      "weather_card",
+      "timezone_card",
+      "currency_card",
+      "map_card",
+      "crypto_card",
+      "news_card",
+      "stock_card",
+    ],
+    keywords: [
+      "weather", "temperature", "forecast", "humidity", "wind speed", "how hot", "how cold",
+      "timezone", "time in", "what time is it in", "local time", "current time in",
+      "currency", "convert", "exchange rate", "usd to", "eur to", "jpy to", "gbp to", "convert usd",
+      "map", "where is", "locate", "address of", "coordinates", "geocode", "show me on a map",
+      "crypto", "bitcoin", "ethereum", "solana", "btc", "eth", "price of bitcoin", "price of eth",
+      "news", "headlines", "breaking news", "top headlines",
+      "stock", "ticker", "aapl", "tsla", "nvda", "stock price", "quote for", "nasdaq", "nyse",
     ],
   },
 };

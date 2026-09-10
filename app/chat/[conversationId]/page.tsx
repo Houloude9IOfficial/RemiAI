@@ -54,7 +54,7 @@ import {
   errorToDisplayMessage,
   decodeStreamError,
 } from "@/lib/chat/error-payload";
-import { userContextHeaders } from "@/lib/chat/user-context";
+import { primeClientLocation, userContextHeaders } from "@/lib/chat/user-context";
 import { TEMPORARY_CHAT_RETENTION_DAYS } from "@/lib/chat/temporary-chat-constants";
 
 // If the conversation fetch takes longer than this, abort it and surface an
@@ -564,6 +564,10 @@ function ConversationChat({
   // stuck run (one that keeps hitting the limit with no progress) falls back
   // to the visible error banner after the budget is spent.
   const autoContinueBudgetRef = useRef(MAX_AUTO_CONTINUES_PER_MESSAGE);
+
+  useEffect(() => {
+    primeClientLocation();
+  }, []);
 
   const {
     messages,

@@ -36,6 +36,14 @@ import {
   X,
   Palette,
   Check,
+  CloudSun,
+  Clock,
+  DollarSign,
+  Bitcoin,
+  Newspaper,
+  TrendingUp,
+  LayoutGrid,
+  Map as MapIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -43,6 +51,15 @@ import { ACCENT_PRESETS } from "@/lib/accent-colors";
 import { BACKGROUND_PRESETS } from "@/lib/background-colors";
 import { useTheme } from "@/components/ThemeProvider";
 import { useAppearancePreview } from "@/components/AppearancePreviewProvider";
+import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { CARD_IDS, type CardId } from "@/lib/api/preferences";
 
 const DEFAULT_PREFERENCES: UserPreferences = {
   preferredName: "",
@@ -60,6 +77,9 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   accentColor: "",
   backgroundColor: "",
   enableNewModels: true,
+  remiApiUrl: "",
+  remiApiEnabled: true,
+  cardDisplayModes: {},
 };
 
 interface LinkEntry {
@@ -96,6 +116,14 @@ function linksEqual(
   return true;
 }
 
+function cardModesEqual(a: Record<string, string>, b: Record<string, string>): boolean {
+  const ak = Object.keys(a).sort();
+  const bk = Object.keys(b).sort();
+  if (ak.length !== bk.length) return false;
+  for (let i = 0; i < ak.length; i++) if (ak[i] !== bk[i] || a[ak[i]] !== b[bk[i]]) return false;
+  return true;
+}
+
 function preferencesEqual(a: UserPreferences, b: UserPreferences): boolean {
   return (
     a.preferredName === b.preferredName &&
@@ -112,9 +140,22 @@ function preferencesEqual(a: UserPreferences, b: UserPreferences): boolean {
     a.accentColor === b.accentColor &&
     a.backgroundColor === b.backgroundColor &&
     a.enableNewModels === b.enableNewModels &&
+    (a.remiApiUrl ?? "") === (b.remiApiUrl ?? "") &&
+    (a.remiApiEnabled ?? true) === (b.remiApiEnabled ?? true) &&
+    cardModesEqual(a.cardDisplayModes ?? {}, b.cardDisplayModes ?? {}) &&
     linksEqual(a.links || {}, b.links || {})
   );
 }
+
+const CARD_META: Record<CardId, { label: string; icon: typeof CloudSun; hint: string }> = {
+  weather: { label: "Weather", icon: CloudSun, hint: "Open-Meteo + Nominatim" },
+  timezone: { label: "Timezone", icon: Clock, hint: "WorldTimeAPI / TimeAPI" },
+  currency: { label: "Currency", icon: DollarSign, hint: "Frankfurter / ECB" },
+  map: { label: "Map", icon: MapIcon, hint: "OSM / Nominatim" },
+  crypto: { label: "Crypto", icon: Bitcoin, hint: "CoinGecko" },
+  news: { label: "News", icon: Newspaper, hint: "Integrated news" },
+  stock: { label: "Stock", icon: TrendingUp, hint: "Market data" },
+};
 
 export function ProfileForm() {
   const { resolvedTheme } = useTheme();
@@ -798,6 +839,78 @@ export function ProfileForm() {
               <Plus className="h-3.5 w-3.5" />
               Add
             </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* RemiAPI — edge cache + card controls */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-sm font-medium">
+            <LayoutGrid className="h-4 w-4 text-primary" />
+            RemiAPI &amp; Visual Cards
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Caching proxy for the zero-cost card set. Fixed by default; toggle cards and choose their display mode.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between rounded-lg border border-border/50 bg-muted/20 px-3 py-2.5">
+            <div>
+              <p className="text-xs font-semibold">Enable visual cards</p>
+              {/* <p className="text-[11px] text-muted-foreground/70">Master toggle for the 7 card tools.</p> */}
+            </div>
+            <Switch
+              checked={form.remiApiEnabled ?? true}
+              onCheckedChange={(v) => setForm({ ...form, remiApiEnabled: v })}
+              aria-label="Toggle RemiAPI cards"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="remiApiUrl" className="text-xs">RemiAPI Worker URL (optional override)</Label>
+            <Input
+              id="remiApiUrl"
+              placeholder="https://remiapi.your-subdomain.workers.dev  (leave blank for default)"
+              value={form.remiApiUrl ?? ""}
+              onChange={(e) => setForm({ ...form, remiApiUrl: e.target.value })}
+            />
+            <p className="text-[11px] text-muted-foreground/60">Set in Profile once the Worker is live; otherwise the app uses the built-in default. No secrets here.</p>
+          </div>
+          <div className="space-y-2.5">
+            <p className="text-xs font-semibold">Per-card display</p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {CARD_IDS.map((id) => {
+                const meta = CARD_META[id as CardId];
+                const Icon = meta.icon;
+                const mode = (form.cardDisplayModes?.[id] as string) ?? "card";
+                return (
+                  <div key={id} className="flex items-center justify-between gap-2 rounded-lg border border-border/40 bg-card px-2.5 py-2">
+                    <span className="flex items-center gap-2 text-xs font-medium">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-md bg-muted"><Icon className="h-3.5 w-3.5" /></span>
+                      <span>{meta.label}</span>
+                      <span className="hidden text-[10px] font-normal text-muted-foreground sm:inline">{meta.hint}</span>
+                    </span>
+                    <Select
+                      value={mode}
+                      onValueChange={(v) =>
+                        setForm({
+                          ...form,
+                          cardDisplayModes: { ...(form.cardDisplayModes ?? {}), [id]: v } as Record<string, string>,
+                        })
+                      }
+                    >
+                      <SelectTrigger className="h-7 w-[88px] text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="card">Card</SelectItem>
+                        <SelectItem value="text">Text</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="text-[11px] text-muted-foreground/60">Each card can render as a visual card or as plain text. Cards can also be used card-only with an optional description, or mixed with other tools.</p>
+            <p className="text-[11px] text-muted-foreground/60">Learn about <a target="_blank" rel="noopener noreferrer" href="https://github.com/Houloude9IOfficial/RemiAI/blob/main/workers/remiapi/README.md" className="underline">RemiAPI</a>.</p>
           </div>
         </CardContent>
       </Card>

@@ -91,8 +91,17 @@ export async function POST(req: Request) {
     `Timezone: ${timeDetails.timezone} (${timeDetails.utcOffset})\n` +
     `Weekday: ${timeDetails.weekday}`;
 
-  // 2. User preferences
-  const prefs = await db.select().from(userPreferences).get();
+  // 2. User preferences (automigrate 0043 if the DB predates it)
+  let prefs: (typeof userPreferences.$inferSelect) | undefined;
+  try {
+    prefs = await db.select().from(userPreferences).get();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message.toLowerCase() : String(e).toLowerCase();
+    if (!msg.includes("no such column") && !msg.includes("has no column")) throw e;
+    const { ensureRemiPrefsColumns } = await import("@/db");
+    ensureRemiPrefsColumns();
+    prefs = await db.select().from(userPreferences).get();
+  }
   const prefParts: string[] = [];
   if (prefs?.preferredName) {
     prefParts.push(

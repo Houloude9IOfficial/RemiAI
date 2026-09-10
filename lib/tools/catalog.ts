@@ -248,6 +248,26 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     togglable: false,
     requiresApiKey: false,
   },
+  // ── Remi Cards — visual cards via RemiAPI Worker (builtin, profile-toggled)
+  {
+    id: "remi_cards",
+    name: "Visual Cards",
+    description:
+      "Zero-cost visual cards via the RemiAPI Cloudflare Worker. Edge-cached (Cache API), rate-limited, no API key needed for the core five. Toggle in Profile → RemiAPI.",
+    toolNames: [
+      "weather_card",
+      "timezone_card",
+      "currency_card",
+      "map_card",
+      "crypto_card",
+      "news_card",
+      "stock_card",
+    ],
+    category: "builtin",
+    subgroup: "Web & Research",
+    togglable: false,
+    requiresApiKey: false,
+  },
   // ── Delay tool (builtin, always on, not togglable) ──
   {
     id: "delay",

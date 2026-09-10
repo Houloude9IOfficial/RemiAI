@@ -107,6 +107,30 @@ function tableExists(tableName: string): boolean {
 }
 
 /**
+ * Ensure the RemiAPI preference columns exist (migration 0043). Extracted so
+ * routes can self-heal immediately on a SQLITE_ERROR without waiting for the
+ * next server restart / instrumentation `register()` to run.
+ */
+export function ensureRemiPrefsColumns(): void {
+  if (!tableExists("user_preferences")) return;
+  let cols = tableColumns("user_preferences");
+  const ensure = (col: string, ddl: string) => {
+    if (cols.has(col)) return;
+    try {
+      sqlite.exec(ddl);
+    } catch (e) {
+      // Another concurrent request may have just added it — ignore duplicate.
+      const msg = e instanceof Error ? e.message.toLowerCase() : String(e).toLowerCase();
+      if (!msg.includes("duplicate column")) throw e;
+    }
+    cols = tableColumns("user_preferences");
+  };
+  ensure("remi_api_url", 'ALTER TABLE "user_preferences" ADD COLUMN "remi_api_url" TEXT NOT NULL DEFAULT \'\'');
+  ensure("remi_api_enabled", 'ALTER TABLE "user_preferences" ADD COLUMN "remi_api_enabled" INTEGER NOT NULL DEFAULT 1');
+  ensure("card_display_modes", 'ALTER TABLE "user_preferences" ADD COLUMN "card_display_modes" TEXT NOT NULL DEFAULT \'{}\'');
+}
+
+/**
  * Repair schema drift from installations whose migration journal is ahead of
  * this checkout. Drizzle orders migrations by timestamp, so an older local
  * migration can be skipped even when a required table/column is absent.
@@ -137,6 +161,7 @@ function repairSchemaCompatibility(): void {
     if (!columns.has("enable_new_models")) {
       sqlite.exec('ALTER TABLE "user_preferences" ADD COLUMN "enable_new_models" INTEGER NOT NULL DEFAULT 1');
     }
+    ensureRemiPrefsColumns();
   }
 
   if (tableExists("provider_models")) {

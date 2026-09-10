@@ -1446,7 +1446,7 @@ export function ChatInput({
                             <span className="block">Memory</span>
                             <span className="block text-[10px] font-normal text-muted-foreground">
                               {memoryEnabled === false
-                                ? "Off — fully isolated: no memory, profile, preferences, or file access"
+                                ? "Disabled. No memory, profile, preferences, or file access"
                                 : "Remembers you across conversations"}
                             </span>
                           </span>

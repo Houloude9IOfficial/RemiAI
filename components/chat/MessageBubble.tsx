@@ -8,6 +8,7 @@ import { Copy, Check, RefreshCw, Pencil, X } from "lucide-react";
 import { ToolCallGroup, FileChangeDigest, extractFileChanges } from "./ToolCallGroup";
 import { ActivityDisclosure } from "./ActivityDisclosure";
 import { VisualCard } from "./VisualCard";
+import { RemiCard } from "./RemiCard";
 import { GeneratingIndicator } from "./GeneratingIndicator";
 import { ReasoningBlock } from "./ReasoningBlock";
 import { FollowupSuggestions } from "./FollowupSuggestions";
@@ -173,7 +174,7 @@ function CopyButton({ text, ariaLabel = "Copy message" }: { text: string; ariaLa
       onClick={copy}
       aria-label={ariaLabel}
       title={ariaLabel}
-      className="flex h-6.5 w-6.5 items-center justify-center rounded-md text-muted-foreground/55 transition-colors hover:bg-muted hover:text-foreground active:scale-90"
+      className="flex h-6.5 w-6.5 items-center justify-center rounded-md text-muted-foreground/55 transition-colors hover:text-foreground active:scale-90"
     >
       {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
     </button>
@@ -212,7 +213,7 @@ function RegenerateButton({
         onClick={requestRegenerate}
         aria-label="Regenerate response"
         title="Regenerate response"
-        className="flex h-6.5 w-6.5 items-center justify-center rounded-md text-muted-foreground/55 transition-colors hover:bg-muted hover:text-foreground active:scale-90"
+        className="flex h-6.5 w-6.5 items-center justify-center rounded-md text-muted-foreground/55 transition-colors hover:text-foreground active:scale-90"
       >
         <RefreshCw className="h-3.5 w-3.5" />
       </button>
@@ -417,10 +418,22 @@ type Segment =
   | { type: "reasoning"; text: string; isStreaming: boolean }
   | { type: "tool"; parts: UIMessage["parts"] }
   | { type: "visual"; part: UIMessage["parts"][number] }
+  | { type: "remiCard"; part: UIMessage["parts"][number] }
   | { type: "sessionPresent"; part: UIMessage["parts"][number] }
   | { type: "canvasPresent"; part: UIMessage["parts"][number] }
   | { type: "suggestions"; data: unknown }
   | { type: "sources"; data: unknown };
+
+/** Remi card tool names — promoted to inline RemiCard instead of a generic ToolCallGroup. */
+const REMI_CARD_TOOL_NAMES = new Set([
+  "weather_card",
+  "timezone_card",
+  "currency_card",
+  "map_card",
+  "crypto_card",
+  "news_card",
+  "stock_card",
+]);
 
 /**
  * Text this short between two tool calls is transitional filler (e.g.
@@ -642,6 +655,8 @@ function buildSegments(parts: UIMessage["parts"]): Segment[] {
 
       if (shortToolName === "create_visual") {
         segments.push({ type: "visual", part });
+      } else if (shortToolName && REMI_CARD_TOOL_NAMES.has(shortToolName)) {
+        segments.push({ type: "remiCard", part });
       } else if (
         shortToolName === "session_present_files" ||
         shortToolName === "session_present_file"
@@ -795,7 +810,7 @@ function UserMessageBubble({
                 onClick={() => setIsEditing(true)}
                 aria-label="Edit message"
                 title="Edit message"
-                className="flex h-6.5 w-6.5 items-center justify-center rounded-md text-muted-foreground/55 transition-colors hover:bg-muted hover:text-foreground active:scale-90"
+                className="flex h-6.5 w-6.5 items-center justify-center rounded-md text-muted-foreground/55 transition-colors hover:text-foreground active:scale-90"
               >
                 <Pencil className="h-3.5 w-3.5" />
               </button>
@@ -996,6 +1011,8 @@ export function MessageBubble({
               />
             ) : segment.type === "visual" ? (
               <VisualCardSegment key={`visual-${idx}`} part={segment.part} />
+            ) : segment.type === "remiCard" ? (
+              <RemiCardSegment key={`remi-${idx}`} part={segment.part} />
             ) : segment.type === "sessionPresent" ? (
               <SessionFilesPresentSegment
                 key={`present-${idx}`}
@@ -1136,6 +1153,81 @@ function VisualCardSegment({ part }: { part: UIMessage["parts"][number] }) {
   }
 
   return <VisualCard data={output} />;
+}
+
+// ── Remi card segment — inline visual card (weather, timezone, etc.) ──
+
+function RemiCardSegment({ part }: { part: UIMessage["parts"][number] }) {
+  const partObj = part as Record<string, unknown>;
+  const state = (partObj.state as string) ?? "call-result";
+  const output = partObj.output;
+  const toolName = (() => {
+    try {
+      return getToolName(part as Parameters<typeof getToolName>[0]);
+    } catch {
+      return "";
+    }
+  })();
+  const isComplete = state === "output-available" || state === "approval-responded";
+  const isError = state === "output-error";
+  if (isError) {
+    return (
+      <div className="overflow-hidden rounded-xl border border-destructive/20 bg-destructive/[0.04] p-4 text-sm text-destructive">
+        Card could not be loaded — the tool call encountered an error.
+      </div>
+    );
+  }
+  if (!isComplete) {
+    return (
+      <div className="overflow-hidden rounded-xl border border-border/55 bg-surface-2/40">
+        <div className="flex items-center gap-2.5 px-3.5 py-3">
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary/10">
+            <svg className="h-3.5 w-3.5 animate-spin text-primary" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4 31.4" strokeLinecap="round" />
+            </svg>
+          </div>
+          <span className="text-sm font-medium text-foreground">Loading {toolName.replace("_card", "")} card…</span>
+        </div>
+      </div>
+    );
+  }
+  if (!output || typeof output !== "object") {
+    return (
+      <div className="overflow-hidden rounded-xl border border-destructive/20 bg-destructive/[0.04] p-4 text-sm text-destructive">
+        Card could not be rendered — unexpected output format.
+      </div>
+    );
+  }
+  const rec = output as Record<string, unknown>;
+  // Per-card "text" mode (profile setting) — render a compact textual fallback instead of the visual card.
+  if (rec.displayMode === "text") {
+    const data = (rec.data as Record<string, unknown> | undefined) ?? rec;
+    const desc = typeof rec.description === "string" ? rec.description : "";
+    // Render a minimal text summary; the full structured data stays in the tool output for the model.
+    const preview = (() => {
+      try {
+        const card = String(rec.card ?? "card");
+        if (card === "weather" && data) {
+          const cur = (data.current as Record<string, unknown> | undefined) ?? data;
+          const t = cur?.temperature_c ?? (data as Record<string, unknown>).temperature_c;
+          return `Weather — ${typeof t === "number" ? `${Number(t).toFixed(1)}°C` : "—"} · ${String((data as Record<string, unknown>).location ?? "")}`;
+        }
+        if (card === "currency" && data) return `${String(data.from ?? "")} → ${String(data.to ?? "")} · ${String(data.converted ?? data.rate ?? "")}`;
+        if (card === "crypto" && data) return `${String(data.coin ?? card)} · $${String(data.price ?? "—")}`;
+        return JSON.stringify(data).slice(0, 220);
+      } catch {
+        return "";
+      }
+    })();
+    return (
+      <div className="rounded-xl border border-border/40 bg-card px-3.5 py-2.5 text-sm">
+        <div className="text-xs font-semibold capitalize tracking-wide">{String(rec.card ?? "card")}</div>
+        <div className="mt-1 text-sm text-muted-foreground">{preview}</div>
+        {desc ? <div className="mt-1 text-[11px] italic text-muted-foreground">{desc}</div> : null}
+      </div>
+    );
+  }
+  return <RemiCard data={output} />;
 }
 
 // ── Session files present segment — extracts output from a session_present_files part ──
