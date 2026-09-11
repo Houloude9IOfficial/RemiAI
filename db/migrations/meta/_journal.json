@@ -295,6 +295,20 @@
       "when": 1788400000000,
       "tag": "0046_heartbeats",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "6",
+      "when": 1788500000000,
+      "tag": "0047_heartbeat_fallback_mode",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "6",
+      "when": 1788600000000,
+      "tag": "0048_heartbeat_denied_tools",
+      "breakpoints": true
     }
   ]
 }

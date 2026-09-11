@@ -205,6 +205,24 @@ export function ensureMemoryColumns(): void {
   } catch {}
 }
 
+/** Keep heartbeat settings compatible with databases upgraded from 0047. */
+export function ensureHeartbeatColumns(): void {
+  if (!tableExists("heartbeats")) return;
+  let columns = tableColumns("heartbeats");
+  const ensure = (column: string, definition: string) => {
+    if (columns.has(column)) return;
+    try {
+      sqlite.exec(`ALTER TABLE "heartbeats" ADD COLUMN "${column}" ${definition}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+      if (!message.includes("duplicate column")) throw error;
+    }
+    columns = tableColumns("heartbeats");
+  };
+  ensure("fallback_mode", "TEXT NOT NULL DEFAULT 'fail'");
+  ensure("denied_tool_names", "TEXT NOT NULL DEFAULT '[]'");
+}
+
 /**
  * Repair schema drift from installations whose migration journal is ahead of
  * this checkout. Drizzle orders migrations by timestamp, so an older local
@@ -215,6 +233,7 @@ export function ensureMemoryColumns(): void {
  * `current_version` → `version` when those legacy columns exist.
  */
 function repairSchemaCompatibility(): void {
+  ensureHeartbeatColumns();
   if (tableExists("conversations")) {
     const columns = tableColumns("conversations");
     if (!columns.has("quality_policy")) {
@@ -481,6 +500,10 @@ async function initializeAppInternal(): Promise<void> {
   // Auto-run migrations on startup so the app works out of the box
   // without requiring a separate `npm run db:migrate` step.
   try {
+    // Reconcile columns created by a previous compatibility repair before
+    // Drizzle sees the migration. This keeps partially upgraded databases
+    // from failing on a duplicate-column ALTER TABLE.
+    reconcileAdditiveMigrations();
     migrate(db, {
       migrationsFolder: path.join(/*turbopackIgnore: true*/ process.cwd(), "db/migrations"),
     });

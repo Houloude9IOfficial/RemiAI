@@ -1,7 +1,7 @@
 import { desc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { db } from "@/db";
+import { db, ensureHeartbeatColumns } from "@/db";
 import { heartbeats, providerModels, providers } from "@/db/schema";
 
 const schema = z.object({
@@ -13,8 +13,10 @@ const schema = z.object({
   timezone: z.string().min(1).max(80).default("UTC"),
   providerId: z.coerce.number().int().positive().nullable().optional(),
   modelId: z.string().max(300).nullable().optional(),
+  fallbackMode: z.enum(["auto", "fail"]).default("fail"),
   allowedToolNames: z.array(z.string()).default([]),
   allowedToolGroups: z.array(z.string()).default([]),
+  deniedToolNames: z.array(z.string()).default([]),
   allowedMcpServerIds: z.array(z.coerce.number().int().positive()).default([]),
   maxSteps: z.coerce.number().int().min(1).max(50).default(20),
   timeoutSeconds: z.coerce.number().int().min(60).max(3600).default(300),
@@ -29,12 +31,14 @@ function nextRun(input: z.infer<typeof schema>) {
 }
 
 export async function GET() {
+  ensureHeartbeatColumns();
   const rows = await db.select().from(heartbeats).orderBy(desc(heartbeats.updatedAt), desc(heartbeats.id)).all();
   return NextResponse.json({ heartbeats: rows, count: rows.length });
 }
 
 export async function POST(req: Request) {
   try {
+    ensureHeartbeatColumns();
     const input = schema.parse(await req.json());
     const now = new Date().toISOString();
     const provider = input.providerId ? await db.select().from(providers).where(eq(providers.id, input.providerId)).get() : await db.select().from(providers).where(eq(providers.enabled, true)).get();
