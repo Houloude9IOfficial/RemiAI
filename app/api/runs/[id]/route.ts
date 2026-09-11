@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAutomationRun, getAutomationRunEvents } from "@/lib/runs/automation";
+import { getAutomationRun, getAutomationRunEvents, getHeartbeatToolCalls } from "@/lib/runs/automation";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -16,5 +16,6 @@ export async function GET(
   const run = await getAutomationRun(runId);
   if (!run) return NextResponse.json({ error: "Run not found" }, { status: 404 });
   const events = await getAutomationRunEvents(runId);
-  return NextResponse.json({ run, events });
+  const toolCalls = run.kind === "heartbeat" ? await getHeartbeatToolCalls(runId) : [];
+  return NextResponse.json({ run, events, toolCalls });
 }

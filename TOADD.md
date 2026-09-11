@@ -315,3 +315,5 @@ the ai users bash to write/edit/delete files, but it should use bash for command
 <!-- make multiple tool calls in a chain of thought to be limited and scrollable instead of bloating the UI with too many tool calls. Also if a COT (chain of thought) had one error and one success instead of making the whole COT icon red, make it yellow. And while generating cot/thinking/reasoning, allow collapsing them all. -->
 
 <!-- opening profile settings takes a long time, and it should be faster. -->
+
+<!-- Add fully functional Heartbeat system that allows the AI to auto-run automatically at any moment with no client connected to execute stuff, or just do stuff on it's own, for example use mcp social-media like tools and others, or follow a prompt. Not in a chat, but keep tools and stuff, configurable and save a result and tool calls, and other statistics. -->

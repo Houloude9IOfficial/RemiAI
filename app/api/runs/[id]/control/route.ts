@@ -43,7 +43,7 @@ async function dispatchRetry(run: NonNullable<Awaited<ReturnType<typeof getAutom
   if (!run.sourceId) throw new Error("This run has no retryable source record.");
   if (run.kind === "routine") {
     void executeRoutine(run.sourceId, 30_000, {
-      conversationId: run.conversationId,
+      conversationId: run.conversationId ?? undefined,
       automationRunId: run.id,
     });
     return;

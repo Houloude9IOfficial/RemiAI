@@ -9,7 +9,7 @@ export type AutomationNotification = {
   type: "automation_run_completed" | "automation_run_failed" | "automation_run_cancelled";
   run: {
     id: number;
-    conversationId: number;
+    conversationId: number | null;
     kind: string;
     name: string;
     task: string;
@@ -82,7 +82,7 @@ export function publishUserNotification(input: {
   return notification;
 }
 
-export function publishAutomationNotification(run: AutomationRunRow): void {
+export function publishAutomationNotification(run: AutomationRunRow | (Omit<AutomationRunRow, "heartbeatId"> & { heartbeatId?: number | null })): void {
   const type = run.status === "completed"
     ? "automation_run_completed"
     : run.status === "cancelled"

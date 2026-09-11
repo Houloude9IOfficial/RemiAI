@@ -18,6 +18,8 @@ npx wrangler deploy
 
 ## Configure the app
 
+We offer a free public Worker at `https://remiapi.remiai.crickdevs.com`, but you can deploy your own to avoid shared limits and to use a private NewsAPI key.
+
 In your RemiAI host (Next.js), set:
 
 - `NEXT_PUBLIC_REMIAPI_URL` — e.g. `https://remiapi.your-subdomain.workers.dev` (fallback is the same-origin `/api/remiapi` or a documented default once live)

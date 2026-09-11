@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Brain, BarChart3, Files, FolderOpen, Pen, Plug, Settings2, Wrench, Bot, Eye, Terminal, Gamepad2, Clock, ChevronUp, Shield, Radio, Webhook, PanelLeftClose, PanelLeftOpen, Plus, Sparkles, Timer } from "lucide-react";
+import { Activity, Brain, BarChart3, Files, FolderOpen, Pen, Plug, Settings2, Wrench, Bot, Eye, Terminal, Gamepad2, Clock, ChevronUp, Shield, Radio, Webhook, PanelLeftClose, PanelLeftOpen, Plus, Sparkles, Timer } from "lucide-react";
 import { useNewChat } from "@/lib/hooks/use-new-chat";
 import { ConversationList } from "./ConversationList";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -29,6 +29,7 @@ const primaryLinks = [
 
 const moreLinks = [
   { href: "/settings/tasks", label: "Agent Tasks", icon: Bot },
+  { href: "/settings/heartbeats", label: "Heartbeats", icon: Activity },
   { href: "/settings/directories", label: "Directories", icon: FolderOpen },
   { href: "/games", label: "Games", icon: Gamepad2 },
   { href: "/talk", label: "Talk", icon: Radio },

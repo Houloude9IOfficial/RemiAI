@@ -11,6 +11,7 @@ import { generateText, stepCountIs } from "ai";
 import { db } from "@/db";
 import {
   scheduledTasks,
+  heartbeats,
   conversations,
   providers,
   mcpServers,
@@ -53,6 +54,7 @@ import {
   scheduleAutomationRetry,
   startAutomationRun,
 } from "@/lib/runs/automation";
+import { executeHeartbeat } from "@/lib/heartbeats/runner";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -178,16 +180,42 @@ async function pollDueTasks() {
       )
       .all() as ScheduledTaskRow[];
 
-    if (dueTasks.length === 0) return;
+    if (dueTasks.length > 0) {
+      console.log(`[scheduler] Found ${dueTasks.length} due task(s)`);
+      await Promise.all(dueTasks.map((task) => executeTask(task)));
+    }
 
-    console.log(`[scheduler] Found ${dueTasks.length} due task(s)`);
-
-    // Execute each task in parallel (they're independent)
-    await Promise.all(
-      dueTasks.map((task) => executeTask(task)),
-    );
+    const dueHeartbeats = await db.select().from(heartbeats)
+      .where(and(eq(heartbeats.enabled, true), lt(heartbeats.nextRunAt, now))).all();
+    await Promise.all(dueHeartbeats.map((heartbeat) => executeDueHeartbeat(heartbeat)));
   } catch (err) {
     console.error("[scheduler] Poll error:", err);
+  }
+}
+
+async function executeDueHeartbeat(heartbeat: typeof heartbeats.$inferSelect) {
+  // Claim the schedule before starting work. A second poll/process will see
+  // the future nextRunAt and cannot launch a duplicate run.
+  const claim = await db.update(heartbeats)
+    .set({ nextRunAt: new Date(Date.now() + 60_000).toISOString(), updatedAt: new Date().toISOString() })
+    .where(and(eq(heartbeats.id, heartbeat.id), eq(heartbeats.enabled, true), lt(heartbeats.nextRunAt, new Date().toISOString())))
+    .run();
+  if (!claim.changes) return;
+  try {
+    await executeHeartbeat(heartbeat);
+  } catch (error) {
+    console.error(`[scheduler] Heartbeat #${heartbeat.id} failed:`, error);
+  } finally {
+    const now = new Date();
+    let next: Date;
+    if (heartbeat.scheduleType === "cron") {
+      next = computeNextCronTime(heartbeat.schedule, now);
+    } else {
+      const seconds = Math.max(60, Number(heartbeat.schedule) || 3600);
+      next = new Date(now.getTime() + seconds * 1000);
+    }
+    await db.update(heartbeats).set({ lastRunAt: now.toISOString(), nextRunAt: next.toISOString(), updatedAt: now.toISOString() })
+      .where(eq(heartbeats.id, heartbeat.id));
   }
 }
 

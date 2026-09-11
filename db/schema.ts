@@ -368,10 +368,10 @@ export const fileIndex = sqliteTable(
 export const automationRuns = sqliteTable("automation_runs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   conversationId: integer("conversation_id")
-    .notNull()
     .references(() => conversations.id, { onDelete: "cascade" }),
+  heartbeatId: integer("heartbeat_id"),
   kind: text("kind", {
-    enum: ["routine", "scheduled_task", "webhook", "agent"],
+    enum: ["routine", "scheduled_task", "webhook", "agent", "heartbeat"],
   }).notNull(),
   sourceId: integer("source_id"),
   parentRunId: integer("parent_run_id"),
@@ -424,6 +424,45 @@ export const automationRunEvents = sqliteTable("automation_run_events", {
     .notNull()
     .default({}),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const heartbeatToolCalls = sqliteTable("heartbeat_tool_calls", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  runId: integer("run_id")
+    .notNull()
+    .references(() => automationRuns.id, { onDelete: "cascade" }),
+  callId: text("call_id"),
+  toolName: text("tool_name").notNull(),
+  input: text("input"),
+  output: text("output"),
+  status: text("status", { enum: ["running", "completed", "failed"] }).notNull(),
+  startedAt: text("started_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  completedAt: text("completed_at"),
+  durationMs: integer("duration_ms"),
+});
+
+export const heartbeats = sqliteTable("heartbeats", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  prompt: text("prompt").notNull(),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  scheduleType: text("schedule_type", { enum: ["interval", "cron"] }).notNull().default("interval"),
+  schedule: text("schedule").notNull().default("3600"),
+  timezone: text("timezone").notNull().default("UTC"),
+  nextRunAt: text("next_run_at").notNull(),
+  lastRunAt: text("last_run_at"),
+  providerId: integer("provider_id").references(() => providers.id, { onDelete: "set null" }),
+  modelId: text("model_id"),
+  allowedToolNames: text("allowed_tool_names", { mode: "json" }).$type<string[]>().notNull().default([]),
+  allowedToolGroups: text("allowed_tool_groups", { mode: "json" }).$type<string[]>().notNull().default([]),
+  allowedMcpServerIds: text("allowed_mcp_server_ids", { mode: "json" }).$type<number[]>().notNull().default([]),
+  maxSteps: integer("max_steps").notNull().default(20),
+  timeoutSeconds: integer("timeout_seconds").notNull().default(300),
+  maxAttempts: integer("max_attempts").notNull().default(2),
+  retentionDays: integer("retention_days").notNull().default(30),
+  notifyOnCompletion: integer("notify_on_completion", { mode: "boolean" }).notNull().default(false),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const routines = sqliteTable("routines", {
