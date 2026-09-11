@@ -4,7 +4,7 @@ import type { UIMessage } from "ai";
 import { isTextUIPart, isToolUIPart, isReasoningUIPart, getToolName } from "ai";
 import { Component, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Copy, Check, RefreshCw, Pencil, X } from "lucide-react";
+import { Copy, Check, Play, RefreshCw, Pencil, X } from "lucide-react";
 import { ToolCallGroup, FileChangeDigest, extractFileChanges } from "./ToolCallGroup";
 import { ActivityDisclosure } from "./ActivityDisclosure";
 import { VisualCard } from "./VisualCard";
@@ -259,16 +259,19 @@ function RegenerateButton({
 function MessageActionsRow({
   children,
   align = "left",
+  alwaysVisible = false,
 }: {
   children: React.ReactNode;
   align?: "left" | "right";
+  alwaysVisible?: boolean;
 }) {
   return (
     <div
       className={cn(
         "flex items-center gap-0.5",
         align === "right" ? "justify-end" : "justify-start",
-        "md:opacity-0 md:transition-opacity md:duration-200 md:group-hover:opacity-100 md:focus-within:opacity-100",
+        !alwaysVisible &&
+          "md:opacity-0 md:transition-opacity md:duration-200 md:group-hover:opacity-100 md:focus-within:opacity-100",
       )}
     >
       {children}
@@ -722,9 +725,11 @@ function buildSegments(parts: UIMessage["parts"]): Segment[] {
 function UserMessageBubble({
   message,
   onEdit,
+  onContinue,
 }: {
   message: UIMessage;
   onEdit?: (messageId: string, text: string) => void;
+  onContinue?: () => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const inlineText = message.parts
@@ -801,8 +806,19 @@ function UserMessageBubble({
             )}
           </div>
         )}
-        {!isEditing && (hasText || onEdit) && (
-          <MessageActionsRow align="right">
+        {!isEditing && (hasText || onEdit || onContinue) && (
+          <MessageActionsRow align="right" alwaysVisible={Boolean(onContinue)}>
+            {onContinue && (
+              <button
+                type="button"
+                onClick={onContinue}
+                aria-label="Continue response"
+                title="Continue response"
+                className="flex h-6.5 w-6.5 items-center justify-center rounded-md text-muted-foreground/55 transition-colors hover:text-foreground active:scale-90"
+              >
+                <Play className="h-3.5 w-3.5 fill-current" />
+              </button>
+            )}
             {hasText && <CopyButton text={cleanText} ariaLabel="Copy message" />}
             {onEdit && (
               <button
@@ -827,6 +843,7 @@ export function MessageBubble({
   isStreaming,
   onRegenerate,
   onEdit,
+  onContinue,
   messagesAfter,
   conversationId,
 }: {
@@ -836,13 +853,21 @@ export function MessageBubble({
   onRegenerate?: (messageId: string) => void;
   /** Called with the message id and replacement text to edit it. */
   onEdit?: (messageId: string, text: string) => void;
+  /** Called when this is the last user message without an assistant reply. */
+  onContinue?: () => void;
   /** Number of messages that come after this one (used by the regenerate confirm). */
   messagesAfter?: number;
   /** Conversation id used by chat-scoped evidence export actions. */
   conversationId?: number;
 }) {
   if (message.role === "user") {
-    return <UserMessageBubble message={message} onEdit={onEdit} />;
+    return (
+      <UserMessageBubble
+        message={message}
+        onEdit={onEdit}
+        onContinue={onContinue}
+      />
+    );
   }
 
   // ---- Assistant messages ----

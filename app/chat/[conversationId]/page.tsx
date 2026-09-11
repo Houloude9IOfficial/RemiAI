@@ -159,6 +159,19 @@ function messagePresentsCanvas(message: { parts: unknown[] }): boolean {
   return false;
 }
 
+/** Empty assistant placeholders are left behind when a generation is stopped
+ * before it produces any output. They are not a response the user can read. */
+function assistantHasOutput(message: { role?: string; parts?: unknown[] } | undefined): boolean {
+  if (message?.role !== "assistant") return false;
+  return (message.parts ?? []).some((rawPart) => {
+    if (!rawPart || typeof rawPart !== "object") return false;
+    const part = rawPart as Record<string, unknown>;
+    if (part.type === "text") return typeof part.text === "string" && part.text.trim().length > 0;
+    return typeof part.type === "string" &&
+      (part.type.startsWith("tool-") || part.type === "tool-invocation" || part.type === "reasoning");
+  });
+}
+
 // ── Reconnecting Banner ─────────────────────────────────────────────
 
 function ReconnectingBanner() {
@@ -564,6 +577,9 @@ function ConversationChat({
   // stuck run (one that keeps hitting the limit with no progress) falls back
   // to the visible error banner after the budget is spent.
   const autoContinueBudgetRef = useRef(MAX_AUTO_CONTINUES_PER_MESSAGE);
+  // Keep the composer reactive even when a failed request does not cause the
+  // SDK to publish the new user message back through `messages`.
+  const [pendingUserTurn, setPendingUserTurn] = useState(false);
 
   useEffect(() => {
     primeClientLocation();
@@ -798,6 +814,7 @@ function ConversationChat({
       // A fresh user message gets a fresh auto-continue budget — the previous
       // turn's silent resumes must not leak into the new request.
       autoContinueBudgetRef.current = MAX_AUTO_CONTINUES_PER_MESSAGE;
+      setPendingUserTurn(true);
       // A fresh request starts a fresh present — the previous request's canvas
       // no longer claims the panel slot.
       canvasWinsRef.current = false;
@@ -805,6 +822,32 @@ function ConversationChat({
     },
     [clearError, clearChatError, sendMessage],
   );
+
+  // A user message can survive locally even when its assistant request never
+  // started (for example after a dropped connection). Re-submit the current
+  // last message so the SDK/server can generate the missing assistant reply.
+  const handleContinueLastMessage = useCallback(() => {
+    if (status === "submitted" || status === "streaming") return;
+    clearError();
+    clearChatError();
+    autoContinueBudgetRef.current = MAX_AUTO_CONTINUES_PER_MESSAGE;
+    setPendingUserTurn(true);
+    canvasWinsRef.current = false;
+    const lastUserMessage = [...messagesRef.current]
+      .reverse()
+      .find((message) => message.role === "user");
+    if (lastUserMessage) {
+      sendMessage({ parts: lastUserMessage.parts, messageId: lastUserMessage.id });
+    } else {
+      sendMessage();
+    }
+  }, [status, clearError, clearChatError, sendMessage]);
+
+  const lastVisibleMessage = messages.at(-1);
+  const hasUnansweredLastMessage =
+    lastVisibleMessage?.role === "user" ||
+    (lastVisibleMessage?.role === "assistant" && !assistantHasOutput(lastVisibleMessage)) ||
+    (pendingUserTurn && lastVisibleMessage?.role !== "assistant");
 
   const [isRegenerating, setIsRegenerating] = useState(false);
   const handleEdit = useCallback(
@@ -1154,6 +1197,7 @@ function ConversationChat({
                 onSend={(text) => sendMessage({ text })}
                 onRegenerate={handleRegenerate}
                 onEdit={handleEdit}
+                onContinue={handleContinueLastMessage}
                 conversationId={conversationId}
               />
             )}
@@ -1215,6 +1259,9 @@ function ConversationChat({
                     modelId={modelId}
                     onModelChange={handleModelChange}
                     onSend={handleSend}
+                    onContinue={
+                      hasUnansweredLastMessage ? handleContinueLastMessage : undefined
+                    }
                     onStop={stop}
                     isTemporary={isTemporary}
                     memoryEnabled={memoryEnabled}

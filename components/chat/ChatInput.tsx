@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   ArrowUp,
+  Play,
   Square,
   Sparkles,
   ListChecks,
@@ -197,6 +198,7 @@ export function ChatInput({
   modelId,
   onModelChange,
   onSend,
+  onContinue,
   onStop,
   isTemporary,
   memoryEnabled,
@@ -215,6 +217,8 @@ export function ChatInput({
   modelId?: string | null;
   onModelChange?: (providerId: number, modelId: string) => void;
   onSend: (text: string) => void;
+  /** Continues the latest unanswered user message when the composer is empty. */
+  onContinue?: () => void;
   onStop: () => void;
   /** Temporary-chat flag + per-chat memory switch (fully independent). */
   isTemporary?: boolean;
@@ -969,6 +973,12 @@ export function ChatInput({
     !disabled &&
     !isStreaming &&
     (text.trim().length > 0 || attachedFiles.some((f) => f.status === "uploaded"));
+  const canContinue =
+    Boolean(onContinue) &&
+    !disabled &&
+    !isStreaming &&
+    text.trim().length === 0 &&
+    attachedFiles.length === 0;
 
   const submit = useCallback(() => {
     // Never send while a response is in flight — stop is the only action then.
@@ -1550,13 +1560,16 @@ export function ChatInput({
                 type="button"
                 size="icon"
                 className={cn("shrink-0 rounded-full", sendBtn)}
-                disabled={!canSend}
-                onClick={submit}
-                aria-label="Send message"
+                disabled={!canSend && !canContinue}
+                onClick={canContinue ? onContinue : submit}
+                aria-label={canContinue ? "Continue response" : "Send message"}
+                title={canContinue ? "Continue response" : "Send message"}
               >
-                <ArrowUp
-                  className={large ? "h-5 w-5" : "h-4 w-4"}
-                />
+                {canContinue ? (
+                  <Play className={cn(large ? "h-5 w-5" : "h-4 w-4", "fill-current")} />
+                ) : (
+                  <ArrowUp className={large ? "h-5 w-5" : "h-4 w-4"} />
+                )}
               </Button>
             )}
           </div>
