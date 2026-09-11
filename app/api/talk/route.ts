@@ -11,6 +11,11 @@ import { providers, providerModels } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { getLanguageModel } from "@/lib/providers/factory";
 import { normalizeStreamError, encodeStreamError } from "@/lib/chat/error-payload";
+import { buildContextTools } from "@/lib/tools/context";
+import { buildMemoryTools } from "@/lib/tools/memories";
+import { buildWebSearchTool } from "@/lib/tools/web-search";
+import { webFetchTool } from "@/lib/tools/web-fetch";
+import { estimateTokenCount } from "@/lib/utils";
 
 // ── Talk Mode System Prompt ─────────────────────────────────────────
 // The AI is told to speak naturally, concisely, without markdown/emojis.
@@ -34,6 +39,14 @@ const TALK_SYSTEM_PROMPT = `You are in Talk Mode — a natural voice conversatio
 ## Context and tools
 
 You have access to all the same tools as the main chat — filesystem, web search, memory, etc. Feel free to use them when needed, but keep your responses conversational. When you use a tool, you don't need to announce it — just share what you found naturally.
+
+## Output format — important
+
+Your reply is read aloud by a speech synthesiser and shown as voice captions.
+
+- Return ONLY what you want spoken to the user. Your answer is the message.
+- Never include your reasoning, planning, working, or self-checks in the reply — no "let me think", no step-by-step derivation, no notes to yourself, no thinking tags of any kind.
+- Think it through silently, then say the answer.
 
 ## Memory
 
@@ -126,27 +139,72 @@ export async function POST(req: Request) {
       content: m.content,
     }));
 
-    // Stream the response
+    const timezone = req.headers.get("x-user-timezone") ?? undefined;
+    const locale = req.headers.get("x-user-locale") ?? undefined;
+    // Talk deliberately has a smaller, voice-friendly tool belt than full chat.
+    // These tools are enough to answer current questions, inspect the local
+    // environment, and remember useful context without sending 40 definitions
+    // on every short spoken turn.
+    const tools = {
+      ...buildContextTools(req.headers.get("user-agent") ?? undefined, timezone, locale),
+      ...buildMemoryTools(),
+      web_search: buildWebSearchTool({ userContext: { timezone, language: locale } }),
+      web_fetch: webFetchTool,
+    };
+
+    // Stream the response. Tool calls are allowed to run for several steps so
+    // "look up X and tell me the answer" works in one spoken turn.
     const result = streamText({
       model,
       system: TALK_SYSTEM_PROMPT,
       messages: coreMessages,
-      // No tools in talk mode — keep it pure conversation.
+      tools,
+      stopWhen: ({ steps }) => steps.length >= 5,
       // Retry retryable provider failures up to 3 times before erroring out.
       maxRetries: 3,
     });
 
-    // Convert to text stream for SSE
-    const textStream = result.textStream;
+    // Stream only what the assistant is actually saying to the user.
+    //
+    // `fullStream` (rather than `textStream`) lets us drop every non-answer
+    // part explicitly. Talk mode is read aloud, so reasoning/thinking deltas,
+    // step markers and tool plumbing must never reach it.
+    const stream = result.fullStream;
 
     const encoder = new TextEncoder();
     const readable = new ReadableStream({
       async start(controller) {
         try {
-          for await (const delta of textStream) {
-            const data = JSON.stringify({ type: "text-delta", delta });
-            controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+          let streamedOutput = "";
+          for await (const part of stream) {
+            if (part.type === "text-delta") {
+              streamedOutput += part.text;
+              const data = JSON.stringify({ type: "text-delta", delta: part.text });
+              controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+              continue;
+            }
+
+            if (part.type === "tool-call") {
+              // Text produced before a tool call is working narration
+              // ("let me look that up"), not the answer. Tell the client to
+              // drop it from the captions and stop reading it out.
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify({ type: "clear-text" })}\n\n`),
+              );
+              continue;
+            }
+
+            // reasoning-*, start/finish-step, tool-result, sources, … —
+            // deliberately not spoken.
           }
+          const usage = await result.usage;
+          const inputTokens = usage?.inputTokens ?? estimateTokenCount(TALK_SYSTEM_PROMPT + JSON.stringify(coreMessages));
+          const outputTokens = usage?.outputTokens ?? estimateTokenCount(streamedOutput);
+          // Talk is metered at a deliberately transparent, provider-neutral
+          // reference rate. This is a usage indicator, not a second provider
+          // charge; users still pay their configured provider directly.
+          const costUsd = (inputTokens * 0.15 + outputTokens * 0.60) / 1_000_000;
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "usage", inputTokens, outputTokens, costUsd })}\n\n`));
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         } catch (err) {
           console.error("[Talk] Stream error:", err);

@@ -149,6 +149,11 @@ mac:
   # have the entitlements file otherwise).
   entitlements: entitlements.mac.plist
   entitlementsInherit: entitlements.mac.plist
+  # Talk mode records from the microphone (getUserMedia / Web Speech API).
+  # macOS terminates an app that touches the mic without a usage string, so
+  # this key MUST be in Info.plist or the packaged app crashes on first use.
+  extendInfo:
+    NSMicrophoneUsageDescription: "RemiAI uses the microphone in talk mode so you can speak to your assistant."
   # macOS code signing — set CSC_LINK / CSC_KEY_PASSWORD in CI
   # identity: null  # uncomment to skip signing for local builds
 

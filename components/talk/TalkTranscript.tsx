@@ -1,139 +1,119 @@
-// ── Talk Transcript — Animated line-by-line display ─────────────────
-// Each spoken sentence fades in below the circle with smooth animation.
-// Previous lines fade slightly while maintaining readability.
-// Like ChatGPT/Grok talk mode captions.
+// ── Talk Transcript — rolling sentence captions ─────────────────────
+// Shows the most recent sentences of the assistant's reply, newest at
+// the bottom, ChatGPT talk-mode style.
+//
+// Keys are absolute sentence indices, so a line keeps its identity as the
+// window slides — that's what keeps the animation from re-firing (and the
+// text from jumping) on every streaming delta.
 // ────────────────────────────────────────────────────────────────────
 
 "use client";
 
-import { motion, AnimatePresence } from "framer-motion";
-import { useEffect, useRef } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
-interface TranscriptLine {
-  id: string;
-  text: string;
-  isCurrent: boolean;
-}
-
 interface TalkTranscriptProps {
-  lines: TranscriptLine[];
+  /** The currently streaming assistant reply (markdown already stripped). */
+  text: string;
+  /** Completed turns, retained so Talk does not discard older captions. */
+  messages?: Array<{ role: "user" | "assistant"; content: string }>;
+  /** The sentence currently being spoken by TTS. */
+  activeText?: string;
   className?: string;
 }
+
+type TranscriptLine = {
+  content: string;
+  role: "user" | "assistant";
+  active?: boolean;
+};
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
 function splitIntoSentences(text: string): string[] {
-  // Split on sentence endings while keeping the punctuation
-  const raw = text.split(/(?<=[.!?])\s+/);
-  // Filter out empty strings and trim each sentence
-  return raw
+  return text
+    .split(/(?<=[.!?…])\s+/)
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
 }
 
-// ── Sentence entry animation ────────────────────────────────────────
-
-const sentenceVariants = {
-  initial: {
-    opacity: 0,
-    y: 16,
-    scale: 0.98,
-  },
-  enter: {
-    opacity: 1,
-    y: 0,
-    scale: 1,
-    transition: {
-      duration: 0.5,
-      ease: "easeOut" as const,
-    },
-  },
-  exit: {
-    opacity: 0.4,
-    y: 0,
-    scale: 0.98,
-    transition: {
-      duration: 0.4,
-      ease: "easeOut" as const,
-    },
-  },
-};
-
 // ── Component ───────────────────────────────────────────────────────
 
-export function TalkTranscript({
-  lines,
-  className,
-}: TalkTranscriptProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const prevLineCountRef = useRef(0);
-
-  // Auto-scroll to the current line
-  useEffect(() => {
-    if (lines.length > prevLineCountRef.current) {
-      prevLineCountRef.current = lines.length;
-      // Small delay to let the animation start
-      const timer = setTimeout(() => {
-        containerRef.current?.scrollTo({
-          top: containerRef.current.scrollHeight,
-          behavior: "smooth",
-        });
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [lines.length]);
-
-  if (lines.length === 0) {
+export function TalkTranscript({ text, messages = [], activeText, className }: TalkTranscriptProps) {
+  if (activeText) {
     return (
-      <div className={cn("flex items-center justify-center", className)}>
-        <p className="text-xs text-muted-foreground/30 italic">
-          Your conversation will appear here
-        </p>
+      <div className={cn("flex min-h-16 w-full items-center justify-center overflow-hidden", className)}>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.p
+            key={activeText}
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -24 }}
+            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+            className="max-w-xl text-center text-base leading-relaxed text-foreground"
+          >
+            {activeText}
+          </motion.p>
+        </AnimatePresence>
       </div>
     );
   }
 
+  // The voice surface shows only the sentence currently being spoken. The
+  // complete history is retained by the page for the next model request.
+  return null;
+
+  const history: TranscriptLine[] = messages.flatMap((message) =>
+    splitIntoSentences(message.content).map((content) => ({
+      content,
+      role: message.role,
+    })),
+  );
+  const active: TranscriptLine[] = splitIntoSentences(text).map((content) => ({
+    content,
+    role: "assistant" as const,
+    active: true,
+  }));
+  // Once a turn finishes, `messages` already contains the same assistant
+  // reply as `text`; don't show that reply twice.
+  const completed = text && messages.at(-1)?.role === "assistant"
+    && messages.at(-1)?.content === text
+    ? history.slice(0, -splitIntoSentences(text).length)
+    : history;
+  const lines = [...completed, ...active];
+  const total = lines.length;
+  if (total === 0) return null;
+
   return (
     <div
-      ref={containerRef}
       className={cn(
-        "flex flex-col items-center gap-3 overflow-y-auto py-4",
+        "flex max-h-64 w-full flex-col items-center justify-end gap-2.5 overflow-y-auto px-2",
         className,
       )}
-      style={{ scrollbarWidth: "none" }}
     >
-      <AnimatePresence mode="popLayout">
-        {lines.map((line, idx) => (
-          <motion.div
-            key={line.id}
-            layout
-            variants={sentenceVariants}
-            initial="initial"
-            animate={line.isCurrent ? "enter" : "exit"}
-            exit="exit"
+      {lines.map((line, i) => {
+        const isCurrent = activeText
+          ? line.role === "assistant" && line.content === activeText
+          : i === total - 1 && (line.active || line.role === "assistant");
+        return (
+          <motion.p
+            key={i}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
             className={cn(
-              "max-w-lg text-center transition-all duration-500",
-              line.isCurrent
-                ? "text-foreground"
-                : "text-muted-foreground/50",
+              "max-w-xl text-center leading-relaxed transition-colors duration-500",
+              line.role === "user"
+                ? "text-sm text-primary/55"
+                : isCurrent
+                  ? "text-base text-foreground"
+                  : "text-sm text-muted-foreground/45",
             )}
           >
-            <p
-              className={cn(
-                "leading-relaxed transition-all duration-500",
-                line.isCurrent
-                  ? "text-base font-normal"
-                  : "text-sm font-light",
-              )}
-            >
-              {line.text}
-            </p>
-          </motion.div>
-        ))}
-      </AnimatePresence>
+            {line.content}
+          </motion.p>
+        );
+      })}
     </div>
   );
 }
-
-

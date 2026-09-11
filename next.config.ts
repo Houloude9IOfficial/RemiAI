@@ -72,7 +72,13 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(self)" },
+          // microphone=(self): talk mode needs the mic (Web Speech API and
+          // getUserMedia). `microphone=()` forbids it for the document itself,
+          // which makes Chrome reject the request with `not-allowed` without
+          // ever showing a permission prompt. Same-origin only — the mic is
+          // still unavailable to cross-origin content and to the sandboxed
+          // canvas previews (see the route above).
+          { key: "Permissions-Policy", value: "camera=(), microphone=(self), geolocation=(self)" },
           { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
           { key: "Content-Security-Policy", value: "default-src 'self'; base-uri 'self'; frame-src https://www.openstreetmap.org; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: blob: https: http:; media-src 'self' blob:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'" },
           ...(process.env.NODE_ENV === "production" ? [{ key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" }] : []),
