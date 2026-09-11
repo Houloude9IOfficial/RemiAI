@@ -17,7 +17,7 @@ import { queryRecentChanges } from "@/lib/fs/file-index";
 import { periodicallyPersistMessages } from "@/lib/chat/persist-interval";
 import { streamRegistry } from "@/lib/chat/stream-registry";
 import { estimateTokenCount } from "@/lib/utils";
-import { retrieveRelevantMemories } from "@/lib/chat/memories";
+import { buildMemoryPromptBlock, retrieveRelevantMemories } from "@/lib/chat/memories";
 import { getTimeDetails } from "@/lib/time";
 import { createRunTrace } from "@/lib/observability/run-trace";
 import { isDemoMode, filterDemoTools } from "@/lib/demo-policy";
@@ -145,14 +145,13 @@ export async function POST(req: Request) {
     : "";
 
   // 3. Saved memories — budget-capped (most recent, since there's no query
-  // yet). Skipped for memory-disabled chats (e.g. temporary chats): the AI
-  // must greet without any saved context, and the no-memory prompt variant
-  // below removes the memory guidance too.
+  // yet). Grouped by category; event dates shown inline as [YYYY-MM-DD].
+  // Skipped for memory-disabled chats (e.g. temporary chats): the AI must
+  // greet without any saved context, and the no-memory prompt variant below
+  // removes the memory guidance too.
   const memoryEnabled = conversation.memoryEnabled !== false;
   const relevantMemories = memoryEnabled ? await retrieveRelevantMemories("") : [];
-  const memoryContext = relevantMemories.length > 0
-    ? `\n\n## Saved memories about the user\n${relevantMemories.map((m) => `- ${m.content}`).join("\n")}`
-    : "";
+  const memoryContext = buildMemoryPromptBlock(relevantMemories as any).replace("\n\n## Saved memories", "\n\n## Saved memories about the user");
 
   // 4. Recent file changes
   const recentChanges = memoryEnabled ? await queryRecentChanges(10) : [];

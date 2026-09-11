@@ -106,11 +106,12 @@ export const CONDITIONAL_GROUPS: Record<string, ToolGroup> = {
   },
   memory: {
     label: "memory",
-    tools: ["remember", "get_recent_memories", "search_memories"],
+    tools: ["remember", "update_memory", "get_recent_memories", "search_memories"],
     keywords: [
       "memory", "memories", "remember", "remember this", "save this about me",
       "what do you know about me", "saved facts", "recall about me", "forget that",
-      "personal context", "my preferences",
+      "personal context", "my preferences", "update memory", "edit memory",
+      "category", "health", "work memory", "personal memory",
     ],
   },
   file_index: {

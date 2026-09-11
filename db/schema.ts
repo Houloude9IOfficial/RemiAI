@@ -1,5 +1,7 @@
 import { sql } from "drizzle-orm";
 import { sqliteTable, text, integer, unique } from "drizzle-orm/sqlite-core";
+import { MEMORY_CATEGORIES } from "@/lib/memory-categories";
+export { MEMORY_CATEGORIES };
 
 export const directories = sqliteTable("directories", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -69,9 +71,14 @@ export const mcpServers = sqliteTable("mcp_servers", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
+export type MemoryCategory = (typeof MEMORY_CATEGORIES)[number];
+
 export const memories = sqliteTable("memories", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   content: text("content").notNull(),
+  category: text("category", { enum: MEMORY_CATEGORIES }).notNull().default("general"),
+  /** Optional event date for the memory (YYYY-MM-DD). Distinct from createdAt which is when it was saved. */
+  memoryDate: text("memory_date"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });

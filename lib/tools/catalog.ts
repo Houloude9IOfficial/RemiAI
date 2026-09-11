@@ -161,8 +161,8 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     id: "memory",
     name: "Memory",
     description:
-      "Save and recall facts about the user across conversations. The AI can remember preferences, interests, and personal details.",
-    toolNames: ["remember", "search_memories", "get_recent_memories"],
+      "Save and recall structured facts about the user across conversations — each memory has a category (health, work, personal, etc.) and an optional event date. The AI can create, search, and update memories.",
+    toolNames: ["remember", "update_memory", "search_memories", "get_recent_memories"],
     category: "memory",
     togglable: false,
     requiresApiKey: false,

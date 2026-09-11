@@ -32,6 +32,7 @@ const MINOR_TOOLS = new Set([
   "query_recent_changes",
   "search_memories",
   "remember",
+  "update_memory",
   "get_profile",
   "update_profile",
   "get_tool_help",
@@ -133,6 +134,7 @@ function minorSummary(name: string, output: unknown, running: boolean): string {
   }
   if (name === "load_tool_groups") return "Loaded tools";
   if (name === "remember") return "Saved to memory";
+  if (name === "update_memory") return "Updated memory";
   if (name === "get_recent_memories" || name === "search_memories") {
     const count = Array.isArray(out?.memories)
       ? out.memories.length

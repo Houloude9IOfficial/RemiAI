@@ -35,7 +35,7 @@ import {
   buildCachedInstructions,
   markLastToolForCache,
 } from "@/lib/chat/prompt-cache";
-import { retrieveRelevantMemories } from "@/lib/chat/memories";
+import { buildMemoryPromptBlock, retrieveRelevantMemories } from "@/lib/chat/memories";
 import { persistUIMessage } from "@/lib/chat/persist";
 import { buildFilesystemTools } from "@/lib/fs/tools";
 import { buildContextTools } from "@/lib/tools/context";
@@ -280,9 +280,7 @@ export async function processWebhookEvent(opts: {
     if (prefs?.skills) profileParts.push(`Skills: ${prefs.skills}`);
 
     const relevantMemories = await retrieveRelevantMemories(webhook.systemPrompt);
-    const memoryTip = relevantMemories.length > 0
-      ? `\n\nSaved memories:\n${relevantMemories.map((m) => `- ${m.content}`).join("\n")}`
-      : "";
+    const memoryTip = buildMemoryPromptBlock(relevantMemories as any);
 
     const recentChanges = await queryRecentChanges(5);
     const fileChangeTip = recentChanges.length > 0

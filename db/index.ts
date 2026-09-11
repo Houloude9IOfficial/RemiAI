@@ -130,6 +130,26 @@ export function ensureRemiPrefsColumns(): void {
   ensure("card_display_modes", 'ALTER TABLE "user_preferences" ADD COLUMN "card_display_modes" TEXT NOT NULL DEFAULT \'{}\'');
 }
 
+export function ensureMemoryColumns(): void {
+  if (!tableExists("memories")) return;
+  let cols = tableColumns("memories");
+  const ensure = (col: string, ddl: string) => {
+    if (cols.has(col)) return;
+    try {
+      sqlite.exec(ddl);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message.toLowerCase() : String(e).toLowerCase();
+      if (!msg.includes("duplicate column")) throw e;
+    }
+    cols = tableColumns("memories");
+  };
+  ensure("category", "ALTER TABLE \"memories\" ADD COLUMN \"category\" TEXT NOT NULL DEFAULT 'general'");
+  ensure("memory_date", "ALTER TABLE \"memories\" ADD COLUMN \"memory_date\" TEXT");
+  try {
+    sqlite.exec("UPDATE \"memories\" SET \"category\" = 'general' WHERE \"category\" IS NULL OR \"category\" = ''");
+  } catch {}
+}
+
 /**
  * Repair schema drift from installations whose migration journal is ahead of
  * this checkout. Drizzle orders migrations by timestamp, so an older local
@@ -162,6 +182,10 @@ function repairSchemaCompatibility(): void {
       sqlite.exec('ALTER TABLE "user_preferences" ADD COLUMN "enable_new_models" INTEGER NOT NULL DEFAULT 1');
     }
     ensureRemiPrefsColumns();
+  }
+
+  if (tableExists("memories")) {
+    ensureMemoryColumns();
   }
 
   if (tableExists("provider_models")) {

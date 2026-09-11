@@ -44,7 +44,7 @@ import {
   optimizeMessageHistory,
   RECENT_MESSAGES_KEPT,
 } from "@/lib/chat/history-optimizer";
-import { retrieveRelevantMemories } from "@/lib/chat/memories";
+import { buildMemoryPromptBlock, retrieveRelevantMemories } from "@/lib/chat/memories";
 import {
   summarizeConversationBackground,
   shouldSummarize,
@@ -890,10 +890,10 @@ Definition of done:
 
   // Memory-disabled chats get NO saved-memories block — the model must answer
   // from this conversation alone (the memory tools aren't registered either).
+  // Grouped by category so the model sees health/work/etc separately; dates
+  // are inline as [YYYY-MM-DD] next to the content when present.
   const relevantMemories = memoryEnabled ? await retrieveRelevantMemories(lastUserText) : [];
-  const memoryTip = relevantMemories.length > 0
-    ? `\n\n## Saved memories\nThings you have remembered about the user across conversations, ranked by relevance to the current request. Use them to personalize responses.\n${relevantMemories.map((m) => `- ${m.content}`).join("\n")}`
-    : "";
+  const memoryTip = buildMemoryPromptBlock(relevantMemories as any);
 
   // ── Intent-based dynamic tool loading ─────────────────────────────
   // Simple chats register only the CORE tool subset (~2-3k tokens instead of

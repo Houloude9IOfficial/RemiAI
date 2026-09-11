@@ -22,7 +22,7 @@ import {
   buildCachedInstructions,
   markLastToolForCache,
 } from "@/lib/chat/prompt-cache";
-import { retrieveRelevantMemories } from "@/lib/chat/memories";
+import { buildMemoryPromptBlock, retrieveRelevantMemories } from "@/lib/chat/memories";
 import { persistUIMessage } from "@/lib/chat/persist";
 import { buildFilesystemTools } from "@/lib/fs/tools";
 import { buildContextTools } from "@/lib/tools/context";
@@ -349,11 +349,9 @@ export async function executeTask(task: ScheduledTaskRow) {
     if (prefs?.skills) profileParts.push(`Skills: ${prefs.skills}`);
 
     // Inject only the memories relevant to THIS task, capped to a hard token
-    // budget — the model can still search_memories for anything else.
+    // budget — grouped by category; the model can still search_memories for anything else.
     const relevantMemories = await retrieveRelevantMemories(task.task);
-    const memoryTip = relevantMemories.length > 0
-      ? `\n\nSaved memories:\n${relevantMemories.map((m) => `- ${m.content}`).join("\n")}`
-      : "";
+    const memoryTip = buildMemoryPromptBlock(relevantMemories as any);
 
     const recentChanges = await queryRecentChanges(10);
     const fileChangeTip = recentChanges.length > 0
