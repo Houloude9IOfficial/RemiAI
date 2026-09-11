@@ -41,12 +41,14 @@ import {
   Plus,
   CalendarDays,
   Tag,
+  Copy,
 } from "lucide-react";
 import { toast } from "sonner";
 import { memoriesApi, type Memory } from "@/lib/api/memories";
 import { MEMORY_CATEGORIES, type MemoryCategory } from "@/lib/memory-categories";
 import DatePicker from "@/components/date-picker/date-picker";
 import { format } from "date-fns";
+import { REMI_MEMORY_EXPORT_PROMPT, type ImportedMemory } from "@/lib/memory-import";
 
 // ---------------------------------------------------------------------------
 // Category meta — label + Tailwind tint (works in light & dark)
@@ -126,6 +128,10 @@ function CategoryBadge({ category }: { category: string }) {
   );
 }
 
+function categoryLabel(category: MemoryCategory | "all"): string {
+  return category === "all" ? "All" : CATEGORY_META[category].label;
+}
+
 function formatShortDate(iso: string): string {
   try {
     const d = new Date(iso);
@@ -173,6 +179,11 @@ export function MemoryList() {
   const [formContent, setFormContent] = useState("");
   const [formCategory, setFormCategory] = useState<MemoryCategory>("general");
   const [formDate, setFormDate] = useState("");
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [imported, setImported] = useState<ImportedMemory[]>([]);
+  const [importBusy, setImportBusy] = useState(false);
+  const [importCopied, setImportCopied] = useState(false);
 
   const { data: memories = [], isLoading } = useQuery({
     queryKey: ["memories"],
@@ -308,8 +319,42 @@ export function MemoryList() {
     });
   };
 
+  const extractImport = async () => {
+    if (!importText.trim()) return;
+    setImportBusy(true);
+    try {
+      const res = await fetch("/api/memories/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: importText }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Import failed");
+      setImported(data.memories ?? []);
+      if (!(data.memories ?? []).length) toast.error("No durable memories were found");
+    } catch (err) { toast.error(err instanceof Error ? err.message : "Import failed"); }
+    finally { setImportBusy(false); }
+  };
+
+  const saveImported = async () => {
+    setImportBusy(true);
+    const existing = memories.map((m) => `${m.category}|${m.memoryDate ?? ""}|${m.content.toLowerCase()}`);
+    const candidates = imported.filter((m) => !existing.includes(`${m.category}|${m.memoryDate ?? ""}|${m.content.toLowerCase()}`));
+    const results = await Promise.allSettled(candidates.map((m) => memoriesApi.create(m)));
+    const failed = results.filter((r) => r.status === "rejected").length;
+    const saved = results.length - failed;
+    queryClient.invalidateQueries({ queryKey: ["memories"] });
+    setImported([]); setImportText(""); setImportOpen(false); setImportBusy(false);
+    toast.success(`Imported ${saved} memor${saved === 1 ? "y" : "ies"}${failed ? `; ${failed} failed` : ""}`);
+  };
+
   return (
     <div className="flex flex-col gap-4">
+      <div className="rounded-lg border bg-muted/20 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="font-medium">Bring your context to Remi</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Ask another AI to export durable context in Remi’s memory format, then review it before saving. Remi retrieves relevant memories when needed and keeps the full store searchable.</p>
+          </div>
+          <Button variant="outline" className="shrink-0 gap-1.5" onClick={() => setImportOpen(true)}>Start</Button>
+        </div>
+      </div>
       {/* ── Toolbar: search + category + date + add ───────────────────── */}
       <div className="flex flex-col gap-2">
         <div className="flex flex-col gap-2 sm:flex-row">
@@ -319,7 +364,7 @@ export function MemoryList() {
               placeholder="Search memories..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 pr-8"
+              className="pl-9 pr-2"
             />
             {searchQuery && (
               <button
@@ -341,7 +386,9 @@ export function MemoryList() {
             >
               <SelectTrigger className="w-[148px] shrink-0">
                 <Tag className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
-                <SelectValue placeholder="Category" />
+                <SelectValue placeholder="Category">
+                  {categoryLabel(categoryFilter)}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">
@@ -367,7 +414,7 @@ export function MemoryList() {
                   setDateFilter(date ? format(date, "yyyy-MM-dd") : "")
                 }
                 placeholder="Event date"
-                className="w-[164px] h-8"
+                className="w-[164px] h-8 w-50"
               />
             </div>
 
@@ -504,11 +551,8 @@ export function MemoryList() {
                     <TableCell className="max-w-[260px] sm:max-w-[420px]">
                       <div
                         className="cursor-pointer"
-                        onClick={() => {
-                          navigator.clipboard.writeText(memory.content);
-                          toast.success("Copied!");
-                        }}
-                        title="Click to copy"
+                        onClick={() => openEdit(memory)}
+                        title="Click to edit"
                       >
                         <p className="text-sm leading-snug line-clamp-2 sm:line-clamp-none sm:truncate hover:underline">
                           {memory.content}
@@ -619,7 +663,7 @@ export function MemoryList() {
                   onValueChange={(v) => setFormCategory(v as MemoryCategory)}
                 >
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue>{categoryLabel(formCategory)}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {MEMORY_CATEGORIES.map((c) => (
@@ -673,6 +717,43 @@ export function MemoryList() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+        <DialogContent className="max-w-[calc(100vw-2rem)] overflow-x-hidden sm:max-w-[900px]">
+          <DialogHeader>
+            <DialogTitle>Import memories to Remi</DialogTitle>
+            <DialogDescription>
+              Copy the Remi guide into another AI, then paste its formatted response below. Review the memories before saving.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex min-w-0 flex-col gap-6 overflow-x-hidden py-2">
+            <div className="flex items-center justify-between border-b pb-4">
+              <p className="text-sm text-muted-foreground">Use the guide with another AI, then bring the formatted memories back here.</p>
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => { navigator.clipboard.writeText(REMI_MEMORY_EXPORT_PROMPT); setImportCopied(true); setTimeout(() => setImportCopied(false), 1500); }}><Copy className="h-3.5 w-3.5" /> {importCopied ? "Copied" : "Copy guide"}</Button>
+            </div>
+            {!imported.length ? <>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="memory-import-text">Paste the export</Label>
+                <Textarea id="memory-import-text" value={importText} onChange={(e) => setImportText(e.target.value)} rows={14} className="h-[320px] max-h-[45vh] resize-none overflow-y-auto" placeholder="Paste the formatted memories here..." />
+              </div>
+              <DialogFooter><Button variant="outline" onClick={() => setImportOpen(false)}>Cancel</Button><Button onClick={extractImport} disabled={importBusy || !importText.trim()}>{importBusy && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}Extract memories</Button></DialogFooter>
+            </> : <>
+              <p className="text-sm text-muted-foreground">Review {imported.length} extracted memories. Entries matching an existing memory are marked as duplicates and will be skipped.</p>
+              <div className="flex min-w-0 flex-col gap-3">
+                {imported.map((memory, index) => {
+                  const duplicate = memories.some((m) => m.content.toLowerCase() === memory.content.toLowerCase() && m.category === memory.category && (m.memoryDate ?? null) === memory.memoryDate);
+                  return <div key={`${index}-${memory.content}`} className={`min-w-0 overflow-hidden rounded-md border p-3 ${duplicate ? "opacity-60" : ""}`}>
+                    <div className="mb-2 flex items-center justify-between"><span className="text-xs text-muted-foreground">{duplicate ? "Duplicate — will be skipped" : `Memory ${index + 1}`}</span><Button variant="ghost" size="sm" onClick={() => setImported((items) => items.filter((_, i) => i !== index))}>Remove</Button></div>
+                    <Textarea value={memory.content} maxLength={500} onChange={(e) => setImported((items) => items.map((item, i) => i === index ? { ...item, content: e.target.value } : item))} rows={2} />
+                    <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2"><Select value={memory.category} onValueChange={(value) => setImported((items) => items.map((item, i) => i === index ? { ...item, category: value as MemoryCategory } : item))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{MEMORY_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{CATEGORY_META[c].label}</SelectItem>)}</SelectContent></Select><Input value={memory.memoryDate ?? ""} placeholder="Event date (YYYY-MM-DD)" onChange={(e) => setImported((items) => items.map((item, i) => i === index ? { ...item, memoryDate: e.target.value || null } : item))} /></div>
+                  </div>;
+                })}
+              </div>
+              <DialogFooter><Button variant="outline" onClick={() => setImported([])}>Back</Button><Button onClick={saveImported} disabled={importBusy || !imported.length}>{importBusy && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}Save memories</Button></DialogFooter>
+            </>}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* ── Create dialog ──────────────────────────────────────────── */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-[520px]">
@@ -707,7 +788,7 @@ export function MemoryList() {
                   onValueChange={(v) => setFormCategory(v as MemoryCategory)}
                 >
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue>{categoryLabel(formCategory)}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {MEMORY_CATEGORIES.map((c) => (
