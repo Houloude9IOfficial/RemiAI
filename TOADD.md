@@ -301,3 +301,17 @@ the ai users bash to write/edit/delete files, but it should use bash for command
 <!-- backup still says: Exporting backup failed — server returned a non-JSON response (502 , content-type: unknown): "Bad Gateway" but says that it exported successfully in history -->
 
 <!-- make notify tool actually send web push and electron notifications. -->
+
+<!-- allow memories to be saved in a more structured way, that includes date & categories (health, work, personal, etc. (or other)). -->
+
+
+
+<!-- Add import to Remi guide in memory tab, similar to claude's with a similar instruction. -->
+
+
+<!-- add request tool to allow POST, GET, PUT, DELETE, PATCH requests to any URL with optional headers and body, and allow the AI to use it to fetch data from APIs or websites, and also allow the AI to use it to send data to APIs or websites. (Already have fetch tool, keep it, but add this one as a more advanced tool with more options and flexibility.) -->
+
+
+<!-- make multiple tool calls in a chain of thought to be limited and scrollable instead of bloating the UI with too many tool calls. Also if a COT (chain of thought) had one error and one success instead of making the whole COT icon red, make it yellow. And while generating cot/thinking/reasoning, allow collapsing them all. -->
+
+<!-- opening profile settings takes a long time, and it should be faster. -->
