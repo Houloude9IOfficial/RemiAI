@@ -5,7 +5,7 @@ import {
   createUIMessageStreamResponse,
 } from "ai";
 import { eq, sql } from "drizzle-orm";
-import { db } from "@/db";
+import { db, initializeApp } from "@/db";
 import { conversations, providers, userPreferences } from "@/db/schema";
 import { getLanguageModel } from "@/lib/providers/factory";
 import { streamingReasoningProviderOptions } from "@/lib/providers/reasoning";
@@ -23,6 +23,7 @@ import { createRunTrace } from "@/lib/observability/run-trace";
 import { isDemoMode, filterDemoTools } from "@/lib/demo-policy";
 
 export async function POST(req: Request) {
+  await initializeApp();
   const trace = createRunTrace({ kind: "chat-start" });
   trace.metric("retryBudget", 3);
   trace.event("request.received", { method: "POST" });

@@ -281,6 +281,13 @@
       "when": 1788200000000,
       "tag": "0044_memory_categories",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "6",
+      "when": 1788300000000,
+      "tag": "0045_conversation_request_mode",
+      "breakpoints": true
     }
   ]
 }

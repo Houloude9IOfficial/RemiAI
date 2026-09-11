@@ -307,7 +307,9 @@ export function ChatInput({
 
   useEffect(() => {
     conversationsApi.get(conversationId)
-      .then(({ conversation }) => setBashMode(conversation.bashMode ?? "sandboxed"))
+      .then(({ conversation }) => {
+        setBashMode(conversation.bashMode ?? "sandboxed");
+      })
       .catch(() => {});
   }, [conversationId]);
 
@@ -1501,26 +1503,16 @@ export function ChatInput({
                       )}
                     </span>
                   </DropdownMenuItem>
-                  {/* Bash access tier — one toggle between the two real
-                      permission levels (Safe = sandboxed to permitted
-                      directories, Full = device-wide). Shows the current
-                      tier; clicking switches to the other. Disabled when
-                      code execution is off. */}
+                  {/* Unified Bash + HTTP access tier. The same setting controls
+                      filesystem/shell reach and private-network requests, and
+                      is carried into newly-created conversations. */}
                   <DropdownMenuItem
-                    onClick={() => {
-                      if (codeExecutionOn) {
-                        setBashModeValue(bashMode === "sandboxed" ? "full" : "sandboxed");
-                      } else {
-                        router.push("/settings/tools");
-                      }
-                    }}
+                    onClick={() => setBashModeValue(bashMode === "sandboxed" ? "full" : "sandboxed")}
                   >
                     <Terminal className="h-4 w-4" />
-                    Bash: {codeExecutionOn ? (bashMode === "full" ? "Full" : "Safe") : "Safe"}
+                    Access: {bashMode === "full" ? "Full" : "Limited"}
                     <span className="ml-auto text-[10px] text-muted-foreground">
-                      {codeExecutionOn
-                        ? (bashMode === "full" ? "Switch to Safe" : "Switch to Full")
-                        : "Set up"}
+                      {bashMode === "full" ? "Switch to Limited" : "Switch to Full"}
                     </span>
                   </DropdownMenuItem>
                 </DropdownMenuGroup>}

@@ -336,6 +336,15 @@ export const CONDITIONAL_GROUPS: Record<string, ToolGroup> = {
       "compare", " vs ", "versus", "difference between", "pros and cons",
     ],
   },
+  http_request: {
+    label: "advanced-http-request",
+    tools: ["http_request"],
+    keywords: [
+      "http request", "https request", "api", "api request", "call an api", "call the api",
+      "send data", "post to", "put to", "patch", "delete request", "REST API",
+      "REST endpoint", "webhook", "request headers", "request body",
+    ],
+  },
   notion: {
     label: "notion",
     tools: ["notion_search_pages", "notion_get_page"],
@@ -669,7 +678,7 @@ export function buildToolAvailabilityNote(
     `Some tools are loaded on demand to save tokens. **Only call the tools listed above.**\n` +
     `Loaded: ${loaded}.\n` +
     `Not loaded: ${unloadedLabels.sort().join(", ")}.\n` +
-    `To enable an unloaded group, call \`load_tool_groups({ groups: [...] })\` — the tools become available immediately in this same response, then continue with the current request.`
+    `If the user's request needs an unloaded tool, do not call it directly. First call \`load_tool_groups({ groups: [...] })\` — the tools become available immediately in this same response, then continue with the user's request. Always use the exact registered tool name shown by \`list_available_tools\`.`
   );
 }
 

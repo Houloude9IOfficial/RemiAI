@@ -33,6 +33,7 @@ import { buildDocumentReaderTools } from "@/lib/tools/document-reader";
 import { buildMediaTools } from "@/lib/media/tools";
 import { delayTool } from "@/lib/tools/delay";
 import { webFetchTool } from "@/lib/tools/web-fetch";
+import { buildHttpRequestTool } from "@/lib/tools/http-request";
 import { askQuestionsTool } from "@/lib/tools/ask-questions";
 import { buildTodoTools } from "@/lib/tools/todo";
 import { buildFileIndexTools } from "@/lib/tools/file-index";
@@ -280,7 +281,7 @@ export async function executeTask(task: ScheduledTaskRow) {
         Promise.resolve(buildContextTools()),
         buildMemoryTools(),
         buildIntegrationTools(),
-        buildExecutionTools(),
+        buildExecutionTools(conversation.bashMode === "full" ? "full" : "sandboxed"),
         buildDocumentReaderTools(task.conversationId),
         Promise.resolve(buildMediaTools(task.conversationId)),
         Promise.resolve(buildFileIndexTools()),
@@ -306,6 +307,9 @@ export async function executeTask(task: ScheduledTaskRow) {
       ...scheduleToolSet,
       delay: delayTool,
       web_fetch: webFetchTool,
+      http_request: buildHttpRequestTool({
+        mode: conversation.bashMode === "full" ? "full" : "sandboxed",
+      }),
       ask_questions: askQuestionsTool,
       ...buildToolHelpTool(),
       ...buildListAvailableToolsTool(),

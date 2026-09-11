@@ -13,7 +13,7 @@ import {
 import { streamRegistry } from "@/lib/chat/stream-registry";
 import { periodicallyPersistMessages } from "@/lib/chat/persist-interval";
 import { eq, sql, count } from "drizzle-orm";
-import { db } from "@/db";
+import { db, initializeApp } from "@/db";
 import {
   conversations,
   providers,
@@ -74,6 +74,7 @@ import { buildDocumentReaderTools } from "@/lib/tools/document-reader";
 import { buildMediaTools } from "@/lib/media/tools";
 import { delayTool } from "@/lib/tools/delay";
 import { webFetchTool } from "@/lib/tools/web-fetch";
+import { buildHttpRequestTool } from "@/lib/tools/http-request";
 import { buildCreateVisualTool } from "@/lib/tools/create-visual";
 import { askQuestionsTool } from "@/lib/tools/ask-questions";
 import { suggestFollowupsTool } from "@/lib/tools/suggest-followups";
@@ -256,6 +257,7 @@ const chatRequestSchema = z.object({
 });
 
 export async function POST(req: Request) {
+  await initializeApp();
   const trace = createRunTrace({ kind: "chat" });
   trace.metric("retryBudget", 3);
   trace.event("request.received", { method: "POST" });
@@ -514,11 +516,15 @@ export async function POST(req: Request) {
   const createVisualToolSet = await buildCreateVisualTool();
   const createVisualEnabled = "create_visual" in createVisualToolSet;
 
-  // Built-in tools (delay, web_fetch, notifications, ask_questions, suggest_followups, get_tool_help, list_available_tools)
+  // Built-in tools (delay, web_fetch, http_request, notifications, ask_questions, suggest_followups, get_tool_help, list_available_tools)
   const builtinToolSet = {
     delay: delayTool,
     send_notification: buildSendNotificationTool(conversationId),
     web_fetch: sourceAwareWebFetchTool,
+    http_request: buildHttpRequestTool({
+      mode: conversation.bashMode === "full" ? "full" : "sandboxed",
+      allowMutations: mode !== "plan",
+    }),
     ask_questions: askQuestionsTool,
     suggest_followups: suggestFollowupsTool,
     set_run_name: setRunNameTool,

@@ -316,6 +316,18 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     togglable: false,
     requiresApiKey: false,
   },
+  // ── Advanced HTTP request tool (builtin, always on, not togglable) ──
+  {
+    id: "http_request",
+    name: "HTTP Requests",
+    description:
+      "Make flexible GET, POST, PUT, PATCH, and DELETE requests to public APIs and websites with custom headers and raw or JSON request bodies. Safe mode blocks private-network destinations; Full mode permits them.",
+    toolNames: ["http_request"],
+    category: "builtin",
+    subgroup: "Web & Research",
+    togglable: false,
+    requiresApiKey: false,
+  },
   // ── Todo List (builtin, always on, not togglable) ──
   {
     id: "todo",

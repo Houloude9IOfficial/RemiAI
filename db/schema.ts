@@ -128,6 +128,9 @@ export const conversations = sqliteTable("conversations", {
   bashMode: text("bash_mode", { enum: ["sandboxed", "full"] })
     .notNull()
     .default("sandboxed"),
+  requestMode: text("request_mode", { enum: ["sandboxed", "full"] })
+    .notNull()
+    .default("sandboxed"),
   // Temporary chat (ChatGPT-style): looks "hacky/temporary" in the UI, can be
   // converted to/from a normal chat, and is auto-deleted after a retention
   // period (see lib/chat/temporary-chats.ts). Fully independent of memory.

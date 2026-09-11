@@ -13,6 +13,7 @@ import { buildDocumentReaderTools } from "@/lib/tools/document-reader";
 import { buildMediaTools } from "@/lib/media/tools";
 import { delayTool } from "@/lib/tools/delay";
 import { webFetchTool } from "@/lib/tools/web-fetch";
+import { buildHttpRequestTool } from "@/lib/tools/http-request";
 import { buildSendNotificationTool } from "@/lib/tools/notifications";
 import { buildTodoTools } from "@/lib/tools/todo";
 import { buildRoutinesTools } from "@/lib/tools/routines";
@@ -233,6 +234,9 @@ async function buildAgentTools(
   userContext?: UserContext,
   conversationId?: number,
 ): Promise<Record<string, unknown>> {
+  const conversation = conversationId != null
+    ? await db.select({ bashMode: conversations.bashMode }).from(conversations).where(eq(conversations.id, conversationId)).get()
+    : undefined;
   const [fsTools, memoryTools, integrationTools, executionTools, docTools, mediaTools, routineTools] =
     await Promise.all([
       buildFilesystemTools(conversationId),
@@ -266,6 +270,9 @@ async function buildAgentTools(
       : {}),
     delay: delayTool,
     web_fetch: webFetchTool,
+    http_request: buildHttpRequestTool({
+      mode: conversation?.bashMode === "full" ? "full" : "sandboxed",
+    }),
   };
 
   return Object.fromEntries(

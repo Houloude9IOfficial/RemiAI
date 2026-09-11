@@ -28,6 +28,12 @@ export async function POST(req: Request) {
   }
 
   const demoProvider = isDemoMode() ? ensureDemoProvider() : null;
+  const previousConversation = await db
+    .select({ bashMode: conversations.bashMode })
+    .from(conversations)
+    .orderBy(desc(conversations.updatedAt))
+    .limit(1)
+    .get();
   const row = await db
     .insert(conversations)
     .values({
@@ -37,6 +43,9 @@ export async function POST(req: Request) {
       // independent — the user can flip either one from the chat menu).
       isTemporary: body.isTemporary ?? false,
       memoryEnabled: body.memoryEnabled ?? true,
+      // Carry the unified Access tier into new chats so the user's choice is
+      // remembered between conversations.
+      bashMode: previousConversation?.bashMode ?? "sandboxed",
       // Use ISO dates consistently — SQLite's CURRENT_TIMESTAMP lacks
       // timezone info and causes inconsistent sort/display behavior
       createdAt: new Date().toISOString(),

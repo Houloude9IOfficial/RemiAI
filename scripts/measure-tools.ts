@@ -15,6 +15,7 @@ import { buildDocumentReaderTools } from "../lib/tools/document-reader";
 import { buildMediaTools } from "../lib/media/tools";
 import { delayTool } from "../lib/tools/delay";
 import { webFetchTool } from "../lib/tools/web-fetch";
+import { httpRequestTool } from "../lib/tools/http-request";
 import { buildCreateVisualTool } from "../lib/tools/create-visual";
 import { askQuestionsTool } from "../lib/tools/ask-questions";
 import { suggestFollowupsTool } from "../lib/tools/suggest-followups";
@@ -58,6 +59,7 @@ async function main() {
     ...((await safe("media", () => buildMediaTools(1))) ?? {}),
     delay: delayTool,
     web_fetch: webFetchTool,
+    http_request: httpRequestTool,
     ask_questions: askQuestionsTool,
     suggest_followups: suggestFollowupsTool,
     set_run_name: setRunNameTool,

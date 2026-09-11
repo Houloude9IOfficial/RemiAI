@@ -1,5 +1,6 @@
 import path from "node:path";
 import fs from "node:fs";
+import crypto from "node:crypto";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
@@ -88,7 +89,7 @@ const sqlite = openDatabase();
 
 const db = drizzle(sqlite, { schema });
 
-let initialized = false;
+let initializationPromise: Promise<void> | null = null;
 
 type TableInfoRow = { name: string };
 
@@ -104,6 +105,60 @@ function tableExists(tableName: string): boolean {
     .prepare("SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = ?")
     .get(tableName) as { present?: number } | undefined;
   return row?.present === 1;
+}
+
+/**
+ * Mark migrations as applied when an older compatibility repair already
+ * created every column in an additive migration. This prevents Drizzle from
+ * retrying a partially-applied migration and failing on "duplicate column"
+ * after a restart. Only migrations made exclusively of ALTER TABLE ... ADD
+ * COLUMN statements are eligible; CREATE/UPDATE/data migrations still run
+ * through Drizzle normally.
+ */
+function reconcileAdditiveMigrations(): void {
+  const migrationsDir = path.join(/*turbopackIgnore: true*/ process.cwd(), "db/migrations");
+  const journalPath = path.join(migrationsDir, "meta/_journal.json");
+  if (!fs.existsSync(journalPath)) return;
+
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS __drizzle_migrations (
+    id SERIAL PRIMARY KEY,
+    hash TEXT NOT NULL,
+    created_at NUMERIC
+  )`);
+
+  const journal = JSON.parse(fs.readFileSync(journalPath, "utf8")) as {
+    entries?: Array<{ tag: string; when: number }>;
+  };
+  const hasMigration = sqlite.prepare(
+    "SELECT 1 FROM __drizzle_migrations WHERE hash = ? OR created_at = ? LIMIT 1",
+  );
+  const insertMigration = sqlite.prepare(
+    "INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)",
+  );
+
+  for (const entry of journal.entries ?? []) {
+    const filePath = path.join(migrationsDir, `${entry.tag}.sql`);
+    if (!fs.existsSync(filePath)) continue;
+    const sqlText = fs.readFileSync(filePath, "utf8");
+    const statements = sqlText.split("--> statement-breakpoint").map((s) => s.trim()).filter(Boolean);
+    const additions: Array<{ table: string; column: string }> = [];
+    let additiveOnly = statements.length > 0;
+    for (const statement of statements) {
+      const match = statement.match(
+        /^ALTER\s+TABLE\s+[`"]?([^`"\s]+)[`"]?\s+ADD(?:\s+COLUMN)?\s+[`"]?([^`"\s(]+)[`"]?/i,
+      );
+      if (!match) {
+        additiveOnly = false;
+        break;
+      }
+      additions.push({ table: match[1], column: match[2] });
+    }
+    if (!additiveOnly || additions.length === 0) continue;
+    if (!additions.every(({ table, column }) => tableExists(table) && tableColumns(table).has(column))) continue;
+
+    const hash = crypto.createHash("sha256").update(sqlText).digest("hex");
+    if (!hasMigration.get(hash, entry.when)) insertMigration.run(hash, entry.when);
+  }
 }
 
 /**
@@ -173,6 +228,14 @@ function repairSchemaCompatibility(): void {
     }
     if (!columns.has("memory_enabled")) {
       sqlite.exec('ALTER TABLE "conversations" ADD COLUMN "memory_enabled" INTEGER NOT NULL DEFAULT 1');
+    }
+    if (!tableColumns("conversations").has("request_mode")) {
+      sqlite.exec('ALTER TABLE "conversations" ADD COLUMN "request_mode" TEXT NOT NULL DEFAULT \'sandboxed\'');
+    }
+    // Older builds stored HTTP access separately. Preserve any previously
+    // granted Full access when consolidating both capabilities into bash_mode.
+    if (tableColumns("conversations").has("request_mode")) {
+      sqlite.exec('UPDATE "conversations" SET "bash_mode" = \'full\' WHERE "request_mode" = \'full\' AND "bash_mode" <> \'full\'');
     }
   }
 
@@ -404,8 +467,12 @@ function repairSchemaCompatibility(): void {
  * multiple times or from multiple entry points.
  */
 export async function initializeApp(): Promise<void> {
-  if (initialized) return;
-  initialized = true;
+  if (initializationPromise) return initializationPromise;
+  initializationPromise = initializeAppInternal();
+  return initializationPromise;
+}
+
+async function initializeAppInternal(): Promise<void> {
 
   // Defensive: Next.js already skips the instrumentation `register()` hook
   // during `next build`, but never run these in a build context regardless.
@@ -431,6 +498,20 @@ export async function initializeApp(): Promise<void> {
     repairSchemaCompatibility();
   } catch (e) {
     console.error("[db] Schema compatibility repair failed:", e);
+  }
+
+  try {
+    reconcileAdditiveMigrations();
+    // Retry after reconciliation so a partially repaired migration chain can
+    // continue applying newer migrations automatically.
+    migrate(db, {
+      migrationsFolder: path.join(/*turbopackIgnore: true*/ process.cwd(), "db/migrations"),
+    });
+  } catch (e) {
+    console.warn(
+      "[db] Migration reconciliation warning — continuing with compatibility repair.",
+      e instanceof Error ? e.message : e,
+    );
   }
 
   // Clean up orphaned background agent tasks from any previous server session

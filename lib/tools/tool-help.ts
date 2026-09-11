@@ -569,6 +569,12 @@ write_file({ rootId: 1, relativePath: "src/components/Header.tsx", content: "...
 
 For advanced scraping/crawling, use the Firecrawl tools instead (if configured).`,
 
+  "http-request": `## HTTP Request tool
+
+Use \`http_request\` when you need an API or website request beyond a simple public GET. It supports \`GET\`, \`POST\`, \`PUT\`, \`PATCH\`, and \`DELETE\`, optional string headers, and either a raw string body or a JSON object/array body. It returns the status, response headers, content type, and a truncated response body.
+
+Use \`web_fetch\` for straightforward public reads. HTTP requests use the conversation's Request access setting: Safe mode blocks localhost, private/link-local networks, and metadata services; Full mode allows them. Plan mode permits GET only. Never include secrets in a request unless the user explicitly provided and authorized them.`,
+
   "mcp-tools": `## MCP tools
 
 MCP servers provide additional tools beyond the built-in ones. Each MCP tool is namespaced with its server name like \`serverName__toolName\`.
@@ -963,7 +969,8 @@ const KEYWORD_SYNONYMS: Record<string, string> = {
   mcp: "mcp-tools",
   "external tool": "mcp-tools",
   "fetch url": "web-fetch",
-  "http request": "web-fetch",
+  "http request": "http-request",
+  "api request": "http-request",
   routine: "routines",
   routines: "routines",
   "create routine": "routines",
@@ -1056,6 +1063,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   delay: "Delay / wait",
   ask_questions: "Ask user questions",
   web_fetch: "Web fetching",
+  http_request: "Advanced HTTP requests",
   todo: "Todo list",
   agent_spawner: "Agent spawning",
   routines: "Routines",
@@ -1084,6 +1092,7 @@ const HELP_TOPIC_MAP: Record<string, string | null> = {
   delay: "delay",
   ask_questions: "ask-questions",
   web_fetch: "web-fetch",
+  http_request: "http-request",
   todo: "todo",
   agent_spawner: "agent-spawner",
   routines: "routines",
