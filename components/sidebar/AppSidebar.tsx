@@ -238,7 +238,7 @@ function DesktopSidebar() {
               onClick={() => setExtraExpanded((v) => !v)}
               aria-expanded={extraExpanded}
               className={cn(
-                "flex items-center gap-2 rounded-md px-2 py-1.25 text-sm text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors duration-150",
+                "flex items-center gap-2 rounded-md px-2 py-1.25 text-sm text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors duration-150 text-center",
                 extraExpanded && "text-sidebar-foreground/80",
               )}
             >

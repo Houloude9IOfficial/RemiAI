@@ -203,16 +203,6 @@ export function SkillLibrary({
                 </div>
 
                 <div className="flex shrink-0 items-center gap-1 pt-0.5">
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    className="h-7 w-7"
-                    title="View instructions"
-                    aria-label={`View ${skill.name} instructions`}
-                    onClick={() => setViewSkill(skill)}
-                  >
-                    <Eye className="h-4 w-4" />
-                  </Button>
                   {skill.updateAvailable && (
                     <Button
                       variant="ghost"
@@ -230,6 +220,16 @@ export function SkillLibrary({
                       />
                     </Button>
                   )}
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="h-7 w-7"
+                    title="View instructions"
+                    aria-label={`View ${skill.name} instructions`}
+                    onClick={() => setViewSkill(skill)}
+                  >
+                    <Eye className="h-4 w-4" />
+                  </Button>
                   <Button
                     variant="ghost"
                     size="icon-sm"
