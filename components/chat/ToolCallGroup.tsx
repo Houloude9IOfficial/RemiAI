@@ -38,6 +38,7 @@ import {
   FileDiff,
   Wrench,
   XCircle,
+  AlertTriangle,
   Download,
   Music,
   Clapperboard,
@@ -405,6 +406,7 @@ export function summarizeToolActivity(parts: AnyToolPart[]) {
     runName: getRunName(parts),
     running: groupParts.some(isPartRunning),
     hasError: groupParts.some(isPartError),
+    hasSuccess: groupParts.some(isPartComplete),
     hasQuestions: groupParts.some(isQuestionsPart),
   };
 }
@@ -788,6 +790,8 @@ export function ToolCallGroup({
   const running = groupParts.some(isPartRunning);
   const completed = groupParts.every(isPartComplete) && groupParts.length > 0;
   const hasError = groupParts.some(isPartError);
+  const hasSuccess = groupParts.some(isPartComplete);
+  const mixedOutcome = hasError && hasSuccess;
 
   const fileChanges = useMemo(() => extractFileChanges(groupParts), [groupParts]);
   const verificationChecks = useMemo(
@@ -942,12 +946,16 @@ export function ToolCallGroup({
         <div
           className={cn(
             "flex h-3 w-3 shrink-0 items-center justify-center",
-            hasError || hasVerificationFailure
-              ? "text-status-danger"
-              : "text-muted-foreground",
+            mixedOutcome
+              ? "text-status-warning"
+              : hasError || hasVerificationFailure
+                ? "text-status-danger"
+                : "text-muted-foreground",
           )}
         >
-          {hasError || hasVerificationFailure ? (
+          {mixedOutcome ? (
+            <AlertTriangle className="h-3 w-3" />
+          ) : hasError || hasVerificationFailure ? (
             <XCircle className="h-3 w-3" />
           ) : running ? (
             <Loader2 className="h-3 w-3 animate-spin" />
@@ -989,7 +997,7 @@ export function ToolCallGroup({
           isOpen ? "grid-rows-[1fr] mt-1.5" : "grid-rows-[0fr]",
         )}
       >
-        <div className="overflow-hidden">{trace}</div>
+        <div className="max-h-80 overflow-y-auto overscroll-contain">{trace}</div>
       </div>
     </div>
   );

@@ -112,12 +112,12 @@ export function ReasoningBlock({
     >
       <button
         type="button"
-        onClick={() => !isStreaming && setOpen((current) => !current)}
+        onClick={() => setOpen((current) => !current)}
         aria-expanded={open}
         aria-controls={contentId}
         className={cn(
           "group flex cursor-pointer items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground",
-          isStreaming && "cursor-default",
+          isStreaming && "cursor-pointer",
         )}
       >
         <Brain className="h-4 w-4 shrink-0" aria-hidden="true" />
@@ -133,7 +133,7 @@ export function ReasoningBlock({
           className={cn(
             "ml-0.5 h-4 w-4 opacity-0 transition-all group-hover:opacity-100",
             open && "rotate-180 opacity-100",
-            isStreaming && "hidden",
+            isStreaming && "rotate-180 opacity-100",
           )}
           aria-hidden="true"
         />
