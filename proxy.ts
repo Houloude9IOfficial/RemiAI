@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isDemoMode } from "@/lib/demo-policy";
+import { getAccountFromToken, SESSION_COOKIE } from "@/lib/auth/service";
 
 const PUBLIC_AUTH_PATHS = new Set([
   "/api/auth/status",
@@ -84,13 +85,8 @@ export async function proxy(request: NextRequest) {
     // In a container, PORT is the internal Next.js port. Do not use the
     // host-published port here; that can point back at the reverse proxy and
     // produce intermittent 502s during authenticated API requests.
-    const port = process.env.PORT || "3000";
-    const status = await fetch(`http://127.0.0.1:${port}/api/auth/status`, {
-      headers: { cookie: request.headers.get("cookie") ?? "" },
-      cache: "no-store",
-    });
-    const data = await status.json() as { authenticated?: boolean };
-    if (!data.authenticated) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+    const account = getAccountFromToken(request.cookies.get(SESSION_COOKIE)?.value);
+    if (!account) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
   } catch (e) {
     console.error("[proxy] Auth status check failed:", e);
     return NextResponse.json({ error: "Authentication service unavailable." }, { status: 503 });
