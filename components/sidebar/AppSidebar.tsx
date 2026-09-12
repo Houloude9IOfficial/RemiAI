@@ -92,7 +92,7 @@ function DesktopSidebar() {
     >
       <div className={cn("flex items-center py-3", isDesktopSidebarCollapsed ? "justify-center px-2" : "justify-between px-3")}>
         <div className={cn("flex items-center", isDesktopSidebarCollapsed ? "justify-center" : "flex-1")}>
-          <div className={cn("flex items-center", isDesktopSidebarCollapsed ? "justify-center" : "px-1.5")} aria-label="RemiAI">
+          <div className={cn("flex items-center", isDesktopSidebarCollapsed ? "hidden" : "px-1.5")} aria-label="RemiAI">
             <img src="/RemiAI.png" alt="RemiAI" className="block h-7 w-auto dark:hidden" />
             <img src="/RemiAI-Light.png" alt="RemiAI" className="hidden h-7 w-auto dark:block" />
           </div>
