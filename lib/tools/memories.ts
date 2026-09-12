@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { db } from "@/db";
+import { db, ensureMemoryColumns } from "@/db";
 import { memories } from "@/db/schema";
 import { eq, sql, and, desc } from "drizzle-orm";
 import { truncateToolResult } from "@/lib/utils";
@@ -15,7 +15,6 @@ function ensureMemoryColumnsIfNeeded(e: unknown): void {
   const msg = (e instanceof Error ? e.message : String(e)).toLowerCase();
   if (msg.includes("no such column") || msg.includes("has no column")) {
     try {
-      const { ensureMemoryColumns } = require("@/db") as typeof import("@/db");
       ensureMemoryColumns();
     } catch {}
   }

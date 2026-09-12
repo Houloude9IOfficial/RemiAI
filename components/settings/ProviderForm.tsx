@@ -157,7 +157,7 @@ export function ProviderForm() {
                   <span className="font-medium text-foreground">Identity-linked</span> ({""}
                   workspace-scoped) keys require an <code>anthropic-workspace-id</code> header and
                   won&apos;t return models here. If you set one up and no models show up, this is
-                  why. Create a fresh "unlinked" key at console.anthropic.com and paste it above.
+                  why. Create a fresh &quot;unlinked&quot; key at console.anthropic.com and paste it above.
                 </p>
               )}
             </div>

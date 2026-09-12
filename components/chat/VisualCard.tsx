@@ -140,8 +140,10 @@ function SvgRenderer({ content, className }: { content: string; className?: stri
       const doc = parser.parseFromString(sanitized, "image/svg+xml");
 
       if (doc.querySelector("parsererror")) {
-        setError(true);
-        setLoading(false);
+        queueMicrotask(() => {
+          setError(true);
+          setLoading(false);
+        });
         return;
       }
 
@@ -152,8 +154,10 @@ function SvgRenderer({ content, className }: { content: string; className?: stri
         const retryDoc = parser.parseFromString(wrapped, "image/svg+xml");
         svgEl = retryDoc.querySelector("svg");
         if (!svgEl) {
-          setError(true);
-          setLoading(false);
+          queueMicrotask(() => {
+            setError(true);
+            setLoading(false);
+          });
           return;
         }
       }
@@ -182,10 +186,12 @@ function SvgRenderer({ content, className }: { content: string; className?: stri
       const shadow =
         container.shadowRoot ?? container.attachShadow({ mode: "open" });
       shadow.replaceChildren(svgEl);
-      setLoading(false);
+      queueMicrotask(() => setLoading(false));
     } catch {
-      setError(true);
-      setLoading(false);
+      queueMicrotask(() => {
+        setError(true);
+        setLoading(false);
+      });
     }
   }, [content]);
 
@@ -237,15 +243,19 @@ function HtmlRenderer({
     const iframe = iframeRef.current;
     if (!iframe) return;
 
-    setLoading(true);
-    setLoadError(false);
-    setIframeHeight(null);
+    queueMicrotask(() => {
+      setLoading(true);
+      setLoadError(false);
+      setIframeHeight(null);
+    });
 
     try {
       const doc = iframe.contentDocument || iframe.contentWindow?.document;
       if (!doc) {
-        setLoadError(true);
-        setLoading(false);
+        queueMicrotask(() => {
+          setLoadError(true);
+          setLoading(false);
+        });
         return;
       }
 
@@ -301,8 +311,10 @@ function HtmlRenderer({
       setTimeout(measure, 100);
       if (doc.fonts?.ready) doc.fonts.ready.then(measure);
     } catch {
-      setLoadError(true);
-      setLoading(false);
+      queueMicrotask(() => {
+        setLoadError(true);
+        setLoading(false);
+      });
     }
   }, [content]);
 

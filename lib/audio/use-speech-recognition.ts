@@ -15,7 +15,7 @@
 
 "use client";
 
-import { useCallback, useRef, useState, useEffect } from "react";
+import { useCallback, useRef, useState, useEffect, useSyncExternalStore } from "react";
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -262,7 +262,11 @@ export function useSpeechRecognition() {
   const [speechState, setSpeechState] = useState<SpeechState>("idle");
   const [interimText, setInterimText] = useState("");
   const [finalText, setFinalText] = useState("");
-  const [isSupported, setIsSupported] = useState(false);
+  const isSupported = useSyncExternalStore(
+    () => () => {},
+    () => getSpeechRecognition() !== null,
+    () => false,
+  );
   const [permission, setPermission] = useState<MicPermission>("unknown");
   const [error, setError] = useState<SpeechErrorInfo | null>(null);
   // Mirrors `permission` so callbacks can read it without re-creating them.
@@ -291,10 +295,8 @@ export function useSpeechRecognition() {
     setPermission(state);
   }, []);
 
-  // Check support and the current permission state on mount
+  // Check the current permission state on mount
   useEffect(() => {
-    setIsSupported(getSpeechRecognition() !== null);
-
     let cancelled = false;
     void queryMicPermission().then((state) => {
       if (!cancelled) applyPermission(state);
@@ -326,6 +328,7 @@ export function useSpeechRecognition() {
 
   // ── Silence timer — fires onSilence, never stops recognition ────
 
+  const resetSilenceTimerRef = useRef<() => void>(() => {});
   const resetSilenceTimer = useCallback(() => {
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current);
@@ -339,7 +342,7 @@ export function useSpeechRecognition() {
       // committing to a half-finished sentence.
       if (!finalText && interimText && !interimGraceUsedRef.current) {
         interimGraceUsedRef.current = true;
-        resetSilenceTimer();
+        resetSilenceTimerRef.current();
         return;
       }
 
@@ -356,9 +359,13 @@ export function useSpeechRecognition() {
         onSilenceRef.current?.(transcript);
       }
       // Keep listening — reset timer for next utterance
-      resetSilenceTimer();
+      resetSilenceTimerRef.current();
     }, SILENCE_TIMEOUT_MS);
   }, []);
+
+  useEffect(() => {
+    resetSilenceTimerRef.current = resetSilenceTimer;
+  }, [resetSilenceTimer]);
 
   const clearSilenceTimer = useCallback(() => {
     if (silenceTimerRef.current) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useCallback, useEffect } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
 
 interface SidebarContextValue {
   isMobileSidebarOpen: boolean;
@@ -17,6 +17,7 @@ const SidebarContext = createContext<SidebarContextValue | null>(null);
 export function SidebarProvider({ children }: { children: React.ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
+  const hydratedRef = useRef(false);
 
   const open = useCallback(() => setIsOpen(true), []);
   const close = useCallback(() => setIsOpen(false), []);
@@ -31,16 +32,22 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     try {
-      const stored = localStorage.getItem("desktopSidebarCollapsed");
-      if (stored === "true") {
-        setIsDesktopCollapsed(true);
-      }
+      queueMicrotask(() => {
+        try {
+          const stored = localStorage.getItem("desktopSidebarCollapsed");
+          hydratedRef.current = true;
+          if (stored === "true") setIsDesktopCollapsed(true);
+        } catch {
+          // localStorage unavailable
+        }
+      });
     } catch {
       // localStorage unavailable
     }
   }, []);
 
   useEffect(() => {
+    if (!hydratedRef.current) return;
     try {
       localStorage.setItem(
         "desktopSidebarCollapsed",

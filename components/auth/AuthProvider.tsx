@@ -21,7 +21,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally { setLoading(false); }
   };
 
-  useEffect(() => { void refresh(); }, []);
+  useEffect(() => {
+    queueMicrotask(() => void refresh());
+  }, []);
 
   const value = useMemo<AuthState>(() => ({
     loading, configured, account, refresh,

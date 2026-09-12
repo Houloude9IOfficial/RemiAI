@@ -1,15 +1,8 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
-import { db } from "@/db";
+import { db, ensureMemoryColumns } from "@/db";
 import { memories, MEMORY_CATEGORIES } from "@/db/schema";
 import { isValidCategory, isValidMemoryDate } from "@/lib/memory-categories";
-
-function ensureMemoryColumns(): void {
-  try {
-    const { ensureMemoryColumns: heal } = require("@/db") as typeof import("@/db");
-    heal();
-  } catch {}
-}
 
 function withMemoryRetry<T>(fn: () => T): T {
   try {

@@ -50,7 +50,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const stored = localStorage.getItem("theme") as Theme | null;
     const effective = stored && ["light", "dark", "system"].includes(stored) ? stored : "system";
-    setThemeState(effective);
+    queueMicrotask(() => setThemeState(effective));
 
     // Resolve and apply immediately (before the next effect runs)
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
@@ -61,7 +61,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     document.documentElement.classList.remove("light", "dark");
     document.documentElement.classList.add(resolved);
     document.documentElement.style.colorScheme = resolved;
-    setResolvedTheme(resolved);
+    queueMicrotask(() => setResolvedTheme(resolved));
   }, []);
 
   // Listen for system preference changes (only when theme === "system")
