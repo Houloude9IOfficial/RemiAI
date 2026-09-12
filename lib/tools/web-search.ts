@@ -9,6 +9,7 @@ const FIRECRAWL_TIMEOUT_MS = 15_000;
 const DEFAULT_SEARXNG_URL = "http://127.0.0.1:3105";
 
 type SearchCategory = "general" | "news" | "images";
+type SafeSearch = 0 | 1 | 2;
 type SearchOptions = {
   query: string;
   count?: number;
@@ -16,7 +17,7 @@ type SearchOptions = {
   language?: string;
   page?: number;
   timeRange?: "day" | "month" | "year";
-  safeSearch?: 0 | 1 | 2;
+  safeSearch?: SafeSearch | string; // string input is normalized before sending to providers
 };
 
 type NormalizedResult = {
@@ -72,12 +73,27 @@ function searxngUrl(): string {
   );
 }
 
+const safeSearchInputSchema = z.preprocess(
+  (value) => {
+    if (typeof value !== "string") return value;
+    const trimmed = value.trim();
+    return /^[0-2]$/.test(trimmed) ? Number(trimmed) : value;
+  },
+  z.union([z.literal(0), z.literal(1), z.literal(2)]),
+);
+
+function normalizeSafeSearch(value: SafeSearch | string | undefined): SafeSearch {
+  const normalized = value === undefined ? 1 : typeof value === "string" ? Number(value) : value;
+  if (normalized === 0 || normalized === 1 || normalized === 2) return normalized;
+  throw new Error("safeSearch must be 0 (off), 1 (moderate), or 2 (strict)");
+}
+
 function searxngParams(options: SearchOptions): URLSearchParams {
   const params = new URLSearchParams({
     q: options.query,
     format: "json",
     pageno: String(options.page ?? 1),
-    safesearch: String(options.safeSearch ?? 1),
+    safesearch: String(normalizeSafeSearch(options.safeSearch)),
   });
   if (options.category && options.category !== "general") {
     params.set("categories", options.category);
@@ -386,7 +402,7 @@ export function buildWebSearchTool(options: {
       language: z.string().min(2).max(12).optional().describe("SearXNG language code, for example en or en-US"),
       page: z.number().int().min(1).max(5).default(1).describe("Result page number, 1–5"),
       timeRange: z.enum(["day", "month", "year"]).optional().describe("Restrict results by freshness"),
-      safeSearch: z.union([z.literal(0), z.literal(1), z.literal(2)]).default(1).describe("Safe search level: 0 off, 1 moderate, 2 strict"),
+      safeSearch: safeSearchInputSchema.default(1).describe("Safe search level: 0 off, 1 moderate, 2 strict; numeric strings are accepted and converted"),
     }),
     execute: async ({
       query,
@@ -404,7 +420,7 @@ export function buildWebSearchTool(options: {
         language: language ?? options.userContext?.language,
         page,
         timeRange,
-        safeSearch,
+        safeSearch: normalizeSafeSearch(safeSearch),
       };
       const attempts: Array<{ provider: string; error?: string }> = [];
       const providers: Array<[string, () => Promise<ProviderResult>]> = [];

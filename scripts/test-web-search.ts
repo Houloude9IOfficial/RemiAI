@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { asSchema } from "ai";
 import { buildWebSearchTool } from "../lib/tools/web-search";
 import { buildIntegrationTools } from "../lib/tools/integrations";
 
@@ -31,6 +32,20 @@ async function main() {
   }) as typeof fetch;
 
   const search = buildWebSearchTool({ braveApiKey: "brave-key" });
+  const parsedStringSafeSearch = search.inputSchema.parse({
+    query: "test",
+    safeSearch: "2",
+  });
+  assert.equal(parsedStringSafeSearch.safeSearch, 2);
+  const sdkSchema = asSchema(search.inputSchema);
+  assert.equal(typeof sdkSchema.validate, "function");
+  const sdkValidation = await sdkSchema.validate!({
+    query: "test",
+    safeSearch: "1",
+  });
+  assert.equal(sdkValidation.success, true);
+  if (sdkValidation.success) assert.equal(sdkValidation.value.safeSearch, 1);
+
   const result = await search.execute({ query: "test", count: 1, category: "general" }) as {
     provider: string;
     results: Array<{ url: string }>;
@@ -54,7 +69,12 @@ async function main() {
     throw new Error(`Unexpected request: ${url}`);
   }) as typeof fetch;
 
-  const fallback = await search.execute({ query: "fallback", count: 1, category: "general" }) as {
+  const fallback = await search.execute({
+    query: "fallback",
+    count: 1,
+    category: "general",
+    safeSearch: "2",
+  }) as {
     provider: string;
     fallback: boolean;
     results: Array<{ url: string }>;
@@ -65,6 +85,7 @@ async function main() {
   assert.equal(calls.length, 2);
   assert.match(calls[0], /127\.0\.0\.1:3105/);
   assert.match(calls[1], /api\.search\.brave\.com/);
+  assert.match(calls[1], /safesearch=strict/);
 
   process.env.SEARXNG = "false";
   calls.length = 0;
