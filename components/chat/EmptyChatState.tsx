@@ -5,7 +5,6 @@ import { useQuery } from "@tanstack/react-query";
 import type { ChatStatus } from "ai";
 import {
   BarChart3,
-  CalendarClock,
   Code2,
   FileText,
   Loader2,
@@ -17,6 +16,7 @@ import { ChatInput, type ChatMode } from "./ChatInput";
 import type { QualityPolicy } from "@/lib/chat/quality-policy";
 import { Timer } from "lucide-react";
 import { TEMPORARY_CHAT_RETENTION_DAYS } from "@/lib/chat/temporary-chat-constants";
+import { dispatchChatInputTogglePrefix } from "@/lib/chat-input-registry";
 
 const OUTCOME_SUGGESTIONS: Array<{
   label: string;
@@ -25,30 +25,27 @@ const OUTCOME_SUGGESTIONS: Array<{
 }> = [
   {
     label: "Research a question",
-    prompt: "Research this question and give me a grounded answer with sources: ",
+    prompt: "Gather information from sources, and answer correctly the following question:",
     icon: Search,
   },
   {
     label: "Analyze a file",
-    prompt: "Analyze the file I attach and summarize the important findings: ",
+    prompt: "Analyze the attached file and summarize the important findings:",
     icon: BarChart3,
   },
   {
     label: "Build or fix code",
-    prompt: "Help me build or fix this code. Inspect the relevant files, make the change, and verify it: ",
+    prompt: "Inspect the relevant files, then build or fix the following code and verify the result:",
     icon: Code2,
   },
   {
     label: "Create a document",
-    prompt: "Create a polished document about this topic and save it in this chat: ",
+    prompt: "Create a polished document about the following topic and save it in this chat:",
     icon: FileText,
   },
-  {
-    label: "Schedule an operation",
-    prompt: "Schedule this recurring operation and explain when it will run: ",
-    icon: CalendarClock,
-  },
 ];
+
+const RECOMMENDED_PROMPTS = OUTCOME_SUGGESTIONS.map(({ prompt }) => prompt);
 
 /**
  * Empty conversation state — code-editor style: a headline with a large,
@@ -121,7 +118,7 @@ export function EmptyChatState({
        translateY entrance would push it past the bottom edge and flash a
        scrollbar. */
     <div className="flex min-h-full w-full flex-col items-center px-6 pb-12 pt-2 animate-fade-in-opacity">
-      <div className="my-auto flex w-full flex-col items-center gap-9">
+      <div className="my-auto -translate-y-6 flex w-full flex-col items-center gap-1 md:-translate-y-10">
         {/* Headline — outer element is a <div>, not a <p>, because it renders
             a nested <p dangerouslySetInnerHTML> (may contain an <a> link).
             <p> inside <p> is invalid HTML and breaks hydration. */}
@@ -161,7 +158,7 @@ export function EmptyChatState({
             </button>
           </div>
         ) : (
-          <div className="relative max-w-3xl text-center text-4xl font-semibold tracking-tight text-foreground/90 md:text-[2.75rem] md:leading-[1.15]">
+          <div className="relative max-w-3xl text-center text-[2.25rem] font-semibold leading-[1.12] tracking-tight text-foreground/90 md:text-[2.75rem] md:leading-[1.12]">
             {/**
              * Reserved mascot slot — when a mascot/illustration exists it can
              * drop in here next to the greeting. Renders nothing today: an
@@ -171,24 +168,6 @@ export function EmptyChatState({
             <p dangerouslySetInnerHTML={{ __html: headline }} />
           </div>
         )}
-
-        <div
-          className="flex w-full max-w-3xl flex-wrap justify-center gap-2 hidden"
-          aria-label="Common outcomes"
-        >
-          {OUTCOME_SUGGESTIONS.map(({ label, prompt, icon: Icon }) => (
-            <button
-              key={label}
-              type="button"
-              disabled={disabled || status === "submitted" || status === "streaming"}
-              onClick={() => onSend(prompt)}
-              className="inline-flex min-h-9 items-center gap-2 rounded-full border border-border/65 bg-background/70 px-3.5 py-2 text-xs font-medium text-foreground/80 transition-colors hover:border-primary/40 hover:bg-primary/[0.05] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:pointer-events-none disabled:opacity-45"
-            >
-              <Icon className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-              {label}
-            </button>
-          ))}
-        </div>
 
         {/* Big centered composer — stays exactly where it is while typing.
             When the first message is sent the page swaps to the docked
@@ -216,12 +195,30 @@ export function EmptyChatState({
           />
         </div>
 
+        <div
+          className="mt-2 flex w-full max-w-3xl flex-wrap justify-center gap-2"
+          aria-label="Common outcomes"
+        >
+          {OUTCOME_SUGGESTIONS.map(({ label, prompt, icon: Icon }) => (
+            <button
+              key={label}
+              type="button"
+              disabled={disabled || status === "submitted" || status === "streaming"}
+              onClick={() => dispatchChatInputTogglePrefix(prompt, RECOMMENDED_PROMPTS)}
+              className="inline-flex min-h-9 items-center gap-2 rounded-full border border-border/65 bg-background/70 px-3.5 py-2 text-xs font-medium text-foreground/80 transition-colors hover:border-primary/40 hover:bg-primary/[0.05] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:pointer-events-none disabled:opacity-45"
+            >
+              <Icon className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+              {label}
+            </button>
+          ))}
+        </div>
+
         {onAiStart && (
           <button
             type="button"
             onClick={onAiStart}
             disabled={isAiStarting || disabled}
-            className="group relative inline-flex items-center gap-2 rounded-lg border border-border/70 bg-background px-4 py-2 text-sm font-medium text-foreground transition-all duration-150 hover:bg-accent/40 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
+            className="group relative mt-10 inline-flex items-center gap-2 rounded-md border border-border/50 bg-transparent px-3 py-1.5 text-xs font-medium text-muted-foreground transition-all duration-150 hover:bg-accent/40 hover:text-foreground active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
           >
             {isAiStarting ? (
               <>

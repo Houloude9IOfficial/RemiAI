@@ -249,7 +249,7 @@ export function ChatModelSelector({
         <ChevronDown
           className={cn(
             "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform",
-            open && "rotate-180",
+            open && "rotate-[-180deg]",
           )}
         />
       </DropdownMenuTrigger>

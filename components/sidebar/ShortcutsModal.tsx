@@ -6,6 +6,7 @@ import {
   PanelLeft,
   Keyboard,
   Command,
+  Search,
 } from "lucide-react";
 import {
   Dialog,
@@ -63,6 +64,11 @@ export function ShortcutsDialog() {
         : "Linux";
 
   const shortcuts = [
+    {
+      icon: Search,
+      label: "Open command palette",
+      keys: <><Kbd><ModKey /></Kbd><Kbd>K</Kbd></>,
+    },
     {
       icon: MessageCircle,
       label: "Focus chat input",

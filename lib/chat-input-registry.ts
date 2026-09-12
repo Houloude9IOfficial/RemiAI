@@ -13,9 +13,15 @@
 let chatInput: HTMLTextAreaElement | null = null;
 
 export const CHAT_INPUT_PREFILL_EVENT = "remi:chat-input:prefill";
+export const CHAT_INPUT_TOGGLE_PREFIX_EVENT = "remi:chat-input:toggle-prefix";
 
 export type ChatInputPrefillDetail = {
   text: string;
+};
+
+export type ChatInputTogglePrefixDetail = {
+  text: string;
+  prefixes?: string[];
 };
 
 /** Register the mounted chat input. */
@@ -44,6 +50,16 @@ export function dispatchChatInputPrefill(text: string): void {
   window.dispatchEvent(
     new CustomEvent<ChatInputPrefillDetail>(CHAT_INPUT_PREFILL_EVENT, {
       detail: { text },
+    }),
+  );
+}
+
+/** Toggle an exact phrase at the start of the mounted composer. */
+export function dispatchChatInputTogglePrefix(text: string, prefixes?: string[]): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent<ChatInputTogglePrefixDetail>(CHAT_INPUT_TOGGLE_PREFIX_EVENT, {
+      detail: { text, prefixes },
     }),
   );
 }

@@ -56,6 +56,7 @@ import {
 } from "@/lib/image-utils";
 import {
   CHAT_INPUT_PREFILL_EVENT,
+  CHAT_INPUT_TOGGLE_PREFIX_EVENT,
   registerChatInput,
   unregisterChatInput,
 } from "@/lib/chat-input-registry";
@@ -157,7 +158,7 @@ function CapabilityChip({
 }
 
 const LINE_HEIGHT = 24;
-const MAX_LINES = 3;
+const MAX_LINES = 10;
 const MAX_HEIGHT = LINE_HEIGHT * MAX_LINES;
 // Must stay in sync with the server's MAX_FILES_PER_REQUEST
 // (app/api/chat/upload/route.ts).
@@ -230,11 +231,11 @@ export function ChatInput({
 }) {
   const [text, setText] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [inputFocused, setInputFocused] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Highlight the composer border only while the textarea itself is focused.
   // Using focus-within would light it up for toolbar buttons too (e.g. the
   // dropdown triggers keep focus after their menus close), which isn't wanted.
-  const [inputFocused, setInputFocused] = useState(false);
 
   // -----------------------------------------------------------------------
   // Slash-command menu (/mcp, /tool, /file, mode commands)
@@ -385,6 +386,36 @@ export function ChatInput({
     };
     window.addEventListener(CHAT_INPUT_PREFILL_EVENT, onPrefill);
     return () => window.removeEventListener(CHAT_INPUT_PREFILL_EVENT, onPrefill);
+  }, [resize]);
+
+  useEffect(() => {
+    const onTogglePrefix = (event: Event) => {
+      const detail = (event as CustomEvent<{ text?: unknown; prefixes?: unknown }>).detail;
+      const phrase = detail?.text;
+      if (typeof phrase !== "string" || !phrase.trim()) return;
+      const exactPhrase = phrase.trim();
+      const knownPrefixes = Array.isArray(detail.prefixes)
+        ? detail.prefixes.filter((prefix): prefix is string => typeof prefix === "string").map((prefix) => prefix.trim()).filter(Boolean)
+        : [exactPhrase];
+      setText((previous) => {
+        const leading = previous.trimStart();
+        const currentPrefix = knownPrefixes.find((prefix) =>
+          leading === prefix || leading.startsWith(`${prefix} `) || leading.startsWith(`${prefix}\n`),
+        );
+        const remaining = currentPrefix ? leading.slice(currentPrefix.length).trimStart() : leading;
+        if (currentPrefix === exactPhrase) return remaining;
+        if (remaining) {
+          return `${exactPhrase}\n\n${remaining}`;
+        }
+        return `${exactPhrase}\n\n`;
+      });
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+        resize();
+      });
+    };
+    window.addEventListener(CHAT_INPUT_TOGGLE_PREFIX_EVENT, onTogglePrefix);
+    return () => window.removeEventListener(CHAT_INPUT_TOGGLE_PREFIX_EVENT, onTogglePrefix);
   }, [resize]);
 
   // -----------------------------------------------------------------------
@@ -1158,21 +1189,7 @@ export function ChatInput({
             composer and shift the box up ~22px on every send, then drop it
             back down when the response finishes. Dimmed (not removed) while
             streaming so the input box never changes size or position. */}
-        <div
-          className={cn(
-            "mb-1.5 flex items-center gap-2 px-1 text-[11px] text-muted-foreground transition-opacity duration-200",
-            isStreaming && "opacity-50",
-          )}
-        >
-          <span className="font-medium text-foreground/80">
-            {mode === "goal"
-              ? "Goal mode"
-              : mode === "plan"
-                ? "Plan mode"
-                : mode === "build"
-                  ? "Build mode"
-                  : "Chat mode"}
-          </span>
+        <div className={cn("mb-1.5 flex min-h-4 items-center gap-2 px-1 text-[11px] text-muted-foreground transition-opacity duration-200", isStreaming && "opacity-50")}>
           {isTemporary && (
             <>
               <span aria-hidden="true">·</span>
@@ -1192,14 +1209,10 @@ export function ChatInput({
                   ? "Change files, run checks, and report what was verified"
                   : "Direct answer with minimal overhead"}
           </span> */}
-          {!demo && onQualityPolicyChange && (
-            <>
-              <span aria-hidden="true">·</span>
-              <span>
-                {qualityPolicyLabel(activeQualityPolicy)}
-                {activeQualityPolicy === "high" && " · Deep reasoning"}
-              </span>
-            </>
+          {!demo && onQualityPolicyChange && activeQualityPolicy !== "medium" && (
+            <span className="rounded-full bg-primary/8 px-2 py-0.5 font-medium text-primary">
+              {qualityPolicyLabel(activeQualityPolicy)}
+            </span>
           )}
         </div>
 
@@ -1207,9 +1220,9 @@ export function ChatInput({
           className={cn(
             // While the slash menu is attached above, square the composer's
             // top corners so the two sheets look like one unit.
-            "group relative flex flex-col border border-border/70 bg-surface-1 transition-colors duration-200",
+            "group relative flex flex-col border border-border/45 bg-surface-1/80 transition-colors duration-200",
             slashLevel ? "rounded-b-3xl" : "rounded-3xl",
-            // large && inputFocused && "border-primary/60", uncomment to border the composer when focused
+            inputFocused && "border-border-focus/70",
             isDragging && "border-primary/45 bg-primary/[0.03]",
             isStreaming && "opacity-95",
           )}
