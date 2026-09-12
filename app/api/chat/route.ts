@@ -33,8 +33,10 @@ import {
   SESSION_FILES_SECTION,
   REMI_CARDS_SECTION,
   REMI_CARD_PRESENTATION_RULES,
+  REMI_CARD_SCOPE_RULES,
 } from "@/lib/chat/system-prompt";
 import { buildRemiCardTools, setRemiApiOverride, setRemiCardDisplayModes, setRemiLocationFallback } from "@/lib/tools/remi-cards";
+import { existingRemiCardInventory, remiCardRequestIdentity } from "@/lib/chat/card-identity";
 import { PERSISTENCE_GUIDANCE } from "@/lib/chat/persistence-guidance";
 import {
   buildCachedInstructions,
@@ -758,12 +760,38 @@ Definition of done:
   setRemiApiOverride(_remiApiUrl);
   setRemiCardDisplayModes(_remiCardDisplayModes);
   setRemiLocationFallback(req.headers.get("x-user-latitude"), req.headers.get("x-user-longitude"));
-  const _remiCardToolSet: Record<string, unknown> = _remiApiEnabled ? (buildRemiCardTools() as Record<string, unknown>) : {};
+  const _remiCardToolSet: Record<string, unknown> = _remiApiEnabled
+    ? (buildRemiCardTools() as Record<string, unknown>)
+    : {};
+  // Tool calls can be repeated by a model across agentic steps. Share one
+  // request-scoped promise per card query so a duplicate does not hit the
+  // provider twice. The UI also deduplicates the resulting card parts.
+  const remiCardExecutionCache = new Map<string, Promise<unknown>>();
+  for (const [toolName, rawTool] of Object.entries(_remiCardToolSet)) {
+    const tool = rawTool as { execute?: (args: Record<string, unknown>) => Promise<unknown> };
+    if (typeof tool.execute !== "function") continue;
+    const execute = tool.execute;
+    _remiCardToolSet[toolName] = {
+      ...tool,
+      execute: (args: Record<string, unknown>) => {
+        const key = remiCardRequestIdentity(toolName, args);
+        const cached = remiCardExecutionCache.get(key);
+        if (cached) return cached;
+        const result = Promise.resolve(execute(args));
+        remiCardExecutionCache.set(key, result);
+        return result;
+      },
+    };
+  }
   if (Object.keys(_remiCardToolSet).length) {
     Object.assign(tools, _remiCardToolSet);
     tools.list_available_tools = buildListAvailableToolsTool(new Set(Object.keys(tools)))["list_available_tools"];
   }
   const _remiCardsSection = Object.keys(_remiCardToolSet).length ? REMI_CARDS_SECTION : "";
+  const existingCardInventory = existingRemiCardInventory(uiMessages);
+  const existingCardSection = existingCardInventory
+    ? `\n\n## Existing visual cards in this conversation\nThese cards are already present in the conversation. Treat this as a registry, not as a reason to repeat them. For an exact same non-time-sensitive request, do not call the card tool again unless the user explicitly asks for a fresh/current value. Time, weather, stock, crypto, and news requests are inherently current: call their card once for the new request, but never duplicate that call within the same response. If a new card type is added later, apply the same identity rule automatically.\n${existingCardInventory}`
+    : "";
   const prefParts: string[] = [];
   if (prefs?.preferredName) {
     prefParts.push(`The user's preferred name is "${prefs.preferredName}". Address them by this name.`);
@@ -1080,7 +1108,7 @@ Definition of done:
 
   const dynamicSystemPromptBase =
     systemTip + profileTip + memoryTip + fileChangeTip + summarySection +
-    planModePrompt + buildModePrompt + canvasSection + _remiCardsSection + (Object.keys(_remiCardToolSet).length ? REMI_CARD_PRESENTATION_RULES : "") + activeSkillsSection +
+    planModePrompt + buildModePrompt + canvasSection + _remiCardsSection + existingCardSection + (Object.keys(_remiCardToolSet).length ? REMI_CARD_PRESENTATION_RULES + REMI_CARD_SCOPE_RULES : "") + activeSkillsSection +
     taggedSkillsSection + qualityPolicyPrompt;
 
   const dynamicSystemPrompt = dynamicSystemPromptBase + toolAvailabilityNote;

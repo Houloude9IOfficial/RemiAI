@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { truncateToolResult } from "@/lib/utils";
+import { remiCardOutputIdentity } from "@/lib/chat/card-identity";
 
 const REMIAPI_DEFAULT = "https://remiapi.example.workers.dev";
 
@@ -57,6 +58,9 @@ function cardResult(card: string, query: Record<string, unknown>, data: unknown,
     type: "remi_card",
     card,
     query,
+    // Stable across renders and future card types; display-only fields are
+    // intentionally excluded from the identity.
+    cardId: remiCardOutputIdentity({ type: "remi_card", card, query, data }),
     displayMode,
     description: opts.description ?? null,
     data,
@@ -204,9 +208,23 @@ export const remiCardTools: Record<string, { description: string; inputSchema: z
       const fallback = !location && latitude == null && longitude == null ? remiLocationFallback : null;
       if (latitude != null || fallback) qs.set("latitude", String(latitude ?? fallback!.latitude));
       if (longitude != null || fallback) qs.set("longitude", String(longitude ?? fallback!.longitude));
-      const data = await fetchRemi(`/weather?${qs.toString()}`, () =>
-        fallbackWeather(location, latitude, longitude)
+      const fallbackLatitude = latitude ?? fallback?.latitude;
+      const fallbackLongitude = longitude ?? fallback?.longitude;
+      let data = await fetchRemi(`/weather?${qs.toString()}`, () =>
+        fallbackWeather(location, fallbackLatitude, fallbackLongitude)
       );
+      // A proxy can return a structured 200 response containing an error.
+      // Treat that like an unavailable proxy and use the browser coordinates
+      // before exposing a misleading "Missing location" card to the model.
+      if (
+        data &&
+        typeof data === "object" &&
+        typeof (data as Record<string, unknown>).error === "string" &&
+        fallbackLatitude != null &&
+        fallbackLongitude != null
+      ) {
+        data = await fallbackWeather(location, fallbackLatitude, fallbackLongitude);
+      }
       return cardResult("weather", { location: location ?? null, latitude: latitude ?? fallback?.latitude ?? null, longitude: longitude ?? fallback?.longitude ?? null }, data, { cardOnly, description });
     },
   },

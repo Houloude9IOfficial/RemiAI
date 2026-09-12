@@ -29,6 +29,31 @@ export function getClientLocale(): string {
 
 let cachedLocation: { latitude: number; longitude: number } | null = null;
 
+/** Ask the browser for precise location after an explicit user action. */
+export function requestClientLocation(): Promise<{ latitude: number; longitude: number }> {
+  if (typeof navigator === "undefined" || !navigator.geolocation) {
+    return Promise.reject(new Error("Location is not available in this browser."));
+  }
+  return new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        cachedLocation = { latitude: coords.latitude, longitude: coords.longitude };
+        resolve(cachedLocation);
+      },
+      (error) => {
+        reject(
+          new Error(
+            error.code === error.PERMISSION_DENIED
+              ? "Location permission was denied. Enable it in your browser settings and try again."
+              : "Could not determine your location. Try again or enter a city manually.",
+          ),
+        );
+      },
+      { maximumAge: 10 * 60_000, timeout: 10_000, enableHighAccuracy: false },
+    );
+  });
+}
+
 /**
  * Read a previously granted browser location permission. This deliberately
  * never triggers a permission prompt: weather still has IP/locale fallbacks

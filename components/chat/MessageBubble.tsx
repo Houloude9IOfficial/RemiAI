@@ -44,6 +44,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { isRemiCardOutput, remiCardPartIdentity } from "@/lib/chat/card-identity";
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -438,6 +439,75 @@ const REMI_CARD_TOOL_NAMES = new Set([
   "stock_card",
 ]);
 
+function isRemiCardPart(part: UIMessage["parts"][number], shortToolName: string | null): boolean {
+  if (shortToolName && (REMI_CARD_TOOL_NAMES.has(shortToolName) || shortToolName.endsWith("_card"))) {
+    return true;
+  }
+  const record = part as Record<string, unknown>;
+  const output = record.output;
+  return isRemiCardOutput(output);
+}
+
+function remiCardPartOutput(part: UIMessage["parts"][number]): Record<string, unknown> | null {
+  const record = part as Record<string, unknown>;
+  if (record.output && typeof record.output === "object") return record.output as Record<string, unknown>;
+  const invocation = record.toolInvocation;
+  if (invocation && typeof invocation === "object") {
+    const output = (invocation as Record<string, unknown>).output ?? (invocation as Record<string, unknown>).result;
+    return output && typeof output === "object" ? output as Record<string, unknown> : null;
+  }
+  return null;
+}
+
+function cardKind(part: UIMessage["parts"][number]): string | null {
+  const output = remiCardPartOutput(part);
+  if (isRemiCardOutput(output)) return String(output.card).toLowerCase();
+  try {
+    return getToolName(part as Parameters<typeof getToolName>[0]).toLowerCase().replace(/^.*__/, "").replace(/_card$/, "");
+  } catch {
+    return null;
+  }
+}
+
+function isFailedCard(part: UIMessage["parts"][number]): boolean {
+  const output = remiCardPartOutput(part);
+  if (!isRemiCardOutput(output)) return false;
+  const data = output.data;
+  return Boolean(data && typeof data === "object" && typeof (data as Record<string, unknown>).error === "string");
+}
+
+/** Keep one visual for duplicate card calls in a single assistant turn. */
+function dedupeRemiCardSegments(segments: Segment[]): Segment[] {
+  const cardSegments = segments.filter(
+    (segment): segment is Extract<Segment, { type: "remiCard" }> => segment.type === "remiCard",
+  );
+  const successfulKinds = new Set(
+    cardSegments
+      .filter((segment) => !isFailedCard(segment.part))
+      .map((segment) => cardKind(segment.part))
+      .filter((kind): kind is string => Boolean(kind)),
+  );
+  // If a location/device lookup is retried successfully in the same turn,
+  // don't leave the failed placeholder above the usable result.
+  const withoutSupersededFailures = segments.filter((segment) => {
+    if (segment.type !== "remiCard" || !isFailedCard(segment.part)) return true;
+    const kind = cardKind(segment.part);
+    return kind === null || !successfulKinds.has(kind);
+  });
+  const lastByIdentity = new Map<string, number>();
+  withoutSupersededFailures.forEach((segment, index) => {
+    if (segment.type !== "remiCard") return;
+    const identity = remiCardPartIdentity(segment.part);
+    if (identity) lastByIdentity.set(identity, index);
+  });
+  if (lastByIdentity.size === 0) return withoutSupersededFailures;
+  return withoutSupersededFailures.filter((segment, index) => {
+    if (segment.type !== "remiCard") return true;
+    const identity = remiCardPartIdentity(segment.part);
+    return !identity || lastByIdentity.get(identity) === index;
+  });
+}
+
 /**
  * Text this short between two tool calls is transitional filler (e.g.
  * "Hmm," or "Let me retry") — it gets absorbed so the calls read as one
@@ -658,7 +728,7 @@ function buildSegments(parts: UIMessage["parts"]): Segment[] {
 
       if (shortToolName === "create_visual") {
         segments.push({ type: "visual", part });
-      } else if (shortToolName && REMI_CARD_TOOL_NAMES.has(shortToolName)) {
+      } else if (isRemiCardPart(part, shortToolName)) {
         segments.push({ type: "remiCard", part });
       } else if (
         shortToolName === "session_present_files" ||
@@ -704,13 +774,15 @@ function buildSegments(parts: UIMessage["parts"]): Segment[] {
       )
     : segments;
 
+  const dedupedCardSegments = dedupeRemiCardSegments(visibleSegments);
+
   // Deduplicate canvas present cards: keep only the LAST one so the user
   // sees a single card at the end of the message, not one per canvas_* call.
-  const lastCanvasIdx = visibleSegments.findLastIndex(
+  const lastCanvasIdx = dedupedCardSegments.findLastIndex(
     (s) => s.type === "canvasPresent",
   );
   if (lastCanvasIdx >= 0) {
-    const deduped = visibleSegments.filter(
+    const deduped = dedupedCardSegments.filter(
       (s, i) => s.type !== "canvasPresent" || i === lastCanvasIdx,
     );
     // Reasoning is consolidated into ONE block before the tool pass, so tool
@@ -719,7 +791,7 @@ function buildSegments(parts: UIMessage["parts"]): Segment[] {
     return mergeInRowToolSegments(mergeReasoningSegments(deduped));
   }
 
-  return mergeInRowToolSegments(mergeReasoningSegments(visibleSegments));
+  return mergeInRowToolSegments(mergeReasoningSegments(dedupedCardSegments));
 }
 
 function UserMessageBubble({
@@ -1198,7 +1270,7 @@ function RemiCardSegment({ part }: { part: UIMessage["parts"][number] }) {
   if (isError) {
     return (
       <div className="overflow-hidden rounded-xl border border-destructive/20 bg-destructive/[0.04] p-4 text-sm text-destructive">
-        Card could not be loaded — the tool call encountered an error.
+        Card could not be loaded. The tool call encountered an error.
       </div>
     );
   }
@@ -1219,7 +1291,7 @@ function RemiCardSegment({ part }: { part: UIMessage["parts"][number] }) {
   if (!output || typeof output !== "object") {
     return (
       <div className="overflow-hidden rounded-xl border border-destructive/20 bg-destructive/[0.04] p-4 text-sm text-destructive">
-        Card could not be rendered — unexpected output format.
+        Card could not be rendered. Unexpected output format.
       </div>
     );
   }

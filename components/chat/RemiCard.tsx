@@ -2,7 +2,8 @@
 
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
-import { Clock, CloudSun, DollarSign, MapPin, Bitcoin, Newspaper, TrendingUp, ExternalLink, Droplets, Wind, ArrowUpRight, AlertCircle } from "lucide-react";
+import { Clock, CloudSun, DollarSign, MapPin, Bitcoin, Newspaper, TrendingUp, ExternalLink, Droplets, Wind, ArrowUpRight, AlertCircle, LocateFixed } from "lucide-react";
+import { requestClientLocation } from "@/lib/chat/user-context";
 
 type CardKind = "weather" | "timezone" | "currency" | "map" | "crypto" | "news" | "stock";
 
@@ -51,7 +52,7 @@ export function RemiCard({ data }: { data: unknown }) {
       </div>
 
       <div className="p-3.5 text-center align-middle">
-        {typeof (innerCard as any)?.error === "string" ? <CardError message={(innerCard as any).error} /> : <>
+        {typeof (innerCard as any)?.error === "string" ? <CardError card={card} message={(innerCard as any).error} /> : <>
         {card === "weather" && <WeatherBody d={innerCard as any} />}
         {card === "timezone" && <TimezoneBody d={innerCard as any} />}
         {card === "currency" && <CurrencyBody d={innerCard as any} />}
@@ -69,8 +70,49 @@ export function RemiCard({ data }: { data: unknown }) {
   );
 }
 
-function CardError({ message }: { message: string }) {
-  return <div className="flex items-center gap-2 py-1 text-xs text-muted-foreground"><AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />{message}</div>;
+function CardError({ card, message }: { card: CardKind; message: string }) {
+  const [locationState, setLocationState] = useState<"idle" | "requesting" | "enabled" | "failed">("idle");
+  const [locationError, setLocationError] = useState("");
+  const isMissingWeatherLocation = card === "weather" && /missing location|provide.*location/i.test(message);
+
+  async function enableLocation() {
+    setLocationState("requesting");
+    setLocationError("");
+    try {
+      await requestClientLocation();
+      setLocationState("enabled");
+    } catch (error) {
+      setLocationState("failed");
+      setLocationError(error instanceof Error ? error.message : "Location permission could not be granted.");
+    }
+  }
+
+  if (!isMissingWeatherLocation) {
+    return <div className="flex items-center gap-2 py-1 text-xs text-muted-foreground"><AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />{message}</div>;
+  }
+
+  return (
+    <div className="space-y-2 py-1 text-left">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />
+        <span>Location is needed to show local weather.</span>
+      </div>
+      {locationState === "enabled" ? (
+        <div className="text-xs text-emerald-700">Location enabled. Ask for the weather again to load your local forecast.</div>
+      ) : (
+        <button
+          type="button"
+          onClick={enableLocation}
+          disabled={locationState === "requesting"}
+          className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-background px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-wait disabled:opacity-60"
+        >
+          <LocateFixed className="h-3.5 w-3.5" />
+          {locationState === "requesting" ? "Requesting location…" : "Enable location"}
+        </button>
+      )}
+      {locationError ? <div className="text-[11px] text-destructive">{locationError}</div> : null}
+    </div>
+  );
 }
 
 function WeatherBody({ d }: { d: any }) {
@@ -178,7 +220,7 @@ function MapBody({ d }: { d: any }) {
             </a>
           </div>
         </div>
-      ) : <CardError message="This place could not be located. Try the business name with its city or address." />}
+      ) : <CardError card="map" message="This place could not be located. Try the business name with its city or address." />}
     </div>
   );
 }

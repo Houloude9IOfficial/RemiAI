@@ -580,6 +580,9 @@ function ConversationChat({
   // Keep the composer reactive even when a failed request does not cause the
   // SDK to publish the new user message back through `messages`.
   const [pendingUserTurn, setPendingUserTurn] = useState(false);
+  // Synchronous guard for double click/Enter events that arrive before the
+  // AI SDK has updated `status` to submitted.
+  const sendGuardRef = useRef(false);
 
   useEffect(() => {
     primeClientLocation();
@@ -674,6 +677,8 @@ function ConversationChat({
       startStream(conversationId);
       return;
     }
+
+    sendGuardRef.current = false;
 
     // Keep stream state intact on transport errors so Resume/Continue can
     // reconnect instead of immediately downgrading to a blind resend flow.
@@ -809,6 +814,8 @@ function ConversationChat({
 
   const handleSend = useCallback(
     (text: string) => {
+      if (sendGuardRef.current || status === "submitted" || status === "streaming") return;
+      sendGuardRef.current = true;
       clearError();
       clearChatError();
       // A fresh user message gets a fresh auto-continue budget — the previous
@@ -820,7 +827,7 @@ function ConversationChat({
       canvasWinsRef.current = false;
       sendMessage({ text });
     },
-    [clearError, clearChatError, sendMessage],
+    [clearError, clearChatError, sendMessage, status],
   );
 
   // A user message can survive locally even when its assistant request never
