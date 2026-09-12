@@ -8,6 +8,7 @@ export type Conversation = {
   mode: string;
   qualityPolicy: "minimal" | "low" | "medium" | "high";
   bashMode: "sandboxed" | "full";
+  requestMode: "sandboxed" | "full";
   /** Temporary chat (ChatGPT-style): hacky/temporary UI, auto-deleted after 30 days. */
   isTemporary: boolean;
   /** Per-chat memory switch — off means no memory in prompts and no saving. */
@@ -73,6 +74,7 @@ export const conversationsApi = {
       mode: string;
       qualityPolicy: "minimal" | "low" | "medium" | "high";
       bashMode: "sandboxed" | "full";
+      requestMode: "sandboxed" | "full";
       isTemporary: boolean;
       memoryEnabled: boolean;
     }>,

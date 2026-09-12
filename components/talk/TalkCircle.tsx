@@ -1,13 +1,18 @@
-// ── Talk Circle — Pulsating voice indicator ─────────────────────────
-// A large animated circle that responds to voice state:
-//   idle:    slow, subtle breathing pulse
-//   thinking: faster pulse with ambient glow
-//   speaking: vibrant ring with energy waves
+// ── Talk Circle — voice state indicator ─────────────────────────────
+// A large animated circle that reflects the voice state:
+//   idle:      slow, subtle breathing pulse
+//   listening: calm breathing with a soft outer ring
+//   thinking:  gentle glow pulse
+//   speaking:  visible energy ripples
+//
+// Only transform/opacity are animated — never SVG geometry attributes
+// (animating `d`/`x1`/`y1` makes framer-motion emit `undefined` into the
+// DOM and spams the console). Honours prefers-reduced-motion.
 // ────────────────────────────────────────────────────────────────────
 
 "use client";
 
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 export type CircleState = "idle" | "listening" | "thinking" | "speaking";
@@ -22,30 +27,35 @@ interface TalkCircleProps {
   className?: string;
 }
 
-// ── Ripple ring for speaking state ─────────────────────────────────
+const SIZE = 168;
+
+// ── Gentle, shared easings ──────────────────────────────────────────
+
+const BREATH = { duration: 3.2, repeat: Infinity, ease: "easeInOut" } as const;
+
+// ── Ripple ring for the speaking state ──────────────────────────────
 
 function RippleRing({ delay }: { delay: number }) {
   return (
     <motion.div
-      className="absolute inset-0 rounded-full border-2 border-primary/30"
-      initial={{ opacity: 0, scale: 1 }}
-      animate={{
-        opacity: [0, 0.4, 0],
-        scale: [1, 1.3, 1.6],
-      }}
-      transition={{
-        duration: 2,
-        repeat: Infinity,
-        delay,
-        ease: "easeOut",
-      }}
+      className="absolute inset-0 rounded-full border border-primary/25"
+      initial={{ opacity: 0, scale: 0.94 }}
+      animate={{ opacity: [0, 0.35, 0], scale: [0.94, 1.18, 1.34] }}
+      transition={{ duration: 2.6, repeat: Infinity, delay, ease: "easeOut" }}
     />
   );
 }
 
-// ── Microphone icon ────────────────────────────────────────────────
+// ── Microphone icon ─────────────────────────────────────────────────
+// Geometry is static; the capsule just breathes.
 
 function MicIcon({ state }: { state: CircleState }) {
+  const reduceMotion = useReducedMotion();
+
+  const capsuleScale =
+    reduceMotion || state === "idle" ? 1 : state === "speaking" ? [1, 1.1, 0.97, 1.06, 1] : [1, 1.035, 1];
+  const capsuleDuration = state === "speaking" ? 1.1 : 2.6;
+
   return (
     <svg
       viewBox="0 0 24 24"
@@ -54,71 +64,41 @@ function MicIcon({ state }: { state: CircleState }) {
       strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="h-8 w-8"
+      className="h-9 w-9"
+      aria-hidden="true"
     >
-      <motion.path
-        d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"
-        animate={
-          state === "speaking"
-            ? { scaleY: [1, 1.15, 0.95, 1.1, 1] }
-            : { scaleY: 1 }
-        }
-        transition={
-          state === "speaking"
-            ? { duration: 0.8, repeat: Infinity, ease: "easeInOut" }
-            : {}
-        }
-      />
+      <motion.g
+        style={{ transformBox: "fill-box", transformOrigin: "center" }}
+        animate={{ scaleY: capsuleScale }}
+        transition={{ duration: capsuleDuration, repeat: Infinity, ease: "easeInOut" }}
+      >
+        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+      </motion.g>
+
       <motion.path
         d="M19 10v2a7 7 0 0 1-14 0v-2"
-        animate={
-          state === "thinking"
-            ? { d: ["M19 10v2a7 7 0 0 1-14 0v-2", "M19 9v2a7 7 0 0 1-14 0v-2"] }
-            : { d: "M19 10v2a7 7 0 0 1-14 0v-2" }
-        }
-        transition={
-          state === "thinking"
-            ? { duration: 1.5, repeat: Infinity, ease: "easeInOut" }
-            : {}
-        }
+        animate={{
+          opacity: reduceMotion ? 1 : state === "thinking" ? [0.55, 1, 0.55] : 1,
+        }}
+        transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
       />
-      <motion.line
-        x1="12"
-        y1="19"
-        x2="12"
-        y2="22"
-        animate={
-          state === "speaking"
-            ? { y1: [19, 18.5, 19], y2: [22, 21.5, 22] }
-            : { y1: 19, y2: 22 }
-        }
-        transition={
-          state === "speaking"
-            ? { duration: 0.6, repeat: Infinity, ease: "easeInOut" }
-            : {}
-        }
-      />
-      <motion.line
-        x1="9"
-        y1="22"
-        x2="15"
-        y2="22"
-        animate={
-          state === "speaking"
-            ? { x1: [9, 8, 9], x2: [15, 16, 15] }
-            : { x1: 9, x2: 15 }
-        }
-        transition={
-          state === "speaking"
-            ? { duration: 0.6, repeat: Infinity, ease: "easeInOut" }
-            : {}
-        }
-      />
+
+      <line x1="12" y1="19" x2="12" y2="22" />
+      <line x1="9" y1="22" x2="15" y2="22" />
     </svg>
   );
 }
 
-// ── Main Component ─────────────────────────────────────────────────
+// ── State label ─────────────────────────────────────────────────────
+
+const STATE_LABELS: Record<CircleState, string> = {
+  idle: "Voice mode",
+  listening: "Listening",
+  thinking: "Thinking",
+  speaking: "Speaking",
+};
+
+// ── Main component ──────────────────────────────────────────────────
 
 export function TalkCircle({
   state,
@@ -129,192 +109,146 @@ export function TalkCircle({
   onPointerUp,
   className,
 }: TalkCircleProps) {
-  // ── Circle animations ──────────────────────────────────────────
-  // Note: boxShadow can't use oklch CSS vars (Tailwind 4 style),
-  // so we control glow via the separate blur div behind the circle.
+  const reduceMotion = useReducedMotion();
 
-  const idleAnimation = {
-    scale: 1,
-  };
+  // ── Circle motion per state ────────────────────────────────────
+  const circleAnimation = (() => {
+    if (reduceMotion) return { scale: 1 };
+    switch (state) {
+      case "speaking":
+        return {
+          scale: [1, 1.045, 0.99, 1.03, 1],
+          transition: { duration: 2.2, repeat: Infinity, ease: "easeInOut" as const },
+        };
+      case "listening":
+        return {
+          scale: pressed ? [1, 1.035, 0.995, 1.02, 1] : [1, 1.02, 1],
+          transition: {
+            duration: pressed ? 1.6 : 2.6,
+            repeat: Infinity,
+            ease: "easeInOut" as const,
+          },
+        };
+      case "thinking":
+        return {
+          scale: [1, 1.015, 1],
+          transition: { duration: 2.8, repeat: Infinity, ease: "easeInOut" as const },
+        };
+      default:
+        return { scale: [1, 1.015, 1], transition: BREATH };
+    }
+  })();
 
-  const listeningAnimation = {
-    scale: pressed ? [1, 1.04, 0.98, 1.02, 1] : [1, 1.02, 0.99, 1.01, 1],
-    transition: {
-      duration: pressed ? 0.6 : 1.2,
-      repeat: Infinity,
-      ease: "easeInOut" as const,
-    },
-  };
-
-  const thinkingAnimation = {
-    scale: [1, 1.03, 1],
-    transition: {
-      duration: 1.5,
-      repeat: Infinity,
-      ease: "easeInOut" as const,
-    },
-  };
-
-  const speakingAnimation = {
-    scale: [1, 1.06, 0.98, 1.04, 1],
-    transition: {
-      duration: 0.8,
-      repeat: Infinity,
-      ease: "easeInOut" as const,
-    },
-  };
+  const glowAnimation = (() => {
+    if (reduceMotion) {
+      return { scale: 1, opacity: state === "idle" ? 0.35 : 0.7 };
+    }
+    return {
+      scale: state === "speaking" ? [1, 1.16, 1] : state === "idle" ? [1, 1.05, 1] : [1, 1.1, 1],
+      opacity: state === "idle" ? [0.25, 0.4, 0.25] : [0.55, 0.8, 0.55],
+      transition: {
+        duration: state === "speaking" ? 2.2 : 3.4,
+        repeat: Infinity,
+        ease: "easeInOut" as const,
+      },
+    };
+  })();
 
   return (
-    <div className={cn("relative flex items-center justify-center", className)}>
-      {/* Ripple rings (only during speaking) */}
+    <div
+      className={cn("relative flex items-center justify-center", className)}
+      style={{ width: SIZE, height: SIZE }}
+    >
+      {/* Soft glow behind the circle */}
+      <motion.div
+        className="pointer-events-none absolute rounded-full bg-primary/10 blur-3xl"
+        style={{ width: SIZE * 1.5, height: SIZE * 1.5 }}
+        animate={glowAnimation}
+      />
+
+      {/* Energy ripples while the assistant speaks */}
       <AnimatePresence>
-        {state === "speaking" && !isMuted && (
+        {state === "speaking" && !isMuted && !reduceMotion && (
           <>
             <RippleRing delay={0} />
-            <RippleRing delay={0.7} />
-            <RippleRing delay={1.4} />
+            <RippleRing delay={0.85} />
+            <RippleRing delay={1.7} />
           </>
         )}
       </AnimatePresence>
 
-      {/* Glow behind circle */}
+      {/* Outer ring — doubles as the listening indicator */}
       <motion.div
-        className="absolute rounded-full bg-primary/5 blur-3xl"
-        style={{ width: 200, height: 200 }}
+        className={cn(
+          "pointer-events-none absolute inset-0 rounded-full border",
+          state === "idle" ? "border-border/40" : "border-primary/20",
+        )}
         animate={{
-          scale:
-            state === "speaking"
-              ? [1, 1.2, 1]
-              : state === "listening"
-                ? [1, 1.08, 1]
-                : 1,
-          opacity:
-            state === "idle"
-              ? 0.5
-              : state === "listening"
-                ? 0.8
-                : state === "thinking"
-                  ? 0.7
-                  : 0.9,
+          opacity: reduceMotion ? 0.6 : state === "idle" ? [0.35, 0.6, 0.35] : [0.6, 1, 0.6],
+          scale: reduceMotion ? 1 : state === "listening" ? [1, 1.03, 1] : 1,
         }}
-        transition={{
-          duration:
-            state === "speaking"
-              ? 1.5
-              : state === "listening"
-                ? 1.2
-                : 2,
-          repeat:
-            state === "speaking" || state === "listening" ? Infinity : 0,
-          ease: "easeInOut",
-        }}
+        transition={{ duration: 2.8, repeat: Infinity, ease: "easeInOut" }}
       />
 
-      {/* Main circle */}
+      {/* Main circle (button) */}
       <motion.button
         type="button"
         onClick={onClick}
         onPointerDown={onPointerDown}
         onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        aria-label={
+          state === "speaking"
+            ? "Interrupt the assistant"
+            : state === "listening"
+              ? "Pause listening"
+              : "Start listening"
+        }
+        animate={circleAnimation}
+        whileTap={reduceMotion ? undefined : { scale: 0.97 }}
         className={cn(
-          "relative z-10 flex items-center justify-center",
-          "rounded-full border-2 transition-colors duration-300",
-          state === "idle" && "border-border/40 bg-background",
+          "relative z-10 flex select-none items-center justify-center rounded-full border transition-colors duration-500",
+          "h-40 w-40",
+          state === "idle" && "border-border/50 bg-background",
           state === "listening" && (pressed
             ? "border-primary/50 bg-primary/[0.08]"
-            : "border-primary/30 bg-primary/[0.04]"
-          ),
-          state === "thinking" && "border-primary/30 bg-primary/[0.03]",
-          state === "speaking" && "border-primary/40 bg-primary/[0.05]",
-          isMuted && "border-border/20 bg-muted/30",
-          pressed && "cursor-grabbing",
-          !pressed && "cursor-pointer",
-          "select-none",
-          "active:scale-[0.97] transition-transform duration-150",
+            : "border-primary/35 bg-primary/[0.05]"),
+          state === "thinking" && "border-primary/30 bg-primary/[0.04]",
+          state === "speaking" && "border-primary/40 bg-primary/[0.06]",
+          isMuted && "border-border/25 bg-muted/30",
+          pressed ? "cursor-grabbing" : "cursor-pointer",
         )}
-        style={{ width: 160, height: 160 }}
-        animate={
-          state === "idle"
-            ? idleAnimation
-            : state === "listening"
-              ? listeningAnimation
-              : state === "thinking"
-                ? thinkingAnimation
-                : speakingAnimation
-        }
-        transition={{
-          duration:
-            state === "idle"
-              ? 3
-              : state === "listening"
-                ? 1.2
-                : state === "thinking"
-                  ? 1.5
-                  : 0.8,
-          repeat:
-            state === "idle" ||
-            state === "listening" ||
-            state === "thinking" ||
-            state === "speaking"
-              ? Infinity
-              : 0,
-          ease: "easeInOut",
-        }}
       >
-        {/* Inner glow ring */}
-        <motion.div
-          className="absolute inset-2 rounded-full"
-          animate={{
-            borderWidth: state === "speaking" ? [1, 2, 1] : 1,
-            borderColor:
-              state === "idle"
-                ? "rgba(var(--color-border), 0.3)"
-                : "rgba(var(--color-primary), 0.15)",
-          }}
-          transition={
-            state === "speaking"
-              ? { duration: 1, repeat: Infinity, ease: "easeInOut" }
-              : {}
-          }
-          style={{ borderStyle: "solid", borderColor: "transparent" }}
+        {/* Inner ring — static, just tints with the state */}
+        <div
+          className={cn(
+            "pointer-events-none absolute inset-3 rounded-full border",
+            state === "idle" ? "border-border/25" : "border-primary/15",
+          )}
         />
 
-        {/* Microphone icon */}
-        <motion.div
+        <div
           className={cn(
-            "transition-colors duration-300",
-            state === "idle" && "text-muted-foreground/40",
-            state === "listening" && "text-primary",
-            state === "thinking" && "text-primary/60",
-            state === "speaking" && "text-primary",
-            isMuted && "text-muted-foreground/20",
+            "transition-colors duration-500",
+            isMuted && "text-muted-foreground/25",
+            !isMuted && state === "idle" && "text-muted-foreground/50",
+            !isMuted && state === "thinking" && "text-primary/70",
+            !isMuted && (state === "listening" || state === "speaking") && "text-primary",
           )}
         >
           <MicIcon state={state} />
-        </motion.div>
+        </div>
       </motion.button>
 
-      {/* State label below circle */}
-      <motion.p
-        className="absolute -bottom-7 left-1/2 -translate-x-1/2 text-[10px] font-medium uppercase tracking-[0.15em]"
-        animate={{
-          color:
-            state === "idle"
-              ? "var(--muted-foreground)"
-              : state === "thinking"
-                ? "var(--primary)"
-                : "var(--primary)",
-          opacity: state === "idle" ? 0.4 : 0.7,
-        }}
+      {/* State label */}
+      <p
+        className={cn(
+          "pointer-events-none absolute -bottom-7 left-1/2 -translate-x-1/2 text-[10px] font-medium uppercase tracking-[0.16em] transition-colors duration-500",
+          state === "idle" ? "text-muted-foreground/40" : "text-primary/70",
+        )}
       >
-        {state === "idle"
-          ? "Voice mode"
-          : state === "listening"
-            ? "Listening"
-            : state === "thinking"
-              ? "Thinking"
-              : "Speaking"}
-      </motion.p>
+        {STATE_LABELS[state]}
+      </p>
     </div>
   );
 }

@@ -671,9 +671,13 @@ export async function buildExecutionTools(
     return {};
   }
 
+  const bashTool = buildBashExecuteTool(bashMode);
   return {
     python_exec: pythonExecTool,
     js_exec: javaScriptExecTool,
-    bash_execute: buildBashExecuteTool(bashMode),
+    bash_execute: bashTool,
+    // Compatibility alias: some providers normalize the tool name to `bash`.
+    // Keep it registered so a valid Bash request is not rejected before execute.
+    bash: bashTool,
   };
 }

@@ -4,10 +4,11 @@ import type { UIMessage } from "ai";
 import { isTextUIPart, isToolUIPart, isReasoningUIPart, getToolName } from "ai";
 import { Component, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Copy, Check, RefreshCw } from "lucide-react";
+import { Copy, Check, Play, RefreshCw, Pencil, X } from "lucide-react";
 import { ToolCallGroup, FileChangeDigest, extractFileChanges } from "./ToolCallGroup";
 import { ActivityDisclosure } from "./ActivityDisclosure";
 import { VisualCard } from "./VisualCard";
+import { RemiCard } from "./RemiCard";
 import { GeneratingIndicator } from "./GeneratingIndicator";
 import { ReasoningBlock } from "./ReasoningBlock";
 import { FollowupSuggestions } from "./FollowupSuggestions";
@@ -43,6 +44,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { isRemiCardOutput, remiCardPartIdentity } from "@/lib/chat/card-identity";
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -173,7 +175,7 @@ function CopyButton({ text, ariaLabel = "Copy message" }: { text: string; ariaLa
       onClick={copy}
       aria-label={ariaLabel}
       title={ariaLabel}
-      className="flex h-6.5 w-6.5 items-center justify-center rounded-md text-muted-foreground/55 transition-colors hover:bg-muted hover:text-foreground active:scale-90"
+      className="flex h-6.5 w-6.5 items-center justify-center rounded-md text-muted-foreground/55 transition-colors hover:text-foreground active:scale-90"
     >
       {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
     </button>
@@ -212,7 +214,7 @@ function RegenerateButton({
         onClick={requestRegenerate}
         aria-label="Regenerate response"
         title="Regenerate response"
-        className="flex h-6.5 w-6.5 items-center justify-center rounded-md text-muted-foreground/55 transition-colors hover:bg-muted hover:text-foreground active:scale-90"
+        className="flex h-6.5 w-6.5 items-center justify-center rounded-md text-muted-foreground/55 transition-colors hover:text-foreground active:scale-90"
       >
         <RefreshCw className="h-3.5 w-3.5" />
       </button>
@@ -258,16 +260,19 @@ function RegenerateButton({
 function MessageActionsRow({
   children,
   align = "left",
+  alwaysVisible = false,
 }: {
   children: React.ReactNode;
   align?: "left" | "right";
+  alwaysVisible?: boolean;
 }) {
   return (
     <div
       className={cn(
         "flex items-center gap-0.5",
         align === "right" ? "justify-end" : "justify-start",
-        "md:opacity-0 md:transition-opacity md:duration-200 md:group-hover:opacity-100 md:focus-within:opacity-100",
+        !alwaysVisible &&
+          "md:opacity-0 md:transition-opacity md:duration-200 md:group-hover:opacity-100 md:focus-within:opacity-100",
       )}
     >
       {children}
@@ -276,6 +281,56 @@ function MessageActionsRow({
 }
 
 // ── User message text — plain text, images only ────────────────────────
+
+function EditMessageForm({
+  initialText,
+  onCancel,
+  onSave,
+}: {
+  initialText: string;
+  onCancel: () => void;
+  onSave: (text: string) => void;
+}) {
+  const [text, setText] = useState(initialText);
+
+  return (
+    <div className="flex w-full min-w-0 flex-col gap-2">
+      <textarea
+        autoFocus
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") onCancel();
+          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+            event.preventDefault();
+            onSave(text);
+          }
+        }}
+        aria-label="Edit message"
+        className="min-h-24 w-full resize-y rounded-2xl border border-primary/40 bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
+      />
+      <div className="flex items-center justify-end gap-1.5">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <X className="h-3.5 w-3.5" />
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={() => onSave(text)}
+          disabled={!text.trim()}
+          className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Check className="h-3.5 w-3.5" />
+          Save & resend
+        </button>
+      </div>
+    </div>
+  );
+}
 
 /**
  * Renders a user's message as plain text — no markdown formatting, so
@@ -367,10 +422,91 @@ type Segment =
   | { type: "reasoning"; text: string; isStreaming: boolean }
   | { type: "tool"; parts: UIMessage["parts"] }
   | { type: "visual"; part: UIMessage["parts"][number] }
+  | { type: "remiCard"; part: UIMessage["parts"][number] }
   | { type: "sessionPresent"; part: UIMessage["parts"][number] }
   | { type: "canvasPresent"; part: UIMessage["parts"][number] }
   | { type: "suggestions"; data: unknown }
   | { type: "sources"; data: unknown };
+
+/** Remi card tool names — promoted to inline RemiCard instead of a generic ToolCallGroup. */
+const REMI_CARD_TOOL_NAMES = new Set([
+  "weather_card",
+  "timezone_card",
+  "currency_card",
+  "map_card",
+  "crypto_card",
+  "news_card",
+  "stock_card",
+]);
+
+function isRemiCardPart(part: UIMessage["parts"][number], shortToolName: string | null): boolean {
+  if (shortToolName && (REMI_CARD_TOOL_NAMES.has(shortToolName) || shortToolName.endsWith("_card"))) {
+    return true;
+  }
+  const record = part as Record<string, unknown>;
+  const output = record.output;
+  return isRemiCardOutput(output);
+}
+
+function remiCardPartOutput(part: UIMessage["parts"][number]): Record<string, unknown> | null {
+  const record = part as Record<string, unknown>;
+  if (record.output && typeof record.output === "object") return record.output as Record<string, unknown>;
+  const invocation = record.toolInvocation;
+  if (invocation && typeof invocation === "object") {
+    const output = (invocation as Record<string, unknown>).output ?? (invocation as Record<string, unknown>).result;
+    return output && typeof output === "object" ? output as Record<string, unknown> : null;
+  }
+  return null;
+}
+
+function cardKind(part: UIMessage["parts"][number]): string | null {
+  const output = remiCardPartOutput(part);
+  if (isRemiCardOutput(output)) return String(output.card).toLowerCase();
+  try {
+    return getToolName(part as Parameters<typeof getToolName>[0]).toLowerCase().replace(/^.*__/, "").replace(/_card$/, "");
+  } catch {
+    return null;
+  }
+}
+
+function isFailedCard(part: UIMessage["parts"][number]): boolean {
+  const output = remiCardPartOutput(part);
+  if (!isRemiCardOutput(output)) return false;
+  const data = output.data;
+  return Boolean(data && typeof data === "object" && typeof (data as Record<string, unknown>).error === "string");
+}
+
+/** Keep one visual for duplicate card calls in a single assistant turn. */
+function dedupeRemiCardSegments(segments: Segment[]): Segment[] {
+  const cardSegments = segments.filter(
+    (segment): segment is Extract<Segment, { type: "remiCard" }> => segment.type === "remiCard",
+  );
+  const successfulKinds = new Set(
+    cardSegments
+      .filter((segment) => !isFailedCard(segment.part))
+      .map((segment) => cardKind(segment.part))
+      .filter((kind): kind is string => Boolean(kind)),
+  );
+  // If a location/device lookup is retried successfully in the same turn,
+  // don't leave the failed placeholder above the usable result.
+  const withoutSupersededFailures = segments.filter((segment) => {
+    if (segment.type !== "remiCard" || !isFailedCard(segment.part)) return true;
+    const kind = cardKind(segment.part);
+    return kind === null || !successfulKinds.has(kind);
+  });
+  const lastByIdentity = new Map<string, number>();
+  withoutSupersededFailures.forEach((segment, index) => {
+    if (segment.type !== "remiCard") return;
+    const identity = remiCardPartIdentity(segment.part);
+    if (identity) lastByIdentity.set(identity, index);
+  });
+  if (lastByIdentity.size === 0) return withoutSupersededFailures;
+  return withoutSupersededFailures.filter((segment, index) => {
+    if (segment.type !== "remiCard") return true;
+    const identity = remiCardPartIdentity(segment.part);
+    return !identity || lastByIdentity.get(identity) === index;
+  });
+}
 
 /**
  * Text this short between two tool calls is transitional filler (e.g.
@@ -592,6 +728,8 @@ function buildSegments(parts: UIMessage["parts"]): Segment[] {
 
       if (shortToolName === "create_visual") {
         segments.push({ type: "visual", part });
+      } else if (isRemiCardPart(part, shortToolName)) {
+        segments.push({ type: "remiCard", part });
       } else if (
         shortToolName === "session_present_files" ||
         shortToolName === "session_present_file"
@@ -636,13 +774,15 @@ function buildSegments(parts: UIMessage["parts"]): Segment[] {
       )
     : segments;
 
+  const dedupedCardSegments = dedupeRemiCardSegments(visibleSegments);
+
   // Deduplicate canvas present cards: keep only the LAST one so the user
   // sees a single card at the end of the message, not one per canvas_* call.
-  const lastCanvasIdx = visibleSegments.findLastIndex(
+  const lastCanvasIdx = dedupedCardSegments.findLastIndex(
     (s) => s.type === "canvasPresent",
   );
   if (lastCanvasIdx >= 0) {
-    const deduped = visibleSegments.filter(
+    const deduped = dedupedCardSegments.filter(
       (s, i) => s.type !== "canvasPresent" || i === lastCanvasIdx,
     );
     // Reasoning is consolidated into ONE block before the tool pass, so tool
@@ -651,64 +791,59 @@ function buildSegments(parts: UIMessage["parts"]): Segment[] {
     return mergeInRowToolSegments(mergeReasoningSegments(deduped));
   }
 
-  return mergeInRowToolSegments(mergeReasoningSegments(visibleSegments));
+  return mergeInRowToolSegments(mergeReasoningSegments(dedupedCardSegments));
 }
 
-export function MessageBubble({
+function UserMessageBubble({
   message,
-  isStreaming,
-  onRegenerate,
-  messagesAfter,
-  conversationId,
+  onEdit,
+  onContinue,
 }: {
   message: UIMessage;
-  isStreaming?: boolean;
-  /** Called with the message id to regenerate (AI messages only). */
-  onRegenerate?: (messageId: string) => void;
-  /** Number of messages that come after this one (used by the regenerate confirm). */
-  messagesAfter?: number;
-  /** Conversation id used by chat-scoped evidence export actions. */
-  conversationId?: number;
+  onEdit?: (messageId: string, text: string) => void;
+  onContinue?: () => void;
 }) {
-  // ---- User messages ----
-  if (message.role === "user") {
-    const inlineText = message.parts
-      .filter(isTextUIPart)
-      .map((p) => p.text)
-      .join("");
-    if (!inlineText) return null;
+  const [isEditing, setIsEditing] = useState(false);
+  const inlineText = message.parts
+    .filter(isTextUIPart)
+    .map((p) => p.text)
+    .join("");
+  if (!inlineText) return null;
 
-    // Parse file attachments from markdown
-    const attachments = parseAttachments(inlineText);
-    const cleanText = stripAttachmentMarkdown(inlineText);
-    const hasText = cleanText.length > 0;
+  const attachments = parseAttachments(inlineText);
+  const cleanText = stripAttachmentMarkdown(inlineText);
+  const hasText = cleanText.length > 0;
+  const imageAttachments = attachments.filter((a) => a.isImage);
+  const fileAttachments = attachments.filter((a) => !a.isImage);
 
-    // Images go in a side-by-side grid; other files stay stacked below.
-    const imageAttachments = attachments.filter((a) => a.isImage);
-    const fileAttachments = attachments.filter((a) => !a.isImage);
-
-    return (
-      <div className="group flex justify-end">
-        <div className="flex max-w-[min(85%,36rem)] flex-col items-end gap-1">
+  return (
+    <div className="group flex justify-end">
+      <div className="flex max-w-[min(85%,36rem)] flex-col items-end gap-1">
+        {isEditing ? (
+          <EditMessageForm
+            initialText={inlineText}
+            onCancel={() => setIsEditing(false)}
+            onSave={(nextText) => {
+              if (!onEdit) return;
+              setIsEditing(false);
+              onEdit(message.id, nextText);
+            }}
+          />
+        ) : (
           <div
             className={cn(
               "flex flex-col gap-2",
-              // When there's text, wrap it in a rounded bubble
               hasText &&
-                "rounded-4xl bg-primary px-3.5 py-2.5 text-[15px] leading-relaxed text-primary-foreground",
+                "rounded-2xl bg-primary/90 px-3.5 py-2.5 text-[15px] leading-relaxed text-primary-foreground",
             )}
           >
-            {/* Text content (if any) — plain text, only images render */}
             {hasText && <UserMessageText text={cleanText} />}
 
-            {/* Image attachments — side-by-side grid when multiple */}
             {imageAttachments.length > 0 && (
               <div
                 className={cn(
                   "grid gap-2",
-                  imageAttachments.length > 1
-                    ? "grid-cols-2"
-                    : "grid-cols-1",
+                  imageAttachments.length > 1 ? "grid-cols-2" : "grid-cols-1",
                 )}
               >
                 {imageAttachments.map((att, idx) => (
@@ -724,7 +859,6 @@ export function MessageBubble({
               </div>
             )}
 
-            {/* Other file attachments as cards */}
             {fileAttachments.length > 0 && (
               <div className="flex flex-col gap-2">
                 {fileAttachments.map((att, idx) => (
@@ -739,18 +873,72 @@ export function MessageBubble({
               </div>
             )}
 
-            {/* No text, no attachments — shouldn't happen, but handle gracefully */}
             {!hasText && attachments.length === 0 && (
               <span className="text-sm text-primary-foreground/60">Sent a file</span>
             )}
           </div>
-          {hasText && (
-            <MessageActionsRow align="right">
-              <CopyButton text={cleanText} ariaLabel="Copy message" />
-            </MessageActionsRow>
-          )}
-        </div>
+        )}
+        {!isEditing && (hasText || onEdit || onContinue) && (
+          <MessageActionsRow align="right" alwaysVisible={Boolean(onContinue)}>
+            {onContinue && (
+              <button
+                type="button"
+                onClick={onContinue}
+                aria-label="Continue response"
+                title="Continue response"
+                className="flex h-6.5 w-6.5 items-center justify-center rounded-md text-muted-foreground/55 transition-colors hover:text-foreground active:scale-90"
+              >
+                <Play className="h-3.5 w-3.5 fill-current" />
+              </button>
+            )}
+            {hasText && <CopyButton text={cleanText} ariaLabel="Copy message" />}
+            {onEdit && (
+              <button
+                type="button"
+                onClick={() => setIsEditing(true)}
+                aria-label="Edit message"
+                title="Edit message"
+                className="flex h-6.5 w-6.5 items-center justify-center rounded-md text-muted-foreground/55 transition-colors hover:text-foreground active:scale-90"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </MessageActionsRow>
+        )}
       </div>
+    </div>
+  );
+}
+
+export function MessageBubble({
+  message,
+  isStreaming,
+  onRegenerate,
+  onEdit,
+  onContinue,
+  messagesAfter,
+  conversationId,
+}: {
+  message: UIMessage;
+  isStreaming?: boolean;
+  /** Called with the message id to regenerate (AI messages only). */
+  onRegenerate?: (messageId: string) => void;
+  /** Called with the message id and replacement text to edit it. */
+  onEdit?: (messageId: string, text: string) => void;
+  /** Called when this is the last user message without an assistant reply. */
+  onContinue?: () => void;
+  /** Number of messages that come after this one (used by the regenerate confirm). */
+  messagesAfter?: number;
+  /** Conversation id used by chat-scoped evidence export actions. */
+  conversationId?: number;
+}) {
+  if (message.role === "user") {
+    return (
+      <UserMessageBubble
+        message={message}
+        onEdit={onEdit}
+        onContinue={onContinue}
+      />
     );
   }
 
@@ -920,6 +1108,8 @@ export function MessageBubble({
               />
             ) : segment.type === "visual" ? (
               <VisualCardSegment key={`visual-${idx}`} part={segment.part} />
+            ) : segment.type === "remiCard" ? (
+              <RemiCardSegment key={`remi-${idx}`} part={segment.part} />
             ) : segment.type === "sessionPresent" ? (
               <SessionFilesPresentSegment
                 key={`present-${idx}`}
@@ -1060,6 +1250,81 @@ function VisualCardSegment({ part }: { part: UIMessage["parts"][number] }) {
   }
 
   return <VisualCard data={output} />;
+}
+
+// ── Remi card segment — inline visual card (weather, timezone, etc.) ──
+
+function RemiCardSegment({ part }: { part: UIMessage["parts"][number] }) {
+  const partObj = part as Record<string, unknown>;
+  const state = (partObj.state as string) ?? "call-result";
+  const output = partObj.output;
+  const toolName = (() => {
+    try {
+      return getToolName(part as Parameters<typeof getToolName>[0]);
+    } catch {
+      return "";
+    }
+  })();
+  const isComplete = state === "output-available" || state === "approval-responded";
+  const isError = state === "output-error";
+  if (isError) {
+    return (
+      <div className="overflow-hidden rounded-xl border border-destructive/20 bg-destructive/[0.04] p-4 text-sm text-destructive">
+        Card could not be loaded. The tool call encountered an error.
+      </div>
+    );
+  }
+  if (!isComplete) {
+    return (
+      <div className="overflow-hidden rounded-xl border border-border/55 bg-surface-2/40">
+        <div className="flex items-center gap-2.5 px-3.5 py-3">
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary/10">
+            <svg className="h-3.5 w-3.5 animate-spin text-primary" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4 31.4" strokeLinecap="round" />
+            </svg>
+          </div>
+          <span className="text-sm font-medium text-foreground">Loading {toolName.replace("_card", "")} card…</span>
+        </div>
+      </div>
+    );
+  }
+  if (!output || typeof output !== "object") {
+    return (
+      <div className="overflow-hidden rounded-xl border border-destructive/20 bg-destructive/[0.04] p-4 text-sm text-destructive">
+        Card could not be rendered. Unexpected output format.
+      </div>
+    );
+  }
+  const rec = output as Record<string, unknown>;
+  // Per-card "text" mode (profile setting) — render a compact textual fallback instead of the visual card.
+  if (rec.displayMode === "text") {
+    const data = (rec.data as Record<string, unknown> | undefined) ?? rec;
+    const desc = typeof rec.description === "string" ? rec.description : "";
+    // Render a minimal text summary; the full structured data stays in the tool output for the model.
+    const preview = (() => {
+      try {
+        const card = String(rec.card ?? "card");
+        if (card === "weather" && data) {
+          const cur = (data.current as Record<string, unknown> | undefined) ?? data;
+          const t = cur?.temperature_c ?? (data as Record<string, unknown>).temperature_c;
+          return `Weather — ${typeof t === "number" ? `${Number(t).toFixed(1)}°C` : "—"} · ${String((data as Record<string, unknown>).location ?? "")}`;
+        }
+        if (card === "currency" && data) return `${String(data.from ?? "")} → ${String(data.to ?? "")} · ${String(data.converted ?? data.rate ?? "")}`;
+        if (card === "crypto" && data) return `${String(data.coin ?? card)} · $${String(data.price ?? "—")}`;
+        return JSON.stringify(data).slice(0, 220);
+      } catch {
+        return "";
+      }
+    })();
+    return (
+      <div className="rounded-xl border border-border/40 bg-card px-3.5 py-2.5 text-sm">
+        <div className="text-xs font-semibold capitalize tracking-wide">{String(rec.card ?? "card")}</div>
+        <div className="mt-1 text-sm text-muted-foreground">{preview}</div>
+        {desc ? <div className="mt-1 text-[11px] italic text-muted-foreground">{desc}</div> : null}
+      </div>
+    );
+  }
+  return <RemiCard data={output} />;
 }
 
 // ── Session files present segment — extracts output from a session_present_files part ──

@@ -7,7 +7,7 @@ import { SITE_NAME } from "@/lib/constants";
 
 const ease: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
-function usePrefersDark() {
+export function usePrefersDark() {
   const [dark, setDark] = useState(false);
 
   useEffect(() => {
@@ -38,7 +38,7 @@ export function DashboardShot() {
   return (
     <div className="relative mx-auto mt-16 max-w-5xl md:mt-20">
       {/* Soft aura behind the frame */}
-      <div className="hero-glow absolute -inset-x-8 -top-16 -bottom-10 -z-10" aria-hidden />
+      {/* <div className="hero-glow absolute -inset-x-8 -top-16 -bottom-10 -z-10" aria-hidden /> */}
 
       <motion.div
         initial={prefersReduced ? false : { opacity: 0, y: 40 }}

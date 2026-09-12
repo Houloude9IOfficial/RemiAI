@@ -1,0 +1,21 @@
+name = "remiapi"
+main = "src/index.ts"
+compatibility_date = "2024-11-12"
+
+# No secrets committed. Use `wrangler secret put <NAME>` or dashboard vars.
+# See .env.example for optional keys (NEWS_API_KEY, etc.). Free-tier card
+# types (weather, timezone, currency, map, crypto) use no key.
+
+# Optional environment bindings (set via dashboard / wrangler secret):
+# [vars]
+# UPSTREAM_TIMEOUT_MS = "8000"
+
+# Rate limiting (dashboard-managed to protect free-tier budget):
+# Create a Rate Limiting namespace in Cloudflare and bind it, e.g.:
+# [[ratelimits]]
+# binding = "REMIAPI_LIMIT"
+# namespace_id = "1001"
+# simple = { limit = 60, period = 60 }
+
+[observability.logs]
+enabled = true

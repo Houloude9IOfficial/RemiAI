@@ -4,7 +4,7 @@ import { sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { UPLOAD_DIR, AVATAR_DIR, SESSION_FILES_DIR, SKILLS_DIR } from "@/lib/paths";
 import { decryptBackup } from "./crypto";
-import { getAllTables, getTableColumns } from "./schema";
+import { getAllTables } from "./schema";
 import {
   BACKUP_VERSION,
   BACKUP_VERSION_MIN,
@@ -174,31 +174,102 @@ function validatePayload(payload: unknown): {
 }
 
 // ---------------------------------------------------------------------------
-// Delete all existing data (dynamic, FK-safe)
-// ---------------------------------------------------------------------------
-
-function deleteAllData(): void {
-  const tables = getAllTables();
-
-  db.transaction((tx) => {
-    tx.run(sql`PRAGMA foreign_keys = OFF`);
-
-    for (const t of tables) {
-      if (["backup_history", "auth_accounts", "auth_sessions", "auth_bootstrap"].includes(t.name)) continue;
-      tx.run(sql`DELETE FROM ${sql.identifier(t.name)}`);
-    }
-
-    tx.run(sql`DELETE FROM sqlite_sequence`);
-    tx.run(sql`PRAGMA foreign_keys = ON`);
-  });
-}
-
-// ---------------------------------------------------------------------------
 // Insert rows into a table with column filtering
 // ---------------------------------------------------------------------------
 
 /** Regex to validate SQLite column names. */
 const VALID_COLUMN_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+
+/**
+ * Optional foreign keys introduced by later schema versions. Older or
+ * partially exported backups can contain a reference whose parent row is not
+ * present. Preserve the child row and clear only that optional link instead
+ * of aborting the entire restore.
+ */
+const MANDATORY_FOREIGN_KEYS: Array<{
+  table: string;
+  column: string;
+  parentTable: string;
+}> = [
+  { table: "automation_runs", column: "conversation_id", parentTable: "conversations" },
+  { table: "automation_run_events", column: "run_id", parentTable: "automation_runs" },
+  { table: "provider_models", column: "provider_id", parentTable: "providers" },
+  { table: "build_runs", column: "conversation_id", parentTable: "conversations" },
+  { table: "artifacts", column: "conversation_id", parentTable: "conversations" },
+  { table: "sources", column: "conversation_id", parentTable: "conversations" },
+  { table: "source_claims", column: "conversation_id", parentTable: "conversations" },
+  { table: "messages", column: "conversation_id", parentTable: "conversations" },
+  { table: "todo_items", column: "conversation_id", parentTable: "conversations" },
+  { table: "routine_logs", column: "routine_id", parentTable: "routines" },
+  { table: "scheduled_tasks", column: "conversation_id", parentTable: "conversations" },
+  { table: "agent_tasks", column: "conversation_id", parentTable: "conversations" },
+  { table: "webhook_events", column: "webhook_id", parentTable: "webhooks" },
+];
+
+const OPTIONAL_FOREIGN_KEYS: Array<{
+  table: string;
+  column: string;
+  parentTable: string;
+}> = [
+  { table: "agent_tasks", column: "parent_task_id", parentTable: "agent_tasks" },
+  { table: "agent_tasks", column: "automation_run_id", parentTable: "automation_runs" },
+  { table: "routine_logs", column: "automation_run_id", parentTable: "automation_runs" },
+  { table: "scheduled_tasks", column: "automation_run_id", parentTable: "automation_runs" },
+  { table: "webhook_events", column: "automation_run_id", parentTable: "automation_runs" },
+];
+
+function rowIdSet(rows: Record<string, unknown>[] | undefined): Set<string> {
+  return new Set(
+    (rows ?? [])
+      .map((row) => row.id)
+      .filter((id) => id !== null && id !== undefined)
+      .map((id) => String(id)),
+  );
+}
+
+function hasMissingMandatoryForeignKey(
+  tableName: string,
+  row: Record<string, unknown>,
+  tableIdSets: Map<string, Set<string>>,
+): string | null {
+  for (const relation of MANDATORY_FOREIGN_KEYS) {
+    if (
+      relation.table === tableName &&
+      !tableIdSets.get(relation.parentTable)?.has(String(row[relation.column]))
+    ) {
+      return `${relation.column} → ${relation.parentTable}`;
+    }
+  }
+  return null;
+}
+
+function clearDanglingOptionalForeignKeys(
+  tableName: string,
+  row: Record<string, unknown>,
+  tableIdSets: Map<string, Set<string>>,
+  warned: Set<string>,
+  warnings: string[],
+): Record<string, unknown> {
+  let result = row;
+  for (const relation of OPTIONAL_FOREIGN_KEYS) {
+    if (relation.table !== tableName) continue;
+    const value = row[relation.column];
+    if (value === null || value === undefined || tableIdSets.get(relation.parentTable)?.has(String(value))) {
+      continue;
+    }
+
+    if (result === row) result = { ...row };
+    result[relation.column] = null;
+    const warningKey = `${tableName}.${relation.column}`;
+    if (!warned.has(warningKey)) {
+      warned.add(warningKey);
+      warnings.push(
+        `Table "${tableName}": dangling ${relation.column} reference was cleared during restore.`,
+      );
+    }
+  }
+  return result;
+}
 
 /**
  * Coerce a backup value to a type that better-sqlite3 can bind.
@@ -218,7 +289,22 @@ function toSQLiteValue(v: unknown): unknown {
  * - Coerces values to SQLite-compatible types
  * - Logs warnings for skipped columns and rows
  */
+type SqliteExecutor = Pick<typeof db, "run">;
+
+function rootErrorMessage(error: unknown): string {
+  let current: unknown = error;
+  let fallback = "Unknown database error";
+  for (let depth = 0; depth < 6 && current; depth++) {
+    if (current instanceof Error && current.message) fallback = current.message;
+    else if (typeof current === "object" && "message" in current && typeof current.message === "string") fallback = current.message;
+    else if (typeof current === "string" && current) fallback = current;
+    current = current instanceof Error ? current.cause : undefined;
+  }
+  return fallback;
+}
+
 function insertRows(
+  executor: SqliteExecutor,
   tableName: string,
   rows: Record<string, unknown>[],
   currentColumns: Set<string>,
@@ -228,43 +314,48 @@ function insertRows(
 
   let restored = 0;
 
-  db.transaction((tx) => {
-    for (const row of rows) {
-      // Filter to only columns that exist in the current DB
-      const validCols = Object.keys(row).filter(
-        (col) =>
-          VALID_COLUMN_RE.test(col) && currentColumns.has(col),
+  for (const [rowIndex, row] of rows.entries()) {
+    // Filter to only columns that exist in the current DB
+    const validCols = Object.keys(row).filter(
+      (col) => VALID_COLUMN_RE.test(col) && currentColumns.has(col),
+    );
+
+    if (validCols.length === 0) {
+      warnings.push(
+        `Table "${tableName}": row has no valid columns — skipped.`,
       );
-
-      if (validCols.length === 0) {
-        warnings.push(
-          `Table "${tableName}": row has no valid columns — skipped.`,
-        );
-        continue;
-      }
-
-      // Warn about columns in backup that don't exist in current DB
-      const skipped = Object.keys(row).filter(
-        (col) => !currentColumns.has(col) && VALID_COLUMN_RE.test(col),
-      );
-      if (skipped.length > 0) {
-        // Only warn once per table, not per row
-        if (restored === 0) {
-          warnings.push(
-            `Table "${tableName}": columns [${skipped.join(", ")}] not found in current DB — omitted.`,
-          );
-        }
-      }
-
-      const values = validCols.map((col) => toSQLiteValue(row[col]));
-      const colIdents = validCols.map((c) => sql.identifier(c));
-      const valSQL: SQL[] = values.map((v) => sql`${v}`);
-      const stmt =
-        sql`INSERT INTO ${sql.identifier(tableName)} (${sql.join(colIdents, sql`, `)}) VALUES (${sql.join(valSQL, sql`, `)})`;
-      tx.run(stmt);
-      restored++;
+      continue;
     }
-  });
+
+    // Warn about columns in backup that don't exist in current DB
+    const skipped = Object.keys(row).filter(
+      (col) => !currentColumns.has(col) && VALID_COLUMN_RE.test(col),
+    );
+    if (skipped.length > 0) {
+      // Only warn once per table, not per row
+      if (restored === 0) {
+        warnings.push(
+          `Table "${tableName}": columns [${skipped.join(", ")}] not found in current DB — omitted.`,
+        );
+      }
+    }
+
+    const values = validCols.map((col) => toSQLiteValue(row[col]));
+    const colIdents = validCols.map((c) => sql.identifier(c));
+    const valSQL: SQL[] = values.map((v) => sql`${v}`);
+    const stmt =
+      sql`INSERT INTO ${sql.identifier(tableName)} (${sql.join(colIdents, sql`, `)}) VALUES (${sql.join(valSQL, sql`, `)})`;
+    try {
+      executor.run(stmt);
+    } catch (err) {
+      const detail = rootErrorMessage(err);
+      throw new Error(
+        `Table "${tableName}", row ${rowIndex + 1}: ${detail}`,
+        { cause: err },
+      );
+    }
+    restored++;
+  }
 
   return restored;
 }
@@ -358,14 +449,17 @@ export async function importBackup(
   const currentTableMap = new Map<string, Set<string>>(
     currentTables.map((t) => [t.name, new Set(t.columns)]),
   );
-  // ── Wipe existing data (skipping backup_history) ────────────────────────
-  deleteAllData();
-
   // ── Insert data ─────────────────────────────────────────────────────────
   const tableCounts: Record<string, number> = {};
-  const restoreOrder: string[] = [];
+  const tableIdSets = new Map(
+    Object.entries(payload.tables).map(([tableName, rows]) => [tableName, rowIdSet(rows)]),
+  );
+  const danglingReferenceWarnings = new Set<string>();
 
-  // Order tables: known parent tables first, then alphabetically for unknowns
+  // Order tables so every known foreign-key parent is restored before its
+  // children. In particular, agent_tasks.automation_run_id references
+  // automation_runs; leaving automation_runs in the alphabetical "unknown"
+  // section caused current backups to fail at agent_tasks.
   const preferredOrder = [
     "directories",
     "providers",
@@ -374,6 +468,8 @@ export async function importBackup(
     "memories",
     "user_preferences",
     "conversations",
+    "automation_runs",
+    "automation_run_events",
     "build_runs",
     "artifacts",
     "sources",
@@ -384,6 +480,8 @@ export async function importBackup(
     "routines",
     "routine_logs",
     "scheduled_tasks",
+    "webhooks",
+    "webhook_events",
     "agent_tasks",
   ];
 
@@ -397,35 +495,71 @@ export async function importBackup(
     return a.localeCompare(b);
   });
 
-  db.transaction((tx) => {
-    tx.run(sql`PRAGMA foreign_keys = OFF`);
-
-    for (const tableName of sortedTables) {
-      const rows = payload.tables[tableName];
-      if (!rows || rows.length === 0) continue;
-
-      const currentCols = currentTableMap.get(tableName);
-      if (!currentCols) {
-        warnings.push(
-          `Table "${tableName}" from backup does not exist in current DB — skipped.`,
-        );
-        continue;
+  // Keep the wipe and restore in one atomic transaction. SQLite only changes
+  // foreign_keys outside a transaction; disabling it here also lets us restore
+  // older/partial backups without depending on table order.
+  db.run(sql`PRAGMA foreign_keys = OFF`);
+  try {
+    db.transaction((tx) => {
+      // Delete application data only after validation/decryption succeeded.
+      // Because this is the same transaction as insertion, any failed row
+      // rolls the wipe back instead of leaving a partially restored database.
+      for (const table of currentTables) {
+        if (["backup_history", "auth_accounts", "auth_sessions", "auth_bootstrap"].includes(table.name)) continue;
+        tx.run(sql`DELETE FROM ${sql.identifier(table.name)}`);
       }
+      tx.run(sql`DELETE FROM sqlite_sequence`);
 
-      // Authentication is installation-local and was not part of the
-      // original backup format. Ignore it even for interim auth-aware backup
-      // files so restore can never replace the current account.
-      if (["auth_accounts", "auth_sessions", "auth_bootstrap"].includes(tableName)) {
-        warnings.push(`Table "${tableName}" was skipped because authentication is not part of application backups.`);
-        continue;
+      for (const tableName of sortedTables) {
+        const rows = payload.tables[tableName];
+        if (!rows || rows.length === 0) continue;
+
+        const currentCols = currentTableMap.get(tableName);
+        if (!currentCols) {
+          warnings.push(
+            `Table "${tableName}" from backup does not exist in current DB — skipped.`,
+          );
+          continue;
+        }
+
+        // Authentication is installation-local and was not part of the
+        // original backup format. Ignore it even for interim auth-aware backup
+        // files so restore can never replace the current account.
+        if (["auth_accounts", "auth_sessions", "auth_bootstrap"].includes(tableName)) {
+          warnings.push(`Table "${tableName}" was skipped because authentication is not part of application backups.`);
+          continue;
+        }
+
+        const restoreRows: Record<string, unknown>[] = [];
+        for (const row of rows) {
+          const missingParent = hasMissingMandatoryForeignKey(tableName, row, tableIdSets);
+          if (missingParent) {
+            const warningKey = `${tableName}.${missingParent}`;
+            if (!danglingReferenceWarnings.has(warningKey)) {
+              danglingReferenceWarnings.add(warningKey);
+              warnings.push(
+                `Table "${tableName}": rows with missing mandatory reference ${missingParent} were skipped during restore.`,
+              );
+            }
+            continue;
+          }
+          restoreRows.push(
+            clearDanglingOptionalForeignKeys(
+              tableName,
+              row,
+              tableIdSets,
+              danglingReferenceWarnings,
+              warnings,
+            ),
+          );
+        }
+        const count = insertRows(tx, tableName, restoreRows, currentCols, warnings);
+        if (count > 0) tableCounts[tableName] = count;
       }
-
-      const count = insertRows(tableName, rows, currentCols, warnings);
-      if (count > 0) tableCounts[tableName] = count;
-    }
-
-    tx.run(sql`PRAGMA foreign_keys = ON`);
-  });
+    });
+  } finally {
+    db.run(sql`PRAGMA foreign_keys = ON`);
+  }
 
   // ── Restore files ──────────────────────────────────────────────────────
   const fileStats = payload.includesFiles

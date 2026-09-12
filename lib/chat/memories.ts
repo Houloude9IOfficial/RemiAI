@@ -1,6 +1,7 @@
 import { desc } from "drizzle-orm";
 import { db } from "@/db";
 import { memories } from "@/db/schema";
+import { MEMORY_CATEGORIES, type MemoryCategory } from "@/lib/memory-categories";
 
 /**
  * Relevance-based memory retrieval.
@@ -64,10 +65,13 @@ function isNearDuplicate(content: string, selected: string[]): boolean {
   return false;
 }
 
-interface MemoryRow {
+export interface MemoryRow {
   id: number;
   content: string;
+  category: MemoryCategory;
+  memoryDate: string | null;
   createdAt: string | null;
+  updatedAt: string | null;
 }
 
 /**
@@ -80,24 +84,45 @@ interface MemoryRow {
  */
 export async function retrieveRelevantMemories(
   query: string,
-  opts: { maxChars?: number; maxItems?: number } = {},
+  opts: { maxChars?: number; maxItems?: number; category?: MemoryCategory } = {},
 ): Promise<MemoryRow[]> {
   const maxChars = opts.maxChars ?? MEMORY_BUDGET_CHARS;
   const maxItems = opts.maxItems ?? MEMORY_MAX_ITEMS;
 
-  const rows = (await db
-    .select()
-    .from(memories)
-    .orderBy(desc(memories.createdAt))
-    .limit(200)
-    .all()) as MemoryRow[];
+  let rows: MemoryRow[];
+  try {
+    rows = (await db
+      .select()
+      .from(memories)
+      .orderBy(desc(memories.createdAt))
+      .limit(200)
+      .all()) as MemoryRow[];
+  } catch (e) {
+    const msg = e instanceof Error ? e.message.toLowerCase() : String(e).toLowerCase();
+    if (msg.includes("no such column") || msg.includes("has no column")) {
+      const { ensureMemoryColumns } = await import("@/db");
+      ensureMemoryColumns();
+      rows = (await db
+        .select()
+        .from(memories)
+        .orderBy(desc(memories.createdAt))
+        .limit(200)
+        .all()) as MemoryRow[];
+    } else throw e;
+  }
 
   if (rows.length === 0) return [];
 
+  // Optional server-side category pre-filter (keep scoring but limit pool)
+  let pool = rows;
+  if (opts.category) {
+    const filtered = rows.filter((r) => r.category === opts.category);
+    if (filtered.length > 0) pool = filtered;
+  }
+
   const queryTokens = significantTokens(query);
-  const scored = rows.map((row, index) => {
+  const scored = pool.map((row, index) => {
     const overlap = tokenOverlapScore(queryTokens, significantTokens(row.content));
-    // Recency weight: newest (index 0) gets 1.0, decaying to ~0.6 at row 100.
     const recency = Math.max(0.6, 1 - index / 250);
     return { row, score: overlap + (queryTokens.size === 0 ? recency : recency * 0.15) };
   });
@@ -111,14 +136,67 @@ export async function retrieveRelevantMemories(
   for (const { row } of scored) {
     if (selected.length >= maxItems) break;
     if (isNearDuplicate(row.content, selectedContents)) continue;
-    const cost = row.content.length + 4; // " - " prefix
-    // Skip memories that don't fit — a shorter, lower-scored one later in the
-    // list may still fit, so keep scanning rather than stopping outright.
+    // Estimate cost includes category + date prefix
+    const prefixLen = row.category !== "general" ? row.category.length + 4 : 0;
+    const dateLen = row.memoryDate ? row.memoryDate.length + 3 : 0;
+    const cost = row.content.length + 4 + prefixLen + dateLen;
     if (used + cost > maxChars) continue;
-    selected.push(row);
+    // Normalize missing fields from old DBs
+    const normalized: MemoryRow = {
+      id: row.id,
+      content: row.content,
+      category: (row.category as MemoryCategory) ?? "general",
+      memoryDate: row.memoryDate ?? null,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
+    selected.push(normalized);
     selectedContents.push(row.content);
     used += cost;
   }
 
   return selected;
+}
+
+/** Format a single memory line for the prompt / export. */
+export function formatMemoryLine(m: MemoryRow | { content: string; memoryDate?: string | null; category?: string }): string {
+  const date = (m as any).memoryDate ?? null;
+  const cat = (m as any).category ?? "general";
+  const showCat = cat !== "general";
+  const datePart = date ? `[${date}]` : "";
+  const catPart = showCat ? `[${cat}]` : "";
+  const prefix = [datePart, catPart].filter(Boolean).join(" ");
+  return prefix ? `- ${prefix} ${m.content}` : `- ${m.content}`;
+}
+
+/** Group memories by category in MEMORY_CATEGORIES order and render. */
+export function formatGroupedMemories(memories: MemoryRow[]): string {
+  if (memories.length === 0) return "";
+  const byCat = new Map<string, MemoryRow[]>();
+  for (const m of memories) {
+    const cat = m.category ?? "general";
+    if (!byCat.has(cat)) byCat.set(cat, []);
+    byCat.get(cat)!.push(m);
+  }
+  const orderedCats = MEMORY_CATEGORIES.filter((c) => byCat.has(c));
+  // Include any unexpected categories at the end
+  for (const c of byCat.keys()) if (!orderedCats.includes(c as any)) orderedCats.push(c as any);
+
+  if (orderedCats.length === 1) {
+    // Single category — compact list (no headings)
+    return memories.map(formatMemoryLine).join("\n");
+  }
+  const sections: string[] = [];
+  for (const cat of orderedCats) {
+    const group = byCat.get(cat)!;
+    const heading = cat.charAt(0).toUpperCase() + cat.slice(1);
+    sections.push(`### ${heading}\n${group.map(formatMemoryLine).join("\n")}`);
+  }
+  return sections.join("\n\n");
+}
+
+export function buildMemoryPromptBlock(memories: MemoryRow[]): string {
+  if (memories.length === 0) return "";
+  const body = formatGroupedMemories(memories);
+  return `\n\n## Saved memories\nThings you have remembered about the user across conversations, grouped by category and ranked by relevance to the current request. Use them to personalize responses. Dates in [YYYY-MM-DD] are event dates (when the fact became true); if absent, the memory's save time is the only date.\n${body}`;
 }

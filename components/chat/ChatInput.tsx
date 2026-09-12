@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   ArrowUp,
+  Play,
   Square,
   Sparkles,
   ListChecks,
@@ -55,6 +56,7 @@ import {
 } from "@/lib/image-utils";
 import {
   CHAT_INPUT_PREFILL_EVENT,
+  CHAT_INPUT_TOGGLE_PREFIX_EVENT,
   registerChatInput,
   unregisterChatInput,
 } from "@/lib/chat-input-registry";
@@ -156,7 +158,7 @@ function CapabilityChip({
 }
 
 const LINE_HEIGHT = 24;
-const MAX_LINES = 3;
+const MAX_LINES = 10;
 const MAX_HEIGHT = LINE_HEIGHT * MAX_LINES;
 // Must stay in sync with the server's MAX_FILES_PER_REQUEST
 // (app/api/chat/upload/route.ts).
@@ -197,6 +199,7 @@ export function ChatInput({
   modelId,
   onModelChange,
   onSend,
+  onContinue,
   onStop,
   isTemporary,
   memoryEnabled,
@@ -215,6 +218,8 @@ export function ChatInput({
   modelId?: string | null;
   onModelChange?: (providerId: number, modelId: string) => void;
   onSend: (text: string) => void;
+  /** Continues the latest unanswered user message when the composer is empty. */
+  onContinue?: () => void;
   onStop: () => void;
   /** Temporary-chat flag + per-chat memory switch (fully independent). */
   isTemporary?: boolean;
@@ -226,11 +231,11 @@ export function ChatInput({
 }) {
   const [text, setText] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [inputFocused, setInputFocused] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Highlight the composer border only while the textarea itself is focused.
   // Using focus-within would light it up for toolbar buttons too (e.g. the
   // dropdown triggers keep focus after their menus close), which isn't wanted.
-  const [inputFocused, setInputFocused] = useState(false);
 
   // -----------------------------------------------------------------------
   // Slash-command menu (/mcp, /tool, /file, mode commands)
@@ -307,7 +312,9 @@ export function ChatInput({
 
   useEffect(() => {
     conversationsApi.get(conversationId)
-      .then(({ conversation }) => setBashMode(conversation.bashMode ?? "sandboxed"))
+      .then(({ conversation }) => {
+        setBashMode(conversation.bashMode ?? "sandboxed");
+      })
       .catch(() => {});
   }, [conversationId]);
 
@@ -379,6 +386,36 @@ export function ChatInput({
     };
     window.addEventListener(CHAT_INPUT_PREFILL_EVENT, onPrefill);
     return () => window.removeEventListener(CHAT_INPUT_PREFILL_EVENT, onPrefill);
+  }, [resize]);
+
+  useEffect(() => {
+    const onTogglePrefix = (event: Event) => {
+      const detail = (event as CustomEvent<{ text?: unknown; prefixes?: unknown }>).detail;
+      const phrase = detail?.text;
+      if (typeof phrase !== "string" || !phrase.trim()) return;
+      const exactPhrase = phrase.trim();
+      const knownPrefixes = Array.isArray(detail.prefixes)
+        ? detail.prefixes.filter((prefix): prefix is string => typeof prefix === "string").map((prefix) => prefix.trim()).filter(Boolean)
+        : [exactPhrase];
+      setText((previous) => {
+        const leading = previous.trimStart();
+        const currentPrefix = knownPrefixes.find((prefix) =>
+          leading === prefix || leading.startsWith(`${prefix} `) || leading.startsWith(`${prefix}\n`),
+        );
+        const remaining = currentPrefix ? leading.slice(currentPrefix.length).trimStart() : leading;
+        if (currentPrefix === exactPhrase) return remaining;
+        if (remaining) {
+          return `${exactPhrase}\n\n${remaining}`;
+        }
+        return `${exactPhrase}\n\n`;
+      });
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+        resize();
+      });
+    };
+    window.addEventListener(CHAT_INPUT_TOGGLE_PREFIX_EVENT, onTogglePrefix);
+    return () => window.removeEventListener(CHAT_INPUT_TOGGLE_PREFIX_EVENT, onTogglePrefix);
   }, [resize]);
 
   // -----------------------------------------------------------------------
@@ -885,7 +922,8 @@ export function ChatInput({
       const anchor = slashAnchorRef.current;
       // Backing out to the command list leaves the composer untouched.
       if (el && anchor >= 0 && level.kind !== "command") {
-        const commandWord = level.kind === "tools" ? "tool" : "mcp";
+        const commandWord =
+          level.kind === "tools" ? "tool" : level.kind === "skills" ? "skill" : "mcp";
         const next = `${el.value.slice(0, anchor)}/${commandWord} `;
         setText(next);
         requestAnimationFrame(() => {
@@ -966,6 +1004,12 @@ export function ChatInput({
     !disabled &&
     !isStreaming &&
     (text.trim().length > 0 || attachedFiles.some((f) => f.status === "uploaded"));
+  const canContinue =
+    Boolean(onContinue) &&
+    !disabled &&
+    !isStreaming &&
+    text.trim().length === 0 &&
+    attachedFiles.length === 0;
 
   const submit = useCallback(() => {
     // Never send while a response is in flight — stop is the only action then.
@@ -1145,21 +1189,7 @@ export function ChatInput({
             composer and shift the box up ~22px on every send, then drop it
             back down when the response finishes. Dimmed (not removed) while
             streaming so the input box never changes size or position. */}
-        <div
-          className={cn(
-            "mb-1.5 flex items-center gap-2 px-1 text-[11px] text-muted-foreground transition-opacity duration-200",
-            isStreaming && "opacity-50",
-          )}
-        >
-          <span className="font-medium text-foreground/80">
-            {mode === "goal"
-              ? "Goal mode"
-              : mode === "plan"
-                ? "Plan mode"
-                : mode === "build"
-                  ? "Build mode"
-                  : "Chat mode"}
-          </span>
+        <div className={cn("mb-1.5 flex min-h-4 items-center gap-2 px-1 text-[11px] text-muted-foreground transition-opacity duration-200", isStreaming && "opacity-50")}>
           {isTemporary && (
             <>
               <span aria-hidden="true">·</span>
@@ -1179,14 +1209,10 @@ export function ChatInput({
                   ? "Change files, run checks, and report what was verified"
                   : "Direct answer with minimal overhead"}
           </span> */}
-          {!demo && onQualityPolicyChange && (
-            <>
-              <span aria-hidden="true">·</span>
-              <span>
-                {qualityPolicyLabel(activeQualityPolicy)}
-                {activeQualityPolicy === "high" && " · Deep reasoning"}
-              </span>
-            </>
+          {!demo && onQualityPolicyChange && activeQualityPolicy !== "medium" && (
+            <span className="rounded-full bg-primary/8 px-2 py-0.5 font-medium text-primary">
+              {qualityPolicyLabel(activeQualityPolicy)}
+            </span>
           )}
         </div>
 
@@ -1194,9 +1220,9 @@ export function ChatInput({
           className={cn(
             // While the slash menu is attached above, square the composer's
             // top corners so the two sheets look like one unit.
-            "group relative flex flex-col border border-border/70 bg-surface-1 transition-colors duration-200",
+            "group relative flex flex-col border border-border/45 bg-surface-1/80 transition-colors duration-200",
             slashLevel ? "rounded-b-3xl" : "rounded-3xl",
-            // large && inputFocused && "border-primary/60", uncomment to border the composer when focused
+            inputFocused && "border-border-focus/70",
             isDragging && "border-primary/45 bg-primary/[0.03]",
             isStreaming && "opacity-95",
           )}
@@ -1445,7 +1471,7 @@ export function ChatInput({
                             <span className="block">Memory</span>
                             <span className="block text-[10px] font-normal text-muted-foreground">
                               {memoryEnabled === false
-                                ? "Off — fully isolated: no memory, profile, preferences, or file access"
+                                ? "Disabled. No memory, profile, preferences, or file access"
                                 : "Remembers you across conversations"}
                             </span>
                           </span>
@@ -1500,26 +1526,16 @@ export function ChatInput({
                       )}
                     </span>
                   </DropdownMenuItem>
-                  {/* Bash access tier — one toggle between the two real
-                      permission levels (Safe = sandboxed to permitted
-                      directories, Full = device-wide). Shows the current
-                      tier; clicking switches to the other. Disabled when
-                      code execution is off. */}
+                  {/* Unified Bash + HTTP access tier. The same setting controls
+                      filesystem/shell reach and private-network requests, and
+                      is carried into newly-created conversations. */}
                   <DropdownMenuItem
-                    onClick={() => {
-                      if (codeExecutionOn) {
-                        setBashModeValue(bashMode === "sandboxed" ? "full" : "sandboxed");
-                      } else {
-                        router.push("/settings/tools");
-                      }
-                    }}
+                    onClick={() => setBashModeValue(bashMode === "sandboxed" ? "full" : "sandboxed")}
                   >
                     <Terminal className="h-4 w-4" />
-                    Bash: {codeExecutionOn ? (bashMode === "full" ? "Full" : "Safe") : "Safe"}
+                    Access: {bashMode === "full" ? "Full" : "Limited"}
                     <span className="ml-auto text-[10px] text-muted-foreground">
-                      {codeExecutionOn
-                        ? (bashMode === "full" ? "Switch to Safe" : "Switch to Full")
-                        : "Set up"}
+                      {bashMode === "full" ? "Switch to Limited" : "Switch to Full"}
                     </span>
                   </DropdownMenuItem>
                 </DropdownMenuGroup>}
@@ -1557,13 +1573,16 @@ export function ChatInput({
                 type="button"
                 size="icon"
                 className={cn("shrink-0 rounded-full", sendBtn)}
-                disabled={!canSend}
-                onClick={submit}
-                aria-label="Send message"
+                disabled={!canSend && !canContinue}
+                onClick={canContinue ? onContinue : submit}
+                aria-label={canContinue ? "Continue response" : "Send message"}
+                title={canContinue ? "Continue response" : "Send message"}
               >
-                <ArrowUp
-                  className={large ? "h-5 w-5" : "h-4 w-4"}
-                />
+                {canContinue ? (
+                  <Play className={cn(large ? "h-5 w-5" : "h-4 w-4", "fill-current")} />
+                ) : (
+                  <ArrowUp className={large ? "h-5 w-5" : "h-4 w-4"} />
+                )}
               </Button>
             )}
           </div>

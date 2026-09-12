@@ -8,6 +8,7 @@ import { discoverModels } from "@/lib/providers/discover";
 import { PROVIDER_MODEL_CATALOG } from "@/lib/providers/catalog";
 import { demoBlockedResponse, isDemoMode } from "@/lib/demo-policy";
 import { ensureDemoProvider } from "@/lib/demo-provider";
+import { shouldEnableNewModels } from "@/lib/providers/model-preferences";
 
 export async function GET() {
   if (isDemoMode()) return demoBlockedResponse();
@@ -59,6 +60,7 @@ export async function POST(req: Request) {
         contextWindow: null,
       }));
 
+  const enableNewModels = await shouldEnableNewModels();
   for (const model of seedModels) {
     await db
       .insert(providerModels)
@@ -67,6 +69,7 @@ export async function POST(req: Request) {
         modelId: model.modelId,
         label: model.label,
         contextWindow: model.contextWindow,
+        enabled: enableNewModels,
       })
       .onConflictDoNothing({ target: [providerModels.providerId, providerModels.modelId] })
       .run();

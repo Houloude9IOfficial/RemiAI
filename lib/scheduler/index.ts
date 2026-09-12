@@ -11,6 +11,7 @@ import { generateText, stepCountIs } from "ai";
 import { db } from "@/db";
 import {
   scheduledTasks,
+  heartbeats,
   conversations,
   providers,
   mcpServers,
@@ -22,7 +23,7 @@ import {
   buildCachedInstructions,
   markLastToolForCache,
 } from "@/lib/chat/prompt-cache";
-import { retrieveRelevantMemories } from "@/lib/chat/memories";
+import { buildMemoryPromptBlock, retrieveRelevantMemories } from "@/lib/chat/memories";
 import { persistUIMessage } from "@/lib/chat/persist";
 import { buildFilesystemTools } from "@/lib/fs/tools";
 import { buildContextTools } from "@/lib/tools/context";
@@ -33,6 +34,7 @@ import { buildDocumentReaderTools } from "@/lib/tools/document-reader";
 import { buildMediaTools } from "@/lib/media/tools";
 import { delayTool } from "@/lib/tools/delay";
 import { webFetchTool } from "@/lib/tools/web-fetch";
+import { buildHttpRequestTool } from "@/lib/tools/http-request";
 import { askQuestionsTool } from "@/lib/tools/ask-questions";
 import { buildTodoTools } from "@/lib/tools/todo";
 import { buildFileIndexTools } from "@/lib/tools/file-index";
@@ -52,6 +54,7 @@ import {
   scheduleAutomationRetry,
   startAutomationRun,
 } from "@/lib/runs/automation";
+import { executeHeartbeat } from "@/lib/heartbeats/runner";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -177,16 +180,42 @@ async function pollDueTasks() {
       )
       .all() as ScheduledTaskRow[];
 
-    if (dueTasks.length === 0) return;
+    if (dueTasks.length > 0) {
+      console.log(`[scheduler] Found ${dueTasks.length} due task(s)`);
+      await Promise.all(dueTasks.map((task) => executeTask(task)));
+    }
 
-    console.log(`[scheduler] Found ${dueTasks.length} due task(s)`);
-
-    // Execute each task in parallel (they're independent)
-    await Promise.all(
-      dueTasks.map((task) => executeTask(task)),
-    );
+    const dueHeartbeats = await db.select().from(heartbeats)
+      .where(and(eq(heartbeats.enabled, true), lt(heartbeats.nextRunAt, now))).all();
+    await Promise.all(dueHeartbeats.map((heartbeat) => executeDueHeartbeat(heartbeat)));
   } catch (err) {
     console.error("[scheduler] Poll error:", err);
+  }
+}
+
+async function executeDueHeartbeat(heartbeat: typeof heartbeats.$inferSelect) {
+  // Claim the schedule before starting work. A second poll/process will see
+  // the future nextRunAt and cannot launch a duplicate run.
+  const claim = await db.update(heartbeats)
+    .set({ nextRunAt: new Date(Date.now() + 60_000).toISOString(), updatedAt: new Date().toISOString() })
+    .where(and(eq(heartbeats.id, heartbeat.id), eq(heartbeats.enabled, true), lt(heartbeats.nextRunAt, new Date().toISOString())))
+    .run();
+  if (!claim.changes) return;
+  try {
+    await executeHeartbeat(heartbeat);
+  } catch (error) {
+    console.error(`[scheduler] Heartbeat #${heartbeat.id} failed:`, error);
+  } finally {
+    const now = new Date();
+    let next: Date;
+    if (heartbeat.scheduleType === "cron") {
+      next = computeNextCronTime(heartbeat.schedule, now);
+    } else {
+      const seconds = Math.max(60, Number(heartbeat.schedule) || 3600);
+      next = new Date(now.getTime() + seconds * 1000);
+    }
+    await db.update(heartbeats).set({ lastRunAt: now.toISOString(), nextRunAt: next.toISOString(), updatedAt: now.toISOString() })
+      .where(eq(heartbeats.id, heartbeat.id));
   }
 }
 
@@ -276,12 +305,12 @@ export async function executeTask(task: ScheduledTaskRow) {
 
     const [fsToolSet, contextToolSet, memoryToolSet, integrationToolSet, executionToolSet, docToolSet, mediaToolSet, fileIndexToolSet, todoToolSet, profileToolSet, routineToolSet, scheduleToolSet] =
       await Promise.all([
-        buildFilesystemTools(),
+        buildFilesystemTools(task.conversationId),
         Promise.resolve(buildContextTools()),
         buildMemoryTools(),
         buildIntegrationTools(),
-        buildExecutionTools(),
-        buildDocumentReaderTools(),
+        buildExecutionTools(conversation.bashMode === "full" ? "full" : "sandboxed"),
+        buildDocumentReaderTools(task.conversationId),
         Promise.resolve(buildMediaTools(task.conversationId)),
         Promise.resolve(buildFileIndexTools()),
         Promise.resolve(buildTodoTools(task.conversationId)),
@@ -306,6 +335,9 @@ export async function executeTask(task: ScheduledTaskRow) {
       ...scheduleToolSet,
       delay: delayTool,
       web_fetch: webFetchTool,
+      http_request: buildHttpRequestTool({
+        mode: conversation.bashMode === "full" ? "full" : "sandboxed",
+      }),
       ask_questions: askQuestionsTool,
       ...buildToolHelpTool(),
       ...buildListAvailableToolsTool(),
@@ -319,8 +351,17 @@ export async function executeTask(task: ScheduledTaskRow) {
     const toolNames = Object.keys(tools);
     console.log(`[scheduler] Task #${task.id} has ${toolNames.length} tool(s): ${toolNames.join(", ")}`);
 
-    // ── Build system prompt with context ──
-    const prefs = await db.select().from(userPreferences).get();
+    // ── Build system prompt with context (automigrate 0043 if needed) ──
+    let prefs: (typeof userPreferences.$inferSelect) | undefined;
+    try {
+      prefs = await db.select().from(userPreferences).get();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message.toLowerCase() : String(e).toLowerCase();
+      if (!msg.includes("no such column") && !msg.includes("has no column")) throw e;
+      const { ensureRemiPrefsColumns } = await import("@/db");
+      ensureRemiPrefsColumns();
+      prefs = await db.select().from(userPreferences).get();
+    }
     const prefParts: string[] = [];
     if (prefs?.preferredName) {
       prefParts.push(`The user's preferred name is "${prefs.preferredName}".`);
@@ -340,11 +381,9 @@ export async function executeTask(task: ScheduledTaskRow) {
     if (prefs?.skills) profileParts.push(`Skills: ${prefs.skills}`);
 
     // Inject only the memories relevant to THIS task, capped to a hard token
-    // budget — the model can still search_memories for anything else.
+    // budget — grouped by category; the model can still search_memories for anything else.
     const relevantMemories = await retrieveRelevantMemories(task.task);
-    const memoryTip = relevantMemories.length > 0
-      ? `\n\nSaved memories:\n${relevantMemories.map((m) => `- ${m.content}`).join("\n")}`
-      : "";
+    const memoryTip = buildMemoryPromptBlock(relevantMemories as any);
 
     const recentChanges = await queryRecentChanges(10);
     const fileChangeTip = recentChanges.length > 0

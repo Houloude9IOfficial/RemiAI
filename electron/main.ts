@@ -101,7 +101,9 @@ function getNextCommand(): NextCommand {
   if (isDev) {
     return {
       script: resolveNextCli(),
-      args: ["dev", "-p", String(PORT), "-H", "127.0.0.1"],
+      // Webpack is more reliable for this app's development HMR graph than
+      // Turbopack, which can repeatedly request stale/missing HMR chunks.
+      args: ["dev", "--webpack", "-p", String(PORT), "-H", "127.0.0.1"],
       cwd: APP_ROOT,
     };
   }
@@ -378,13 +380,32 @@ function createTray(): void {
 // Notifications
 // ---------------------------------------------------------------------------
 
+ipcMain.handle("notifications-supported", () => Notification.isSupported());
+
 ipcMain.handle(
   "send-notification",
-  (_event: Electron.IpcMainInvokeEvent, { title, body }: { title: string; body: string }) => {
-    if (Notification.isSupported()) {
-      const notification = new Notification({ title, body });
-      notification.show();
+  (
+    _event: Electron.IpcMainInvokeEvent,
+    {
+      title,
+      body,
+      url,
+    }: { title: string; body: string; url?: string; requireInteraction?: boolean },
+  ) => {
+    if (!Notification.isSupported()) {
+      throw new Error("Native notifications are not supported on this system");
     }
+
+    const notification = new Notification({ title, body });
+    if (url) {
+      notification.on("click", () => {
+        mainWindow?.show();
+        mainWindow?.focus();
+        void mainWindow?.loadURL(new URL(url, NEXTJS_URL).toString());
+      });
+    }
+    notification.show();
+    return true;
   },
 );
 

@@ -76,6 +76,49 @@ export default function RootLayout({
         Must mirror the logic in ThemeProvider.tsx.
       */}
       <head>
+        {process.env.NODE_ENV !== "production" && (
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `
+                try {
+                  if ("serviceWorker" in navigator) {
+                    var cleanupKey = "remiai-dev-sw-cleanup-v3";
+                    var hadController = navigator.serviceWorker.controller !== null;
+                    if (hadController && !sessionStorage.getItem(cleanupKey)) {
+                      // Stop parsing before Next.js can request its client
+                      // chunks. The current document is still controlled by
+                      // the old worker until the cleanup navigation finishes.
+                      window.stop();
+                      sessionStorage.setItem(cleanupKey, "1");
+                      navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                        return Promise.all(registrations.map(function(registration) {
+                          return registration.unregister();
+                        }));
+                      }).then(function() {
+                        if (!("caches" in window)) return;
+                        return caches.keys().then(function(names) {
+                          return Promise.all(names.filter(function(name) {
+                            return name.indexOf("remiai-") === 0;
+                          }).map(function(name) {
+                            return caches.delete(name);
+                          }));
+                        });
+                      }).then(function() {
+                        // The current document remains controlled until the
+                        // next navigation, so reload only after unregistering.
+                        window.location.reload();
+                      }).catch(function() {
+                        sessionStorage.removeItem(cleanupKey);
+                      });
+                    } else if (!hadController) {
+                      sessionStorage.removeItem(cleanupKey);
+                    }
+                  }
+                } catch (e) {}
+              `,
+            }}
+          />
+        )}
         <script
           dangerouslySetInnerHTML={{
             __html: `

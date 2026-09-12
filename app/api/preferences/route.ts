@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { db } from "@/db";
+import { db, ensureRemiPrefsColumns } from "@/db";
 import { userPreferences } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
@@ -18,10 +18,26 @@ const DEFAULT_PREFERENCES = {
   links: {} as Record<string, string>,
   accentColor: "",
   backgroundColor: "",
+  enableNewModels: true,
+  remiApiUrl: "",
+  remiApiEnabled: true,
+  cardDisplayModes: {} as Record<string, string>,
 };
 
+function isMissingColumnError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message.toLowerCase() : String(e).toLowerCase();
+  return msg.includes("no such column") || msg.includes("has no column");
+}
+
 export async function GET() {
-  let prefs = await db.select().from(userPreferences).get();
+  let prefs: (typeof userPreferences.$inferSelect) | undefined;
+  try {
+    prefs = await db.select().from(userPreferences).get();
+  } catch (e) {
+    if (!isMissingColumnError(e)) throw e;
+    ensureRemiPrefsColumns();
+    prefs = await db.select().from(userPreferences).get();
+  }
 
   if (!prefs) {
     // Seed a default row on first access so the chat route always finds one
@@ -47,6 +63,10 @@ export async function GET() {
     links: prefs!.links,
     accentColor: prefs!.accentColor,
     backgroundColor: prefs!.backgroundColor,
+    enableNewModels: prefs!.enableNewModels,
+    remiApiUrl: ((prefs as Record<string, unknown>).remiApiUrl as string | undefined) ?? "",
+    remiApiEnabled: ((prefs as Record<string, unknown>).remiApiEnabled as boolean | undefined) ?? true,
+    cardDisplayModes: ((prefs as Record<string, unknown>).cardDisplayModes as Record<string, string> | undefined) ?? {},
   });
 }
 
@@ -66,9 +86,20 @@ export async function PUT(req: Request) {
     links?: Record<string, string>;
     accentColor?: string;
     backgroundColor?: string;
+    enableNewModels?: boolean;
+    remiApiUrl?: string;
+    remiApiEnabled?: boolean;
+    cardDisplayModes?: Record<string, string>;
   };
 
-  const existing = await db.select().from(userPreferences).get();
+  let existing: (typeof userPreferences.$inferSelect) | undefined;
+  try {
+    existing = await db.select().from(userPreferences).get();
+  } catch (e) {
+    if (!isMissingColumnError(e)) throw e;
+    ensureRemiPrefsColumns();
+    existing = await db.select().from(userPreferences).get();
+  }
 
   const data = {
     preferredName: body.preferredName ?? existing?.preferredName ?? "",
@@ -85,6 +116,10 @@ export async function PUT(req: Request) {
     links: body.links ?? existing?.links ?? {},
     accentColor: body.accentColor ?? existing?.accentColor ?? "",
     backgroundColor: body.backgroundColor ?? existing?.backgroundColor ?? "",
+    enableNewModels: body.enableNewModels ?? existing?.enableNewModels ?? true,
+    remiApiUrl: body.remiApiUrl ?? ((existing as unknown as Record<string, unknown> | null)?.remiApiUrl as string | undefined) ?? "",
+    remiApiEnabled: body.remiApiEnabled ?? ((existing as unknown as Record<string, unknown> | null)?.remiApiEnabled as boolean | undefined) ?? true,
+    cardDisplayModes: body.cardDisplayModes ?? ((existing as unknown as Record<string, unknown> | null)?.cardDisplayModes as Record<string, string> | undefined) ?? {},
     updatedAt: new Date().toISOString(),
   };
 

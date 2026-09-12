@@ -1,10 +1,12 @@
 import { ProfileForm } from "@/components/settings/ProfileForm";
 import { AccountSecurity } from "@/components/settings/AccountSecurity";
+import { NotificationSettings } from "@/components/settings/NotificationSettings";
 
 export default function ProfileSettingsPage() {
   return (
-    <div className="flex flex-col gap-6">
+    <div className="mx-auto flex max-w-3xl flex-col gap-6">
       <ProfileForm />
+      <NotificationSettings />
       <AccountSecurity />
       <p className="text-center text-[11px] leading-relaxed text-muted-foreground/60">
         This interface gives the AI a wide range of tools to be as accurate as

@@ -161,8 +161,8 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     id: "memory",
     name: "Memory",
     description:
-      "Save and recall facts about the user across conversations. The AI can remember preferences, interests, and personal details.",
-    toolNames: ["remember", "search_memories", "get_recent_memories"],
+      "Save and recall structured facts about the user across conversations — each memory has a category (health, work, personal, etc.) and an optional event date. The AI can create, search, and update memories.",
+    toolNames: ["remember", "update_memory", "search_memories", "get_recent_memories"],
     category: "memory",
     togglable: false,
     requiresApiKey: false,
@@ -179,14 +179,26 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     togglable: false,
     requiresApiKey: false,
   },
-  // ── Brave Search (integration, togglable, needs API key) ──
+  // ── Unified Web Search (builtin, always on) ──
+  {
+    id: "web_search",
+    name: "Web Search",
+    description:
+      "Searches through self-hosted SearXNG first, then optionally falls back to Brave Search and Firecrawl. Configure SearXNG with the SEARXNG_URL environment variable; API keys are optional fallbacks.",
+    toolNames: ["web_search"],
+    category: "builtin",
+    subgroup: "Web & Research",
+    togglable: false,
+    requiresApiKey: false,
+  },
+  // ── Brave Search fallback (integration, togglable, needs API key) ──
   {
     id: "brave_search",
-    name: "Brave Search",
+    name: "Brave Search Fallback",
     icon: "https://upload.wikimedia.org/wikipedia/commons/5/51/Brave_icon_lionface.png",
     description:
-      "Search the web using Brave Search. Get up-to-date information, news, answers, and image results from the internet.",
-    toolNames: ["brave_web_search", "brave_image_search"],
+      "Optional fallback for the unified Web Search tool when SearXNG is unavailable. The key is never used unless SearXNG fails.",
+    toolNames: [],
     category: "integration",
     togglable: true,
     requiresApiKey: true,
@@ -236,6 +248,26 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     togglable: false,
     requiresApiKey: false,
   },
+  // ── Remi Cards — visual cards via RemiAPI Worker (builtin, profile-toggled)
+  {
+    id: "remi_cards",
+    name: "Visual Cards",
+    description:
+      "Zero-cost visual cards via the RemiAPI Cloudflare Worker. Edge-cached (Cache API), rate-limited, no API key needed for the core five. Toggle in Profile → RemiAPI.",
+    toolNames: [
+      "weather_card",
+      "timezone_card",
+      "currency_card",
+      "map_card",
+      "crypto_card",
+      "news_card",
+      "stock_card",
+    ],
+    category: "builtin",
+    subgroup: "Web & Research",
+    togglable: false,
+    requiresApiKey: false,
+  },
   // ── Delay tool (builtin, always on, not togglable) ──
   {
     id: "delay",
@@ -279,6 +311,18 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     description:
       "Fetch a specific URL and return its content as text. Use this to read web pages, REST APIs, or any publicly accessible URL.",
     toolNames: ["web_fetch"],
+    category: "builtin",
+    subgroup: "Web & Research",
+    togglable: false,
+    requiresApiKey: false,
+  },
+  // ── Advanced HTTP request tool (builtin, always on, not togglable) ──
+  {
+    id: "http_request",
+    name: "HTTP Requests",
+    description:
+      "Make flexible GET, POST, PUT, PATCH, and DELETE requests to public APIs and websites with custom headers and raw or JSON request bodies. Safe mode blocks private-network destinations; Full mode permits them.",
+    toolNames: ["http_request"],
     category: "builtin",
     subgroup: "Web & Research",
     togglable: false,
@@ -372,7 +416,13 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     name: "Canvas",
     description:
       "Create interactive, buildable web projects — self-contained HTML/CSS/JS shown in a live preview + code editor panel the user can run and edit. Websites, apps, calculators, games, dashboards, interactive demos.",
-    toolNames: ["canvas_create", "canvas_add_file", "canvas_list", "canvas_open"],
+    toolNames: [
+      "canvas_create",
+      "canvas_add_file",
+      "canvas_list",
+      "canvas_open",
+      "canvas_review",
+    ],
     category: "builtin",
     subgroup: "Build",
     togglable: false,
@@ -427,12 +477,11 @@ export const TOOL_CATALOG: ToolDefinition[] = [
   // ── Firecrawl (integration, togglable, needs API key) ──
   {
     id: "firecrawl",
-    name: "Firecrawl",
+    name: "Firecrawl Fallback & Scraping",
     icon: "https://firecrawl.dev/logo.png",
     description:
-      "Powerful web scraping, crawling, searching, and browser interaction powered by Firecrawl. Includes fc_search (web search), fc_scrape (single page scrape), fc_crawl (multi-page crawl), fc_interact (browser interaction), and fc_stop_interaction.",
+      "Optional final fallback for the unified Web Search tool, plus advanced page scraping, crawling, and browser interaction. Search is only attempted after SearXNG and Brave fail.",
     toolNames: [
-      "fc_search",
       "fc_scrape",
       "fc_crawl",
       "fc_interact",

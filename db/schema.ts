@@ -1,5 +1,7 @@
 import { sql } from "drizzle-orm";
 import { sqliteTable, text, integer, unique } from "drizzle-orm/sqlite-core";
+import { MEMORY_CATEGORIES } from "@/lib/memory-categories";
+export { MEMORY_CATEGORIES };
 
 export const directories = sqliteTable("directories", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -69,9 +71,14 @@ export const mcpServers = sqliteTable("mcp_servers", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
+export type MemoryCategory = (typeof MEMORY_CATEGORIES)[number];
+
 export const memories = sqliteTable("memories", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   content: text("content").notNull(),
+  category: text("category", { enum: MEMORY_CATEGORIES }).notNull().default("general"),
+  /** Optional event date for the memory (YYYY-MM-DD). Distinct from createdAt which is when it was saved. */
+  memoryDate: text("memory_date"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
@@ -92,6 +99,16 @@ export const userPreferences = sqliteTable("user_preferences", {
   links: text("links", { mode: "json" }).$type<Record<string, string>>().notNull().default({}),
   accentColor: text("accent_color").notNull().default(""),
   backgroundColor: text("background_color").notNull().default(""),
+  // Controls whether models discovered or manually added in the future are enabled.
+  enableNewModels: integer("enable_new_models", { mode: "boolean" }).notNull().default(true),
+  // RemiAPI (Cloudflare Worker caching proxy for zero-cost cards)
+  remiApiUrl: text("remi_api_url").notNull().default(""),
+  remiApiEnabled: integer("remi_api_enabled", { mode: "boolean" }).notNull().default(true),
+  // Per-card display mode: "card" vs "text" (and future). Key is card id.
+  cardDisplayModes: text("card_display_modes", { mode: "json" })
+    .$type<Record<string, string>>()
+    .notNull()
+    .default({}),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
@@ -109,6 +126,9 @@ export const conversations = sqliteTable("conversations", {
     .notNull()
     .default("medium"),
   bashMode: text("bash_mode", { enum: ["sandboxed", "full"] })
+    .notNull()
+    .default("sandboxed"),
+  requestMode: text("request_mode", { enum: ["sandboxed", "full"] })
     .notNull()
     .default("sandboxed"),
   // Temporary chat (ChatGPT-style): looks "hacky/temporary" in the UI, can be
@@ -348,10 +368,10 @@ export const fileIndex = sqliteTable(
 export const automationRuns = sqliteTable("automation_runs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   conversationId: integer("conversation_id")
-    .notNull()
     .references(() => conversations.id, { onDelete: "cascade" }),
+  heartbeatId: integer("heartbeat_id"),
   kind: text("kind", {
-    enum: ["routine", "scheduled_task", "webhook", "agent"],
+    enum: ["routine", "scheduled_task", "webhook", "agent", "heartbeat"],
   }).notNull(),
   sourceId: integer("source_id"),
   parentRunId: integer("parent_run_id"),
@@ -404,6 +424,47 @@ export const automationRunEvents = sqliteTable("automation_run_events", {
     .notNull()
     .default({}),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const heartbeatToolCalls = sqliteTable("heartbeat_tool_calls", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  runId: integer("run_id")
+    .notNull()
+    .references(() => automationRuns.id, { onDelete: "cascade" }),
+  callId: text("call_id"),
+  toolName: text("tool_name").notNull(),
+  input: text("input"),
+  output: text("output"),
+  status: text("status", { enum: ["running", "completed", "failed"] }).notNull(),
+  startedAt: text("started_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  completedAt: text("completed_at"),
+  durationMs: integer("duration_ms"),
+});
+
+export const heartbeats = sqliteTable("heartbeats", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  prompt: text("prompt").notNull(),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  scheduleType: text("schedule_type", { enum: ["interval", "cron"] }).notNull().default("interval"),
+  schedule: text("schedule").notNull().default("3600"),
+  timezone: text("timezone").notNull().default("UTC"),
+  nextRunAt: text("next_run_at").notNull(),
+  lastRunAt: text("last_run_at"),
+  providerId: integer("provider_id").references(() => providers.id, { onDelete: "set null" }),
+  modelId: text("model_id"),
+  fallbackMode: text("fallback_mode", { enum: ["auto", "fail"] }).notNull().default("fail"),
+  allowedToolNames: text("allowed_tool_names", { mode: "json" }).$type<string[]>().notNull().default([]),
+  allowedToolGroups: text("allowed_tool_groups", { mode: "json" }).$type<string[]>().notNull().default([]),
+  deniedToolNames: text("denied_tool_names", { mode: "json" }).$type<string[]>().notNull().default([]),
+  allowedMcpServerIds: text("allowed_mcp_server_ids", { mode: "json" }).$type<number[]>().notNull().default([]),
+  maxSteps: integer("max_steps").notNull().default(20),
+  timeoutSeconds: integer("timeout_seconds").notNull().default(300),
+  maxAttempts: integer("max_attempts").notNull().default(2),
+  retentionDays: integer("retention_days").notNull().default(30),
+  notifyOnCompletion: integer("notify_on_completion", { mode: "boolean" }).notNull().default(false),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const routines = sqliteTable("routines", {
@@ -525,6 +586,19 @@ export const authBootstrap = sqliteTable("auth_bootstrap", {
   codeHash: text("code_hash").notNull(),
   consumedAt: text("consumed_at"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const pushSubscriptions = sqliteTable("push_subscriptions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  accountId: integer("account_id")
+    .notNull()
+    .references(() => authAccounts.id, { onDelete: "cascade" }),
+  endpoint: text("endpoint").notNull().unique(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  userAgent: text("user_agent"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 /**

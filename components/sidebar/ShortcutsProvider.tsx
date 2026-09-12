@@ -6,6 +6,7 @@ import { useNewChat } from "@/lib/hooks/use-new-chat";
 import { focusChatInput } from "@/lib/chat-input-registry";
 import { ShortcutsContext } from "./shortcuts-context";
 import { ShortcutsDialog } from "./ShortcutsModal";
+import { CommandPalette } from "./CommandPalette";
 
 const DESKTOP_MEDIA = "(min-width: 768px)";
 
@@ -26,6 +27,7 @@ const DESKTOP_MEDIA = "(min-width: 768px)";
  */
 export function ShortcutsProvider({ children }: { children: React.ReactNode }) {
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const { toggleDesktopSidebar, toggleMobileSidebar } = useSidebar();
   const newChat = useNewChat();
   // `mutate` is memoized by TanStack Query (stable), so aliasing it lets the
@@ -64,6 +66,12 @@ export function ShortcutsProvider({ children }: { children: React.ReactNode }) {
 
       const key = e.key.toLowerCase();
 
+      if (key === "k") {
+        e.preventDefault();
+        setIsCommandPaletteOpen((open) => !open);
+        return;
+      }
+
       if (key === "o") {
         // Prevent the browser's "open file" default where possible
         e.preventDefault();
@@ -99,6 +107,7 @@ export function ShortcutsProvider({ children }: { children: React.ReactNode }) {
     >
       {children}
       <ShortcutsDialog />
+      <CommandPalette open={isCommandPaletteOpen} onClose={() => setIsCommandPaletteOpen(false)} />
     </ShortcutsContext.Provider>
   );
 }

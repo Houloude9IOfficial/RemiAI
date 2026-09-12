@@ -27,13 +27,62 @@ export function getClientLocale(): string {
   return "en";
 }
 
+let cachedLocation: { latitude: number; longitude: number } | null = null;
+
+/** Ask the browser for precise location after an explicit user action. */
+export function requestClientLocation(): Promise<{ latitude: number; longitude: number }> {
+  if (typeof navigator === "undefined" || !navigator.geolocation) {
+    return Promise.reject(new Error("Location is not available in this browser."));
+  }
+  return new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        cachedLocation = { latitude: coords.latitude, longitude: coords.longitude };
+        resolve(cachedLocation);
+      },
+      (error) => {
+        reject(
+          new Error(
+            error.code === error.PERMISSION_DENIED
+              ? "Location permission was denied. Enable it in your browser settings and try again."
+              : "Could not determine your location. Try again or enter a city manually.",
+          ),
+        );
+      },
+      { maximumAge: 10 * 60_000, timeout: 10_000, enableHighAccuracy: false },
+    );
+  });
+}
+
+/**
+ * Read a previously granted browser location permission. This deliberately
+ * never triggers a permission prompt: weather still has IP/locale fallbacks
+ * when the user has not opted in to precise location.
+ */
+export function primeClientLocation(): void {
+  if (typeof navigator === "undefined" || !navigator.geolocation || cachedLocation) return;
+  navigator.permissions?.query?.({ name: "geolocation" as PermissionName }).then((permission) => {
+    if (permission.state !== "granted") return;
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => { cachedLocation = { latitude: coords.latitude, longitude: coords.longitude }; },
+      () => undefined,
+      { maximumAge: 10 * 60_000, timeout: 5_000 }
+    );
+  }).catch(() => undefined);
+}
+
 /**
  * Headers to attach to chat API requests (`/api/chat`, `/api/chat/start`)
  * so the server knows the user's timezone and locale.
  */
 export function userContextHeaders(): Record<string, string> {
-  return {
+  const headers: Record<string, string> = {
     "x-user-timezone": getClientTimeZone(),
     "x-user-locale": getClientLocale(),
   };
+  if (cachedLocation) {
+    headers["x-user-latitude"] = String(cachedLocation.latitude);
+    headers["x-user-longitude"] = String(cachedLocation.longitude);
+  }
+  return headers;
 }

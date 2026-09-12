@@ -13,6 +13,8 @@ import { buildDocumentReaderTools } from "@/lib/tools/document-reader";
 import { buildMediaTools } from "@/lib/media/tools";
 import { delayTool } from "@/lib/tools/delay";
 import { webFetchTool } from "@/lib/tools/web-fetch";
+import { buildHttpRequestTool } from "@/lib/tools/http-request";
+import { buildSendNotificationTool } from "@/lib/tools/notifications";
 import { buildTodoTools } from "@/lib/tools/todo";
 import { buildRoutinesTools } from "@/lib/tools/routines";
 import { truncateToolResult, estimateTokenCount, normaliseTool } from "@/lib/utils";
@@ -159,12 +161,13 @@ const AGENT_PROFILES: Record<string, AgentProfile> = {
 - Use your search tools (if available) to find relevant sources.
 - Focus on factual information. If information is unclear or contradictory, note that.
 - When you have completed your research, provide a clear, well-organized summary.
+- If the task asks you to notify the user, call send_notification with a concise title and brief result/next-step body after completing the work.
 - Cite your sources by including URLs.
 - Be concise but comprehensive — cover the key points without unnecessary detail.
 - Keep your final summary under 2000 words unless the task specifically requires more.
 
 ## Available tools
-You have access to web_fetch (for reading web pages), delay (for rate limiting), code execution tools (for analysis), and filesystem tools (for reading/writing files). Use them as needed to complete your research task.`,
+You have access to web_fetch (for reading web pages), send_notification, delay (for rate limiting), code execution tools (for analysis), and filesystem tools (for reading/writing files). Use them as needed to complete your research task.`,
   },
   coder: {
     label: "Coder",
@@ -231,13 +234,16 @@ async function buildAgentTools(
   userContext?: UserContext,
   conversationId?: number,
 ): Promise<Record<string, unknown>> {
+  const conversation = conversationId != null
+    ? await db.select({ bashMode: conversations.bashMode }).from(conversations).where(eq(conversations.id, conversationId)).get()
+    : undefined;
   const [fsTools, memoryTools, integrationTools, executionTools, docTools, mediaTools, routineTools] =
     await Promise.all([
-      buildFilesystemTools(),
+      buildFilesystemTools(conversationId),
       buildMemoryTools(),
       buildIntegrationTools(userContext),
       buildExecutionTools(),
-      buildDocumentReaderTools(),
+      buildDocumentReaderTools(conversationId),
       // Sub-agents can analyze/process media too; outputs land in the parent
       // conversation's session sandbox (conversationId is always present for
       // spawned agents).
@@ -259,8 +265,14 @@ async function buildAgentTools(
     ...docTools,
     ...mediaTools,
     ...routineTools,
+    ...(conversationId != null
+      ? { send_notification: buildSendNotificationTool(conversationId) }
+      : {}),
     delay: delayTool,
     web_fetch: webFetchTool,
+    http_request: buildHttpRequestTool({
+      mode: conversation?.bashMode === "full" ? "full" : "sandboxed",
+    }),
   };
 
   return Object.fromEntries(

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { ImageIcon, Play, Film, FileWarning } from "lucide-react";
 import { ImagePreview } from "./ImagePreview";
@@ -11,6 +11,11 @@ interface MediaDisplayProps {
 }
 
 export function MediaDisplay({ data }: MediaDisplayProps) {
+  const key = `${String(data.dataUrl ?? "")}::${String(data.url ?? "")}`;
+  return <MediaContent key={key} data={data} />;
+}
+
+function MediaContent({ data }: MediaDisplayProps) {
   const type = data.type as string | undefined;
   const dataUrl = data.dataUrl as string | undefined;
   const url = data.url as string | undefined;
@@ -20,13 +25,6 @@ export function MediaDisplay({ data }: MediaDisplayProps) {
   const [hasError, setHasError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [useUrlFallback, setUseUrlFallback] = useState(false);
-
-  // Reset fallback state when data changes (new media result)
-  useEffect(() => {
-    setUseUrlFallback(false);
-    setHasError(false);
-    setIsLoading(true);
-  }, [data.dataUrl, data.url]);
 
   // If dataUrl is present but fails to load (e.g. truncated by tool result
   // truncation), fall back to the server-served URL so the image still displays.

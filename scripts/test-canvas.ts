@@ -92,6 +92,83 @@ async function main() {
     `/api/chat/${conversationId}/session-files/canvas/guided-meditation/index.html`,
   );
 
+  // ── canonical per-file URLs in the canvas tool serialisation ─────
+  // Canvas/session tool results must give the model canonical session-file
+  // URLs (read_file/web_fetch only accept /api/chat/{id}/session-files/{path})
+  // — a bare path like "canvas/movie-db/style.css" is NOT a valid URL.
+  const { buildCanvasTools } = await import("../lib/canvas/tools");
+  const canvasTools = buildCanvasTools({ conversationId }) as unknown as Record<
+    string,
+    { execute: (args: Record<string, unknown>) => Promise<Record<string, unknown>> }
+  >;
+  const opened = (await canvasTools.canvas_open!.execute({
+    slug: "guided-meditation",
+  })) as unknown as { files: Array<{ path: string; url: string | null }> };
+  const openedEntry = opened.files.find((f) => f.path.endsWith("/index.html"));
+  assert.ok(openedEntry, "canvas_open file listing includes index.html");
+  assert.equal(
+    openedEntry!.url,
+    `/api/chat/${conversationId}/session-files/canvas/guided-meditation/index.html`,
+    "canvas file entries carry the canonical session-file URL",
+  );
+  const createdResult = (await canvasTools.canvas_create!.execute({
+    name: "Guided Meditation",
+  })) as unknown as { files: Array<{ path: string; url: string | null }> };
+  const createdEntry = createdResult.files.find((f) => f.path.endsWith("/index.html"));
+  assert.ok(createdEntry?.url?.startsWith(`/api/chat/${conversationId}/session-files/canvas/`));
+
+  // session_file_write / session_file_edit results include the canonical URL.
+  const { buildSessionFileTools } = await import("../lib/session-files/tools");
+  const sessionTools = buildSessionFileTools(conversationId) as unknown as Record<
+    string,
+    { execute: (args: Record<string, unknown>) => Promise<Record<string, unknown>> }
+  >;
+  const writeResult = (await sessionTools.session_file_write!.execute({
+    path: "canvas/guided-meditation/style.css",
+    content: "body { background: #123; }",
+  })) as unknown as { path: string; url: string };
+  assert.equal(
+    writeResult.url,
+    `/api/chat/${conversationId}/session-files/canvas/guided-meditation/style.css`,
+    "session_file_write returns the canonical URL",
+  );
+  const editResult = (await sessionTools.session_file_edit!.execute({
+    path: "canvas/guided-meditation/style.css",
+    old_str: "#123",
+    new_str: "#456",
+  })) as unknown as { path: string; url: string };
+  assert.equal(
+    editResult.url,
+    `/api/chat/${conversationId}/session-files/canvas/guided-meditation/style.css`,
+    "session_file_edit returns the canonical URL",
+  );
+
+  // ── bare relativePath reads resolve inside the session sandbox ───
+  // The model often passes the bare path it sees in canvas listings
+  // (e.g. "canvas/movie-db/style.css") as `relativePath` WITHOUT rootId.
+  // read_file/read_media/read_document must accept that form and resolve
+  // it against the conversation's sandbox instead of failing validation.
+  const { readFileTool } = await import("../lib/fs/tools");
+  const readFileResult = (await readFileTool.execute({
+    relativePath: "canvas/guided-meditation/style.css",
+    _conversationId: conversationId,
+  })) as { content: string };
+  assert.equal(
+    readFileResult.content,
+    "body { background: #456; }",
+    "read_file resolves a bare session relativePath against the sandbox",
+  );
+
+  // Schema must accept { relativePath } alone (no rootId, no url).
+  const schemaCheck = readFileTool.parameters.safeParse({
+    relativePath: "canvas/guided-meditation/style.css",
+  });
+  assert.equal(
+    schemaCheck.success,
+    true,
+    "read_file schema accepts a bare session relativePath",
+  );
+
   // ── cleanup ──────────────────────────────────────────────────────
   await fsp.rm(tmpRoot, { recursive: true, force: true });
 

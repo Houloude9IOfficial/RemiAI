@@ -10,6 +10,7 @@
  *   npx tsx scripts/launcher.ts          # Interactive prompt
  *   npx tsx scripts/launcher.ts web      # Skip prompt, start web server
  *   npx tsx scripts/launcher.ts electron # Skip prompt, start Electron app
+ *   npx tsx scripts/launcher.ts web --port 3001 --searxng-port 3106
  *   npx tsx scripts/launcher.ts --help   # Show help
  *
  * The launcher checks whether Electron is installed before offering the
@@ -30,7 +31,7 @@ import fs from "node:fs";
 function spawnCommand(
   command: string,
   args: string[],
-  options: SpawnOptions & { stdio: "inherit" },
+  options: SpawnOptions,
 ): ChildProcess {
   const isWindows = process.platform === "win32";
   return spawn(isWindows ? `${command}.cmd` : command, args, {
@@ -44,6 +45,71 @@ function spawnCommand(
 // ---------------------------------------------------------------------------
 
 const PROJECT_ROOT = path.resolve(__dirname, "..");
+const SEARXNG_STARTUP_TIMEOUT_MS = 30_000;
+const SEARXNG_POLL_INTERVAL_MS = 1_000;
+
+/** Load simple KEY=value entries before the launcher starts child processes. */
+function loadProjectEnv(): void {
+  const envPath = path.join(PROJECT_ROOT, ".env");
+  if (!fs.existsSync(envPath)) return;
+
+  for (const rawLine of fs.readFileSync(envPath, "utf-8").split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+
+    const match = line.match(/^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+    if (!match) continue;
+
+    const [, key, rawValue] = match;
+    if (process.env[key] !== undefined) continue;
+
+    let value = rawValue.trim();
+    if (
+      (value.startsWith("\"") && value.endsWith("\"")) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    } else {
+      value = value.replace(/\s+#.*$/, "").trim();
+    }
+    process.env[key] = value;
+  }
+}
+
+function isSearxngEnabled(): boolean {
+  const value = process.env.SEARXNG?.trim().toLowerCase();
+  return value !== "false" && value !== "0" && value !== "no" && value !== "off";
+}
+
+function getArgumentValue(name: string): string | undefined {
+  const args = process.argv.slice(2);
+  const prefix = `${name}=`;
+  const inline = args.find((arg) => arg.startsWith(prefix));
+  if (inline) return inline.slice(prefix.length);
+
+  const index = args.indexOf(name);
+  return index >= 0 ? args[index + 1] : undefined;
+}
+
+function isValidPort(value: string | undefined): value is string {
+  if (!value || !/^[0-9]{1,5}$/.test(value)) return false;
+  const port = Number(value);
+  return port >= 1 && port <= 65535;
+}
+
+function applyPortArguments(): void {
+  const appPort = getArgumentValue("--port");
+  const searxngPort = getArgumentValue("--searxng-port");
+
+  if (appPort !== undefined) {
+    if (!isValidPort(appPort)) throw new Error(`Invalid --port value: ${appPort}`);
+    process.env.PORT = appPort;
+  }
+  if (searxngPort !== undefined) {
+    if (!isValidPort(searxngPort)) throw new Error(`Invalid --searxng-port value: ${searxngPort}`);
+    process.env.SEARXNG_PORT = searxngPort;
+  }
+}
 
 function isElectronInstalled(): boolean {
   try {
@@ -77,6 +143,9 @@ Usage:
   npx tsx scripts/launcher.ts            Interactive prompt (recommended)
   npx tsx scripts/launcher.ts web        Start web server directly
   npx tsx scripts/launcher.ts electron   Start Electron desktop app directly
+  npx tsx scripts/launcher.ts web --port 3001 --searxng-port 3106
+  --port PORT                              App port (default: 3000)
+  --searxng-port PORT                      SearXNG host port (default: 3105)
 
 After choosing, you can press Ctrl+C at any time to stop the server.
   `.trim());
@@ -132,7 +201,7 @@ function startWebServer(devMode: boolean): void {
   const host = "127.0.0.1";
 
   const args = devMode
-    ? ["next", "dev", "-H", host, "-p", port]
+    ? ["next", "dev", "--turbopack", "-H", host, "-p", port]
     : ["next", "start", "-H", host, "-p", port];
 
   console.log(`\n🚀  Starting RemiAI as a web server...`);
@@ -141,7 +210,7 @@ function startWebServer(devMode: boolean): void {
   const child = spawnCommand("npx", args, {
     cwd: PROJECT_ROOT,
     stdio: "inherit",
-    env: { ...process.env, PORT: port },
+    env: { ...process.env, PORT: port, SEARXNG_URL: getSearxngUrl() },
   });
 
   child.on("exit", (code) => {
@@ -196,6 +265,7 @@ function startElectronApp(devMode: boolean): void {
           ...process.env,
           NODE_ENV: devMode ? "development" : "production",
           PORT: port,
+          SEARXNG_URL: getSearxngUrl(),
         },
       },
     );
@@ -216,6 +286,21 @@ function startElectronApp(devMode: boolean): void {
 // ---------------------------------------------------------------------------
 
 async function main(): Promise<void> {
+  // The launcher runs before Next.js loads .env, so load it explicitly for
+  // startup decisions such as whether the local SearXNG service is enabled.
+  loadProjectEnv();
+  applyPortArguments();
+
+  // Parse help/mode arguments before starting services. This keeps `--help`
+  // side-effect free while still allowing the normal interactive flow to
+  // start SearXNG before the app surface is selected.
+  const forcedMode = getModeFromArgs();
+
+  // Start the local search backend before choosing the app surface. The
+  // service is left running after the launcher exits so a later npm start does
+  // not need to pull or recreate it again.
+  await startSearxng();
+
   // Determine dev vs production mode
   // If the script is invoked as `npm run dev`, NODE_ENV may not be set
   // Heuristic: if the Next.js app hasn't been built yet, assume dev mode.
@@ -227,7 +312,6 @@ async function main(): Promise<void> {
     process.env.npm_lifecycle_event === "dev" ||
     process.env.NODE_ENV === "development";
 
-  const forcedMode = getModeFromArgs();
   const mode = forcedMode ?? (await promptForMode());
 
   console.log(`\n✨  RemiAI v${getPackageVersion()} — ${mode === "electron" ? "Desktop App" : "Web Server"} mode\n`);
@@ -236,6 +320,120 @@ async function main(): Promise<void> {
     startWebServer(devMode);
   } else {
     startElectronApp(devMode);
+  }
+}
+
+function getSearxngPort(): string {
+  const configured = process.env.SEARXNG_PORT?.trim();
+  return isValidPort(configured) ? configured : "3105";
+}
+
+function getSearxngUrl(): string {
+  return process.env.SEARXNG_URL?.trim() || `http://127.0.0.1:${getSearxngPort()}`;
+}
+
+function clearConsole(): void {
+  process.stdout.write("\x1b[2J\x1b[0f");
+}
+
+async function promptSearxngFailure(): Promise<boolean> {
+  const inquirer = await import("inquirer");
+  const inq = (inquirer.default ?? inquirer) as unknown as typeof inquirer.default;
+  const { action } = await inq.prompt([
+    {
+      type: "select",
+      name: "action",
+      message: "What would you like to do?",
+      choices: [
+        {
+          name: "Try again",
+          value: "retry",
+          short: "Try again",
+        },
+        {
+          name: "Continue",
+          value: "continue",
+          short: "Continue",
+        },
+      ],
+      default: "retry",
+    },
+  ]);
+
+  clearConsole();
+  if (action === "continue") {
+    console.log("\n🔎  Starting without SearXNG and continuing...\n");
+    return false;
+  }
+
+  return true;
+}
+
+/** Start the local SearXNG container without making it a launcher hard dependency. */
+async function waitForSearxng(url: string): Promise<boolean> {
+  const deadline = Date.now() + SEARXNG_STARTUP_TIMEOUT_MS;
+  const healthUrl = new URL("/healthz", url).toString();
+
+  while (Date.now() < deadline) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2_000);
+    try {
+      const response = await fetch(healthUrl, {
+        signal: controller.signal,
+        headers: { Accept: "text/plain" },
+      });
+      if (response.ok) return true;
+    } catch {
+      // The container may still be initializing or restarting.
+    } finally {
+      clearTimeout(timer);
+    }
+    await new Promise((resolve) => setTimeout(resolve, SEARXNG_POLL_INTERVAL_MS));
+  }
+
+  return false;
+}
+
+async function startSearxng(): Promise<void> {
+  if (!isSearxngEnabled()) {
+    console.log("\n🔎  SearXNG is disabled (SEARXNG=false).\n");
+    return Promise.resolve();
+  }
+
+  if (process.env.SEARXNG_URL?.trim()) {
+    console.log(`\n🔎  Using configured SearXNG at ${getSearxngUrl()}\n`);
+    return;
+  }
+
+  const port = getSearxngPort();
+
+  while (true) {
+    console.log(`\n🔎  Starting SearXNG on http://127.0.0.1:${port}...`);
+
+    const started = await new Promise<boolean>((resolve) => {
+      const child = spawnCommand(
+        "docker",
+        ["compose", "--profile", "true", "up", "-d", "searxng"],
+        {
+          cwd: PROJECT_ROOT,
+          stdio: "ignore",
+          env: { ...process.env, SEARXNG: "true", SEARXNG_PORT: port },
+        },
+      );
+
+      child.once("error", () => resolve(false));
+      child.once("exit", async (code) => {
+        resolve(code === 0 && await waitForSearxng(getSearxngUrl()));
+      });
+    });
+
+    if (started) {
+      console.log(`✅  SearXNG passed its health check at ${getSearxngUrl()}\n`);
+      return;
+    }
+
+    console.warn("Docker is not running or not found, SearXNG will not start.");
+    if (!await promptSearxngFailure()) return;
   }
 }
 
@@ -250,7 +448,19 @@ function getPackageVersion(): string {
   }
 }
 
-main().catch((err) => {
+main().catch((err: unknown) => {
+  // Inquirer throws ExitPromptError when the user presses Ctrl+C. Check the
+  // error name without instanceof because the ESM runtime may use a separate
+  // Error constructor from the launcher.
+  const errorName =
+    typeof err === "object" && err !== null && "name" in err
+      ? String((err as { name?: unknown }).name)
+      : "";
+  if (errorName === "ExitPromptError") {
+    clearConsole();
+    process.exit(0);
+  }
+
   console.error("❌  Launcher error:", err);
   process.exit(1);
 });

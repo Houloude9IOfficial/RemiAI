@@ -11,6 +11,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
+  BookOpen,
   Cable,
   ChevronLeft,
   FileText,
@@ -28,6 +29,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { mcpServersApi, type McpServer } from "@/lib/api/mcp-servers";
+import { skillsApi, type SkillDTO } from "@/lib/api/skills";
 import { toolsApi } from "@/lib/api/tools";
 import type { ChatMode } from "./ChatInput";
 
@@ -44,7 +46,8 @@ export type SlashLevel =
   | { kind: "command" }
   | { kind: "mcp-servers" }
   | { kind: "mcp-tools"; server: McpServer }
-  | { kind: "tools" };
+  | { kind: "tools" }
+  | { kind: "skills" };
 
 export interface SlashCommandMenuProps {
   open: boolean;
@@ -82,6 +85,7 @@ export interface SlashCommandMenuHandle {
 type CommandId =
   | "mcp"
   | "tool"
+  | "skill"
   | "file"
   | "canvas"
   | "visual"
@@ -123,6 +127,13 @@ const COMMANDS: Array<{
     label: "Tool",
     description: "Tag a tool the AI should use for this request",
     icon: Wrench,
+  },
+  {
+    id: "skill",
+    trigger: "skill",
+    label: "Skill",
+    description: "Tag an active skill the AI should follow",
+    icon: BookOpen,
   },
   {
     id: "file",
@@ -282,7 +293,8 @@ type MenuItem =
   | { type: "server"; server: McpServer }
   | { type: "mcp-all"; server: McpServer }
   | { type: "mcp-tool"; server: McpServer; tool: string }
-  | { type: "tool"; tool: string; group: string; description: string; enabled: boolean };
+  | { type: "tool"; tool: string; group: string; description: string; enabled: boolean }
+  | { type: "skill"; skill: SkillDTO };
 
 interface ListState {
   items: MenuItem[];
@@ -347,6 +359,14 @@ export const SlashCommandMenu = forwardRef<
     queryKey: ["tool-configs"],
     queryFn: toolsApi.list,
     enabled: open && level?.kind === "tools",
+  });
+
+  // Installed skills — for the `/skill` picker (only ACTIVE/enabled ones are
+  // listed so the tagged skill is guaranteed usable).
+  const { data: skillRows = [], isLoading: skillsLoading } = useQuery({
+    queryKey: ["skills"],
+    queryFn: skillsApi.list,
+    enabled: open && level?.kind === "skills",
   });
 
   const catalogTools = useMemo(() => {
@@ -428,6 +448,29 @@ export const SlashCommandMenu = forwardRef<
       };
     }
 
+    if (level.kind === "skills") {
+      const active = skillRows.filter((s) => s.enabled);
+      const items = active
+        .filter(
+          (s) =>
+            !q ||
+            s.name.toLowerCase().includes(q) ||
+            s.description.toLowerCase().includes(q) ||
+            s.repoName.toLowerCase().includes(q),
+        )
+        .map((skill) => ({ type: "skill" as const, skill }));
+      return {
+        items,
+        title: "Tag an active skill",
+        placeholder: skillsLoading
+          ? "Loading skills…"
+          : active.length === 0
+            ? "No active skills — enable one in Settings > Skills"
+            : `No skill matches “${query}”`,
+        loading: skillsLoading,
+      };
+    }
+
     // tools — pick a built-in/integration tool to tag
     const items = catalogTools
       .filter(
@@ -451,7 +494,7 @@ export const SlashCommandMenu = forwardRef<
         ? "No tools available"
         : `No tool matches “${query}”`,
     };
-  }, [level, q, query, servers, serversLoading, mcpTest, catalogTools]);
+  }, [level, q, query, servers, serversLoading, mcpTest, catalogTools, skillRows, skillsLoading]);
 
   const { items, title, placeholder, loading } = list;
 
@@ -481,6 +524,10 @@ export const SlashCommandMenu = forwardRef<
       case "command":
         if (item.command.id === "file") {
           onFile();
+          return;
+        }
+        if (item.command.id === "skill") {
+          onNavigate({ kind: "skills" });
           return;
         }
         if (
@@ -525,6 +572,9 @@ export const SlashCommandMenu = forwardRef<
         return;
       case "tool":
         onInsert(`@tool ${item.tool} `);
+        return;
+      case "skill":
+        onInsert(`@skill ${item.skill.name}@${item.skill.repoSource} `);
         return;
     }
   };
@@ -703,6 +753,8 @@ function keyFor(item: MenuItem): string {
       return `mcp-tool-${item.server.id}-${item.tool}`;
     case "tool":
       return `tool-${item.tool}`;
+    case "skill":
+      return `skill-${item.skill.name}@${item.skill.repoSource}`;
   }
 }
 
@@ -727,6 +779,8 @@ function IconFor({
     case "mcp-tool":
     case "tool":
       return <Wrench className={className} />;
+    case "skill":
+      return <BookOpen className={className} />;
   }
 }
 
@@ -742,6 +796,8 @@ function TitleFor(item: MenuItem): string {
       return item.tool;
     case "tool":
       return item.tool;
+    case "skill":
+      return item.skill.name;
   }
 }
 
@@ -759,5 +815,9 @@ function SubtitleFor(item: MenuItem): string {
       return `Use “${item.server.name}__${item.tool}”`;
     case "tool":
       return item.description;
+    case "skill":
+      return item.skill.repoName
+        ? `from ${item.skill.repoName} — ${item.skill.description}`
+        : item.skill.description;
   }
 }

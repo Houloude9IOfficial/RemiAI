@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Brain, BarChart3, Files, FolderOpen, Pen, Plug, Settings2, Wrench, Bot, Eye, Terminal, Gamepad2, Clock, ChevronUp, Shield, Radio, Webhook, PanelLeftClose, PanelLeftOpen, Plus, Sparkles, Timer } from "lucide-react";
+import { Activity, Brain, BarChart3, Files, FolderOpen, Pen, Plug, Settings2, Wrench, Bot, Eye, Terminal, Gamepad2, Clock, ChevronUp, Shield, Radio, Webhook, PanelLeftClose, PanelLeftOpen, Sparkles, Timer } from "lucide-react";
 import { useNewChat } from "@/lib/hooks/use-new-chat";
 import { ConversationList } from "./ConversationList";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -21,23 +21,24 @@ import { useSidebar } from "./SidebarContext";
 // watcher, backup, usage) live under the "More" expander — every item stays
 // reachable in at most two clicks.
 const primaryLinks = [
-  { href: "/settings/providers", label: "Models & Providers", icon: Settings2 },
+  { href: "/settings/providers", label: "Models", icon: Settings2 },
   { href: "/files", label: "Files", icon: Files },
   { href: "/settings/tools", label: "Tools", icon: Wrench },
   { href: "/settings/memories", label: "Memories", icon: Brain },
 ];
 
 const moreLinks = [
-  { href: "/settings/tasks", label: "Agent Tasks", icon: Bot },
+  { href: "/settings/tasks", label: "Tasks", icon: Bot },
+  { href: "/settings/heartbeats", label: "Monitors", icon: Activity },
   { href: "/settings/directories", label: "Directories", icon: FolderOpen },
   { href: "/games", label: "Games", icon: Gamepad2 },
   { href: "/talk", label: "Talk", icon: Radio },
   { href: "/settings/routines", label: "Routines", icon: Terminal },
   { href: "/settings/skills", label: "Skills", icon: Sparkles },
-  { href: "/settings/mcp", label: "MCP Servers", icon: Plug },
+  { href: "/settings/mcp", label: "Integrations", icon: Plug },
   { href: "/settings/webhooks", label: "Webhooks", icon: Webhook },
-  { href: "/settings/scheduled-tasks", label: "Scheduled Tasks", icon: Clock },
-  { href: "/settings/watcher", label: "File Watcher", icon: Eye },
+  { href: "/settings/scheduled-tasks", label: "Automations", icon: Clock },
+  { href: "/settings/watcher", label: "Folder monitoring", icon: Eye },
   { href: "/settings/backup", label: "Backup", icon: Shield },
   { href: "/settings/usage", label: "Usage", icon: BarChart3 },
 ];
@@ -52,9 +53,7 @@ function DesktopSidebar() {
   const { isDesktopSidebarCollapsed, toggleDesktopSidebar } = useSidebar();
 
   const newChatMutation = useNewChat();
-  // Dedicated instance for the "Temporary chat" button (creates temp chats).
   const temporaryChatMutation = useNewChat(undefined, { temporary: true });
-
   const [extraExpanded, setExtraExpanded] = useState(false);
   const [demo, setDemo] = useState(false);
 
@@ -91,42 +90,13 @@ function DesktopSidebar() {
       transition={{ duration: 0.2, ease: "easeOut" }}
       className="hidden md:flex h-full shrink-0 flex-col border-r border-sidebar-border surface-1"
     >
-      <div
-        className={cn(
-          "flex items-center py-3",
-          isDesktopSidebarCollapsed ? "justify-center px-2" : "justify-between px-3",
-        )}
-      >
-        <button
-          type="button"
-          onClick={() => newChatMutation.mutate()}
-          disabled={newChatMutation.isPending}
-          className={cn(
-            "flex items-center rounded-lg disabled:opacity-50 transition-colors cursor-pointer",
-            isDesktopSidebarCollapsed
-              ? ""
-              : "gap-2 px-1.5 py-1 hover:bg-sidebar-accent",
-          )}
-          title="New chat"
-          aria-label="New chat"
-        >
-          {isDesktopSidebarCollapsed ? (
-            <></>
-          ) : (
-            <>
-              <img
-                src="/RemiAI.png"
-                alt="RemiAI"
-                className="block h-7 w-auto dark:hidden"
-              />
-              <img
-                src="/RemiAI-Light.png"
-                alt="RemiAI"
-                className="hidden h-7 w-auto dark:block"
-              />
-            </>
-          )}
-        </button>
+      <div className={cn("flex items-center py-3", isDesktopSidebarCollapsed ? "justify-center px-2" : "justify-between px-3")}>
+        <div className={cn("flex items-center", isDesktopSidebarCollapsed ? "justify-center" : "flex-1")}>
+          <div className={cn("flex items-center", isDesktopSidebarCollapsed ? "hidden" : "px-1.5")} aria-label="RemiAI">
+            <img src="/RemiAI.png" alt="RemiAI" className="block h-7 w-auto dark:hidden" />
+            <img src="/RemiAI-Light.png" alt="RemiAI" className="hidden h-7 w-auto dark:block" />
+          </div>
+        </div>
 
         {isDesktopSidebarCollapsed ? (
           <Button
@@ -190,17 +160,6 @@ function DesktopSidebar() {
             >
               <Pen className="h-4 w-4" />
             </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-8 w-8 cursor-pointer"
-              disabled={temporaryChatMutation.isPending}
-              onClick={() => temporaryChatMutation.mutate()}
-              title="Temporary chat"
-              aria-label="Temporary chat"
-            >
-              <Timer className="h-4 w-4" />
-            </Button>
           {(demo ? [] : primaryLinks).slice(0, 4).map(({ href, label, icon: Icon }) => (
             <Link
               key={href}
@@ -225,6 +184,19 @@ function DesktopSidebar() {
         </div>
       ) : (
         <>
+          <div className="mt-2 px-3 pb-3">
+            <button
+              type="button"
+              onClick={() => newChatMutation.mutate()}
+              disabled={newChatMutation.isPending}
+              className="group flex w-full cursor-pointer items-center gap-2 rounded-xl bg-sidebar-accent/55 px-3 py-2.5 text-left text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent disabled:pointer-events-none disabled:opacity-50"
+              title="New chat"
+              aria-label="New chat"
+            >
+              <Pen className="new-chat-icon h-4 w-4" />
+              <span>New chat</span>
+            </button>
+          </div>
           <div className="flex-1 overflow-y-auto px-2 pb-1 text-sm text-sidebar-foreground/80 custom-scrollbar">
             <ConversationList />
           </div>
@@ -238,7 +210,7 @@ function DesktopSidebar() {
               onClick={() => setExtraExpanded((v) => !v)}
               aria-expanded={extraExpanded}
               className={cn(
-                "flex items-center gap-2 rounded-md px-2 py-1.25 text-sm text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors duration-150",
+                "flex items-center gap-2 rounded-md px-2 py-1.25 text-sm text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors duration-150 text-center",
                 extraExpanded && "text-sidebar-foreground/80",
               )}
             >
@@ -248,7 +220,8 @@ function DesktopSidebar() {
                   extraExpanded && "rotate-180",
                 )}
               />
-              <span>{extraExpanded ? "Less" : `More (${moreLinks.length})`}</span>
+              {/* <MoreHorizontal className="h-4 w-4" /> */}
+              <span>{extraExpanded ? "Less" : "More"}</span>
             </button>
 
             {/* Primary links — always visible */}

@@ -50,13 +50,25 @@ import {
   type CanvasPresentDetail,
 } from "@/lib/api/canvas";
 import { cn } from "@/lib/utils";
-import { errorToDisplayMessage } from "@/lib/chat/error-payload";
-import { userContextHeaders } from "@/lib/chat/user-context";
+import {
+  errorToDisplayMessage,
+  decodeStreamError,
+} from "@/lib/chat/error-payload";
+import { primeClientLocation, userContextHeaders } from "@/lib/chat/user-context";
 import { TEMPORARY_CHAT_RETENTION_DAYS } from "@/lib/chat/temporary-chat-constants";
 
 // If the conversation fetch takes longer than this, abort it and surface an
 // error instead of leaving the user staring at an endless loading skeleton.
 const FETCH_TIMEOUT_MS = 12_000;
+
+// When a run is cut short by the step/token limit (finishReason "length") or
+// a dangling stop, the server marks the error `shouldResume`. Instead of
+// forcing a manual "Continue" click every time, the page silently resumes
+// the run up to this many times per user message so the AI genuinely keeps
+// working until the task is done. If it still cannot finish after this many
+// automatic resumes (a genuinely stuck/looping run), the error banner shows
+// so the user can decide.
+const MAX_AUTO_CONTINUES_PER_MESSAGE = 3;
 
 // ── Session-file auto-present helpers ───────────────────────────────
 // The AI is instructed to present files it creates (session_present_file /
@@ -145,6 +157,19 @@ function messagePresentsCanvas(message: { parts: unknown[] }): boolean {
     }
   }
   return false;
+}
+
+/** Empty assistant placeholders are left behind when a generation is stopped
+ * before it produces any output. They are not a response the user can read. */
+function assistantHasOutput(message: { role?: string; parts?: unknown[] } | undefined): boolean {
+  if (message?.role !== "assistant") return false;
+  return (message.parts ?? []).some((rawPart) => {
+    if (!rawPart || typeof rawPart !== "object") return false;
+    const part = rawPart as Record<string, unknown>;
+    if (part.type === "text") return typeof part.text === "string" && part.text.trim().length > 0;
+    return typeof part.type === "string" &&
+      (part.type.startsWith("tool-") || part.type === "tool-invocation" || part.type === "reasoning");
+  });
 }
 
 // ── Reconnecting Banner ─────────────────────────────────────────────
@@ -544,6 +569,24 @@ function ConversationChat({
   //   "can't access property 'state', this.activeResponse is undefined"
   const [resume] = useState(() => isReconnecting);
   const messagesRef = useRef(initialMessages);
+  // Automatic-resume budget for step-limited runs. The server ends these runs
+  // with a `shouldResume` error instead of completing them; the page silently
+  // resumes (like the Continue button) so a long canvas/build keeps going to
+  // completion without the user clicking. Decremented per automatic resume and
+  // refilled whenever the user sends a new message / regenerates — a genuinely
+  // stuck run (one that keeps hitting the limit with no progress) falls back
+  // to the visible error banner after the budget is spent.
+  const autoContinueBudgetRef = useRef(MAX_AUTO_CONTINUES_PER_MESSAGE);
+  // Keep the composer reactive even when a failed request does not cause the
+  // SDK to publish the new user message back through `messages`.
+  const [pendingUserTurn, setPendingUserTurn] = useState(false);
+  // Synchronous guard for double click/Enter events that arrive before the
+  // AI SDK has updated `status` to submitted.
+  const sendGuardRef = useRef(false);
+
+  useEffect(() => {
+    primeClientLocation();
+  }, []);
 
   const {
     messages,
@@ -577,7 +620,13 @@ function ConversationChat({
           ...body,
           trigger,
           messageId,
-          messages: messages.slice(-3),
+          // User edits replace a message that may be far back in the
+          // conversation. Include that exact message instead of relying on
+          // the bounded tail; regeneration still uses the normal tail.
+          messages:
+            trigger === "submit-message" && messageId
+              ? messages.filter((message) => message.id === messageId)
+              : messages.slice(-3),
         },
       }),
     }),
@@ -629,6 +678,8 @@ function ConversationChat({
       return;
     }
 
+    sendGuardRef.current = false;
+
     // Keep stream state intact on transport errors so Resume/Continue can
     // reconnect instead of immediately downgrading to a blind resend flow.
     if (status === "error") {
@@ -649,12 +700,46 @@ function ConversationChat({
     onRetryable,
   } = useErrorHandler({ showToast: false });
 
-  // Sync AI SDK error to our handler
+  // Sync AI SDK error to our handler — but silently auto-continue runs the
+  // server cut short by the step/token limit (finishReason "length" / dangling
+  // stop). Those end with a `step_limit` + `shouldResume` payload; resuming is
+  // safe and deterministic (it re-runs generation from the accumulated
+  // messages), so do it automatically up to the per-message budget instead of
+  // forcing a manual Continue click on every truncation.
+  //
+  // The resume runs through the SAME retryable the Continue button uses
+  // (registered below via onRetryable), so it keeps every safeguard: it
+  // re-checks whether the server stream is still live, and only then re-sends
+  // the accumulated messages. Deferred with setTimeout(0) so the onRetryable
+  // registration effect has re-registered with the CURRENT error before
+  // retry() reads it. The SDK error is left in place on purpose — the retryable
+  // clears it itself once the continuation request actually starts.
   useEffect(() => {
-    if (error) {
+    if (!error) return;
+    const rawMessage =
+      typeof error === "string"
+        ? error
+        : error instanceof Error
+          ? error.message
+          : "";
+    const decoded = decodeStreamError(rawMessage);
+    const mapped = errorToDisplayMessage(error);
+    const canAutoResume =
+      mapped.shouldResume === true &&
+      decoded?.category === "step_limit" &&
+      autoContinueBudgetRef.current > 0;
+
+    if (!canAutoResume) {
       handleError(error);
+      return;
     }
-  }, [error, handleError]);
+
+    autoContinueBudgetRef.current -= 1;
+    const timer = setTimeout(() => {
+      void retry().catch(() => {});
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [error, handleError, retry]);
 
   // Register the retryable action — continue the interrupted run first.
   useEffect(() => {
@@ -729,27 +814,87 @@ function ConversationChat({
 
   const handleSend = useCallback(
     (text: string) => {
+      if (sendGuardRef.current || status === "submitted" || status === "streaming") return;
+      sendGuardRef.current = true;
       clearError();
       clearChatError();
+      // A fresh user message gets a fresh auto-continue budget — the previous
+      // turn's silent resumes must not leak into the new request.
+      autoContinueBudgetRef.current = MAX_AUTO_CONTINUES_PER_MESSAGE;
+      setPendingUserTurn(true);
       // A fresh request starts a fresh present — the previous request's canvas
       // no longer claims the panel slot.
       canvasWinsRef.current = false;
       sendMessage({ text });
     },
-    [clearError, clearChatError, sendMessage],
+    [clearError, clearChatError, sendMessage, status],
+  );
+
+  // A user message can survive locally even when its assistant request never
+  // started (for example after a dropped connection). Re-submit the current
+  // last message so the SDK/server can generate the missing assistant reply.
+  const handleContinueLastMessage = useCallback(() => {
+    if (status === "submitted" || status === "streaming") return;
+    clearError();
+    clearChatError();
+    autoContinueBudgetRef.current = MAX_AUTO_CONTINUES_PER_MESSAGE;
+    setPendingUserTurn(true);
+    canvasWinsRef.current = false;
+    const lastUserMessage = [...messagesRef.current]
+      .reverse()
+      .find((message) => message.role === "user");
+    if (lastUserMessage) {
+      sendMessage({ parts: lastUserMessage.parts, messageId: lastUserMessage.id });
+    } else {
+      sendMessage();
+    }
+  }, [status, clearError, clearChatError, sendMessage]);
+
+  const lastVisibleMessage = messages.at(-1);
+  const hasUnansweredLastMessage =
+    lastVisibleMessage?.role === "user" ||
+    (lastVisibleMessage?.role === "assistant" && !assistantHasOutput(lastVisibleMessage)) ||
+    (pendingUserTurn && lastVisibleMessage?.role !== "assistant");
+
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const handleEdit = useCallback(
+    async (messageId: string, text: string) => {
+      if (isRegenerating || status === "submitted" || status === "streaming") return;
+      const trimmed = text.trim();
+      if (!trimmed) {
+        toast.error("Message cannot be empty");
+        return;
+      }
+      setIsRegenerating(true);
+      clearError();
+      clearChatError();
+      // A fresh request gets a fresh auto-continue budget.
+      autoContinueBudgetRef.current = MAX_AUTO_CONTINUES_PER_MESSAGE;
+      canvasWinsRef.current = false;
+      try {
+        // The SDK replaces this user message locally and submits it with the
+        // messageId, allowing the server to trim the stale branch.
+        await sendMessage({ text: trimmed, messageId });
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to edit message");
+      } finally {
+        setIsRegenerating(false);
+      }
+    },
+    [isRegenerating, status, clearError, clearChatError, sendMessage],
   );
 
   /**
    * Regenerate an assistant message: truncate the persisted messages at that
    * point (deleting it and everything after), then re-run the generation.
    */
-  const [isRegenerating, setIsRegenerating] = useState(false);
   const handleRegenerate = useCallback(
     async (messageId: string) => {
       if (isRegenerating || status === "submitted" || status === "streaming") return;
       setIsRegenerating(true);
       clearError();
       clearChatError();
+      autoContinueBudgetRef.current = MAX_AUTO_CONTINUES_PER_MESSAGE;
       try {
         const res = await fetch(`/api/chat/${conversationId}/messages`, {
           method: "DELETE",
@@ -1058,6 +1203,8 @@ function ConversationChat({
                 status={status}
                 onSend={(text) => sendMessage({ text })}
                 onRegenerate={handleRegenerate}
+                onEdit={handleEdit}
+                onContinue={handleContinueLastMessage}
                 conversationId={conversationId}
               />
             )}
@@ -1119,6 +1266,9 @@ function ConversationChat({
                     modelId={modelId}
                     onModelChange={handleModelChange}
                     onSend={handleSend}
+                    onContinue={
+                      hasUnansweredLastMessage ? handleContinueLastMessage : undefined
+                    }
                     onStop={stop}
                     isTemporary={isTemporary}
                     memoryEnabled={memoryEnabled}

@@ -63,7 +63,16 @@ export function buildProfileTools(): Record<string, any> {
       "Get the user's complete profile (name, bio, location, occupation, interests, skills, pronouns, birthday, links, preferences, personality). Use to personalise responses or when the user asks what you know about them.",
     parameters: z.object({}),
     execute: async () => {
-      const prefs = await db.select().from(userPreferences).get();
+      let prefs: (typeof userPreferences.$inferSelect) | undefined;
+      try {
+        prefs = await db.select().from(userPreferences).get();
+      } catch (e) {
+        const msg = e instanceof Error ? e.message.toLowerCase() : String(e).toLowerCase();
+        if (!msg.includes("no such column") && !msg.includes("has no column")) throw e;
+        const { ensureRemiPrefsColumns } = await import("@/db");
+        ensureRemiPrefsColumns();
+        prefs = await db.select().from(userPreferences).get();
+      }
 
       if (!prefs) {
         return truncateToolResult({
@@ -155,7 +164,16 @@ export function buildProfileTools(): Record<string, any> {
         .describe("How the AI should behave — tone, style, formality"),
     }),
     execute: async (data: UpdateProfileParams) => {
-      const existing = await db.select().from(userPreferences).get();
+      let existing: (typeof userPreferences.$inferSelect) | undefined;
+      try {
+        existing = await db.select().from(userPreferences).get();
+      } catch (e) {
+        const msg = e instanceof Error ? e.message.toLowerCase() : String(e).toLowerCase();
+        if (!msg.includes("no such column") && !msg.includes("has no column")) throw e;
+        const { ensureRemiPrefsColumns } = await import("@/db");
+        ensureRemiPrefsColumns();
+        existing = await db.select().from(userPreferences).get();
+      }
 
       // Build the update payload: only include fields that were actually provided
       const updateData: Record<string, any> = {

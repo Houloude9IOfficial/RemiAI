@@ -31,66 +31,6 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
 export function buildFirecrawlTools(apiKey: string) {
   const client = new Firecrawl({ apiKey });
 
-  // ── fc_search ──────────────────────────────────────────────────────────
-  const fcSearchTool = {
-    description:
-      "Search the web using Firecrawl. Returns search results with titles, URLs, descriptions, and optional scraped content. Supports filtering by sources (web, news, images) and limiting results.",
-    inputSchema: z.object({
-      query: z
-        .string()
-        .min(1)
-        .max(500)
-        .describe("The search query. Be specific for best results."),
-      limit: z
-        .number()
-        .int()
-        .min(1)
-        .max(50)
-        .default(10)
-        .describe("Number of search results to return (default: 10, max: 50)"),
-      sources: z
-        .array(z.enum(["web", "news", "images"]))
-        .optional()
-        .describe("Optional sources to search: web, news, images. Defaults to all."),
-    }),
-    execute: async ({
-      query,
-      limit = 10,
-      sources,
-    }: {
-      query: string;
-      limit?: number;
-      sources?: ("web" | "news" | "images")[];
-    }) => {
-      try {
-        const result = await withTimeout(
-          client.search(query, {
-            limit,
-            sources: sources as any,
-          }),
-          FIRECRAWL_TIMEOUT_MS,
-        );
-
-        return truncateToolResult({
-          query,
-          results: result,
-        });
-      } catch (err) {
-        const msg = (err as Error).message;
-        const isTimeout = /timed out/i.test(msg);
-        return truncateToolResult({
-          query,
-          error: isTimeout
-            ? `Firecrawl search timed out after ${FIRECRAWL_TIMEOUT_MS}ms`
-            : `Firecrawl search failed: ${msg}`,
-          hint: isTimeout
-            ? "Retry with a narrower query or lower limit."
-            : "Verify your Firecrawl API key in Settings > Tools.",
-        });
-      }
-    },
-  };
-
   // ── fc_scrape ──────────────────────────────────────────────────────────
   const fcScrapeTool = {
     description:
@@ -369,7 +309,6 @@ export function buildFirecrawlTools(apiKey: string) {
   };
 
   return {
-    fc_search: fcSearchTool,
     fc_scrape: fcScrapeTool,
     fc_crawl: fcCrawlTool,
     fc_interact: fcInteractTool,

@@ -13,9 +13,9 @@ import * as schema from "@/db/schema";
  * module rebuilds the full conversation from the `messages` table:
  *
  *   1. Load every persisted message for the conversation, in order.
- *   2. On a `regenerate-message` request, drop the regenerate target and
- *      everything after it (mirrors the client's DELETE endpoint, and is a
- *      safety net if that delete raced or found nothing persisted).
+ *   2. On an edit or `regenerate-message` request, drop the target and
+ *      everything after it (the edited user message is then re-added from the
+ *      request delta).
  *   3. Merge the client's delta into the loaded history:
  *      - messages whose `uiId` is already present are skipped (dedupe),
  *      - NEW user messages are appended AND persisted to the DB,
@@ -31,8 +31,9 @@ import * as schema from "@/db/schema";
  */
 
 /**
- * Regenerate semantics: on `regenerate-message` requests the in-memory
- * truncation alone is not enough — stale rows at/after the target can survive
+ * Edit/regenerate semantics: on a user `submit-message` with a `messageId`,
+ * or on `regenerate-message`, the in-memory truncation alone is not enough —
+ * stale rows at/after the target can survive
  * in the DB (e.g. the client's DELETE endpoint raced or found nothing), and
  * the next response is persisted at `orderIndex = originalMessages.length`,
  * which could then collide with a leftover row's order_index (no unique
@@ -74,7 +75,7 @@ function rowToUIMessage(row: typeof schema.messages.$inferSelect): UIMessage {
  * rows were never persisted, this guarantees the model never sees the stale
  * response it is supposed to be regenerating. Returns a NEW array.
  *
- * @param messageId uiId of the message being regenerated (the target and
+ * @param messageId uiId of the message being regenerated or edited (the target and
  *                  everything after it are dropped). No-op when undefined
  *                  or not found.
  */
@@ -180,12 +181,18 @@ export async function reconstructConversationHistory(
 
   let history = rows.map(rowToUIMessage);
 
-  // Regenerating an assistant message: never let the stale response (or
-  // anything after it) reach the model. The client's DELETE endpoint removes
-  // these rows first; this server-side pass is the authoritative safety net
-  // (see the module doc above) and also clears the stale summary.
-  if (trigger === "regenerate-message" && messageId) {
+  // Editing a user message or regenerating an assistant message: never let
+  // the stale target (or anything after it) reach the model. The client trims
+  // its local state first; this server-side pass is the authoritative safety
+  // net and also clears the stale summary.
+  if (messageId) {
     const targetIndex = rows.findIndex((r) => r.uiId === messageId);
+    const isEdit = trigger === "submit-message" &&
+      rows[targetIndex]?.role === "user";
+    const isRegeneration = trigger === "regenerate-message" &&
+      rows[targetIndex]?.role === "assistant";
+    if (!isEdit && !isRegeneration) return mergeAndPersistHistory(database, conversationId, history, deltaMessages);
+
     if (targetIndex !== -1) {
       const targetOrderIndex = rows[targetIndex].orderIndex;
       const deleted = await database
@@ -212,6 +219,15 @@ export async function reconstructConversationHistory(
     }
   }
 
+  return mergeAndPersistHistory(database, conversationId, history, deltaMessages);
+}
+
+async function mergeAndPersistHistory(
+  database: BetterSQLite3Database<typeof schema>,
+  conversationId: number,
+  history: UIMessage[],
+  deltaMessages: UIMessage[],
+): Promise<UIMessage[]> {
   const { merged, toPersist } = mergeDeltaMessages(history, deltaMessages);
 
   for (const message of toPersist) {

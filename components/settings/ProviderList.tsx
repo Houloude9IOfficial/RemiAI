@@ -14,12 +14,79 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ChevronDown, KeyRound, Layers, Loader2, PlugZap, Trash2 } from "lucide-react";
+import { ChevronDown, KeyRound, Layers, Loader2, PlugZap, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { providersApi, type Provider } from "@/lib/api/providers";
+import { preferencesApi } from "@/lib/api/preferences";
 import { ProviderModelList } from "./ProviderModelList";
 import { PROVIDER_KIND_META } from "./provider-kind";
 import { cn } from "@/lib/utils";
+
+export function NewModelDefaults() {
+  const queryClient = useQueryClient();
+  const {
+    data: preferences,
+    isLoading: preferencesLoading,
+    isError: preferencesError,
+    refetch: refetchPreferences,
+  } = useQuery({
+    queryKey: ["preferences"],
+    queryFn: preferencesApi.get,
+  });
+
+  const newModelsMutation = useMutation({
+    mutationFn: (enableNewModels: boolean) => preferencesApi.update({ enableNewModels }),
+    onSuccess: (updatedPreferences) => {
+      queryClient.setQueryData(["preferences"], updatedPreferences);
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const status = preferencesLoading
+    ? "Loading saved setting..."
+    : preferencesError
+      ? "Could not load the saved setting"
+      : newModelsMutation.isPending
+        ? "Saving..."
+        : preferences?.enableNewModels
+          ? "New models will start enabled"
+          : "New models will start disabled";
+
+  return (
+    <Card>
+      <CardHeader className="!flex !flex-row items-center gap-3 space-y-0">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-sm font-medium">New model defaults</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Choose whether models found during refresh, provider setup, or manual adds start enabled.
+          </p>
+        </div>
+        <Switch
+          checked={preferences?.enableNewModels ?? true}
+          disabled={preferencesLoading || newModelsMutation.isPending}
+          aria-label="Enable newly discovered or added models"
+          onCheckedChange={(enabled) => newModelsMutation.mutate(enabled)}
+        />
+      </CardHeader>
+      <CardContent className="flex items-center justify-between gap-3 border-t pt-3">
+        <p className="text-[11px] text-muted-foreground" role="status">
+          {status}
+        </p>
+        {preferencesError && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 shrink-0 gap-1.5 text-xs"
+            onClick={() => void refetchPreferences()}
+          >
+            <RefreshCw className="h-3 w-3" />
+            Retry
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 export function ProviderList() {
   const queryClient = useQueryClient();

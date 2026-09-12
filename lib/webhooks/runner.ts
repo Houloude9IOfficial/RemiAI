@@ -35,7 +35,7 @@ import {
   buildCachedInstructions,
   markLastToolForCache,
 } from "@/lib/chat/prompt-cache";
-import { retrieveRelevantMemories } from "@/lib/chat/memories";
+import { buildMemoryPromptBlock, retrieveRelevantMemories } from "@/lib/chat/memories";
 import { persistUIMessage } from "@/lib/chat/persist";
 import { buildFilesystemTools } from "@/lib/fs/tools";
 import { buildContextTools } from "@/lib/tools/context";
@@ -46,6 +46,7 @@ import { buildDocumentReaderTools } from "@/lib/tools/document-reader";
 import { buildMediaTools } from "@/lib/media/tools";
 import { delayTool } from "@/lib/tools/delay";
 import { webFetchTool } from "@/lib/tools/web-fetch";
+import { buildHttpRequestTool } from "@/lib/tools/http-request";
 import { askQuestionsTool } from "@/lib/tools/ask-questions";
 import { buildTodoTools } from "@/lib/tools/todo";
 import { buildFileIndexTools } from "@/lib/tools/file-index";
@@ -212,12 +213,12 @@ export async function processWebhookEvent(opts: {
 
     const [fsToolSet, contextToolSet, memoryToolSet, integrationToolSet, executionToolSet, docToolSet, mediaToolSet, fileIndexToolSet, todoToolSet, profileToolSet, routineToolSet, scheduleToolSet] =
       await Promise.all([
-        buildFilesystemTools(),
+        buildFilesystemTools(conversation.id),
         Promise.resolve(buildContextTools()),
         buildMemoryTools(),
         buildIntegrationTools(),
-        buildExecutionTools(),
-        buildDocumentReaderTools(),
+        buildExecutionTools(conversation.bashMode === "full" ? "full" : "sandboxed"),
+        buildDocumentReaderTools(conversation.id),
         Promise.resolve(buildMediaTools(conversation.id)),
         Promise.resolve(buildFileIndexTools()),
         Promise.resolve(buildTodoTools(conversation.id)),
@@ -242,6 +243,9 @@ export async function processWebhookEvent(opts: {
       ...scheduleToolSet,
       delay: delayTool,
       web_fetch: webFetchTool,
+      http_request: buildHttpRequestTool({
+        mode: conversation.bashMode === "full" ? "full" : "sandboxed",
+      }),
       ask_questions: askQuestionsTool,
       ...buildToolHelpTool(),
       ...buildListAvailableToolsTool(),
@@ -250,8 +254,17 @@ export async function processWebhookEvent(opts: {
       Object.entries(rawTools).map(([name, tool]) => [name, normaliseTool(tool)]),
     );
 
-    // ── Build the system prompt ─────────────────────────────────────
-    const prefs = await db.select().from(userPreferences).get();
+    // ── Build the system prompt (automigrate 0043 if needed) ──────
+    let prefs: (typeof userPreferences.$inferSelect) | undefined;
+    try {
+      prefs = await db.select().from(userPreferences).get();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message.toLowerCase() : String(e).toLowerCase();
+      if (!msg.includes("no such column") && !msg.includes("has no column")) throw e;
+      const { ensureRemiPrefsColumns } = await import("@/db");
+      ensureRemiPrefsColumns();
+      prefs = await db.select().from(userPreferences).get();
+    }
     const prefParts: string[] = [];
     if (prefs?.preferredName) {
       prefParts.push(`The user's preferred name is "${prefs.preferredName}".`);
@@ -271,9 +284,7 @@ export async function processWebhookEvent(opts: {
     if (prefs?.skills) profileParts.push(`Skills: ${prefs.skills}`);
 
     const relevantMemories = await retrieveRelevantMemories(webhook.systemPrompt);
-    const memoryTip = relevantMemories.length > 0
-      ? `\n\nSaved memories:\n${relevantMemories.map((m) => `- ${m.content}`).join("\n")}`
-      : "";
+    const memoryTip = buildMemoryPromptBlock(relevantMemories as any);
 
     const recentChanges = await queryRecentChanges(5);
     const fileChangeTip = recentChanges.length > 0

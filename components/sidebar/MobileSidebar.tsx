@@ -7,6 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
+  Activity,
   Brain,
   BarChart3,
   Files,
@@ -49,6 +50,7 @@ const primaryLinks = [
 ];
 
 const extraLinks = [
+  { href: "/settings/heartbeats", label: "Heartbeats", icon: Activity },
   { href: "/settings/tools", label: "Tools", icon: Wrench },
   { href: "/settings/memories", label: "Memories", icon: Brain },
   { href: "/settings/routines", label: "Routines", icon: Terminal },
@@ -229,7 +231,7 @@ export function MobileSidebar() {
               onClick={() => setExtraExpanded((v) => !v)}
               aria-expanded={extraExpanded}
               className={cn(
-                "flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors duration-150",
+                "flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors duration-150 text-center",
                 extraExpanded && "text-sidebar-foreground/80",
               )}
             >

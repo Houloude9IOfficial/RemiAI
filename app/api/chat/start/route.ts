@@ -5,7 +5,7 @@ import {
   createUIMessageStreamResponse,
 } from "ai";
 import { eq, sql } from "drizzle-orm";
-import { db } from "@/db";
+import { db, initializeApp } from "@/db";
 import { conversations, providers, userPreferences } from "@/db/schema";
 import { getLanguageModel } from "@/lib/providers/factory";
 import { streamingReasoningProviderOptions } from "@/lib/providers/reasoning";
@@ -17,12 +17,13 @@ import { queryRecentChanges } from "@/lib/fs/file-index";
 import { periodicallyPersistMessages } from "@/lib/chat/persist-interval";
 import { streamRegistry } from "@/lib/chat/stream-registry";
 import { estimateTokenCount } from "@/lib/utils";
-import { retrieveRelevantMemories } from "@/lib/chat/memories";
+import { buildMemoryPromptBlock, retrieveRelevantMemories } from "@/lib/chat/memories";
 import { getTimeDetails } from "@/lib/time";
 import { createRunTrace } from "@/lib/observability/run-trace";
 import { isDemoMode, filterDemoTools } from "@/lib/demo-policy";
 
 export async function POST(req: Request) {
+  await initializeApp();
   const trace = createRunTrace({ kind: "chat-start" });
   trace.metric("retryBudget", 3);
   trace.event("request.received", { method: "POST" });
@@ -91,8 +92,17 @@ export async function POST(req: Request) {
     `Timezone: ${timeDetails.timezone} (${timeDetails.utcOffset})\n` +
     `Weekday: ${timeDetails.weekday}`;
 
-  // 2. User preferences
-  const prefs = await db.select().from(userPreferences).get();
+  // 2. User preferences (automigrate 0043 if the DB predates it)
+  let prefs: (typeof userPreferences.$inferSelect) | undefined;
+  try {
+    prefs = await db.select().from(userPreferences).get();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message.toLowerCase() : String(e).toLowerCase();
+    if (!msg.includes("no such column") && !msg.includes("has no column")) throw e;
+    const { ensureRemiPrefsColumns } = await import("@/db");
+    ensureRemiPrefsColumns();
+    prefs = await db.select().from(userPreferences).get();
+  }
   const prefParts: string[] = [];
   if (prefs?.preferredName) {
     prefParts.push(
@@ -136,14 +146,13 @@ export async function POST(req: Request) {
     : "";
 
   // 3. Saved memories — budget-capped (most recent, since there's no query
-  // yet). Skipped for memory-disabled chats (e.g. temporary chats): the AI
-  // must greet without any saved context, and the no-memory prompt variant
-  // below removes the memory guidance too.
+  // yet). Grouped by category; event dates shown inline as [YYYY-MM-DD].
+  // Skipped for memory-disabled chats (e.g. temporary chats): the AI must
+  // greet without any saved context, and the no-memory prompt variant below
+  // removes the memory guidance too.
   const memoryEnabled = conversation.memoryEnabled !== false;
   const relevantMemories = memoryEnabled ? await retrieveRelevantMemories("") : [];
-  const memoryContext = relevantMemories.length > 0
-    ? `\n\n## Saved memories about the user\n${relevantMemories.map((m) => `- ${m.content}`).join("\n")}`
-    : "";
+  const memoryContext = buildMemoryPromptBlock(relevantMemories as any).replace("\n\n## Saved memories", "\n\n## Saved memories about the user");
 
   // 4. Recent file changes
   const recentChanges = memoryEnabled ? await queryRecentChanges(10) : [];

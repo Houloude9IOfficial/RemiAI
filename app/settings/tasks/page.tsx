@@ -18,12 +18,13 @@ import {
   Layers,
   Timer,
 } from "lucide-react";
+import CenteredLayout from "@/components/layout/CenteredLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { createElement, useState } from "react";
 import Link from "next/link";
 
 // ─── Types ────────────────────────────────────────────────────────────
@@ -128,8 +129,6 @@ function TaskTreeNode({
   const [expanded, setExpanded] = useState(depth < 2);
   const [showResult, setShowResult] = useState(false);
   const hasChildren = task.children && task.children.length > 0;
-  const StatusIcon = getStatusIcon(task.status);
-  const AgentIcon = getAgentIcon(task.agentType);
 
   return (
     <div>
@@ -160,17 +159,21 @@ function TaskTreeNode({
           "flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
           getStatusBg(task.status),
         )}>
-          <StatusIcon className={cn(
-            "h-3.5 w-3.5",
-            task.status === "running" && "animate-spin",
-          )} />
+          {createElement(getStatusIcon(task.status), {
+            className: cn(
+              "h-3.5 w-3.5",
+              task.status === "running" && "animate-spin",
+            ),
+          })}
         </div>
 
         {/* Content */}
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           {/* Header row */}
           <div className="flex items-center gap-2">
-            <AgentIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            {createElement(getAgentIcon(task.agentType), {
+              className: "h-3.5 w-3.5 text-muted-foreground shrink-0",
+            })}
             <span className="truncate text-xs font-semibold capitalize">
               {task.agentType}
             </span>
@@ -272,9 +275,6 @@ function StatsCards({ tasks }: { tasks: AgentTaskWithConversation[] }) {
   const running = tasks.filter((t) => t.status === "running").length;
   const queued = tasks.filter((t) => t.status === "queued").length;
   const failed = tasks.filter((t) => t.status === "failed").length;
-  const totalInput = tasks.reduce((s, t) => s + t.inputTokens, 0);
-  const totalOutput = tasks.reduce((s, t) => s + t.outputTokens, 0);
-
   const statCards = [
     { label: "Total", value: total, color: "text-foreground" },
     { label: "Completed", value: completed, color: "text-emerald-600 dark:text-emerald-400" },
@@ -284,7 +284,7 @@ function StatsCards({ tasks }: { tasks: AgentTaskWithConversation[] }) {
   ];
 
   return (
-    <div className="grid grid-cols-5 gap-3">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
       {statCards.map((stat) => (
         <Card key={stat.label}>
           <CardContent className="flex flex-col items-center justify-center py-4">
@@ -347,17 +347,18 @@ export default function AgentTasksPage() {
   });
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-lg font-semibold">Agent Tasks</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          View all spawned agent tasks.
-        </p>
-      </div>
+    <CenteredLayout>
+      <div className="flex w-full max-w-3xl flex-col gap-6">
+        <div>
+          <h1 className="text-lg font-semibold">Agent Tasks</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            View all spawned agent tasks.
+          </p>
+        </div>
 
-      {isLoading && (
+        {isLoading && (
         <div className="space-y-4">
-          <div className="grid grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             {Array.from({ length: 5 }).map((_, i) => (
               <Skeleton key={i} className="h-20 rounded-lg" />
             ))}
@@ -367,7 +368,7 @@ export default function AgentTasksPage() {
         </div>
       )}
 
-      {error && (
+        {error && (
         <Card>
           <CardContent className="pt-6">
             <p className="text-destructive text-sm">
@@ -377,7 +378,7 @@ export default function AgentTasksPage() {
         </Card>
       )}
 
-      {data && (
+        {data && (
         <>
           {/* Stats */}
           <StatsCards tasks={data.tasks} />
@@ -399,11 +400,11 @@ export default function AgentTasksPage() {
             </Card>
           ) : (
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
+              <CardHeader className="flex min-w-0 flex-row items-center justify-between gap-3">
                 <CardTitle className="text-sm font-medium">
                   Agent Tree
                 </CardTitle>
-                <span className="text-xs text-muted-foreground tabular-nums">
+                <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
                   {data.tasks.length} total / {data.tree.length} root
                 </span>
               </CardHeader>
@@ -417,7 +418,8 @@ export default function AgentTasksPage() {
             </Card>
           )}
         </>
-      )}
-    </div>
+        )}
+      </div>
+    </CenteredLayout>
   );
 }

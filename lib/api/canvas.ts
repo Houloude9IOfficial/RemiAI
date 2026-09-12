@@ -14,6 +14,8 @@ export type CanvasFileEntry = {
   isFile: boolean;
   size: number;
   mtime: string;
+  /** Canonical /api/chat/{conversationId}/session-files/{path} URL. */
+  url?: string | null;
 };
 
 export type CanvasSummary = {

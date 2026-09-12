@@ -22,7 +22,7 @@ This plan splits the payload into **static (cached)**, **dynamic (budget-capped)
 | 2 | History optimizer: NL tool traces, UI-part stripping, input/output caps | `lib/chat/history-optimizer.ts` | **80–95% of history tokens** |
 | 3 | Rolling conversation summary | `lib/chat/summarizer.ts` + `conversations.summary*` columns | Long conversations stop growing linearly |
 | 4 | Relevance-budgeted memory retrieval | `lib/chat/memories.ts` | Memory block capped at ~2k chars and ranked by relevance |
-| 5 | Intent-based dynamic tool loading | `lib/chat/tool-groups.ts` | Simple chats send **11 tools (~1.1k tokens) instead of 40 (~7.2k)** |
+| 5 | Intent-based dynamic tool loading | `lib/chat/tool-groups.ts` | Simple chats send a lean core set instead of all tools |
 
 ---
 
@@ -307,18 +307,20 @@ activeGroups = CORE ∪ classifier(latest user message)
   note is rebuilt per step by `prepareStep`, so after `load_tool_groups` runs the model sees
   the group listed as loaded instead of a stale "not loaded" warning.
 
-### Core set (always loaded, ~1.1–1.5k tokens)
+### Core set (always loaded)
 
-context (`get_time_details`, `get_device_details`) · memory (`remember`, `get_recent_memories`,
-`search_memories`) · file-index (`query_recent_changes`, `query_file_index`) · fs read basics
-(`list_permitted_roots`, `read_file`) · builtins (`delay`, `web_fetch`, `ask_questions`,
-`suggest_followups`, `set_run_name`, `get_tool_help`, `list_available_tools`, `load_tool_groups`).
+`web_search`, `web_fetch`, `get_time_details`, `get_device_details`, `get_tool_help`,
+`list_available_tools`, `load_tool_groups`, `ask_questions`, and `suggest_followups`.
+
+Memory, file-index, filesystem, skills, notifications, delay, and run naming are loaded on demand
+through their conditional groups.
 
 ### Conditional groups
 
-`fs_write`, `fs_read` (listing/search/glob/media), `document_reader`, `session_files`,
-`exec` (python/js), `create_visual`, `scheduling`, `todo`, `routines`, `agent`, `profile`,
-`web_search`, `notion`, `context7`, `news`, `firecrawl`.
+`fs_write`, `fs_read` (listing/search/glob/media), `memory`, `file_index`, `skills`,
+`notifications`, `delay`, `run_name`, `document_reader`, `session_files`, `exec` (python/js),
+`create_visual`, `scheduling`, `todo`, `routines`, `agent`, `profile`, `notion`, `context7`,
+`news`, and `firecrawl`.
 
 ### Measured (real tool set, `scripts/measure-tools.ts`)
 

@@ -69,10 +69,16 @@ export async function POST(req: Request) {
         body: JSON.stringify({
           text,
           model_id: "eleven_multilingual_v2",
+          // Tuned for a calm, unhurried conversational voice:
+          //   stability        — high keeps the delivery steady instead of
+          //                      swinging in tone mid-sentence
+          //   similarity_boost — stay faithful to the configured voice
+          //   style 0          — style adds theatrical exaggeration, which
+          //                      is the opposite of calm
           voice_settings: {
-            stability: 0.45,
-            similarity_boost: 0.55,
-            style: 0.3,
+            stability: 0.55,
+            similarity_boost: 0.75,
+            style: 0.0,
             use_speaker_boost: true,
           },
         }),

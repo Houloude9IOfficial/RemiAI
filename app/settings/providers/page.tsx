@@ -1,5 +1,5 @@
 import { ProviderForm } from "@/components/settings/ProviderForm";
-import { ProviderList } from "@/components/settings/ProviderList";
+import { NewModelDefaults, ProviderList } from "@/components/settings/ProviderList";
 import CenteredLayout from '@/components/layout/CenteredLayout';
 import { redirect } from "next/navigation";
 
@@ -19,6 +19,7 @@ export default function ProvidersSettingsPage() {
         </div>
         <div className="flex flex-col gap-8">
           <ProviderForm />
+          <NewModelDefaults />
           <ProviderList />
         </div>
       </div>

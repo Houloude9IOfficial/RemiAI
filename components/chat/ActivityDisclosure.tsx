@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Brain, ChevronDown, Loader2, Wrench } from "lucide-react";
+import { AlertTriangle, Brain, ChevronDown, Loader2, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { ToolCallGroup, summarizeToolActivity } from "./ToolCallGroup";
@@ -40,6 +40,7 @@ export function ActivityDisclosure({
   const hasTools = allParts.length > 0;
   const reasoningStreaming = reasoning?.isStreaming === true;
   const hasQuestions = summary.hasQuestions;
+  const mixedOutcome = summary.hasError && summary.hasSuccess;
 
   // Auto-open while the run is working; collapse when the final answer starts
   // or the message completes — unless the user explicitly toggled it.
@@ -71,7 +72,6 @@ export function ActivityDisclosure({
       <button
         type="button"
         onClick={() => {
-          if (working) return;
           userToggledRef.current = true;
           setOpen((o) => !o);
         }}
@@ -79,17 +79,23 @@ export function ActivityDisclosure({
         aria-controls={contentId}
         className={cn(
           "group flex items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground",
-          working && "cursor-default",
+          working && "cursor-pointer",
         )}
       >
         <span
           className={cn(
             "flex h-4 w-4 shrink-0 items-center justify-center",
-            summary.hasError && !working ? "text-status-danger" : "",
+            mixedOutcome
+              ? "text-status-warning"
+              : summary.hasError && !working
+                ? "text-status-danger"
+                : "",
           )}
         >
           {working ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+          ) : mixedOutcome ? (
+            <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
           ) : hasTools ? (
             <Wrench className="h-3.5 w-3.5" aria-hidden="true" />
           ) : (
@@ -126,7 +132,7 @@ export function ActivityDisclosure({
             transition={{ duration: 0.35, ease: [0.32, 0.72, 0, 1] }}
             className="overflow-hidden"
           >
-            <div className="relative mt-1.5">
+            <div className="relative mt-1.5 max-h-80 overflow-y-auto overscroll-contain pr-1">
               {/* One continuous rail from the reasoning dot through every
                   tool call, so the chain reads as a single connected line.
                   The x-position matches the trace's connectors (its rows sit

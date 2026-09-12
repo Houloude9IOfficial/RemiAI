@@ -13,6 +13,8 @@ export function MessageList({
   status,
   onSend,
   onRegenerate,
+  onEdit,
+  onContinue,
   conversationId,
 }: {
   messages: UIMessage[];
@@ -20,6 +22,10 @@ export function MessageList({
   onSend?: (text: string) => void;
   /** Called with a message id to regenerate it (deleting messages after it). */
   onRegenerate?: (messageId: string) => void;
+  /** Called with a message id and replacement text to edit it. */
+  onEdit?: (messageId: string, text: string) => void;
+  /** Called when the last user message has no assistant response yet. */
+  onContinue?: () => void;
   conversationId?: number;
 }) {
   // Defensive safety net: the AI SDK merges streamed assistant messages into
@@ -41,6 +47,23 @@ export function MessageList({
   }, [messages]);
 
   const lastMessage = deduped[deduped.length - 1];
+  const lastAssistantHasOutput =
+    lastMessage?.role === "assistant" &&
+    lastMessage.parts.some((part) => {
+      if (!part || typeof part !== "object") return false;
+      const candidate = part as Record<string, unknown>;
+      if (candidate.type === "text") {
+        return typeof candidate.text === "string" && candidate.text.trim().length > 0;
+      }
+      return typeof candidate.type === "string" &&
+        (candidate.type.startsWith("tool-") ||
+          candidate.type === "tool-invocation" ||
+          candidate.type === "reasoning");
+    });
+  const hasUnansweredLastMessage =
+    lastMessage?.role === "user" ||
+    (lastMessage?.role === "assistant" && !lastAssistantHasOutput);
+  const lastUserIndex = deduped.findLastIndex((message) => message.role === "user");
   const isWaiting =
     (status === "submitted" || status === "streaming") &&
     (!lastMessage || lastMessage.role === "user");
@@ -73,6 +96,15 @@ export function MessageList({
                       idx === deduped.length - 1 && status === "streaming"
                     }
                     onRegenerate={onRegenerate}
+                    onEdit={canSend ? onEdit : undefined}
+                    onContinue={
+                      canSend &&
+                      hasUnansweredLastMessage &&
+                      idx === lastUserIndex &&
+                      message.role === "user"
+                        ? onContinue
+                        : undefined
+                    }
                     messagesAfter={deduped.length - idx - 1}
                     conversationId={conversationId}
                   />

@@ -105,17 +105,19 @@ export function ProviderForm() {
                   className={cn(
                     "flex flex-col items-start gap-2 rounded-lg border p-3 text-left transition-colors",
                     selected
-                      ? "border-primary bg-primary/5 ring-1 ring-primary/40"
+                      ? "border-primary bg-primary/5 ring-0 ring-primary/40"
                       : "border-border hover:bg-muted/50",
                   )}
                 >
-                  <Icon
-                    className={cn(
-                      "h-4 w-4",
-                      selected ? "text-primary" : "text-muted-foreground",
-                    )}
-                  />
-                  <span className="text-sm font-medium leading-none">{meta.label}</span>
+                  <span className="flex items-center gap-2">
+                    <Icon
+                      className={cn(
+                        "h-4 w-4",
+                        selected ? "text-primary" : "text-muted-foreground",
+                      )}
+                    />
+                    <span className="text-sm font-medium leading-none">{meta.label}</span>
+                  </span>
                   <span className="text-[11px] leading-tight text-muted-foreground">
                     {meta.description}
                   </span>
@@ -145,7 +147,7 @@ export function ProviderForm() {
               <Input
                 id="provider-api-key"
                 type="password"
-                placeholder={defaults.requiresApiKey ? "sk-..." : "Leave blank if not required"}
+                placeholder={defaults.requiresApiKey ? PROVIDER_KIND_META[kind].apiKeyPlaceholder ?? "sk-..." : "Leave blank if not required"}
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
               />
@@ -155,7 +157,7 @@ export function ProviderForm() {
                   <span className="font-medium text-foreground">Identity-linked</span> ({""}
                   workspace-scoped) keys require an <code>anthropic-workspace-id</code> header and
                   won&apos;t return models here. If you set one up and no models show up, this is
-                  why. Create a fresh "unlinked" key at console.anthropic.com and paste it above.
+                  why. Create a fresh &quot;unlinked&quot; key at console.anthropic.com and paste it above.
                 </p>
               )}
             </div>

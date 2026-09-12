@@ -50,11 +50,14 @@ function findOnPath(bin: string, extraDirs: string[] = []): string | null {
 }
 
 /** Try the bundled ffmpeg-static / ffprobe-static packages. */
-async function findBundled(
-  pkg: "ffmpeg-static" | "ffprobe-static",
-): Promise<string | null> {
+async function findBundled(pkg: "ffmpeg-static" | "ffprobe-static"): Promise<string | null> {
+  // Hard-code each package's import path so webpack/Turbopack can trace
+  // both statically — avoiding the "Critical dependency: the request of a
+  // dependency is an expression" dev warning.
   try {
-    const mod = (await import(pkg)) as unknown;
+    const mod = pkg === "ffmpeg-static"
+      ? (await import("ffmpeg-static")) as unknown
+      : (await import("ffprobe-static")) as unknown;
     const raw = (mod as Record<string, unknown>).default ?? mod;
     const candidate =
       typeof raw === "string"

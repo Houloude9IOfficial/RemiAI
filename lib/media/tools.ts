@@ -64,10 +64,18 @@ type SourceRef = {
 /** Refine message for url-or-root tool inputs (mirrors read_document). */
 const sourceRefine = {
   message:
-    "Either `url` (for uploaded/session files) or both `rootId` and `relativePath` (for directory files) are required.",
+    "Either `url` (for uploaded/session files), a bare `relativePath` (for a session sandbox file like `canvas/movie-db/logo.png`), or both `rootId` and `relativePath` (for directory files) are required.",
 };
 
-async function resolveSource(src: SourceRef): Promise<{
+/**
+ * Resolve a media source to an absolute path. Accepts a chat URL, a bare
+ * session-relative path (resolved against `conversationId`'s sandbox, e.g.
+ * `canvas/movie-db/logo.png`), or a permitted-directory path.
+ */
+async function resolveSource(
+  src: SourceRef,
+  conversationId?: number,
+): Promise<{
   absPath: string;
   filename: string;
   displayPath: string;
@@ -80,19 +88,40 @@ async function resolveSource(src: SourceRef): Promise<{
       displayPath: filename,
     };
   }
-  if (!src.rootId || !src.relativePath) {
-    throw new Error(
-      "Either `url` (for uploaded files) or both `rootId` and `relativePath` (for directory files) are required.",
-    );
+  if (src.rootId) {
+    if (!src.relativePath) {
+      throw new Error(
+        "`rootId` requires a `relativePath` — pass the path within the root.",
+      );
+    }
+    const root = await getRootById(src.rootId);
+    const absPath = await resolvePath(root, src.relativePath);
+    const displayPath = src.relativePath.replace(/\\/g, "/");
+    return {
+      absPath,
+      filename: path.basename(displayPath),
+      displayPath,
+    };
   }
-  const root = await getRootById(src.rootId);
-  const absPath = await resolvePath(root, src.relativePath);
-  const displayPath = src.relativePath.replace(/\\/g, "/");
-  return {
-    absPath,
-    filename: path.basename(displayPath),
-    displayPath,
-  };
+  if (src.relativePath) {
+    // Bare relativePath (no rootId, no url) → session sandbox file
+    if (!conversationId) {
+      throw new Error(
+        "A bare `relativePath` refers to a session sandbox file, but no conversation is available here. Pass the file's `url` (e.g. /api/chat/{id}/session-files/...) or both `rootId` and `relativePath` instead.",
+      );
+    }
+    const { resolveSessionPath } = await import("@/lib/session-files/storage");
+    const absPath = await resolveSessionPath(conversationId, src.relativePath);
+    const displayPath = src.relativePath.replace(/\\/g, "/");
+    return {
+      absPath,
+      filename: path.basename(displayPath),
+      displayPath,
+    };
+  }
+  throw new Error(
+    "Either `url` (for uploaded/session files), a bare `relativePath` (for a session sandbox file like `canvas/movie-db/logo.png`), or both `rootId` and `relativePath` (for directory files) are required.",
+  );
 }
 
 async function assertMediaFile(absPath: string, displayPath: string): Promise<void> {
@@ -222,7 +251,7 @@ async function runConversion(opts: {
     timeoutMs,
   } = opts;
 
-  const input = await resolveSource(source);
+  const input = await resolveSource(source, conversationId);
   await assertMediaFile(input.absPath, input.displayPath);
 
   const metadata = await probeMediaMetadata(input.absPath);
@@ -342,9 +371,9 @@ export const getMediaMetadataTool = {
         .optional()
         .describe("Chat file URL (upload or session sandbox file). Use instead of rootId+relativePath for chat files."),
     })
-    .refine((data) => Boolean(data.url) || Boolean(data.rootId && data.relativePath), sourceRefine),
-  execute: async ({ rootId, relativePath, url }: SourceRef) => {
-    const input = await resolveSource({ url, rootId, relativePath });
+    .refine((data) => Boolean(data.url) || Boolean(data.relativePath), sourceRefine),
+  execute: async ({ rootId, relativePath, url, _conversationId }: SourceRef & { _conversationId?: number }) => {
+    const input = await resolveSource({ url, rootId, relativePath }, _conversationId);
     await assertMediaFile(input.absPath, input.displayPath);
     const metadata: MediaMetadata = await probeMediaMetadata(input.absPath);
     return truncateToolResult(
@@ -452,7 +481,7 @@ const convertParams = {
 export const convertMediaTool = {
   description: `Convert a video or audio file to another format (e.g. mp4, webm, mkv, mov, avi, gif, mp3, wav, m4a, ogg, flac, opus, aac). Audio target formats extract the audio track automatically. Use 'url' (chat/session files) or 'rootId' + 'relativePath' for directory files. By default the converted file is saved into this chat's session files and a 'url' is returned — pass 'outputRootId'/'outputRelativePath' to write into a permitted directory instead. The result includes the output path — embed the returned 'url' in your reply (e.g. '[file.mp4](url)') so the user can open/download it.`,
   parameters: z.object(convertParams).refine(
-    (data) => Boolean(data.url) || Boolean(data.rootId && data.relativePath),
+    (data) => Boolean(data.url) || Boolean(data.relativePath),
     sourceRefine,
   ),
   execute: async (args: any) => {
@@ -505,7 +534,7 @@ export const extractAudioTool = {
       outputRelativePath: z.string().optional(),
       timeout: z.number().int().positive().max(MAX_CONVERT_TIMEOUT).optional().default(DEFAULT_CONVERT_TIMEOUT),
     })
-    .refine((data) => Boolean(data.url) || Boolean(data.rootId && data.relativePath), sourceRefine),
+    .refine((data) => Boolean(data.url) || Boolean(data.relativePath), sourceRefine),
   execute: async (args: any) => {
     const format = String(args.format ?? "mp3").toLowerCase();
     return runConversion({
@@ -574,13 +603,16 @@ export const extractVideoFramesTool = {
         .default(120_000)
         .describe("Timeout in ms (default 120s, max 300s)"),
     })
-    .refine((data) => Boolean(data.url) || Boolean(data.rootId && data.relativePath), sourceRefine),
+    .refine((data) => Boolean(data.url) || Boolean(data.relativePath), sourceRefine),
   execute: async (args: any) => {
-    const input = await resolveSource({
-      url: args.url,
-      rootId: args.rootId,
-      relativePath: args.relativePath,
-    });
+    const input = await resolveSource(
+      {
+        url: args.url,
+        rootId: args.rootId,
+        relativePath: args.relativePath,
+      },
+      args._conversationId,
+    );
     await assertMediaFile(input.absPath, input.displayPath);
     const metadata = await probeMediaMetadata(input.absPath);
     if (!metadata.hasVideo) {
@@ -783,7 +815,7 @@ async function runTranscription(opts: {
   outputRelativePath?: string;
   timeoutMs: number;
 }): Promise<unknown> {
-  const input = await resolveSource(opts.source);
+  const input = await resolveSource(opts.source, opts.conversationId);
   await assertMediaFile(input.absPath, input.displayPath);
 
   // Probe to check the file actually has an audio stream.
@@ -953,7 +985,7 @@ export const transcribeAudioTool = {
         .default(DEFAULT_TRANSCRIBE_TIMEOUT)
         .describe(`Timeout in ms (default ${DEFAULT_TRANSCRIBE_TIMEOUT / 1000}s, max ${MAX_TRANSCRIBE_TIMEOUT / 1000}s)`),
     })
-    .refine((data) => Boolean(data.url) || Boolean(data.rootId && data.relativePath), sourceRefine),
+    .refine((data) => Boolean(data.url) || Boolean(data.relativePath), sourceRefine),
   execute: async (args: any) => {
     return runTranscription({
       conversationId: args._conversationId,
@@ -1137,7 +1169,9 @@ export function buildMediaTools(conversationId: number): Record<string, any> {
   });
 
   return {
-    get_media_metadata: getMediaMetadataTool,
+    // get_media_metadata is wrapped too so a bare session relativePath
+    // (e.g. canvas/movie-db/logo.png) can resolve against this sandbox.
+    get_media_metadata: withConversation(getMediaMetadataTool),
     convert_media: withConversation(convertMediaTool),
     extract_audio: withConversation(extractAudioTool),
     extract_video_frames: withConversation(extractVideoFramesTool),

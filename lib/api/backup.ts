@@ -2,9 +2,22 @@
 // Client-side API for backup export / import
 // ---------------------------------------------------------------------------
 
+export interface BackupHistoryData {
+  exportedAt: string;
+  totalSize: number;
+  includesFiles: boolean;
+  tableStats: Record<string, number>;
+  uploadCount: number;
+  avatarCount: number;
+  skillCount: number;
+  appVersion: string;
+}
+
 export interface ExportResponse {
-  /** Base64-encoded encrypted backup blob. */
-  encrypted: string;
+  /** Single-use URL for the staged encrypted backup file. */
+  downloadUrl: string;
+  /** Metadata recorded after the client receives the complete response. */
+  history: BackupHistoryData;
   /** Size of the encrypted blob in bytes. */
   size: number;
   stats: {
@@ -88,8 +101,20 @@ export const backupApi = {
   },
 
   /**
-   * Create an encrypted backup of all data.
-   * Returns the encrypted blob as a downloadable file (triggers browser download).
+   * Record a backup after the complete export response has reached the client.
+   */
+  recordHistory: async (data: BackupHistoryData): Promise<void> => {
+    const res = await fetch("/api/backup/history", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    await parseJson<{ success: true }>(res, "Recording backup history");
+  },
+
+  /**
+   * Create an encrypted backup and return its single-use download URL.
    */
   export: async (
     password: string,
@@ -102,6 +127,17 @@ export const backupApi = {
       body: JSON.stringify({ password, includeFiles }),
     });
     return parseJson<ExportResponse>(res, "Exporting backup");
+  },
+
+  /**
+   * Download the staged encrypted backup through its single-use URL.
+   */
+  download: async (downloadUrl: string): Promise<Blob> => {
+    const res = await fetch(downloadUrl, { cache: "no-store" });
+    if (!res.ok) {
+      return parseJson<never>(res, "Downloading backup");
+    }
+    return res.blob();
   },
 
   /**

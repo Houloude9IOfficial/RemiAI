@@ -13,7 +13,7 @@ import {
 import { streamRegistry } from "@/lib/chat/stream-registry";
 import { periodicallyPersistMessages } from "@/lib/chat/persist-interval";
 import { eq, sql, count } from "drizzle-orm";
-import { db } from "@/db";
+import { db, initializeApp } from "@/db";
 import {
   conversations,
   providers,
@@ -31,7 +31,12 @@ import {
   CANVAS_SECTION,
   RESEARCH_SECTION,
   SESSION_FILES_SECTION,
+  REMI_CARDS_SECTION,
+  REMI_CARD_PRESENTATION_RULES,
+  REMI_CARD_SCOPE_RULES,
 } from "@/lib/chat/system-prompt";
+import { buildRemiCardTools, setRemiApiOverride, setRemiCardDisplayModes, setRemiLocationFallback } from "@/lib/tools/remi-cards";
+import { existingRemiCardInventory, remiCardRequestIdentity } from "@/lib/chat/card-identity";
 import { PERSISTENCE_GUIDANCE } from "@/lib/chat/persistence-guidance";
 import {
   buildCachedInstructions,
@@ -41,7 +46,7 @@ import {
   optimizeMessageHistory,
   RECENT_MESSAGES_KEPT,
 } from "@/lib/chat/history-optimizer";
-import { retrieveRelevantMemories } from "@/lib/chat/memories";
+import { buildMemoryPromptBlock, retrieveRelevantMemories } from "@/lib/chat/memories";
 import {
   summarizeConversationBackground,
   shouldSummarize,
@@ -71,6 +76,7 @@ import { buildDocumentReaderTools } from "@/lib/tools/document-reader";
 import { buildMediaTools } from "@/lib/media/tools";
 import { delayTool } from "@/lib/tools/delay";
 import { webFetchTool } from "@/lib/tools/web-fetch";
+import { buildHttpRequestTool } from "@/lib/tools/http-request";
 import { buildCreateVisualTool } from "@/lib/tools/create-visual";
 import { askQuestionsTool } from "@/lib/tools/ask-questions";
 import { suggestFollowupsTool } from "@/lib/tools/suggest-followups";
@@ -90,6 +96,7 @@ import { buildScheduleTool } from "@/lib/tools/schedule";
 import { buildToolHelpTool, buildListAvailableToolsTool } from "@/lib/tools/tool-help";
 import { buildSkillsToolSet } from "@/lib/skills/tools";
 import { buildActiveSkillsSection } from "@/lib/skills/system-prompt";
+import { buildTaggedSkillsSection } from "@/lib/skills/tagged-skill";
 import { userContextFromHeaders } from "@/lib/geo";
 import { queryRecentChanges } from "@/lib/fs/file-index";
 import { estimateTokenCount, normaliseTool } from "@/lib/utils";
@@ -157,6 +164,44 @@ function titleFromMessage(message: UIMessage): string {
 }
 
 /**
+ * Tool names whose `url` argument is normalized before execution: bare
+ * session-relative paths (e.g. `canvas/movie-db/style.css`) get rewritten to
+ * their canonical /api/chat/{id}/session-files/{path} form.
+ */
+const URL_BASED_TOOL_NAMES = new Set([
+  "read_file",
+  "read_media",
+  "read_document",
+  "web_fetch",
+]);
+
+/**
+ * True when a string looks like a bare session-sandbox-relative path (no
+ * scheme, no leading slash) rather than an absolute URL. AI models that get
+ * a file path from a canvas/session tool result sometimes pass it straight
+ * to url-based read tools; those tools can't resolve it without knowing
+ * which conversation's sandbox it lives in.
+ */
+function isBareSessionRelativePath(value: unknown): boolean {
+  if (typeof value !== "string" || !value.trim()) return false;
+  const v = value.trim().replace(/\\/g, "/");
+  if (/^[a-z][a-z0-9+.-]*:/i.test(v)) return false; // has a scheme
+  if (v.startsWith("/")) return false; // absolute (/api/…, /media/…)
+  return true;
+}
+
+/**
+ * Rewrite a bare session-relative path to the canonical session-file URL for
+ * this conversation. Used for chat-generated canvas/session paths like
+ * `canvas/{slug}/style.css` — the sandbox containment checks still apply when
+ * the URL is later resolved server-side.
+ */
+function toSessionFileUrlForConversation(relativePath: string, conversationId: number): string {
+  const normalized = relativePath.replace(/\\/g, "/").replace(/^\/+/, "");
+  return `/api/chat/${conversationId}/session-files/${normalized.split("/").map((s) => encodeURIComponent(s)).join("/")}`;
+}
+
+/**
  * Wrap tools so directory-based (`rootId` / `relativePath`) access is
  * rejected, keeping only chat-file `url` access. Used for fully isolated
  * (memory-disabled) chats: read_document / media tools may still read files
@@ -175,7 +220,10 @@ function restrictToChatUrls(tools: Record<string, unknown>): Record<string, unkn
       ? {
           ...t,
           execute: (args: Record<string, unknown>) => {
-            if (args && (args.rootId !== undefined || args.relativePath !== undefined)) {
+            // Directory access = rootId-based. A bare relativePath (no rootId)
+            // resolves inside THIS conversation's session sandbox (e.g.
+            // canvas/... files), which is chat-scoped and therefore allowed.
+            if (args && args.rootId !== undefined) {
               return "Directory access is disabled in this chat (memory is off — fully isolated). Attach the file to the chat and read it via its `url` instead.";
             }
             return originalExecute(args);
@@ -211,6 +259,7 @@ const chatRequestSchema = z.object({
 });
 
 export async function POST(req: Request) {
+  await initializeApp();
   const trace = createRunTrace({ kind: "chat" });
   trace.metric("retryBudget", 3);
   trace.event("request.received", { method: "POST" });
@@ -386,7 +435,9 @@ export async function POST(req: Request) {
   // Gather filesystem tools from configured directories. Fully isolated
   // (memory-disabled) chats get NO filesystem access — the AI cannot read or
   // write the user's directories at all.
-  const fsToolSet = memoryEnabled ? await buildFilesystemTools() : {};
+  const fsToolSet = memoryEnabled
+    ? await buildFilesystemTools(conversationId)
+    : {};
 
   // User context sent by the browser (timezone + locale). Used to report the
   // user's LOCAL time in get_time_details and to localize web search results.
@@ -408,7 +459,7 @@ export async function POST(req: Request) {
   // in the toolset for those requests.
   const memoryToolSet = memoryEnabled ? buildMemoryTools() : {};
 
-  // Gather integration tools (Brave Search, Notion, Context7) based on config
+  // Gather integration tools (unified web search, Notion, Context7) based on config
   const integrationToolSet = isDemoMode() ? {} : await buildIntegrationTools(userContext);
   const sourceProvenanceOptions = {
     conversationId,
@@ -424,11 +475,9 @@ export async function POST(req: Request) {
       [
         name,
         [
-          "brave_web_search",
-          "brave_image_search",
+          "web_search",
           "news_search",
           "news_top_headlines",
-          "fc_search",
           "fc_scrape",
           "fc_crawl",
         ].includes(name)
@@ -455,8 +504,8 @@ export async function POST(req: Request) {
   // only — rootId-based directory access is rejected (the tool sets stay so
   // files the user explicitly attaches in THIS chat still work).
   const documentToolSet = memoryEnabled
-    ? await buildDocumentReaderTools()
-    : restrictToChatUrls(await buildDocumentReaderTools());
+    ? await buildDocumentReaderTools(conversationId)
+    : restrictToChatUrls(await buildDocumentReaderTools(conversationId));
 
   // Gather media tools (get_media_metadata, convert_media, extract_audio,
   // extract_video_frames, transcribe_audio, manage_transcription_models) —
@@ -469,11 +518,15 @@ export async function POST(req: Request) {
   const createVisualToolSet = await buildCreateVisualTool();
   const createVisualEnabled = "create_visual" in createVisualToolSet;
 
-  // Built-in tools (delay, web_fetch, notifications, ask_questions, suggest_followups, get_tool_help, list_available_tools)
+  // Built-in tools (delay, web_fetch, http_request, notifications, ask_questions, suggest_followups, get_tool_help, list_available_tools)
   const builtinToolSet = {
     delay: delayTool,
     send_notification: buildSendNotificationTool(conversationId),
     web_fetch: sourceAwareWebFetchTool,
+    http_request: buildHttpRequestTool({
+      mode: conversation.bashMode === "full" ? "full" : "sandboxed",
+      allowMutations: mode !== "plan",
+    }),
     ask_questions: askQuestionsTool,
     suggest_followups: suggestFollowupsTool,
     set_run_name: setRunNameTool,
@@ -524,7 +577,14 @@ export async function POST(req: Request) {
   // written with the session_file_* tools (scoped under canvas/{slug}/), so
   // plan mode also blocks the canvas write tools below.
   const canvasToolSet = memoryEnabled
-    ? buildCanvasTools({ conversationId, sourceRunId: trace.traceId })
+    ? buildCanvasTools({
+        conversationId,
+        sourceRunId: trace.traceId,
+        // canvas_review renders the canvas through its real HTTP URL, which
+        // sits behind the proxy's session-cookie wall — forward the caller's
+        // cookie so the headless render can load it.
+        authCookie: req.headers.get("cookie"),
+      })
     : {};
 
   // Skills tools (list_skills, load_skill) — the "plugins" analog; hidden in
@@ -652,8 +712,86 @@ Definition of done:
     new Set(Object.keys(tools)),
   )["list_available_tools"];
 
-  // Build combined system prompt with user preferences
-  const prefs = await db.select().from(userPreferences).get();
+  // URL-based read tools accept bare session-relative paths (e.g.
+  // "canvas/movie-db/style.css") that models copy from canvas/session tool
+  // results. Without the conversation prefix those are NOT valid chat-file
+  // URLs and resolution fails with "Invalid file URL". Rewrite such paths to
+  // the canonical /api/chat/{id}/session-files/{path} form before execute
+  // (resolution then reuses the sandbox's normal containment checks). Full
+  // URLs and absolute paths pass through untouched.
+  for (const name of URL_BASED_TOOL_NAMES) {
+    const tool = tools[name] as Record<string, unknown> | undefined;
+    if (!tool || typeof tool !== "object" || typeof tool.execute !== "function") {
+      continue;
+    }
+    const originalExecute = tool.execute as (args: Record<string, unknown>) => unknown;
+    tools[name] = {
+      ...tool,
+      execute: async (args: Record<string, unknown>) => {
+        const url = args?.url;
+        if (isBareSessionRelativePath(url)) {
+          return originalExecute({
+            ...args,
+            url: toSessionFileUrlForConversation(url as string, conversationId),
+          });
+        }
+        return originalExecute(args);
+      },
+    };
+  }
+
+  // Build combined system prompt with user preferences (self-heal if the
+  // Remi columns from 0043 haven't landed yet on this DB).
+  let prefs: (typeof userPreferences.$inferSelect) | undefined;
+  try {
+    prefs = await db.select().from(userPreferences).get();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message.toLowerCase() : String(e).toLowerCase();
+    const missing = msg.includes("no such column") || msg.includes("has no column");
+    if (!missing) throw e;
+    const { ensureRemiPrefsColumns } = await import("@/db");
+    ensureRemiPrefsColumns();
+    prefs = await db.select().from(userPreferences).get();
+  }
+  const _prefsRec = prefs as unknown as Record<string, unknown> | null;
+  const _remiApiUrl = (_prefsRec?.remiApiUrl as string | undefined) ?? "";
+  const _remiApiEnabled = (_prefsRec?.remiApiEnabled as boolean | undefined) ?? true;
+  const _remiCardDisplayModes = (_prefsRec?.cardDisplayModes as Record<string, string> | undefined) ?? {};
+  setRemiApiOverride(_remiApiUrl);
+  setRemiCardDisplayModes(_remiCardDisplayModes);
+  setRemiLocationFallback(req.headers.get("x-user-latitude"), req.headers.get("x-user-longitude"));
+  const _remiCardToolSet: Record<string, unknown> = _remiApiEnabled
+    ? (buildRemiCardTools() as Record<string, unknown>)
+    : {};
+  // Tool calls can be repeated by a model across agentic steps. Share one
+  // request-scoped promise per card query so a duplicate does not hit the
+  // provider twice. The UI also deduplicates the resulting card parts.
+  const remiCardExecutionCache = new Map<string, Promise<unknown>>();
+  for (const [toolName, rawTool] of Object.entries(_remiCardToolSet)) {
+    const tool = rawTool as { execute?: (args: Record<string, unknown>) => Promise<unknown> };
+    if (typeof tool.execute !== "function") continue;
+    const execute = tool.execute;
+    _remiCardToolSet[toolName] = {
+      ...tool,
+      execute: (args: Record<string, unknown>) => {
+        const key = remiCardRequestIdentity(toolName, args);
+        const cached = remiCardExecutionCache.get(key);
+        if (cached) return cached;
+        const result = Promise.resolve(execute(args));
+        remiCardExecutionCache.set(key, result);
+        return result;
+      },
+    };
+  }
+  if (Object.keys(_remiCardToolSet).length) {
+    Object.assign(tools, _remiCardToolSet);
+    tools.list_available_tools = buildListAvailableToolsTool(new Set(Object.keys(tools)))["list_available_tools"];
+  }
+  const _remiCardsSection = Object.keys(_remiCardToolSet).length ? REMI_CARDS_SECTION : "";
+  const existingCardInventory = existingRemiCardInventory(uiMessages);
+  const existingCardSection = existingCardInventory
+    ? `\n\n## Existing visual cards in this conversation\nThese cards are already present in the conversation. Treat this as a registry, not as a reason to repeat them. For an exact same non-time-sensitive request, do not call the card tool again unless the user explicitly asks for a fresh/current value. Time, weather, stock, crypto, and news requests are inherently current: call their card once for the new request, but never duplicate that call within the same response. If a new card type is added later, apply the same identity rule automatically.\n${existingCardInventory}`
+    : "";
   const prefParts: string[] = [];
   if (prefs?.preferredName) {
     prefParts.push(`The user's preferred name is "${prefs.preferredName}". Address them by this name.`);
@@ -786,10 +924,10 @@ Definition of done:
 
   // Memory-disabled chats get NO saved-memories block — the model must answer
   // from this conversation alone (the memory tools aren't registered either).
+  // Grouped by category so the model sees health/work/etc separately; dates
+  // are inline as [YYYY-MM-DD] next to the content when present.
   const relevantMemories = memoryEnabled ? await retrieveRelevantMemories(lastUserText) : [];
-  const memoryTip = relevantMemories.length > 0
-    ? `\n\n## Saved memories\nThings you have remembered about the user across conversations, ranked by relevance to the current request. Use them to personalize responses.\n${relevantMemories.map((m) => `- ${m.content}`).join("\n")}`
-    : "";
+  const memoryTip = buildMemoryPromptBlock(relevantMemories as any);
 
   // ── Intent-based dynamic tool loading ─────────────────────────────
   // Simple chats register only the CORE tool subset (~2-3k tokens instead of
@@ -946,6 +1084,15 @@ Definition of done:
     ? await buildActiveSkillsSection(isLowCapability)
     : "";
 
+  // Tagged skill section — when the user tags a skill with @skill (the /skill
+  // slash command inserts "@skill <name>@<repo>"), the tagged skill's FULL
+  // instructions are inlined here so the model is guaranteed to follow them
+  // for this request instead of having to discover the skill itself.
+  const taggedSkillsSection =
+    memoryEnabled && !isDemoMode()
+      ? await buildTaggedSkillsSection(lastUserText)
+      : "";
+
   // Split off the availability note so prepareStep can rebuild the
   // instructions with a FRESH note once load_tool_groups enables a group
   // mid-stream (the note is the only part of the dynamic prompt that can
@@ -961,7 +1108,8 @@ Definition of done:
 
   const dynamicSystemPromptBase =
     systemTip + profileTip + memoryTip + fileChangeTip + summarySection +
-    planModePrompt + buildModePrompt + canvasSection + activeSkillsSection + qualityPolicyPrompt;
+    planModePrompt + buildModePrompt + canvasSection + _remiCardsSection + existingCardSection + (Object.keys(_remiCardToolSet).length ? REMI_CARD_PRESENTATION_RULES + REMI_CARD_SCOPE_RULES : "") + activeSkillsSection +
+    taggedSkillsSection + qualityPolicyPrompt;
 
   const dynamicSystemPrompt = dynamicSystemPromptBase + toolAvailabilityNote;
 
@@ -1201,9 +1349,20 @@ Definition of done:
     // 3 times with exponential backoff before surfacing the error.
     maxRetries: qualityStrategy.maxRetries,
     // The quality policy adjusts effort without creating hidden provider calls.
-    // Complex Goal/Build tasks retain the larger execution budget.
+    // Complex Goal/Build tasks retain the larger execution budget. Chat-mode
+    // requests that loaded WRITE/agentic tool groups (canvas builds, session
+    // files, filesystem writes, code execution) get the same larger budget:
+    // a reasoning model that is cut off mid-thought (finishReason "length")
+    // ends the whole run as "step limit reached" right before it would have
+    // called its next tool. Never let a "simple"-classified prompt starve the
+    // run that actually does the work.
     maxOutputTokens:
-      mode === "goal" || mode === "build"
+      mode === "goal" ||
+        mode === "build" ||
+        activeToolGroups.has("canvas") ||
+        activeToolGroups.has("session_files") ||
+        activeToolGroups.has("fs_write") ||
+        activeToolGroups.has("exec")
         ? Math.max(qualityStrategy.maxOutputTokens, 16_384)
         : qualityStrategy.maxOutputTokens,
     // Allow up to 100 steps normally (chat/plan), or 500 in goal mode

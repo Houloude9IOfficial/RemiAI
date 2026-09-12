@@ -290,7 +290,7 @@ function ensureSkillsSchema(): void {
     ) as { name: string }[];
     if (hasJournal.length > 0) {
       const file = fs.readFileSync(
-        path.join(process.cwd(), "db/migrations/0029_skills.sql"),
+        path.join(/*turbopackIgnore: true*/ process.cwd(), "db/migrations/0029_skills.sql"),
         "utf8",
       );
       const hash = crypto.createHash("sha256").update(file).digest("hex");

@@ -1,12 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { Sparkles } from "lucide-react";
 import type { ChatStatus } from "ai";
 import { conversationsApi } from "@/lib/api/conversations";
 import { availableModelsApi } from "@/lib/api/available-models";
-import { skillsApi } from "@/lib/api/skills";
 import { DEFAULT_CONTEXT_WINDOW } from "@/lib/providers/catalog";
 import { cn } from "@/lib/utils";
 import { ChatPersonalizationMenu } from "./ChatPersonalizationMenu";
@@ -23,44 +20,6 @@ function formatCompact(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
   return String(n);
-}
-
-function UsageMeter({ used, contextWindow }: { used: number; contextWindow: number }) {
-  const safeWindow = contextWindow > 0 ? contextWindow : DEFAULT_CONTEXT_WINDOW;
-  const pct = Math.min(100, (used / safeWindow) * 100);
-  const nearLimit = pct >= 90;
-
-  return (
-    <div
-      className="flex items-center gap-2"
-      title={`Approximate tokens used this conversation (${used.toLocaleString()}) vs. the model's context window (${safeWindow.toLocaleString()}). Updates as responses finish. Context window is approximate, may be different for some models.`}
-    >
-      <span
-        className={cn(
-          "whitespace-nowrap text-xs tabular-nums",
-          nearLimit ? "font-medium text-status-warning" : "text-muted-foreground",
-        )}
-      >
-        {formatCompact(used)} / {formatCompact(safeWindow)}
-      </span>
-      <div
-        className="h-1 w-20 overflow-hidden rounded-full bg-muted"
-        role="progressbar"
-        aria-label="Context window usage"
-        aria-valuenow={Math.round(pct)}
-        aria-valuemin={0}
-        aria-valuemax={100}
-      >
-        <div
-          className={cn(
-            "h-full rounded-full transition-[width] duration-500 ease-out",
-            nearLimit ? "bg-status-warning" : "bg-primary",
-          )}
-          style={{ width: `${pct > 0 && pct < 2 ? 2 : pct}%` }}
-        />
-      </div>
-    </div>
-  );
 }
 
 /**
@@ -118,15 +77,6 @@ export function ChatHeader({
     queryFn: availableModelsApi.list,
   });
 
-  // Enabled skills count — small chip that links to the Skills settings.
-  const { data: installedSkills = [] } = useQuery({
-    queryKey: ["skills"],
-    queryFn: skillsApi.list,
-    staleTime: 30_000,
-    enabled: !demo,
-  });
-  const enabledSkillCount = demo ? 0 : installedSkills.filter((s) => s.enabled).length;
-
   const conversation = conversations?.find((c) => c.id === conversationId);
   const usedTokens =
     (conversation?.totalInputTokens ?? 0) + (conversation?.totalOutputTokens ?? 0);
@@ -142,7 +92,7 @@ export function ChatHeader({
     <div className="sticky top-0 z-20 hidden items-center gap-3 border-b border-border/60 bg-background/95 px-4 py-2 backdrop-blur md:flex">
       {/* Left — conversation title */}
       <div className={`flex min-w-0 items-center gap-2.5 ${title === "New chat" ? "hidden" : ""}`}>
-        <span className="min-w-0 truncate text-sm font-medium tracking-tight text-foreground">
+        <span className="min-w-0 truncate text-sm font-medium tracking-tight text-foreground" title={title}>
           {title}
         </span>
       </div>
@@ -159,18 +109,9 @@ export function ChatHeader({
             onMemoryChange={onMemoryChange}
           />
         )}
-        {!demo && enabledSkillCount > 0 && (
-          <Link
-            href="/settings/skills"
-            title={`${enabledSkillCount} skill${enabledSkillCount === 1 ? "" : "s"} active`}
-            className="flex items-center gap-1 rounded-full border border-border/70 bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            <Sparkles className="h-3 w-3 text-primary" />
-            {enabledSkillCount}
-          </Link>
+        {totalTokens / Math.max(contextWindow, 1) >= 0.75 && (
+          <div className={cn("h-2 w-2 rounded-full", totalTokens / Math.max(contextWindow, 1) >= 0.9 ? "bg-status-warning" : "bg-primary")} title={`Context usage: ${formatCompact(totalTokens)} / ${formatCompact(contextWindow)}`} />
         )}
-        <UsageMeter used={totalTokens} contextWindow={contextWindow} />
-        <div className="mx-0.5 h-4 w-px shrink-0 bg-border/70" />
         <div className="flex items-center gap-1">{actions}</div>
       </div>
     </div>

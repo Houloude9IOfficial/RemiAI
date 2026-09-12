@@ -136,7 +136,7 @@ export async function readDocumentFromUrl(uploadUrl: string): Promise<{
 export const readDocumentTool = {
   description: `Extract text from a document (PDF, DOCX, DOC, ODT, RTF, EPUB). Use instead of read_file for non-plain-text documents. Max 50MB. No OCR for scanned PDFs.
 
-Pass \`url\` for chat/session file URLs, or \`rootId\` + \`relativePath\` for files in configured directories. Long documents are truncated at ~100k chars (≈25k tokens); ask the user to split the file or cite the section you need if more is required.`,
+Pass \`url\` for chat/session file URLs, a bare \`relativePath\` (no rootId) for a session sandbox file like \`canvas/movie-db/report.pdf\`, or \`rootId\` + \`relativePath\` for files in configured directories. Long documents are truncated at ~100k chars (≈25k tokens); ask the user to split the file or cite the section you need if more is required.`,
   parameters: z
     .object({
       rootId: z
@@ -144,11 +144,11 @@ Pass \`url\` for chat/session file URLs, or \`rootId\` + \`relativePath\` for fi
         .int()
         .positive()
         .optional()
-        .describe("Permitted root ID (omit if using `url`)"),
+        .describe("Permitted root ID (omit if using `url` or a bare session `relativePath`)"),
       relativePath: z
         .string()
         .optional()
-        .describe("Path to the document within the root (omit if using `url`)"),
+        .describe("Path to the document within the root when combined with rootId, OR a bare session sandbox path (e.g. `canvas/movie-db/report.pdf`) when rootId is omitted"),
       url: z
         .string()
         .optional()
@@ -156,23 +156,25 @@ Pass \`url\` for chat/session file URLs, or \`rootId\` + \`relativePath\` for fi
     })
     .refine(
       (data) => {
-        // Must provide either `url` OR both `rootId`+`relativePath`
+        // url alone, rootId+relativePath, or a bare session relativePath are all valid
         if (data.url) return true;
-        return Boolean(data.rootId && data.relativePath);
+        return Boolean(data.relativePath);
       },
       {
         message:
-          "Either `url` (for uploaded files) or both `rootId` and `relativePath` (for directory files) are required.",
+          "Either `url` (for chat file URLs), a bare `relativePath` (for a session sandbox file like `canvas/movie-db/report.pdf`), or both `rootId` and `relativePath` (for directory files) are required.",
       },
     ),
   execute: async ({
     rootId,
     relativePath,
     url,
+    _conversationId,
   }: {
     rootId?: number;
     relativePath?: string;
     url?: string;
+    _conversationId?: number;
   }) => {
     if (url) {
       // Read from chat upload URL. Documents have no pagination, so use a
@@ -181,21 +183,36 @@ Pass \`url\` for chat/session file URLs, or \`rootId\` + \`relativePath\` for fi
       return truncateToolResult(result, 100_000);
     }
 
-    if (!rootId || !relativePath) {
+    let targetPath: string;
+    if (rootId) {
+      if (!relativePath) {
+        throw new Error(
+          "`rootId` requires a `relativePath` — pass the path within the root.",
+        );
+      }
+      const roots = await getPermittedRoots();
+      if (roots.length === 0) {
+        throw new Error(
+          "No directories configured. Add a directory in Settings > Directories first.",
+        );
+      }
+      const root = await getRootById(rootId);
+      targetPath = await resolvePath(root, relativePath);
+    } else if (relativePath) {
+      // Bare relativePath (no rootId, no url) → session sandbox file
+      if (!_conversationId) {
+        throw new Error(
+          "A bare `relativePath` refers to a session sandbox file, but no conversation is available here. Pass the file's `url` (e.g. /api/chat/{id}/session-files/...) or both `rootId` and `relativePath` instead.",
+        );
+      }
+      const { resolveSessionPath } = await import("@/lib/session-files/storage");
+      targetPath = await resolveSessionPath(_conversationId, relativePath);
+    } else {
       throw new Error(
-        "Either `url` (for uploaded files) or both `rootId` and `relativePath` (for directory files) are required.",
+        "Either `url` (for chat file URLs), a bare `relativePath` (for a session sandbox file like `canvas/movie-db/report.pdf`), or both `rootId` and `relativePath` (for directory files) are required.",
       );
     }
 
-    const roots = await getPermittedRoots();
-    if (roots.length === 0) {
-      throw new Error(
-        "No directories configured. Add a directory in Settings > Directories first.",
-      );
-    }
-
-    const root = await getRootById(rootId);
-    const targetPath = await resolvePath(root, relativePath);
     const stats = await fs.stat(targetPath);
 
     if (!stats.isFile()) {
@@ -266,12 +283,24 @@ async function importMammoth(): Promise<{
  * Build document-reading tools.
  *
  * `read_document` is always included because it now supports URL-based usage
- * (chat uploads) that doesn't require a directory root.
+ * (chat uploads) that doesn't require a directory root. When a
+ * `conversationId` is provided, the conversation id is injected into the
+ * tool's args so a bare session-relative path (e.g.
+ * `canvas/movie-db/report.pdf`) can be resolved against this conversation's
+ * sandbox.
  */
-export async function buildDocumentReaderTools(): Promise<
-  Record<string, any>
-> {
+export async function buildDocumentReaderTools(
+  conversationId?: number,
+): Promise<Record<string, any>> {
+  const tool =
+    conversationId !== undefined
+      ? {
+          ...readDocumentTool,
+          execute: (args: Record<string, unknown>) =>
+            readDocumentTool.execute({ ...args, _conversationId: conversationId }),
+        }
+      : readDocumentTool;
   return {
-    read_document: readDocumentTool,
+    read_document: tool,
   };
 }

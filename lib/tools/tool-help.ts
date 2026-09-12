@@ -104,6 +104,19 @@ The user can tag which tools to use with \`@tool\` markers:
 2. Prefer those exact tool names when fulfilling the request.
 3. If a tagged tool is not in your current tool list, tell the user it isn't available (it may be disabled in Settings).`,
 
+  "@SKILL-references": `## @skill references — skill markers in user messages
+
+The user can tag an installed skill to force it onto the current request with a \`@skill\` marker (the \`/skill\` command inserts it):
+
+| User types | Meaning |
+|---|---|
+| \`@skill react-best-practices@vercel-labs/agent-skills\` | Follow this skill's instructions for the request |
+
+### How to resolve:
+1. When a request contains \`@skill <ref>\`, the tagged skill's full instruction file is ALREADY inlined in the \`## Tagged skill\` section of your system prompt — follow it exactly; do not re-discover it with \`load_skill\` unless you need to read its supporting files.
+2. Ref may be \`name@repo\`, a bare name, or a numeric skill id.
+3. If the tagged skill is disabled or not installed, tell the user it isn't available and how to enable/install it (Settings > Skills).`,
+
   "memory": `## Memory system — tools and usage
 
 **Tools available:**
@@ -324,45 +337,45 @@ Results are already localized automatically: the \`country\` for top headlines a
 
 Note: \`country\` and \`sources\` cannot be used together. \`category\` and \`sources\` also cannot be used together.`,
 
-  "firecrawl": `## Firecrawl tools (when configured)
+  "web-search": `## Unified web search
 
-If the user has configured a Firecrawl API key, you have access to:
+Use \`web_search\` for all internet searches. It tries providers sequentially:
+1. Self-hosted SearXNG (\`SEARXNG_URL\`, default \`http://127.0.0.1:3105\`)
+2. Brave Search, only when configured and enabled
+3. Firecrawl, only when configured and enabled
+
+The tool stops at the first provider that returns usable results. It does not issue parallel requests, which keeps resource usage low on small servers.
+
+| Parameter | Purpose |
+|---|---|
+| \`query\` | Specific search query |
+| \`count\` | 1–20 results, default 10 |
+| \`category\` | \`general\`, \`news\`, or \`images\` |
+| \`language\` | Language code such as \`en\` or \`en-US\` |
+| \`page\` | Result page, 1–5 |
+| \`timeRange\` | \`day\`, \`month\`, or \`year\` |
+| \`safeSearch\` | 0 off, 1 moderate, 2 strict |
+
+Use \`web_fetch\` afterward when the answer requires the full content of a returned page.
+
+### Firecrawl page tools (when configured)
+\`fc_scrape\`, \`fc_crawl\`, \`fc_interact\`, and \`fc_stop_interaction\` remain available for advanced extraction and browser interaction.`,
+
+  "firecrawl": `## Firecrawl page tools (when configured)
+
+Firecrawl is no longer a separate search tool. Its remaining tools are:
 | Tool | Parameters | Purpose |
 |---|---|---|
-| \`fc_search\` | \`query\`, \`limit\`, \`sources\` | Web search using Firecrawl. |
 | \`fc_scrape\` | \`url\`, \`formats\`, \`onlyMainContent\` | Scrape a single URL as markdown. |
 | \`fc_crawl\` | \`url\`, \`maxPages\`, \`includePaths\`/ \`excludePaths\` | Crawl a multi-page website. |
 | \`fc_interact\` | \`scrapeId\`, \`prompt\` or \`code\` | Interact with a live browser session. |
 | \`fc_stop_interaction\` | \`scrapeId\` | Stop an active browser interaction. |
 
-### Firecrawl interaction workflow:
-1. Call \`fc_scrape\` on a URL to get a \`scrapeId\`.
-2. Call \`fc_interact\` with that \`scrapeId\` and a prompt or code.
-3. Chain multiple interactions — the session persists.
-4. Call \`fc_stop_interaction\` when done to clean up.`,
+Search requests should use \`web_search\`, which automatically falls back to Firecrawl after SearXNG and Brave.`,
 
-  "brave-search": `## Brave Search tool (when configured)
+  "brave-search": `## Brave Search fallback
 
-If the user has configured a Brave Search API key, you have access to:
-| Tool | Parameters | Purpose |
-|---|---|---|
-| \`brave_web_search\` | \`query\` (required), \`count\` (optional, default 10, max 20) | Search the web using Brave Search. |
-| \`brave_image_search\` | \`query\` (required), \`count\` (optional, default 10, max 20) | Search for images across the web using Brave Search. |
-
-### When to use:
-- **General web search** — Use \`brave_web_search\` when you need current information from the web.
-- **Images / pictures / visual examples** — Use \`brave_image_search\` when the user wants to SEE something (\"show me pictures of X\", \"what does X look like\", \"find photos of Y\"). Each result includes a clickable thumbnail that opens the full image in a new tab, plus the source page URL. Only call it when images are actually relevant — not for ordinary text/web searches.
-- **Complement with web_fetch** — After getting search results, use \`web_fetch\` to read specific pages.
-- **Compare with Firecrawl** — If Firecrawl is also configured, use Firecrawl (\`fc_search\`/\`fc_scrape\`) for more advanced scraping and crawling. Use Brave for quick, simple web searches.
-
-### Localization:
-Results are automatically localized to the user's country and language (derived from their browser locale/timezone), so searches return results relevant to their region.
-
-### Example:
-\`\`\`
-brave_web_search({ query: "React 19 release date features", count: 5 })
-brave_image_search({ query: "Art Nouveau architecture", count: 10 })
-\`\`\``,
+Brave is not called directly by the model. When configured and enabled, it is used automatically by \`web_search\` only after SearXNG fails. Its API key is stored under Settings > Tools > Brave Search Fallback.`,
 
   "notion": `## Notion tools (when configured)
 
@@ -556,6 +569,12 @@ write_file({ rootId: 1, relativePath: "src/components/Header.tsx", content: "...
 
 For advanced scraping/crawling, use the Firecrawl tools instead (if configured).`,
 
+  "http-request": `## HTTP Request tool
+
+Use \`http_request\` when you need an API or website request beyond a simple public GET. It supports \`GET\`, \`POST\`, \`PUT\`, \`PATCH\`, and \`DELETE\`, optional string headers, and either a raw string body or a JSON object/array body. It returns the status, response headers, content type, and a truncated response body.
+
+Use \`web_fetch\` for straightforward public reads. HTTP requests use the conversation's Request access setting: Safe mode blocks localhost, private/link-local networks, and metadata services; Full mode allows them. Plan mode permits GET only. Never include secrets in a request unless the user explicitly provided and authorized them.`,
+
   "mcp-tools": `## MCP tools
 
 MCP servers provide additional tools beyond the built-in ones. Each MCP tool is namespaced with its server name like \`serverName__toolName\`.
@@ -586,15 +605,11 @@ MCP tools are automatically loaded when you start a conversation and available a
 
   "start-of-conversation": `## Start of conversation — gather context before responding
 
-When the user sends their **first message** in a new conversation, call these tools **together** (in parallel):
+On a new conversation, use the always-loaded \`get_time_details\` tool when the answer needs the current date, time, or timezone. Use \`get_device_details\` when the user asks about their device or environment.
 
-1. **\`get_time_details\`** — Find out current date, time, timezone. Tailor time-aware responses.
-2. **\`query_recent_changes\`** — See what files the user has been working on.
-3. **\`get_recent_memories\`** — Remind yourself of saved facts about the user.
+Memory, file-index, and filesystem tools are loaded on demand. If the first message needs one of them, call \`load_tool_groups({ groups: ["memory"] })\`, \`load_tool_groups({ groups: ["file_index"] })\`, or \`load_tool_groups({ groups: ["fs_read"] })\` first, then continue with the relevant tool. Do not call an unloaded tool.
 
-Then use what you learned to craft a personalized, context-aware response.
-
-**Note:** If the user's message is very urgent (e.g. "Help!"), skip context gathering and reply directly.`,
+Then use what you learned to craft the response. If the user's message is very urgent (e.g. "Help!"), skip context gathering and reply directly.`,
 
   "file-attachments": `## File attachments — how to handle uploaded files
 
@@ -764,18 +779,27 @@ A canvas is DIFFERENT from \`create_visual\` (a static inline chart/card) and fr
 | \`canvas_create\` | \`name\`, \`description?\`, \`entryFile?\` | Establish a canvas project (writes a starter \`index.html\` + manifest) and return its slug. |
 | \`canvas_add_file\` | \`slug\`, \`name\` | Scaffold a placeholder file inside an existing canvas. |
 | \`canvas_list\` | — | List every canvas in this conversation. |
+| \`canvas_review\` | \`slug?\`, \`saveScreenshot?\`, \`fullPage?\` | Render the canvas headlessly and report broken images, console errors, failed requests, and overflow. With \`saveScreenshot: true\` it also saves a timestamped PNG and ATTACHES it to the result as an image you can SEE — use that to judge the visual design, not just brokenness. **The render is a point-in-time snapshot: call it AFTER your final edits, and re-run it after any further edit — never show an earlier review's screenshot as the current state.** |
 | \`canvas_open\` | \`slug\` | Open a canvas in the interactive panel (live preview + code editor). |
 
 ### Standard workflow
 1. **\`canvas_create({ name, description, entryFile })\`** — establishes the project and returns the slug.
 2. **Write the project files** with \`session_file_write\` / \`session_file_edit\` under the **\`canvas/{slug}/\`** prefix (e.g. \`canvas/{slug}/index.html\`, \`canvas/{slug}/style.css\`, \`canvas/{slug}/script.js\`, plus any assets). Always forward slashes.
-3. **\`canvas_open({ slug })\`** — present it in the panel. **Always end by opening the canvas** so the user sees the live result.
+3. **\`canvas_review({ slug })\`** — render it headlessly and fix everything it flags (broken images, JS errors, 404s, overflow). Re-run until it reports clean. **Run it as the LAST canvas tool call — the render reflects the files at call time, so any edit after a review requires another review before presenting.**
+4. **\`canvas_review({ slug, saveScreenshot: true })\`** — once the report is clean, capture the page: the tool saves a timestamped PNG (session sandbox \`browser/…\`) and ATTACHES it to the result as an image you can see. **Look at it** and judge the real design against the request — layout, spacing, visual hierarchy, richness (a "Netflix-like" page must not be a bare text grid). Pass \`fullPage: true\` for long pages. Fix what falls short with \`session_file_edit\`, then re-review with a fresh screenshot until it genuinely looks the part.
+5. **\`canvas_open({ slug })\`** — present it in the panel, and embed the LATEST review screenshot URL as \`![review screenshot](url)\` in your final reply. **Always end by opening the canvas** so the user sees the live result.
+
+### Reading / re-reading canvas files while editing
+- The write/edit tool results and the \`canvas_open\` / \`canvas_create\` file listings include a **\`url\`** for every file: \`/api/chat/{conversationId}/session-files/canvas/{slug}/{file}\`. Use these canonical URLs when you need to pass a file to a URL-based tool — e.g. \`read_file({ url })\`, \`read_media({ url })\`, \`web_fetch({ url })\` — or to embed/link it in your reply.
+- **Bare sandbox paths also work**: \`read_file\`, \`read_media\`, and \`read_document\` accept the bare relative path (no rootId) — e.g. \`read_file({ relativePath: "canvas/movie-db/style.css" })\` — and resolve it inside this conversation's sandbox automatically. The sandbox tool \`session_file_read({ path: "canvas/{slug}/{file}" })\` works too.
 
 ### Design guidance
 - Ground colors in the subject; 2-3 colors max; clean, intentional whitespace.
 - Make the entry file (default \`index.html\`) self-contained or reference the sibling files with relative paths (\`./style.css\`, \`./script.js\`).
 - Prioritize a working interactive experience (JS included) over long prose.
-- To iterate on an existing canvas: \`canvas_list\`, edit files with \`session_file_edit\` under the canvas prefix, then \`canvas_open\` again to refresh the preview.`,
+- **Never hotlink placeholder-image services** (via.placeholder.com is OFFLINE; many others are unreliable) for visuals the design depends on — a broken image ruins the page. Prefer self-contained visuals: CSS gradients, inline SVG, canvas-drawn art, or emoji. If real photos are required, use a stable host the user can reach.
+- When the user says something like “Netflix-like”, that means hero/backdrop sections, rows or a rich grid with real-looking poster visuals, hover states, search/filters — build the full experience they describe, not a bare text grid.
+- To iterate on an existing canvas: \`canvas_list\`, edit files with \`session_file_edit\` under the canvas prefix, run \`canvas_review\` (add \`saveScreenshot: true\` so you can SEE the rendered result) to verify, then \`canvas_open\` again to refresh the preview.`,
 
   "elevenlabs": `## ElevenLabs Voice (when configured)
 
@@ -835,12 +859,17 @@ const KEYWORD_SYNONYMS: Record<string, string> = {
   "@allow": "@TOOL-references",
   "allow tool": "@TOOL-references",
   "allowed tool": "@TOOL-references",
+  "@skill": "@SKILL-references",
+  "skill tag": "@SKILL-references",
+  "skill marker": "@SKILL-references",
+  "tagged skill": "@SKILL-references",
   schedule: "scheduled-tasks",
   scheduling: "scheduled-tasks",
   task: "scheduled-tasks",
   "news api": "newsapi",
   news: "newsapi",
-  "web search": "firecrawl",
+  "web search": "web-search",
+  search: "web-search",
   scraping: "firecrawl",
   crawl: "firecrawl",
   brave: "brave-search",
@@ -940,7 +969,8 @@ const KEYWORD_SYNONYMS: Record<string, string> = {
   mcp: "mcp-tools",
   "external tool": "mcp-tools",
   "fetch url": "web-fetch",
-  "http request": "web-fetch",
+  "http request": "http-request",
+  "api request": "http-request",
   routine: "routines",
   routines: "routines",
   "create routine": "routines",
@@ -999,7 +1029,7 @@ function getAvailableTopicsText(): string {
 }  // Use a shorter inline list for the tool description (the full list is in the
   // system prompt and is returned when the user asks for an invalid topic)
   const SHORT_TOPIC_LIST =
-    "filesystem, memory, profile, todo, file-index, ask-questions, suggest-followups, agent-spawner, scheduled-tasks, routines, delay, create-visual, session-files, canvas, newsapi, firecrawl, brave-search, notion, context7, elevenlabs, playwright, code-execution, document-reader, media, @FILE-references, @MCP-references, @TOOL-references, scaffolding, absolute-paths, web-fetch, mcp-tools, file-attachments, start-of-conversation";
+    "filesystem, memory, profile, todo, file-index, ask-questions, suggest-followups, agent-spawner, scheduled-tasks, routines, delay, create-visual, session-files, canvas, newsapi, web-search, firecrawl, brave-search, notion, context7, elevenlabs, playwright, code-execution, document-reader, media, @FILE-references, @MCP-references, @TOOL-references, @SKILL-references, scaffolding, absolute-paths, web-fetch, mcp-tools, file-attachments, start-of-conversation";
 
 // ---------------------------------------------------------------------------
 // Cached listing for list_available_tools — built once from TOOL_CATALOG
@@ -1025,13 +1055,15 @@ const CATEGORY_LABELS: Record<string, string> = {
   document_reader: "Document reader",
   memory: "Memory & recall",
   profile: "User profile",
-  brave_search: "Web search (Brave)",
+  web_search: "Unified web search",
+  brave_search: "Web search fallback (Brave)",
   notion: "Notion workspace",
   context7: "Library documentation (Context7)",
   file_index: "File index lookup",
   delay: "Delay / wait",
   ask_questions: "Ask user questions",
   web_fetch: "Web fetching",
+  http_request: "Advanced HTTP requests",
   todo: "Todo list",
   agent_spawner: "Agent spawning",
   routines: "Routines",
@@ -1040,7 +1072,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   elevenlabs: "ElevenLabs voice",
   create_visual: "Dynamic visuals (SVG / HTML)",
   session_files: "Session files (per-chat sandbox)",
-  firecrawl: "Web scraping (Firecrawl)",
+  firecrawl: "Web scraping / search fallback (Firecrawl)",
   playwright: "Browser automation (Playwright)",
   media_tools: "Media processing (ffmpeg)",
 };
@@ -1052,6 +1084,7 @@ const HELP_TOPIC_MAP: Record<string, string | null> = {
   document_reader: "document-reader",
   memory: "memory",
   profile: "profile",
+  web_search: "web-search",
   brave_search: "brave-search",
   notion: "notion",
   context7: "context7",
@@ -1059,6 +1092,7 @@ const HELP_TOPIC_MAP: Record<string, string | null> = {
   delay: "delay",
   ask_questions: "ask-questions",
   web_fetch: "web-fetch",
+  http_request: "http-request",
   todo: "todo",
   agent_spawner: "agent-spawner",
   routines: "routines",

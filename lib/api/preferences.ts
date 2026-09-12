@@ -13,7 +13,25 @@ export type UserPreferences = {
   links: Record<string, string>;
   accentColor: string;
   backgroundColor: string;
+  enableNewModels: boolean;
+  remiApiUrl: string;
+  remiApiEnabled: boolean;
+  cardDisplayModes: Record<string, string>;
 };
+
+export const CARD_IDS = [
+  "weather",
+  "timezone",
+  "currency",
+  "map",
+  "crypto",
+  "news",
+  "stock",
+] as const;
+export type CardId = (typeof CARD_IDS)[number];
+
+export const CARD_DISPLAY_CHOICES = ["card", "text"] as const;
+export type CardDisplayMode = (typeof CARD_DISPLAY_CHOICES)[number];
 
 async function get(): Promise<UserPreferences> {
   const res = await fetch("/api/preferences");

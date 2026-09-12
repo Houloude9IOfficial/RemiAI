@@ -49,13 +49,13 @@ export async function POST(request: Request) {
     }
 
     // Ensure avatar directory exists
-    await fs.mkdir(AVATAR_DIR, { recursive: true });
+    await fs.mkdir(/*turbopackIgnore: true*/ AVATAR_DIR, { recursive: true });
 
     // Generate a unique filename
     const ext = file.name.split(".").pop() ?? "jpg";
     const uuid = crypto.randomUUID();
     const safeName = `${uuid}.${ext.replace(/[^a-zA-Z0-9]/g, "")}`;
-    const filePath = path.join(AVATAR_DIR, safeName);
+    const filePath = path.join(/*turbopackIgnore: true*/ AVATAR_DIR, safeName);
 
     // Write file to disk
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -94,7 +94,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "Invalid URL" }, { status: 400 });
     }
 
-    const filePath = path.join(AVATAR_DIR, decodeURIComponent(filename));
+    const filePath = path.join(/*turbopackIgnore: true*/ AVATAR_DIR, decodeURIComponent(filename));
 
     try {
       await fs.unlink(filePath);

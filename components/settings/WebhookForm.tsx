@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -67,7 +67,15 @@ function CopyButton({ text, label }: { text: string; label: string }) {
   );
 }
 
-export function WebhookForm({
+export function WebhookForm(props: {
+  initialWebhook?: Webhook;
+  onCancelEdit?: () => void;
+}) {
+  const key = props.initialWebhook ? String(props.initialWebhook.id) : "new";
+  return <WebhookFormContent key={key} {...props} />;
+}
+
+function WebhookFormContent({
   initialWebhook,
   onCancelEdit,
 }: {
@@ -77,14 +85,22 @@ export function WebhookForm({
   const queryClient = useQueryClient();
   const isEditing = !!initialWebhook;
 
-  const [name, setName] = useState("");
-  const [systemPrompt, setSystemPrompt] = useState("");
-  const [conversationId, setConversationId] = useState<number | "">("");
-  const [conditions, setConditions] = useState<ConditionRow[]>([]);
-  const [respondSync, setRespondSync] = useState(false);
-  const [enabled, setEnabled] = useState(true);
-  const [secret, setSecret] = useState<string | null>(null); // shown once on create / from edit row
-  const [deliveryUrl, setDeliveryUrl] = useState("");
+  const [name, setName] = useState(initialWebhook?.name ?? "");
+  const [systemPrompt, setSystemPrompt] = useState(initialWebhook?.systemPrompt ?? "");
+  const [conversationId, setConversationId] = useState<number | "">(initialWebhook?.conversationId ?? "");
+  const [conditions, setConditions] = useState<ConditionRow[]>(
+    (initialWebhook?.conditions ?? []).map((c) => ({
+      field: c.field,
+      op: c.op,
+      value: c.value ?? "",
+    })),
+  );
+  const [respondSync, setRespondSync] = useState(initialWebhook?.respondSync ?? false);
+  const [enabled, setEnabled] = useState(initialWebhook?.enabled ?? true);
+  const [secret, setSecret] = useState<string | null>(initialWebhook?.secret ?? null); // shown once on create / from edit row
+  const [deliveryUrl, setDeliveryUrl] = useState(
+    initialWebhook ? `${window.location.origin}/api/webhooks/${initialWebhook.id}` : "",
+  );
 
   const { data: conversations = [] } = useQuery({
     queryKey: ["conversations"],
@@ -96,29 +112,6 @@ export function WebhookForm({
     for (const c of conversations) map.set(c.id, c);
     return { map, list: conversations };
   }, [conversations]);
-
-  // Populate form when editing
-  useEffect(() => {
-    if (initialWebhook) {
-      setName(initialWebhook.name);
-      setSystemPrompt(initialWebhook.systemPrompt);
-      setConversationId(initialWebhook.conversationId ?? "");
-      setConditions(
-        (initialWebhook.conditions ?? []).map((c) => ({
-          field: c.field,
-          op: c.op,
-          value: c.value ?? "",
-        })),
-      );
-      setRespondSync(initialWebhook.respondSync);
-      setEnabled(initialWebhook.enabled);
-      setSecret(initialWebhook.secret);
-      setDeliveryUrl(`${window.location.origin}/api/webhooks/${initialWebhook.id}`);
-    } else {
-      setSecret(null);
-      setDeliveryUrl("");
-    }
-  }, [initialWebhook]);
 
   const resetForm = () => {
     setName("");

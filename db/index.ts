@@ -1,5 +1,6 @@
 import path from "node:path";
 import fs from "node:fs";
+import crypto from "node:crypto";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
@@ -88,7 +89,7 @@ const sqlite = openDatabase();
 
 const db = drizzle(sqlite, { schema });
 
-let initialized = false;
+let initializationPromise: Promise<void> | null = null;
 
 type TableInfoRow = { name: string };
 
@@ -107,6 +108,122 @@ function tableExists(tableName: string): boolean {
 }
 
 /**
+ * Mark migrations as applied when an older compatibility repair already
+ * created every column in an additive migration. This prevents Drizzle from
+ * retrying a partially-applied migration and failing on "duplicate column"
+ * after a restart. Only migrations made exclusively of ALTER TABLE ... ADD
+ * COLUMN statements are eligible; CREATE/UPDATE/data migrations still run
+ * through Drizzle normally.
+ */
+function reconcileAdditiveMigrations(): void {
+  const migrationsDir = path.join(/*turbopackIgnore: true*/ process.cwd(), "db/migrations");
+  const journalPath = path.join(migrationsDir, "meta/_journal.json");
+  if (!fs.existsSync(journalPath)) return;
+
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS __drizzle_migrations (
+    id SERIAL PRIMARY KEY,
+    hash TEXT NOT NULL,
+    created_at NUMERIC
+  )`);
+
+  const journal = JSON.parse(fs.readFileSync(journalPath, "utf8")) as {
+    entries?: Array<{ tag: string; when: number }>;
+  };
+  const hasMigration = sqlite.prepare(
+    "SELECT 1 FROM __drizzle_migrations WHERE hash = ? OR created_at = ? LIMIT 1",
+  );
+  const insertMigration = sqlite.prepare(
+    "INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)",
+  );
+
+  for (const entry of journal.entries ?? []) {
+    const filePath = path.join(migrationsDir, `${entry.tag}.sql`);
+    if (!fs.existsSync(filePath)) continue;
+    const sqlText = fs.readFileSync(filePath, "utf8");
+    const statements = sqlText.split("--> statement-breakpoint").map((s) => s.trim()).filter(Boolean);
+    const additions: Array<{ table: string; column: string }> = [];
+    let additiveOnly = statements.length > 0;
+    for (const statement of statements) {
+      const match = statement.match(
+        /^ALTER\s+TABLE\s+[`"]?([^`"\s]+)[`"]?\s+ADD(?:\s+COLUMN)?\s+[`"]?([^`"\s(]+)[`"]?/i,
+      );
+      if (!match) {
+        additiveOnly = false;
+        break;
+      }
+      additions.push({ table: match[1], column: match[2] });
+    }
+    if (!additiveOnly || additions.length === 0) continue;
+    if (!additions.every(({ table, column }) => tableExists(table) && tableColumns(table).has(column))) continue;
+
+    const hash = crypto.createHash("sha256").update(sqlText).digest("hex");
+    if (!hasMigration.get(hash, entry.when)) insertMigration.run(hash, entry.when);
+  }
+}
+
+/**
+ * Ensure the RemiAPI preference columns exist (migration 0043). Extracted so
+ * routes can self-heal immediately on a SQLITE_ERROR without waiting for the
+ * next server restart / instrumentation `register()` to run.
+ */
+export function ensureRemiPrefsColumns(): void {
+  if (!tableExists("user_preferences")) return;
+  let cols = tableColumns("user_preferences");
+  const ensure = (col: string, ddl: string) => {
+    if (cols.has(col)) return;
+    try {
+      sqlite.exec(ddl);
+    } catch (e) {
+      // Another concurrent request may have just added it — ignore duplicate.
+      const msg = e instanceof Error ? e.message.toLowerCase() : String(e).toLowerCase();
+      if (!msg.includes("duplicate column")) throw e;
+    }
+    cols = tableColumns("user_preferences");
+  };
+  ensure("remi_api_url", 'ALTER TABLE "user_preferences" ADD COLUMN "remi_api_url" TEXT NOT NULL DEFAULT \'\'');
+  ensure("remi_api_enabled", 'ALTER TABLE "user_preferences" ADD COLUMN "remi_api_enabled" INTEGER NOT NULL DEFAULT 1');
+  ensure("card_display_modes", 'ALTER TABLE "user_preferences" ADD COLUMN "card_display_modes" TEXT NOT NULL DEFAULT \'{}\'');
+}
+
+export function ensureMemoryColumns(): void {
+  if (!tableExists("memories")) return;
+  let cols = tableColumns("memories");
+  const ensure = (col: string, ddl: string) => {
+    if (cols.has(col)) return;
+    try {
+      sqlite.exec(ddl);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message.toLowerCase() : String(e).toLowerCase();
+      if (!msg.includes("duplicate column")) throw e;
+    }
+    cols = tableColumns("memories");
+  };
+  ensure("category", "ALTER TABLE \"memories\" ADD COLUMN \"category\" TEXT NOT NULL DEFAULT 'general'");
+  ensure("memory_date", "ALTER TABLE \"memories\" ADD COLUMN \"memory_date\" TEXT");
+  try {
+    sqlite.exec("UPDATE \"memories\" SET \"category\" = 'general' WHERE \"category\" IS NULL OR \"category\" = ''");
+  } catch {}
+}
+
+/** Keep heartbeat settings compatible with databases upgraded from 0047. */
+export function ensureHeartbeatColumns(): void {
+  if (!tableExists("heartbeats")) return;
+  let columns = tableColumns("heartbeats");
+  const ensure = (column: string, definition: string) => {
+    if (columns.has(column)) return;
+    try {
+      sqlite.exec(`ALTER TABLE "heartbeats" ADD COLUMN "${column}" ${definition}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+      if (!message.includes("duplicate column")) throw error;
+    }
+    columns = tableColumns("heartbeats");
+  };
+  ensure("fallback_mode", "TEXT NOT NULL DEFAULT 'fail'");
+  ensure("denied_tool_names", "TEXT NOT NULL DEFAULT '[]'");
+}
+
+/**
  * Repair schema drift from installations whose migration journal is ahead of
  * this checkout. Drizzle orders migrations by timestamp, so an older local
  * migration can be skipped even when a required table/column is absent.
@@ -116,6 +233,7 @@ function tableExists(tableName: string): boolean {
  * `current_version` → `version` when those legacy columns exist.
  */
 function repairSchemaCompatibility(): void {
+  ensureHeartbeatColumns();
   if (tableExists("conversations")) {
     const columns = tableColumns("conversations");
     if (!columns.has("quality_policy")) {
@@ -130,6 +248,26 @@ function repairSchemaCompatibility(): void {
     if (!columns.has("memory_enabled")) {
       sqlite.exec('ALTER TABLE "conversations" ADD COLUMN "memory_enabled" INTEGER NOT NULL DEFAULT 1');
     }
+    if (!tableColumns("conversations").has("request_mode")) {
+      sqlite.exec('ALTER TABLE "conversations" ADD COLUMN "request_mode" TEXT NOT NULL DEFAULT \'sandboxed\'');
+    }
+    // Older builds stored HTTP access separately. Preserve any previously
+    // granted Full access when consolidating both capabilities into bash_mode.
+    if (tableColumns("conversations").has("request_mode")) {
+      sqlite.exec('UPDATE "conversations" SET "bash_mode" = \'full\' WHERE "request_mode" = \'full\' AND "bash_mode" <> \'full\'');
+    }
+  }
+
+  if (tableExists("user_preferences")) {
+    const columns = tableColumns("user_preferences");
+    if (!columns.has("enable_new_models")) {
+      sqlite.exec('ALTER TABLE "user_preferences" ADD COLUMN "enable_new_models" INTEGER NOT NULL DEFAULT 1');
+    }
+    ensureRemiPrefsColumns();
+  }
+
+  if (tableExists("memories")) {
+    ensureMemoryColumns();
   }
 
   if (tableExists("provider_models")) {
@@ -218,6 +356,23 @@ function repairSchemaCompatibility(): void {
         FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE CASCADE
       );
       CREATE INDEX "source_claims_conversation_id_created_at_idx" ON "source_claims" ("conversation_id", "created_at");
+    `);
+  }
+
+  if (!tableExists("push_subscriptions")) {
+    sqlite.exec(`
+      CREATE TABLE "push_subscriptions" (
+        "id" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+        "account_id" INTEGER NOT NULL,
+        "endpoint" TEXT NOT NULL UNIQUE,
+        "p256dh" TEXT NOT NULL,
+        "auth" TEXT NOT NULL,
+        "user_agent" TEXT,
+        "created_at" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updated_at" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY ("account_id") REFERENCES "auth_accounts"("id") ON DELETE CASCADE
+      );
+      CREATE INDEX "push_subscriptions_account_id_idx" ON "push_subscriptions" ("account_id");
     `);
   }
 
@@ -331,8 +486,12 @@ function repairSchemaCompatibility(): void {
  * multiple times or from multiple entry points.
  */
 export async function initializeApp(): Promise<void> {
-  if (initialized) return;
-  initialized = true;
+  if (initializationPromise) return initializationPromise;
+  initializationPromise = initializeAppInternal();
+  return initializationPromise;
+}
+
+async function initializeAppInternal(): Promise<void> {
 
   // Defensive: Next.js already skips the instrumentation `register()` hook
   // during `next build`, but never run these in a build context regardless.
@@ -341,7 +500,13 @@ export async function initializeApp(): Promise<void> {
   // Auto-run migrations on startup so the app works out of the box
   // without requiring a separate `npm run db:migrate` step.
   try {
-    migrate(db, { migrationsFolder: path.join(process.cwd(), "db/migrations") });
+    // Reconcile columns created by a previous compatibility repair before
+    // Drizzle sees the migration. This keeps partially upgraded databases
+    // from failing on a duplicate-column ALTER TABLE.
+    reconcileAdditiveMigrations();
+    migrate(db, {
+      migrationsFolder: path.join(/*turbopackIgnore: true*/ process.cwd(), "db/migrations"),
+    });
   } catch (e) {
     // If the migration table is out of sync, the compatibility repair below
     // still creates/adds the current app's required structures without
@@ -356,6 +521,20 @@ export async function initializeApp(): Promise<void> {
     repairSchemaCompatibility();
   } catch (e) {
     console.error("[db] Schema compatibility repair failed:", e);
+  }
+
+  try {
+    reconcileAdditiveMigrations();
+    // Retry after reconciliation so a partially repaired migration chain can
+    // continue applying newer migrations automatically.
+    migrate(db, {
+      migrationsFolder: path.join(/*turbopackIgnore: true*/ process.cwd(), "db/migrations"),
+    });
+  } catch (e) {
+    console.warn(
+      "[db] Migration reconciliation warning — continuing with compatibility repair.",
+      e instanceof Error ? e.message : e,
+    );
   }
 
   // Clean up orphaned background agent tasks from any previous server session
@@ -404,7 +583,7 @@ export async function initializeApp(): Promise<void> {
 
   // Auto-refresh provider models every 5 minutes so newly released models
   // appear (and removed ones drop out) without user action. Keeps each
-  // model's enabled state — only new models get enabled.
+  // existing model's enabled state; new models follow the global preference.
   // Uses dynamic import to avoid circular dependency (refresh imports db).
   setTimeout(() => {
     import("@/lib/providers/refresh")

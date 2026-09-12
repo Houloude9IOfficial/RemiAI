@@ -1,7 +1,6 @@
 import { db } from "@/db";
 import { toolConfigs } from "@/db/schema";
-import { eq } from "drizzle-orm";
-import { buildBraveSearchTool } from "./brave-search";
+import { buildWebSearchTool } from "./web-search";
 import { buildNotionTools } from "./notion";
 import { buildContext7Tool } from "./context7";
 import { buildFirecrawlTools } from "./firecrawl";
@@ -14,7 +13,7 @@ import { isDemoMode } from "@/lib/demo-policy";
  * Only enabled tools with valid API keys are included.
  *
  * @param userContext - Optional user context (timezone, country, language)
- *   used to localize search results (Brave, NewsAPI) to the user's region.
+ *   used to localize search results (unified Web Search, NewsAPI) to the user's region.
  */
 export async function buildIntegrationTools(
   userContext?: UserContext,
@@ -22,14 +21,26 @@ export async function buildIntegrationTools(
   if (isDemoMode()) return {};
   const configs = await db.select().from(toolConfigs).all();
   const tools: Record<string, any> = {};
+  const braveConfig = configs.find((config) => config.toolId === "brave_search");
+  const firecrawlConfig = configs.find((config) => config.toolId === "firecrawl");
+
+  // Web search is always available through the local SearXNG endpoint. The
+  // optional API keys are passed only as fallbacks, in the requested order:
+  // SearXNG → Brave → Firecrawl.
+  tools.web_search = buildWebSearchTool({
+    braveApiKey:
+      braveConfig?.enabled && braveConfig.apiKey ? braveConfig.apiKey : undefined,
+    firecrawlApiKey:
+      firecrawlConfig?.enabled && firecrawlConfig.apiKey
+        ? firecrawlConfig.apiKey
+        : undefined,
+    userContext,
+  });
 
   for (const config of configs) {
     if (!config.enabled || !config.apiKey) continue;
 
     switch (config.toolId) {
-      case "brave_search":
-        Object.assign(tools, buildBraveSearchTool(config.apiKey, userContext));
-        break;
       case "notion":
         Object.assign(tools, buildNotionTools(config.apiKey));
         break;

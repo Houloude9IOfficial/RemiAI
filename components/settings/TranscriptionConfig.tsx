@@ -217,7 +217,7 @@ export function TranscriptionConfig() {
                   onChange={(e) => { setProviderId(e.target.value ? Number(e.target.value) : ""); setDirty(true); }}
                   className="flex h-8 w-full rounded-md border border-input bg-transparent px-3 py-1 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 >
-                  <option value="">Auto (conversation's provider)</option>
+                  <option value="">Auto (conversation&apos;s provider)</option>
                   {transcribeProviders.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.label} ({p.kind})

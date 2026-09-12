@@ -5,6 +5,7 @@ import { providerModels } from "@/db/schema";
 import { providerModelCreateSchema, providerModelsBatchUpdateSchema } from "@/lib/validation/schemas";
 import { jsonError } from "@/lib/validation/api";
 import { demoBlockedResponse, isDemoMode } from "@/lib/demo-policy";
+import { shouldEnableNewModels } from "@/lib/providers/model-preferences";
 
 export async function GET(
   _req: Request,
@@ -77,6 +78,7 @@ export async function POST(
         providerId: Number(id),
         modelId: body.modelId,
         label: body.label ?? null,
+        enabled: await shouldEnableNewModels(),
       })
       .returning()
       .get();

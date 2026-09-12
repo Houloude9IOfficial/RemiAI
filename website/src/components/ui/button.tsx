@@ -16,11 +16,11 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 
           // Variants
           variant === "primary" &&
-            "bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98]",
+            "bg-primary text-primary-foreground hover:bg-primary/90",
           variant === "secondary" &&
-            "bg-accent text-accent-foreground hover:bg-accent/80 active:scale-[0.98]",
+            "bg-accent text-accent-foreground hover:bg-accent/80",
           variant === "outline" &&
-            "border border-border bg-background text-foreground hover:bg-muted hover:border-border active:scale-[0.98]",
+            "border border-border bg-background text-foreground hover:bg-muted hover:border-border",
           variant === "ghost" &&
             "text-muted-foreground hover:bg-muted hover:text-foreground",
 

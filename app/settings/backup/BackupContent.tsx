@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import CenteredLayout from "@/components/layout/CenteredLayout";
 
 // ── Format helpers ─────────────────────────────────────────────────────────
 
@@ -148,10 +149,7 @@ export default function BackupContent() {
 
     try {
       const result = await backupApi.export(exportPassword, includeFiles);
-
-      const blob = new Blob([result.encrypted], {
-        type: "application/octet-stream",
-      });
+      const blob = await backupApi.download(result.downloadUrl);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -162,6 +160,14 @@ export default function BackupContent() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
+      try {
+        await backupApi.recordHistory(result.history);
+        refetchHistory();
+      } catch (historyError) {
+        console.warn("[backup] Failed to record backup history:", historyError);
+        toast.warning("Backup downloaded, but history could not be updated.");
+      }
+
       setExportResult({
         stats: result.stats.tables,
         uploads: result.stats.uploads,
@@ -169,7 +175,6 @@ export default function BackupContent() {
         size: result.size,
       });
 
-      refetchHistory();
       toast.success("Backup downloaded successfully!");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Export failed");
@@ -198,11 +203,10 @@ export default function BackupContent() {
     setIsImporting(true);
 
     try {
-      const result = await backupApi.import(importFile, importPassword);
-      toast.success("Backup restored successfully!", { duration: 8000 });
-      setImportFile(null);
-      setImportPassword("");
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      await backupApi.import(importFile, importPassword);
+      // Restoring revokes all existing sessions, so reload the root page and
+      // let the auth wall show the login screen when required.
+      window.location.href = "/";
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Import failed");
     } finally {
@@ -212,8 +216,9 @@ export default function BackupContent() {
 
   // ── Render ──────────────────────────────────────────────────────────────
   return (
-    <div className="flex max-w-3xl flex-col gap-8">
-      {/* Header */}
+    <CenteredLayout>
+      <div className="flex max-w-3xl flex-col gap-8">
+        {/* Header */}
       <div>
         <h1 className="text-lg font-semibold">Backup & Restore</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -502,7 +507,8 @@ export default function BackupContent() {
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
-    </div>
+        </Dialog>
+      </div>
+    </CenteredLayout>
   );
 }

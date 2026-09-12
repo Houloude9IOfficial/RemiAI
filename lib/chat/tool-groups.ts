@@ -38,32 +38,15 @@ import { asStringArray } from "@/lib/utils";
 
 /** Tool names that are always available, even on the simplest chat. */
 export const CORE_TOOLS: ReadonlySet<string> = new Set([
-  // context
+  "web_search",
+  "web_fetch",
   "get_time_details",
   "get_device_details",
-  // memory
-  "remember",
-  "get_recent_memories",
-  "search_memories",
-  // file index
-  "query_recent_changes",
-  "query_file_index",
-  // filesystem read basics (URL-capable + root discovery)
-  "list_permitted_roots",
-  "read_file",
-  // builtins
-  "delay",
-  "web_fetch",
-  "ask_questions",
-  "suggest_followups",
-  "send_notification",
-  "set_run_name",
   "get_tool_help",
   "list_available_tools",
   "load_tool_groups",
-  // skills (cheap, always available)
-  "list_skills",
-  "load_skill",
+  "ask_questions",
+  "suggest_followups",
 ]);
 
 interface ToolGroup {
@@ -107,6 +90,8 @@ export const CONDITIONAL_GROUPS: Record<string, ToolGroup> = {
   fs_read: {
     label: "filesystem-read",
     tools: [
+      "list_permitted_roots",
+      "read_file",
       "list_directory",
       "search_files",
       "glob_files",
@@ -118,6 +103,50 @@ export const CONDITIONAL_GROUPS: Record<string, ToolGroup> = {
       "image", "screenshot", "photo", "media", "folder", "directory",
       "project", "codebase", "file",
     ],
+  },
+  memory: {
+    label: "memory",
+    tools: ["remember", "update_memory", "get_recent_memories", "search_memories"],
+    keywords: [
+      "memory", "memories", "remember", "remember this", "save this about me",
+      "what do you know about me", "saved facts", "recall about me", "forget that",
+      "personal context", "my preferences", "update memory", "edit memory",
+      "category", "health", "work memory", "personal memory",
+    ],
+  },
+  file_index: {
+    label: "file-index",
+    tools: ["query_recent_changes", "query_file_index"],
+    keywords: [
+      "recent file changes", "recent changes", "what have i been working on",
+      "file index", "indexed files", "files i changed", "what changed",
+    ],
+  },
+  skills: {
+    label: "skills",
+    tools: ["list_skills", "load_skill"],
+    keywords: [
+      "skill", "skills", "install a skill", "agent skill", "skill instructions",
+      "load the skill", "available skills",
+    ],
+  },
+  notifications: {
+    label: "notifications",
+    tools: ["send_notification"],
+    keywords: [
+      "send me a notification", "notify me", "notification", "desktop notification",
+      "alert me",
+    ],
+  },
+  delay: {
+    label: "delay",
+    tools: ["delay"],
+    keywords: ["wait before", "wait between", "rate limit", "throttle", "delay"],
+  },
+  run_name: {
+    label: "run-name",
+    tools: ["set_run_name"],
+    keywords: ["name this chat", "rename this chat", "set the chat name", "conversation name"],
   },
   document_reader: {
     label: "document-reader",
@@ -210,6 +239,7 @@ export const CONDITIONAL_GROUPS: Record<string, ToolGroup> = {
       "canvas_add_file",
       "canvas_list",
       "canvas_open",
+      "canvas_review",
     ],
     keywords: [
       // Interactive / buildable deliverables — a canvas is a runnable,
@@ -280,7 +310,7 @@ export const CONDITIONAL_GROUPS: Record<string, ToolGroup> = {
   },
   web_search: {
     label: "web-search",
-    tools: ["brave_web_search", "brave_image_search"],
+    tools: ["web_search"],
     keywords: [
       // Explicit search requests
       "search the web", "search online", "google", "look it up", "look this up",
@@ -290,6 +320,8 @@ export const CONDITIONAL_GROUPS: Record<string, ToolGroup> = {
       "pictures of", "photos of", "images of", "picture of", "photo of",
       "image of", "show me a picture", "show me pictures", "show me photos",
       "show me images", "find images", "image search", "what does it look like",
+      // Place lookups benefit from one map card plus a small image result set.
+      "where is", "show me where", "location of", "locate", "directions to",
       // Current / time-sensitive / verifiable information
       "latest", "newest", "most recent", "as of", "right now", "nowadays",
       "this week", "this month", "this year", "today",
@@ -302,6 +334,15 @@ export const CONDITIONAL_GROUPS: Record<string, ToolGroup> = {
       "election", "stock", "stocks", "crypto", "weather", "score",
       // Comparison / research framing
       "compare", " vs ", "versus", "difference between", "pros and cons",
+    ],
+  },
+  http_request: {
+    label: "advanced-http-request",
+    tools: ["http_request"],
+    keywords: [
+      "http request", "https request", "api", "api request", "call an api", "call the api",
+      "send data", "post to", "put to", "patch", "delete request", "REST API",
+      "REST endpoint", "webhook", "request headers", "request body",
     ],
   },
   notion: {
@@ -328,7 +369,6 @@ export const CONDITIONAL_GROUPS: Record<string, ToolGroup> = {
   firecrawl: {
     label: "firecrawl",
     tools: [
-      "fc_search",
       "fc_scrape",
       "fc_crawl",
       "fc_interact",
@@ -363,6 +403,27 @@ export const CONDITIONAL_GROUPS: Record<string, ToolGroup> = {
       "subtitles", "transcript", "what did they say", "what was said",
       "what does the audio say", "caption this", "trim the", "trim video",
       "trim audio", "cut the video", "cut the audio",
+    ],
+  },
+  remi_cards: {
+    label: "remi-cards",
+    tools: [
+      "weather_card",
+      "timezone_card",
+      "currency_card",
+      "map_card",
+      "crypto_card",
+      "news_card",
+      "stock_card",
+    ],
+    keywords: [
+      "weather", "temperature", "forecast", "humidity", "wind speed", "how hot", "how cold",
+      "timezone", "time in", "what time is it in", "local time", "current time in",
+      "currency", "convert", "exchange rate", "usd to", "eur to", "jpy to", "gbp to", "convert usd",
+      "map", "where is", "locate", "address of", "coordinates", "geocode", "show me on a map",
+      "crypto", "bitcoin", "ethereum", "solana", "btc", "eth", "price of bitcoin", "price of eth",
+      "news", "headlines", "breaking news", "top headlines",
+      "stock", "ticker", "aapl", "tsla", "nvda", "stock price", "quote for", "nasdaq", "nyse",
     ],
   },
 };
@@ -577,9 +638,10 @@ export function filterTools(
  */
 const ALWAYS_LOADED_CHECKS: Array<[label: string, tool: string]> = [
   ["context", "get_time_details"],
-  ["memory", "remember"],
-  ["file-index", "query_recent_changes"],
-  ["builtin", "web_fetch"],
+  ["context", "get_device_details"],
+  ["web-search", "web_search"],
+  ["web-fetch", "web_fetch"],
+  ["assistant", "get_tool_help"],
 ];
 
 /**
@@ -602,7 +664,10 @@ export function buildToolAvailabilityNote(
     // (e.g. skip integrations with no API key configured).
     const present = group.tools.some((name) => tools[name] !== undefined);
     if (!present) continue;
-    if (activeGroups.has(groupId)) loadedGroupLabels.push(group.label);
+    const hasCoreTool = group.tools.some(
+      (name) => tools[name] !== undefined && CORE_TOOLS.has(name),
+    );
+    if (activeGroups.has(groupId) || hasCoreTool) loadedGroupLabels.push(group.label);
     else unloadedLabels.push(group.label);
   }
   if (unloadedLabels.length === 0) return ""; // nothing was filtered out
@@ -613,7 +678,7 @@ export function buildToolAvailabilityNote(
     `Some tools are loaded on demand to save tokens. **Only call the tools listed above.**\n` +
     `Loaded: ${loaded}.\n` +
     `Not loaded: ${unloadedLabels.sort().join(", ")}.\n` +
-    `To enable an unloaded group, call \`load_tool_groups({ groups: [...] })\` — the tools become available immediately in this same response, then continue with the current request.`
+    `If the user's request needs an unloaded tool, do not call it directly. First call \`load_tool_groups({ groups: [...] })\` — the tools become available immediately in this same response, then continue with the user's request. Always use the exact registered tool name shown by \`list_available_tools\`.`
   );
 }
 

@@ -4,6 +4,7 @@ import {
   automationRunEvents,
   automationRuns,
   conversations,
+  heartbeatToolCalls,
 } from "@/db/schema";
 import { publishAutomationNotification } from "./notifications";
 
@@ -16,7 +17,7 @@ export const AUTOMATION_ACTIVE_STATUSES = [
   "waiting",
 ] as const;
 
-export type AutomationRunKind = "routine" | "scheduled_task" | "webhook" | "agent";
+export type AutomationRunKind = "routine" | "scheduled_task" | "webhook" | "agent" | "heartbeat";
 export type AutomationRunStatus =
   | (typeof AUTOMATION_ACTIVE_STATUSES)[number]
   | "completed"
@@ -36,7 +37,8 @@ export async function getAutomationRun(runId: number): Promise<RunRow | undefine
 }
 
 export async function createAutomationRun(input: {
-  conversationId: number;
+  conversationId?: number | null;
+  heartbeatId?: number | null;
   kind: AutomationRunKind;
   sourceId?: number | null;
   parentRunId?: number | null;
@@ -50,6 +52,7 @@ export async function createAutomationRun(input: {
     .insert(automationRuns)
     .values({
       conversationId: input.conversationId,
+      heartbeatId: input.heartbeatId ?? null,
       kind: input.kind,
       sourceId: input.sourceId ?? null,
       parentRunId: input.parentRunId ?? null,
@@ -65,6 +68,37 @@ export async function createAutomationRun(input: {
     .get();
   await appendAutomationRunEvent(row.id, "queued", `Queued ${input.kind} run.`);
   return row;
+}
+
+function redactPayload(value: unknown, max = 8_000): string {
+  const text = typeof value === "string" ? value : JSON.stringify(value ?? null);
+  return text
+    .replace(/("?(?:api[_-]?key|token|secret|password|authorization)"?\s*:\s*)"?[^"]+"?/gi, "$1\"[REDACTED]\"")
+    .slice(0, max);
+}
+
+export async function recordHeartbeatToolCall(input: {
+  runId: number;
+  callId?: string;
+  toolName: string;
+  input?: unknown;
+  output?: unknown;
+  status: "running" | "completed" | "failed";
+  startedAt?: string;
+  completedAt?: string;
+  durationMs?: number;
+}) {
+  return db.insert(heartbeatToolCalls).values({
+    runId: input.runId,
+    callId: input.callId ?? null,
+    toolName: input.toolName.slice(0, 200),
+    input: input.input === undefined ? null : redactPayload(input.input),
+    output: input.output === undefined ? null : redactPayload(input.output),
+    status: input.status,
+    startedAt: input.startedAt ?? new Date().toISOString(),
+    completedAt: input.completedAt ?? null,
+    durationMs: input.durationMs ?? null,
+  }).returning().get();
 }
 
 export async function appendAutomationRunEvent(
@@ -227,6 +261,7 @@ export async function stopAllAutomationRuns(conversationId?: number): Promise<nu
 
 export async function listAutomationRuns(input: {
   conversationId?: number;
+  heartbeatId?: number;
   limit?: number;
 } = {}): Promise<Array<RunRow & { conversationTitle?: string }>> {
   const limit = Math.max(1, Math.min(input.limit ?? 50, 200));
@@ -235,7 +270,9 @@ export async function listAutomationRuns(input: {
     conversationTitle: conversations.title,
   }).from(automationRuns)
     .leftJoin(conversations, eq(automationRuns.conversationId, conversations.id))
-    .where(input.conversationId === undefined ? undefined : eq(automationRuns.conversationId, input.conversationId))
+    .where(input.conversationId !== undefined
+      ? eq(automationRuns.conversationId, input.conversationId)
+      : input.heartbeatId !== undefined ? eq(automationRuns.heartbeatId, input.heartbeatId) : undefined)
     .orderBy(desc(automationRuns.createdAt), desc(automationRuns.id))
     .limit(limit)
     .all();
@@ -247,6 +284,13 @@ export async function getAutomationRunEvents(runId: number) {
     .where(eq(automationRunEvents.runId, runId))
     .orderBy(desc(automationRunEvents.createdAt), desc(automationRunEvents.id))
     .limit(100)
+    .all();
+}
+
+export async function getHeartbeatToolCalls(runId: number) {
+  return db.select().from(heartbeatToolCalls)
+    .where(eq(heartbeatToolCalls.runId, runId))
+    .orderBy(heartbeatToolCalls.id)
     .all();
 }
 

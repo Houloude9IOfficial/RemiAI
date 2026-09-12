@@ -32,6 +32,7 @@ const MINOR_TOOLS = new Set([
   "query_recent_changes",
   "search_memories",
   "remember",
+  "update_memory",
   "get_profile",
   "update_profile",
   "get_tool_help",
@@ -133,6 +134,7 @@ function minorSummary(name: string, output: unknown, running: boolean): string {
   }
   if (name === "load_tool_groups") return "Loaded tools";
   if (name === "remember") return "Saved to memory";
+  if (name === "update_memory") return "Updated memory";
   if (name === "get_recent_memories" || name === "search_memories") {
     const count = Array.isArray(out?.memories)
       ? out.memories.length
@@ -207,7 +209,6 @@ function operationSummary(name: string, running: boolean): string {
     list_directory: "Listed directory",
     web_fetch: "Fetched page",
     web_search: "Searched web",
-    brave_web_search: "Searched web",
   };
   return labels[name] ?? name.replace(/_/g, " ");
 }
@@ -799,7 +800,7 @@ function AgentResultCard({
   return null;
 }
 
-/* ---- Web search results (Brave web search) ---- */
+/* ---- Unified web search results ---- */
 
 interface WebSearchItem {
   title: string;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -97,7 +97,15 @@ function KeyValueList({
   );
 }
 
-export function McpServerForm({
+export function McpServerForm(props: {
+  initialServer?: McpServer;
+  onCancelEdit?: () => void;
+}) {
+  const key = props.initialServer ? String(props.initialServer.id) : "new";
+  return <McpServerFormContent key={key} {...props} />;
+}
+
+function McpServerFormContent({
   initialServer,
   onCancelEdit,
 }: {
@@ -107,38 +115,17 @@ export function McpServerForm({
   const queryClient = useQueryClient();
   const isEditing = !!initialServer;
 
-  const [name, setName] = useState("");
-  const [transport, setTransport] = useState<McpTransportKind>("stdio");
+  const [name, setName] = useState(initialServer?.name ?? "");
+  const [transport, setTransport] = useState<McpTransportKind>(initialServer?.transport ?? "stdio");
 
   // stdio fields
-  const [command, setCommand] = useState("");
-  const [args, setArgs] = useState("");
-  const [env, setEnv] = useState<KeyValuePair[]>([]);
+  const [command, setCommand] = useState(initialServer?.command ?? "");
+  const [args, setArgs] = useState(initialServer?.args?.join("\n") ?? "");
+  const [env, setEnv] = useState<KeyValuePair[]>(recordToPairs(initialServer?.env ?? null));
 
   // http fields
-  const [url, setUrl] = useState("");
-  const [headers, setHeaders] = useState<KeyValuePair[]>([]);
-
-  // Populate form when editing server changes
-  useEffect(() => {
-    if (initialServer) {
-      setName(initialServer.name);
-      setTransport(initialServer.transport);
-      setCommand(initialServer.command ?? "");
-      setArgs(initialServer.args?.join("\n") ?? "");
-      setEnv(recordToPairs(initialServer.env));
-      setUrl(initialServer.url ?? "");
-      setHeaders(recordToPairs(initialServer.headers));
-    } else {
-      setName("");
-      setTransport("stdio");
-      setCommand("");
-      setArgs("");
-      setEnv([]);
-      setUrl("");
-      setHeaders([]);
-    }
-  }, [initialServer]);
+  const [url, setUrl] = useState(initialServer?.url ?? "");
+  const [headers, setHeaders] = useState<KeyValuePair[]>(recordToPairs(initialServer?.headers ?? null));
 
   const createMutation = useMutation({
     mutationFn: mcpServersApi.create,

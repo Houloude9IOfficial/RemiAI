@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { asc, eq } from "drizzle-orm";
 import { z } from "zod";
-import { db } from "@/db";
+import { db, initializeApp } from "@/db";
 import { conversations, messages } from "@/db/schema";
 import { jsonError } from "@/lib/validation/api";
 import { toUIMessage } from "@/lib/chat/persist";
@@ -15,6 +15,7 @@ const updateSchema = z.object({
   mode: z.enum(["chat", "goal", "plan", "build"]).optional(),
   qualityPolicy: z.enum(["minimal", "low", "medium", "high"]).optional(),
   bashMode: z.enum(["sandboxed", "full"]).optional(),
+  requestMode: z.enum(["sandboxed", "full"]).optional(),
   isTemporary: z.boolean().optional(),
   memoryEnabled: z.boolean().optional(),
 });
@@ -23,6 +24,7 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  await initializeApp();
   const { id } = await params;
   const conversation = await db
     .select()
@@ -47,6 +49,7 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  await initializeApp();
   const { id } = await params;
   let body: z.infer<typeof updateSchema>;
   try {

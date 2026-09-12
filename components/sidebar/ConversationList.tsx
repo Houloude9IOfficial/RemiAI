@@ -24,22 +24,27 @@ import {
   Loader2,
   CheckSquare,
   Square,
-  Info,
   MessageSquare,
   ArrowUpToLine,
   ArrowDownToLine,
   Clock,
   Timer,
+  MoreHorizontal,
 } from "lucide-react";
 import { conversationsApi, type Conversation } from "@/lib/api/conversations";
 import { toast } from "sonner";
 import { useActiveStreams } from "@/lib/chat/streaming-context";
 
-function getConversationGroup(updatedAt: string): "Recent" | "Older" {
+function getConversationGroup(updatedAt: string): "Today" | "Yesterday" | "Previous 7 days" | "Older" {
   const updated = new Date(normalizeDate(updatedAt)).getTime();
-  const now = Date.now();
-  const twoDaysMs = 2 * 24 * 60 * 60 * 1000;
-  return now - updated <= twoDaysMs ? "Recent" : "Older";
+  const nowDate = new Date();
+  const startOfToday = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate()).getTime();
+  const startOfYesterday = startOfToday - 24 * 60 * 60 * 1000;
+  const sevenDaysAgo = startOfToday - 7 * 24 * 60 * 60 * 1000;
+  if (updated >= startOfToday) return "Today";
+  if (updated >= startOfYesterday) return "Yesterday";
+  if (updated >= sevenDaysAgo) return "Previous 7 days";
+  return "Older";
 }
 
 function formatNumber(n: number): string {
@@ -273,7 +278,9 @@ export function ConversationList() {
       return acc;
     },
     {
-      Recent: [] as Conversation[],
+      Today: [] as Conversation[],
+      Yesterday: [] as Conversation[],
+      "Previous 7 days": [] as Conversation[],
       Older: [] as Conversation[],
     },
   );
@@ -497,22 +504,22 @@ export function ConversationList() {
           </>
         ) : (
           <>
-            {/* <span className="text-xs uppercase tracking-wide text-muted-foreground/60">
-              Chats
-            </span> */}
+            <span className="text-[11px] text-muted-foreground/55">Conversations</span>
             <button
               type="button"
               onClick={() => setSelectMode(true)}
-              className="text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+              className="rounded-md p-1 text-muted-foreground/55 hover:bg-muted hover:text-muted-foreground transition-colors"
+              title="Select conversations"
+              aria-label="Select conversations"
             >
-              Select
+              <CheckSquare className="h-3.5 w-3.5" />
             </button>
           </>
         )}
       </div>
 
       <div className="flex flex-col gap-1">
-        {(["Recent", "Older"] as const).map((groupName) => {
+        {(["Today", "Yesterday", "Previous 7 days", "Older"] as const).map((groupName) => {
           const groupItems = grouped[groupName];
           if (groupItems.length === 0) return null;
 
@@ -610,45 +617,67 @@ export function ConversationList() {
                     </div>
                   ) : (
                     /* ---- Normal view: the whole row is the link ---- */
+                    <div className={cn("group/conversation relative flex w-full items-center rounded-md text-sm text-left", isActive ? "bg-sidebar-accent text-sidebar-foreground" : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground")}>
                     <Link
                       href={`/chat/${conversation.id}`}
-                      className={cn(
-                        "group/conversation flex w-full items-center justify-start rounded-md px-2 py-1.5 text-sm text-left",
-                        isActive
-                          ? "bg-sidebar-accent text-sidebar-foreground"
-                          : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground",
-                      )}
+                      className="flex min-w-0 flex-1 items-center px-2 py-1.5"
                       onMouseEnter={() => prefetchConversation(conversation.id)}
                       onFocus={() => prefetchConversation(conversation.id)}
                     >
-                      {isStreaming && (
+                      {/* {isStreaming && (
                         <span className="inline-flex items-center mr-1.5">
                           <span className="relative flex h-2 w-2">
                             <span className="absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
                             <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
                           </span>
                         </span>
-                      )}
-                      <span className="flex-1 truncate">{conversation.title}</span>
+                      )} */}
+                      <span
+                        className={cn(
+                          "min-w-0 flex-1 truncate transition-[padding-right] duration-300 ease-out group-hover/conversation:pr-8 group-focus-within/conversation:pr-8",
+                        )}
+                      >
+                        {conversation.title}
+                      </span>
 
-                      {/* Temporary badge — hacky/temporary look */}
-                      {conversation.isTemporary && (
-                        <span
-                          className="ml-1.5 inline-flex shrink-0 items-center gap-0.5 rounded-full border border-dashed border-status-warning/50 bg-status-warning/[0.08] px-1.5 py-px text-[10px] font-medium text-foreground/80"
-                          title="Temporary chat — deleted after 30 days of inactivity"
-                        >
-                          <Timer className="h-2.5 w-2.5 text-status-warning" />
-                          Temporary
-                        </span>
-                      )}
+                      {(conversation.isTemporary || isStreaming) && (
+                        <span className={`ml-0.5 flex shrink-0 items-center transition-transform duration-300 ease-out group-hover/conversation:-translate-x-8 group-focus-within/conversation:-translate-x-8 ${isActive ? "bg-sidebar-accent text-sidebar-foreground" : "text-sidebar-foreground/75"}`}>
+                          {/* Temporary badge stays flush right until the action button enters. */}
+                          {conversation.isTemporary && (
+                            <span
+                              className="inline-flex shrink-0 items-center gap-0.5 rounded-full border border-dashed border-status-warning/50 bg-status-warning/[0.08] px-1.5 py-px text-[10px] font-medium text-foreground/80 group-hover/conversation:bg-sidebar-accent group-focus-within/conversation:bg-sidebar-accent"
+                              title="Temporary chat — deleted after 30 days of inactivity"
+                            >
+                              <Timer className="h-2.5 w-2.5 text-status-warning" />
+                              Temporary
+                            </span>
+                          )}
 
-                      {/* Keep only critical state icon */}
-                      {isStreaming && (
-                        <span className="flex h-6 w-6 items-center justify-center" title="Generating...">
-                          <span className="h-3 w-3 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                          {/* Keep only critical state icon */}
+                          {isStreaming && (
+                            <span className="flex h-3 w-3 items-center justify-center" title="Generating...">
+                              <span className="h-3 w-3 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                            </span>
+                          )}
                         </span>
                       )}
                     </Link>
+                    <button
+                      type="button"
+                      aria-label={`Actions for ${conversation.title}`}
+                      title="Conversation actions"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setContextMenuId(conversation.id);
+                        const rect = event.currentTarget.getBoundingClientRect();
+                        setContextMenuPos({ x: rect.right - 224, y: rect.bottom + 4 });
+                      }}
+                      className="conversation-actions-button pointer-events-none absolute right-1 top-1/2 flex h-7 w-7 -translate-y-1/2 translate-x-2 cursor-pointer items-center justify-center rounded-md bg-sidebar-accent/80 text-muted-foreground opacity-0 shadow-none transition-[transform,opacity,background-color,color] duration-300 ease-out group-hover/conversation:pointer-events-auto group-hover/conversation:translate-x-0 group-hover/conversation:opacity-100 group-focus-within/conversation:pointer-events-auto group-focus-within/conversation:translate-x-0 group-focus-within/conversation:opacity-100 hover:bg-black/10 dark:hover:bg-black/20 hover:text-foreground focus-visible:text-foreground focus-visible:outline-none"
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                    </button>
+                    </div>
                   )}
             </div>
           );
