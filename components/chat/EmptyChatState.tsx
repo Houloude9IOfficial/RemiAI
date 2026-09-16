@@ -169,6 +169,24 @@ export function EmptyChatState({
           </div>
         )}
 
+        <div
+          className="mt-2 flex w-full max-w-3xl flex-wrap justify-center gap-2"
+          aria-label="Common outcomes"
+        >
+          {OUTCOME_SUGGESTIONS.map(({ label, prompt, icon: Icon }) => (
+            <button
+              key={label}
+              type="button"
+              disabled={disabled || status === "submitted" || status === "streaming"}
+              onClick={() => dispatchChatInputTogglePrefix(prompt, RECOMMENDED_PROMPTS)}
+              className="inline-flex min-h-9 items-center gap-2 rounded-full border border-border/65 bg-background/70 px-3.5 py-2 text-xs font-medium text-foreground/80 transition-colors hover:border-primary/40 hover:bg-primary/[0.05] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:pointer-events-none disabled:opacity-45"
+            >
+              <Icon className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+              {label}
+            </button>
+          ))}
+        </div>
+
         {/* Big centered composer — stays exactly where it is while typing.
             When the first message is sent the page swaps to the docked
             composer, which fades in at its own position instead of animating
@@ -193,24 +211,6 @@ export function EmptyChatState({
             onMemoryChange={onMemoryChange}
             large
           />
-        </div>
-
-        <div
-          className="mt-2 flex w-full max-w-3xl flex-wrap justify-center gap-2"
-          aria-label="Common outcomes"
-        >
-          {OUTCOME_SUGGESTIONS.map(({ label, prompt, icon: Icon }) => (
-            <button
-              key={label}
-              type="button"
-              disabled={disabled || status === "submitted" || status === "streaming"}
-              onClick={() => dispatchChatInputTogglePrefix(prompt, RECOMMENDED_PROMPTS)}
-              className="inline-flex min-h-9 items-center gap-2 rounded-full border border-border/65 bg-background/70 px-3.5 py-2 text-xs font-medium text-foreground/80 transition-colors hover:border-primary/40 hover:bg-primary/[0.05] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:pointer-events-none disabled:opacity-45"
-            >
-              <Icon className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-              {label}
-            </button>
-          ))}
         </div>
 
         {onAiStart && (
