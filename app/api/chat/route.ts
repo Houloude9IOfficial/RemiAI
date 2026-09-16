@@ -318,6 +318,9 @@ export async function POST(req: Request) {
 
   // Read mode from the conversation in the database
   let mode = conversation.mode ?? "chat";
+  const setLiveMode = (nextMode: "chat" | "plan" | "goal" | "build") => {
+    mode = nextMode;
+  };
 
   // Per-chat memory switch: when off, NO saved memories are injected into the
   // system prompt and the memory tools (remember / search_memories /
@@ -524,7 +527,7 @@ export async function POST(req: Request) {
     }),
     ask_questions: askQuestionsTool,
     suggest_followups: suggestFollowupsTool,
-    switch_mode: buildModeTool(conversationId),
+    switch_mode: buildModeTool(conversationId, setLiveMode),
     set_run_name: setRunNameTool,
     ...createVisualToolSet,
     ...buildToolHelpTool(),
@@ -603,30 +606,32 @@ export async function POST(req: Request) {
     "canvas_create",
     "canvas_add_file",
   ];
-  const effectiveFsToolSet =
-    isDemoMode()
-      ? {}
-      : mode === "plan"
-      ? Object.fromEntries(
-          Object.entries(fsToolSet).filter(([key]) => !writeBlocklist.includes(key)),
-        )
-      : fsToolSet;
-  const effectiveSessionFileToolSet =
-    mode === "plan"
-      ? Object.fromEntries(
-          Object.entries(sessionFileToolSet).filter(
-            ([key]) => !writeBlocklist.includes(key),
-          ),
-        )
-      : sessionFileToolSet;
-  const effectiveCanvasToolSet =
-    mode === "plan"
-      ? Object.fromEntries(
-          Object.entries(canvasToolSet).filter(
-            ([key]) => !writeBlocklist.includes(key),
-          ),
-        )
-      : canvasToolSet;
+  // Keep write tools registered for the whole request so switch_mode can
+  // enable them immediately on the next agentic step. Their execution guard
+  // still enforces Plan mode before that switch happens.
+  const guardPlanWriteTools = (toolSet: Record<string, unknown>) =>
+    Object.fromEntries(
+      Object.entries(toolSet).map(([name, rawTool]) => {
+        if (!writeBlocklist.includes(name) || !rawTool || typeof rawTool !== "object") {
+          return [name, rawTool];
+        }
+        const tool = rawTool as Record<string, unknown>;
+        const execute = tool.execute;
+        if (typeof execute !== "function") return [name, rawTool];
+        return [name, {
+          ...tool,
+          execute: async (args: Record<string, unknown>) => {
+            if (mode === "plan") {
+              return "Plan mode is read-only. Call switch_mode with mode goal before using this write tool.";
+            }
+            return (execute as (input: Record<string, unknown>) => unknown)(args);
+          },
+        }];
+      }),
+    );
+  const effectiveFsToolSet = isDemoMode() ? {} : guardPlanWriteTools(fsToolSet);
+  const effectiveSessionFileToolSet = guardPlanWriteTools(sessionFileToolSet);
+  const effectiveCanvasToolSet = guardPlanWriteTools(canvasToolSet);
 
   // Build mode-specific system prompt instructions
   const planModePrompt =
@@ -644,9 +649,9 @@ You are currently in **Plan mode**. This means:
 - Focus on understanding the user's requirements, exploring their codebase, and proposing a clear implementation plan.
 - Use \`todos_init\` at the start to lay out the steps you'll help them plan.
 - Stay in Plan mode while requirements are unclear or questions remain unanswered.
-- When the user has answered the planning questions and the requirements are clear, call \`switch_mode({ mode: "goal", reason: "..." })\` before the next user turn. Do not attempt build/write tools in Plan mode.
-- If new ambiguity appears while working, call \`switch_mode({ mode: "plan", reason: "..." })\` and ask focused questions; return to Goal mode only after they are answered.
-- Mode changes apply to the next user turn. Never claim to have changed modes without calling \`switch_mode\`.
+- When the user has answered the planning questions and the requirements are clear, call \`switch_mode({ mode: "goal", reason: "..." })\` before continuing the work. The switch applies immediately to the current run, so continue with the newly available tools after it succeeds. Do not attempt build/write tools before switching.
+- If new ambiguity appears while working, call \`switch_mode({ mode: "plan", reason: "..." })\` and ask focused questions; the switch applies immediately and remains active for following turns.
+- Never claim to have changed modes without calling \`switch_mode\`.
 - Do NOT attempt to modify any files — you don't have permission to write in this mode.`
       : "";
   const goalModePrompt =
@@ -658,7 +663,7 @@ You are currently in **Plan mode**. This means:
 You are currently in **Goal mode**. The user's requirements are considered clear enough to execute.
 - Use the available read, write, execution, and verification tools to complete the task.
 - Do not stop at a plan or ask broad discovery questions; ask only a focused question if a genuinely blocking ambiguity appears.
-- If a blocking ambiguity appears, call \`switch_mode({ mode: "plan", reason: "..." })\` before asking questions. That change applies to the next user turn.
+- If a blocking ambiguity appears, call \`switch_mode({ mode: "plan", reason: "..." })\` before asking questions. That change applies immediately to the current run.
 - After the user answers, call \`switch_mode({ mode: "goal", reason: "..." })\` if needed, then continue the implementation.
 - Verify the result with the narrowest relevant check before reporting completion.
 `
@@ -995,9 +1000,13 @@ Definition of done:
 
   // The initial active set = core + classified + stored groups (identical to
   // the old filtered set). prepareStep re-derives it before every step.
-  const initialActiveToolNames = isDemoMode()
-    ? Object.keys(filterDemoTools(tools))
-    : activeToolNames(tools, activeToolGroups);
+  const activeToolNamesForMode = (groups: ReadonlySet<string>) =>
+    isDemoMode()
+      ? Object.keys(filterDemoTools(tools))
+      : mode === "plan"
+        ? activeToolNames(tools, groups)
+        : [...Object.keys(tools), "load_tool_groups"];
+  const initialActiveToolNames = activeToolNamesForMode(activeToolGroups);
   const estimatedToolDefinitionChars = Object.entries(baseTools).reduce(
     (total, [name, tool]) => {
       const toolRecord = tool && typeof tool === "object"
@@ -1124,8 +1133,10 @@ Definition of done:
     systemTip + profileTip + memoryTip + fileChangeTip + summarySection +
     planModePrompt + goalModePrompt + buildModePrompt + canvasSection + _remiCardsSection + existingCardSection + (Object.keys(_remiCardToolSet).length ? REMI_CARD_PRESENTATION_RULES + REMI_CARD_SCOPE_RULES : "") + activeSkillsSection +
     taggedSkillsSection + qualityPolicyPrompt;
+  const liveModeNote = () =>
+    `\n\n## AUTHORITATIVE LIVE MODE\nThe active mode for this run is **${mode}**. This live mode overrides any earlier mode wording in the conversation. After a successful switch_mode call, immediately follow the new mode's rules and use its available tools.`;
 
-  const dynamicSystemPrompt = dynamicSystemPromptBase + toolAvailabilityNote;
+  const dynamicSystemPrompt = dynamicSystemPromptBase + liveModeNote() + toolAvailabilityNote;
 
   const fullSystemPrompt = staticSystemPrompt + dynamicSystemPrompt;
 
@@ -1244,6 +1255,7 @@ Definition of done:
         instructions: ReturnType<typeof buildCachedInstructions>;
       }
     | undefined;
+  let lastStepMode: string | undefined;
 
   let buildRunId: number | undefined;
   const buildDefinitionOfDone = [
@@ -1326,7 +1338,7 @@ Definition of done:
       const buildHasFailure = currentBuildChecks.some(
         (check) => check.status !== "passed",
       );
-      if (!enabledGroupsThisRound && lastStepComputed && !buildHasFailure) {
+      if (!enabledGroupsThisRound && lastStepComputed && lastStepMode === mode && !buildHasFailure) {
         return lastStepComputed;
       }
 
@@ -1345,14 +1357,14 @@ Definition of done:
       const repairNote = buildHasFailure
         ? `\n\n## BUILD REPAIR LOOP\n${buildRepairGuidance(Math.max(1, buildRepairState.attempt))}`
         : "";
+      lastStepMode = mode;
       lastStepComputed = {
-        activeTools: isDemoMode()
-          ? Object.keys(filterDemoTools(tools))
-          : activeToolNames(tools, freshActive),
+        activeTools: activeToolNamesForMode(freshActive),
         instructions: buildCachedInstructions(
           activeProvider,
           staticSystemPrompt,
           dynamicSystemPromptBase +
+            liveModeNote() +
             repairNote +
             buildToolAvailabilityNote(tools, freshActive),
         ),

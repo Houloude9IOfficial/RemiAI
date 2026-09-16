@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import { getToolName, isDynamicToolUIPart, isToolUIPart } from "ai";
 import { cn } from "@/lib/utils";
@@ -17,6 +17,7 @@ import {
   Images,
   ChevronRight,
   ExternalLink,
+  ArrowRightLeft,
 } from "lucide-react";
 import { MediaDisplay } from "./MediaDisplay";
 import { QuestionsCard } from "./QuestionsCard";
@@ -190,6 +191,45 @@ function minorSummary(name: string, output: unknown, running: boolean): string {
   return name.replace(/_/g, " ");
 }
 
+type TransitionMode = "chat" | "goal" | "plan" | "build";
+
+function getModeTransition(
+  input: unknown,
+  output: unknown,
+): { mode: TransitionMode; fromMode?: TransitionMode; changed: boolean; reason?: string } | null {
+  const outputRecord =
+    output && typeof output === "object" && !Array.isArray(output)
+      ? (output as Record<string, unknown>)
+      : null;
+  if (
+    outputRecord?.type === "mode_transition" &&
+    (outputRecord.mode === "chat" ||
+      outputRecord.mode === "plan" ||
+      outputRecord.mode === "goal" ||
+      outputRecord.mode === "build")
+  ) {
+    const fromMode = outputRecord.fromMode;
+    return {
+      mode: outputRecord.mode,
+      fromMode: fromMode === "chat" || fromMode === "goal" || fromMode === "plan" || fromMode === "build" ? fromMode : undefined,
+      changed: outputRecord.changed !== false,
+      reason: typeof outputRecord.reason === "string" ? outputRecord.reason : undefined,
+    };
+  }
+
+  const inputRecord =
+    input && typeof input === "object" && !Array.isArray(input)
+      ? (input as Record<string, unknown>)
+      : null;
+  const mode = inputRecord?.mode;
+  if (mode !== "plan" && mode !== "goal") return null;
+  return {
+    mode,
+    changed: true,
+    reason: typeof inputRecord?.reason === "string" ? inputRecord.reason : undefined,
+  };
+}
+
 function operationSummary(name: string, running: boolean): string {
   if (running) return `Working on ${name.replace(/_/g, " ")}`;
   const labels: Record<string, string> = {
@@ -221,6 +261,7 @@ export function ToolCallCard({
   compact?: boolean;
 }) {
   const [inputOpen, setInputOpen] = useState(false);
+  const dispatchedModeRef = useRef<string | null>(null);
   // Collapsed by default — avoids oversized cards and nested scroll traps.
   const [outputOpen, setOutputOpen] = useState(false);
   const [minorOpen, setMinorOpen] = useState(false);
@@ -336,6 +377,90 @@ export function ToolCallCard({
 
   const toolBare = bareName(toolName);
   const isMinor = MINOR_TOOLS.has(toolBare);
+  const modeTransition = toolBare === "switch_mode"
+    ? getModeTransition(input, output)
+    : null;
+
+  useEffect(() => {
+    if (
+      toolBare !== "switch_mode" ||
+      !modeTransition?.changed ||
+      isRunning ||
+      typeof window === "undefined"
+    ) {
+      return;
+    }
+    const key = `${modeTransition.fromMode ?? "unknown"}->${modeTransition.mode}`;
+    if (dispatchedModeRef.current === key) return;
+    dispatchedModeRef.current = key;
+    window.dispatchEvent(
+      new CustomEvent("remi:mode-changed", {
+        detail: { mode: modeTransition.mode },
+      }),
+    );
+  }, [isRunning, modeTransition?.changed, modeTransition?.fromMode, modeTransition?.mode, toolBare]);
+
+  // Special rich outputs — always take precedence
+  if (compact && toolBare === "switch_mode" && modeTransition) {
+    if (!modeTransition.changed) return null;
+    const label = modeTransition.mode === "chat"
+      ? "Normal mode"
+      : `${modeTransition.mode[0].toUpperCase()}${modeTransition.mode.slice(1)} mode`;
+    const sourceLabel = modeTransition.fromMode
+      ? modeTransition.fromMode === "chat"
+        ? "Normal mode"
+        : `${modeTransition.fromMode[0].toUpperCase()}${modeTransition.fromMode.slice(1)} mode`
+      : undefined;
+    const sourceInitial = modeTransition.fromMode
+      ? modeTransition.fromMode === "chat"
+        ? "N"
+        : modeTransition.fromMode[0].toUpperCase()
+      : modeTransition.mode === "goal"
+        ? "P"
+        : "G";
+    const targetInitial = modeTransition.mode === "chat"
+      ? "N"
+      : modeTransition.mode[0].toUpperCase();
+    const handoffClass = modeTransition.mode === "plan"
+      ? "mode-handoff--plan"
+      : "mode-handoff--goal";
+    const transitionVerb = isRunning ? "Switching to" : "Switched to";
+    return (
+      <div
+        className={cn(
+          "flex min-w-0 max-w-full items-center gap-2 overflow-hidden rounded-lg border px-3 py-2",            modeTransition.mode === "plan"
+              ? "border-status-warning/25 bg-status-warning/5"
+              : "border-primary/25 bg-primary/5",
+
+        )}
+        role="status"
+        aria-label={`${transitionVerb} ${label}`}
+      >
+        <ArrowRightLeft className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+        <div
+          className={cn(
+            "mode-handoff",
+            handoffClass,
+          )}
+          aria-hidden="true"
+        >
+          <span className="mode-handoff__track">
+            <span className="mode-handoff__node mode-handoff__node--plan">{sourceInitial}</span>
+            <span className="mode-handoff__arrow" aria-hidden="true">→</span>
+            <span className="mode-handoff__node mode-handoff__node--goal">{targetInitial}</span>
+          </span>
+        </div>
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-foreground">{transitionVerb} {label}</p>
+          <p className="min-w-0 break-words text-[11px] leading-relaxed text-muted-foreground line-clamp-2">
+            {sourceLabel ? `${sourceLabel} → ${label} · ` : ""}
+            {isRunning ? "Preparing the current run" : "Applies immediately to this run and following turns"}
+            {modeTransition.reason ? ` · ${modeTransition.reason}` : ""}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   // Special rich outputs — always take precedence
   if (compact) {
@@ -1116,53 +1241,61 @@ function DetailSection({
   );
 }
 
-function JsonBlock({ data }: { data: unknown }) {
-  const formatted = formatJson(data);
-  const [collapsed, setCollapsed] = useState(
-    formatted ? formatted.length > 320 : false,
-  );
+const TOOL_VALUE_LIMIT = 180;
+const TOOL_KEY_LIMIT = 48;
+const TOOL_VISIBLE_KEYS = 12;
 
-  if (!formatted) {
+function truncateToolValue(value: unknown, limit = TOOL_VALUE_LIMIT): string {
+  if (value === null || value === undefined) return "—";
+  if (typeof value === "string") {
+    const compact = value.replace(/\\s+/g, " ").trim();
+    return compact.length > limit ? `${compact.slice(0, limit - 1)}…` : compact;
+  }
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return `Array · ${value.length} item${value.length === 1 ? "" : "s"}`;
+  if (typeof value === "object") {
+    const count = Object.keys(value as Record<string, unknown>).length;
+    return `Object · ${count} key${count === 1 ? "" : "s"}`;
+  }
+  return String(value);
+}
+
+function JsonBlock({ data }: { data: unknown }) {
+  if (data === undefined || data === null || data === "") {
     return <span className="text-xs italic text-muted-foreground">empty</span>;
   }
 
-  return (
-    <div>
-      <pre
-        className={cn(
-          "overflow-x-auto rounded-md bg-none p-2.5 text-[11px] leading-relaxed text-foreground/85",
-          collapsed && "max-h-28 overflow-hidden",
-        )}
-      >
-        <code>{formatted}</code>
-      </pre>
-      {formatted.length > 320 && (
-        <button
-          type="button"
-          className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
-          onClick={() => setCollapsed(!collapsed)}
-        >
-          {collapsed ? (
-            <>
-              <ChevronDown className="h-3 w-3" /> Show all
-            </>
-          ) : (
-            <>
-              <ChevronUp className="h-3 w-3" /> Collapse
-            </>
-          )}
-        </button>
-      )}
-    </div>
-  );
-}
-
-function formatJson(data: unknown): string {
-  try {
-    return JSON.stringify(data, null, 2);
-  } catch {
-    return String(data);
+  if (typeof data !== "object" || Array.isArray(data)) {
+    const value = truncateToolValue(data);
+    return (
+      <p className="max-w-full break-words text-[11px] leading-relaxed text-foreground/80" title={String(data)}>
+        {value}
+      </p>
+    );
   }
+
+  const entries = Object.entries(data as Record<string, unknown>);
+  const visibleEntries = entries.slice(0, TOOL_VISIBLE_KEYS);
+  const hiddenCount = Math.max(0, entries.length - visibleEntries.length);
+
+  return (
+    <dl className="min-w-0 divide-y divide-border/25 text-[11px]">
+      {visibleEntries.map(([key, value]) => {
+        const fullValue = truncateToolValue(value, Number.MAX_SAFE_INTEGER);
+        const displayValue = truncateToolValue(value);
+        const displayKey = key.length > TOOL_KEY_LIMIT ? `${key.slice(0, TOOL_KEY_LIMIT - 1)}…` : key;
+        return (
+          <div key={key} className="grid min-w-0 grid-cols-[minmax(5rem,34%)_minmax(0,1fr)] gap-2 py-1.5 first:pt-0 last:pb-0">
+            <dt className="min-w-0 truncate font-medium text-muted-foreground" title={key}>{displayKey}</dt>
+            <dd className="min-w-0 break-words text-foreground/80" title={fullValue}>{displayValue || "—"}</dd>
+          </div>
+        );
+      })}
+      {hiddenCount > 0 && (
+        <div className="pt-1.5 text-[10px] text-muted-foreground">+{hiddenCount} more key{hiddenCount === 1 ? "" : "s"}</div>
+      )}
+    </dl>
+  );
 }
 
 /**

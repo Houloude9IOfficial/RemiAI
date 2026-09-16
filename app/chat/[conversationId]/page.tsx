@@ -461,7 +461,18 @@ function ConversationChat({
   // canvas_open (or the single-file fallback fires), which would otherwise
   // open the wrong panel. Cleared when the user sends the next message.
   const canvasWinsRef = useRef(false);
+  const pendingCanvasPresentRef = useRef<CanvasPresentDetail | null>(null);
   const { activeStreams, startStream, endStream } = useStreamingContext();
+
+  const openCanvasPanel = useCallback((detail: CanvasPresentDetail) => {
+    if (canvasDismissedRef.current) return;
+    canvasWinsRef.current = true;
+    setCanvasFocusSlug(detail.slug ?? null);
+    setCanvasOpen(true);
+    setPanelOpen(false);
+    setPanelFocusPath(null);
+    if (detail.slug) dispatchCanvasOpened(detail.slug);
+  }, []);
 
   // Auto-open the session files panel when the AI calls session_present_files
   // or session_present_file; for the single-file variant, focus that file.
@@ -482,29 +493,35 @@ function ConversationChat({
     return () => window.removeEventListener(SESSION_FILES_PRESENT_EVENT, handler);
   }, []);
 
-  // Auto-open the canvas panel when the AI presents a canvas (canvas_open).
-  // Closes the session files panel so the two never stack in the same slot.
+  // Queue AI canvas presentations until the assistant turn is finished. This
+  // keeps the first canvas creation message visible while tools are still
+  // running instead of replacing the conversation with the live panel early.
+  // Manual "Open canvas" clicks remain immediate.
   useEffect(() => {
     const handler = (event: Event) => {
-      const detail = (event as CustomEvent<CanvasPresentDetail>).detail;
-      // A MANUAL "Open canvas" click always wins — the user explicitly asked
-      // for it, so re-arm the panel even if they dismissed it earlier.
-      if (detail?.manual) {
+      const detail = (event as CustomEvent<CanvasPresentDetail>).detail ?? {};
+      if (detail.manual) {
         canvasDismissedRef.current = false;
         filesDismissedRef.current = true;
+        openCanvasPanel(detail);
+        return;
       }
-      // User dismissed the canvas panel — don't force it open again.
-      if (canvasDismissedRef.current) return;
-      canvasWinsRef.current = true;
-      setCanvasFocusSlug(detail?.slug ?? null);
-      setCanvasOpen(true);
-      setPanelOpen(false);
-      setPanelFocusPath(null);
-      // Confirm the open so cards show the "Opened canvas…" copy.
-      if (detail?.slug) dispatchCanvasOpened(detail.slug);
+      pendingCanvasPresentRef.current = detail;
     };
     window.addEventListener(CANVAS_PRESENT_EVENT, handler);
     return () => window.removeEventListener(CANVAS_PRESENT_EVENT, handler);
+  }, [openCanvasPanel]);
+
+  // Reflect AI-controlled mode switches in the visible composer immediately.
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const nextMode = (event as CustomEvent<{ mode?: unknown }>).detail?.mode;
+      if (nextMode === "chat" || nextMode === "goal" || nextMode === "plan" || nextMode === "build") {
+        setMode(nextMode);
+      }
+    };
+    window.addEventListener("remi:mode-changed", handler);
+    return () => window.removeEventListener("remi:mode-changed", handler);
   }, []);
 
   // Persist mode to DB whenever it changes
@@ -644,6 +661,11 @@ function ConversationChat({
       // sees the result. Skip aborted/failed runs.
       if (!isAbort && !isError && !isDisconnect) {
         maybeAutoPresentSingleSessionFile(finishedMessages);
+        const pendingCanvas = pendingCanvasPresentRef.current;
+        pendingCanvasPresentRef.current = null;
+        if (pendingCanvas) openCanvasPanel(pendingCanvas);
+      } else {
+        pendingCanvasPresentRef.current = null;
       }
       // Small delay to ensure server-side token update completes
       // before the sidebar refetches the conversation list.
@@ -1170,7 +1192,7 @@ function ConversationChat({
       )}
 
       {/* ── Todo progress ── */}
-      <TodoProgressBar conversationId={conversationId} />
+      <TodoProgressBar conversationId={conversationId} mode={mode} />
       {mode === "build" && <BuildRunHistory conversationId={conversationId} />}
       <AutomationRunHistory conversationId={conversationId} />
 

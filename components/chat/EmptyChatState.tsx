@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ChatStatus } from "ai";
 import {
@@ -16,36 +16,39 @@ import { ChatInput, type ChatMode } from "./ChatInput";
 import type { QualityPolicy } from "@/lib/chat/quality-policy";
 import { Timer } from "lucide-react";
 import { TEMPORARY_CHAT_RETENTION_DAYS } from "@/lib/chat/temporary-chat-constants";
-import { dispatchChatInputTogglePrefix } from "@/lib/chat-input-registry";
+import { focusChatInput } from "@/lib/chat-input-registry";
 
 const OUTCOME_SUGGESTIONS: Array<{
   label: string;
   prompt: string;
   icon: LucideIcon;
+  mode?: ChatMode;
 }> = [
   {
     label: "Research a question",
-    prompt: "Gather information from sources, and answer correctly the following question:",
+    prompt: "Research the following question thoroughly before answering. Break it into the sub-questions that need answers, then gather information from multiple independent, credible sources for each — don't rely on a single source or your own assumptions where verifiable facts exist. Cross-check claims that conflict between sources and note the discrepancy rather than picking one arbitrarily. Distinguish clearly between what is well-established, what is disputed, and what you're inferring. Cite where each key claim comes from. Once you have enough to answer with confidence, give a direct, well-organized answer up front, followed by the supporting detail and any important caveats or open questions. Question:",
     icon: Search,
+    mode: "goal"
   },
   {
     label: "Analyze a file",
-    prompt: "Analyze the attached file and summarize the important findings:",
+    prompt: "Analyze the attached file in full before summarizing anything — read all of it, not just the beginning or a sample, and check for structure, patterns, outliers, and anything that looks off (errors, inconsistencies, missing data, stale content). Identify the most important findings first, ranked by relevance and impact, not just in the order they appear in the file. Where useful, back findings with specific figures, quotes, or excerpts from the file rather than vague generalities. Flag anything ambiguous, incomplete, or that needs a decision from me. Then give a concise summary of the key takeaways, followed by the supporting detail organized by topic.",
     icon: BarChart3,
-  },
-  {
-    label: "Build or fix code",
-    prompt: "Inspect the relevant files, then build or fix the following code and verify the result:",
-    icon: Code2,
+    mode: "goal"
   },
   {
     label: "Create a document",
-    prompt: "Create a polished document about the following topic and save it in this chat:",
+    prompt: "Before writing, clarify the audience, purpose, and desired length/format for this document if they aren't already obvious, and make a reasonable assumption explicitly if you proceed without asking. Structure the document with clear sections and headings appropriate to its purpose (report, guide, proposal, etc.), and make sure the argument or information flows logically from section to section rather than reading as disconnected chunks. Write in clear, precise language, avoid filler and unsupported claims, and back up any factual statements you're not certain about by researching them first rather than guessing. Proofread for consistency, tone, and correctness before finalizing. Save the finished document in this chat as a properly formatted file. Topic:",
     icon: FileText,
+    mode: "goal"
+  },
+  {
+    label: "Plan & Build",
+    prompt: "Inspect the relevant files first and build a full understanding of the existing implementation before proposing anything. Use the `ask_questions` tool for any decision, missing detail, or ambiguity that would materially change the approach, but skip it for anything you can reasonably infer. Once you have enough context, produce an implementation plan covering the files to change or create, the specific changes in each, edge cases and how they're handled, and how the result will be tested and verified. Present the plan and wait for explicit approval before making any changes. On approval, call `switch_mode` to enter code mode, implement exactly what was approved, then verify the result using whatever applies: tests, build, type checks, linters, `canvas_review`, or other available validation. If verification finds issues, fix them and re-verify, repeating until verification is clean, then report the final changes and verification results. Request:",
+    icon: Code2,
+    mode: "plan",
   },
 ];
-
-const RECOMMENDED_PROMPTS = OUTCOME_SUGGESTIONS.map(({ prompt }) => prompt);
 
 /**
  * Empty conversation state — code-editor style: a headline with a large,
@@ -110,6 +113,50 @@ export function EmptyChatState({
     ? `What are you up to, <a className="font-semibold underline" href="/settings/profile">${preferredName}</a>?`
     : "What should we do?";
   const isStreaming = status === "submitted" || status === "streaming";
+  const [activeSuggestion, setActiveSuggestion] = useState<string | null>(null);
+
+  const toggleSuggestion = useCallback(
+    (suggestion: (typeof OUTCOME_SUGGESTIONS)[number]) => {
+      const isActive = activeSuggestion === suggestion.prompt;
+      const previousSuggestion = OUTCOME_SUGGESTIONS.find(
+        (item) => item.prompt === activeSuggestion,
+      );
+
+      if (isActive) {
+        setActiveSuggestion(null);
+        if (suggestion.mode) onModeChange?.("chat");
+        requestAnimationFrame(focusChatInput);
+        return;
+      }
+
+      // Suggestions are single-select: selecting a new chip replaces the
+      // previous chip instead of stacking multiple long prompts together.
+      setActiveSuggestion(suggestion.prompt);
+      if (suggestion.mode) {
+        onModeChange?.(suggestion.mode);
+      } else if (previousSuggestion?.mode) {
+        // The previous mode was supplied by the old chip, so remove it when a
+        // neutral suggestion replaces that chip.
+        onModeChange?.("chat");
+      }
+      requestAnimationFrame(focusChatInput);
+    },
+    [activeSuggestion, onModeChange],
+  );
+
+  const handleSend = useCallback(
+    (message: string) => {
+      const selectedText = activeSuggestion ?? "";
+      const trimmedMessage = message.trim();
+      const combined = selectedText && trimmedMessage
+        ? `${selectedText}\n\n${trimmedMessage}`
+        : selectedText || trimmedMessage;
+      if (!combined) return;
+      onSend(combined);
+      setActiveSuggestion(null);
+    },
+    [activeSuggestion, onSend],
+  );
 
   return (
     /* my-auto (not justify-center) keeps the top of the content reachable if
@@ -173,18 +220,27 @@ export function EmptyChatState({
           className="mt-2 flex w-full max-w-3xl flex-wrap justify-center gap-2"
           aria-label="Common outcomes"
         >
-          {OUTCOME_SUGGESTIONS.map(({ label, prompt, icon: Icon }) => (
+          {OUTCOME_SUGGESTIONS.map((suggestion) => {
+            const { label, prompt, icon: Icon } = suggestion;
+            const isActive = activeSuggestion === prompt;
+            return (
             <button
               key={label}
               type="button"
               disabled={disabled || status === "submitted" || status === "streaming"}
-              onClick={() => dispatchChatInputTogglePrefix(prompt, RECOMMENDED_PROMPTS)}
-              className="inline-flex min-h-9 items-center gap-2 rounded-full border border-border/65 bg-background/70 px-3.5 py-2 text-xs font-medium text-foreground/80 transition-colors hover:border-primary/40 hover:bg-primary/[0.05] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:pointer-events-none disabled:opacity-45"
+              onClick={() => toggleSuggestion(suggestion)}
+              aria-pressed={isActive}
+              className={`inline-flex min-h-9 items-center gap-2 rounded-full border px-3.5 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:pointer-events-none disabled:opacity-45 ${
+                isActive
+                  ? "border-primary/60 bg-primary/10 text-primary"
+                  : "border-border/65 bg-background/70 text-foreground/80 hover:border-primary/40 hover:bg-primary/[0.05] hover:text-foreground"
+              }`}
             >
               <Icon className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
               {label}
             </button>
-          ))}
+            );
+          })}
         </div>
 
         {/* Big centered composer — stays exactly where it is while typing.
@@ -203,7 +259,8 @@ export function EmptyChatState({
             providerId={providerId}
             modelId={modelId}
             onModelChange={onModelChange}
-            onSend={onSend}
+            onSend={handleSend}
+            selectedSuggestionCount={activeSuggestion ? 1 : 0}
             onStop={onStop}
             isTemporary={isTemporary}
             memoryEnabled={memoryEnabled}

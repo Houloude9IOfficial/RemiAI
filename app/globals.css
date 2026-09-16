@@ -1039,6 +1039,95 @@
 }
 
 /* ------------------------------------------------------------------ */
+/* Plan ↔ Goal mode handoff                                             */
+/* ------------------------------------------------------------------ */
+
+.mode-handoff {
+  width: 3.35rem;
+  height: 1.25rem;
+  flex: 0 0 auto;
+}
+
+.mode-handoff__track {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.3rem;
+}
+
+.mode-handoff__node {
+  display: flex;
+  width: 0.95rem;
+  height: 0.95rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: var(--surface-1);
+  font-size: 0.55rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.mode-handoff__node--plan {
+  color: var(--status-warning);
+}
+
+.mode-handoff__node--goal {
+  color: var(--primary);
+}
+
+.mode-handoff__arrow {
+  color: var(--muted-foreground);
+  font-size: 0.95rem;
+  line-height: 1;
+  animation: mode-handoff-arrow 1.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.mode-handoff--plan .mode-handoff__arrow {
+  animation-name: mode-handoff-arrow-reverse;
+}
+
+.mode-handoff--plan .mode-handoff__node--plan {
+  color: var(--primary);
+}
+
+.mode-handoff--plan .mode-handoff__node--goal {
+  color: var(--status-warning);
+}
+
+.mode-handoff--goal .mode-handoff__node--goal,
+.mode-handoff--plan .mode-handoff__node--goal {
+  animation: mode-handoff-arrive 0.45s 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes mode-handoff-arrow {
+  from { opacity: 0.35; transform: translateX(-0.2rem); }
+  to { opacity: 1; transform: translateX(0.15rem); }
+}
+
+@keyframes mode-handoff-arrow-reverse {
+  from { opacity: 0.35; transform: translateX(0.2rem); }
+  to { opacity: 1; transform: translateX(-0.15rem); }
+}
+
+/* @keyframes mode-handoff-arrive {
+  from { transform: scale(1); box-shadow: 0 0 0 0 currentColor; }
+  55% { transform: scale(1.2); box-shadow: 0 0 0 0.22rem transparent; }
+  to { transform: scale(1); box-shadow: 0 0 0 0 transparent; }
+} */
+
+@media (prefers-reduced-motion: reduce) {
+  .mode-handoff__arrow,
+  .mode-handoff--goal .mode-handoff__node--goal,
+  .mode-handoff--plan .mode-handoff__node--goal {
+    animation: none;
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* Image scanning progress bar                                         */
 /* ------------------------------------------------------------------ */
 

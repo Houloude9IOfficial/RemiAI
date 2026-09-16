@@ -199,6 +199,7 @@ export function ChatInput({
   modelId,
   onModelChange,
   onSend,
+  selectedSuggestionCount = 0,
   onContinue,
   onStop,
   isTemporary,
@@ -218,6 +219,8 @@ export function ChatInput({
   modelId?: string | null;
   onModelChange?: (providerId: number, modelId: string) => void;
   onSend: (text: string) => void;
+  /** Number of active EmptyChatState suggestion chips that will be prepended on send. */
+  selectedSuggestionCount?: number;
   /** Continues the latest unanswered user message when the composer is empty. */
   onContinue?: () => void;
   onStop: () => void;
@@ -397,21 +400,31 @@ export function ChatInput({
       const knownPrefixes = Array.isArray(detail.prefixes)
         ? detail.prefixes.filter((prefix): prefix is string => typeof prefix === "string").map((prefix) => prefix.trim()).filter(Boolean)
         : [exactPhrase];
-      setText((previous) => {
-        const leading = previous.trimStart();
-        const currentPrefix = knownPrefixes.find((prefix) =>
-          leading === prefix || leading.startsWith(`${prefix} `) || leading.startsWith(`${prefix}\n`),
-        );
-        const remaining = currentPrefix ? leading.slice(currentPrefix.length).trimStart() : leading;
-        if (currentPrefix === exactPhrase) return remaining;
-        if (remaining) {
-          return `${exactPhrase}\n\n${remaining}`;
-        }
-        return `${exactPhrase}\n\n`;
-      });
+      const currentText = inputRef.current?.value ?? "";
+      const leading = currentText.trimStart();
+      const currentPrefix = knownPrefixes.find((prefix) =>
+        leading === prefix || leading.startsWith(`${prefix} `) || leading.startsWith(`${prefix}\n`),
+      );
+      const remaining = currentPrefix ? leading.slice(currentPrefix.length).trimStart() : leading;
+      const nextText =
+        currentPrefix === exactPhrase
+          ? remaining
+          : remaining
+            ? `${exactPhrase}\n\n${remaining}`
+            : `${exactPhrase}\n\n`;
+
+      setText(nextText);
       requestAnimationFrame(() => {
-        inputRef.current?.focus();
+        const input = inputRef.current;
+        if (!input) return;
+        input.focus();
+        // Keep the newly appended line visible when a long suggestion exceeds
+        // the textarea's max height. The caret is the reveal target, rather
+        // than the top of the inserted suggestion.
+        const cursor = nextText.length;
+        input.setSelectionRange(cursor, cursor);
         resize();
+        input.scrollTop = input.scrollHeight;
       });
     };
     window.addEventListener(CHAT_INPUT_TOGGLE_PREFIX_EVENT, onTogglePrefix);
@@ -1003,7 +1016,9 @@ export function ChatInput({
   const canSend =
     !disabled &&
     !isStreaming &&
-    (text.trim().length > 0 || attachedFiles.some((f) => f.status === "uploaded"));
+    (text.trim().length > 0 ||
+      attachedFiles.some((f) => f.status === "uploaded") ||
+      selectedSuggestionCount > 0);
   const canContinue =
     Boolean(onContinue) &&
     !disabled &&
@@ -1045,7 +1060,7 @@ export function ChatInput({
           inputRef.current?.focus();
         });
       }
-    } else if (text.trim()) {
+    } else if (text.trim() || selectedSuggestionCount > 0) {
       onSend(text.trim());
       setText("");
       requestAnimationFrame(() => {
@@ -1053,7 +1068,16 @@ export function ChatInput({
         inputRef.current?.focus();
       });
     }
-  }, [disabled, isStreaming, attachedFiles, text, onSend, resize, closeSlashMenu]);
+  }, [
+    disabled,
+    isStreaming,
+    attachedFiles,
+    text,
+    onSend,
+    resize,
+    closeSlashMenu,
+    selectedSuggestionCount,
+  ]);
 
   /** Text change — keep the composer state and slash-command detection in sync. */
   const handleInputChange = useCallback(

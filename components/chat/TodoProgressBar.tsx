@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import {
@@ -48,7 +49,13 @@ const STATUS_COLORS: Record<string, string> = {
 
 // ─── Todo Progress Bar Component ─────────────────────────────────────
 
-export function TodoProgressBar({ conversationId }: { conversationId: number }) {
+export function TodoProgressBar({
+  conversationId,
+  mode = "chat",
+}: {
+  conversationId: number;
+  mode?: "chat" | "goal" | "plan" | "build";
+}) {
   const [dismissed, setDismissed] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
@@ -57,34 +64,67 @@ export function TodoProgressBar({ conversationId }: { conversationId: number }) 
     queryFn: () => fetchTodos(conversationId),
     refetchInterval: 3_000, // Poll every 3s for live updates
   });
+  const isFinished = Boolean(data && data.total > 0 && data.completed === data.total);
 
-  // Don't show anything if dismissed or no items or all completed
-  if (dismissed || !data || data.total === 0 || data.completed === data.total) {
+  // Keep a finished bar visible briefly so the user sees the completed state,
+  // then let AnimatePresence remove it instead of unmounting abruptly.
+  useEffect(() => {
+    if (!isFinished) return;
+    const timer = window.setTimeout(() => setDismissed(true), 1_400);
+    return () => window.clearTimeout(timer);
+  }, [isFinished]);
+
+  // Don't show anything if dismissed or no items.
+  if (dismissed || !data || data.total === 0) {
     return null;
   }
 
   const { items, total, completed, inProgress, failed, skipped } = data;
+  const completedWidth = `${Math.min(100, (completed / total) * 100)}%`;
+  const inProgressWidth = `${Math.min(100 - (completed / total) * 100, (inProgress / total) * 100)}%`;
+  const failedWidth = `${Math.min(100 - (completed + inProgress) / total * 100, (failed / total) * 100)}%`;
+  const skippedWidth = `${Math.min(100 - (completed + inProgress + failed) / total * 100, (skipped / total) * 100)}%`;
 
   return (
-    <div className="mx-4 mt-2 mb-1 animate-slide-down">
-      <div className="overflow-hidden rounded-lg border border-border/40 bg-muted/30 backdrop-blur shadow-sm">
+    <AnimatePresence initial={false}>
+      {mode !== "goal" && (
+        <motion.div
+          key="todo-progress"
+          initial={{ opacity: 0, height: 0, marginTop: 0, marginBottom: 0 }}
+          animate={{ opacity: 1, height: "auto", marginTop: 8, marginBottom: 4 }}
+          exit={{ opacity: 0, height: 0, marginTop: 0, marginBottom: 0 }}
+          transition={{ duration: 0.24, ease: "easeOut" }}
+          className="mx-4 overflow-hidden"
+        >
+          <div className="rounded-lg border border-border/40 bg-muted/30 backdrop-blur shadow-sm">
         {/* Compact bar */}
         <div className="flex items-center gap-2.5 px-3 py-2">
           <ClipboardList className="h-4 w-4 shrink-0 text-primary" />
 
           {/* Thin progress bar */}
-          <div className="flex h-1.5 flex-1 overflow-hidden rounded-full bg-muted max-w-48">
+          <div className="relative h-1.5 max-w-48 flex-1 overflow-hidden rounded-full bg-muted">
             {completed > 0 && (
-              <div className="bg-emerald-500 transition-all duration-500" style={{ width: `${(completed / total) * 100}%` }} />
+              <div className="absolute inset-y-0 left-0 rounded-full bg-emerald-500 transition-[width] duration-500" style={{ width: completedWidth }} />
             )}
             {inProgress > 0 && (
-              <div className="bg-blue-500 animate-pulse transition-all duration-500" style={{ width: `${(inProgress / total) * 100}%` }} />
+              <div
+                className="absolute inset-y-0 rounded-full bg-blue-500 transition-[left,width] duration-500"
+                style={{ left: completedWidth, width: inProgressWidth }}
+              >
+                <span className="absolute inset-0 animate-pulse rounded-full bg-white/25" />
+              </div>
             )}
             {failed > 0 && (
-              <div className="bg-destructive transition-all duration-500" style={{ width: `${(failed / total) * 100}%` }} />
+              <div
+                className="absolute inset-y-0 rounded-full bg-destructive transition-[left,width] duration-500"
+                style={{ left: `calc(${completedWidth} + ${inProgressWidth})`, width: failedWidth }}
+              />
             )}
             {skipped > 0 && (
-              <div className="bg-amber-500 transition-all duration-500" style={{ width: `${(skipped / total) * 100}%` }} />
+              <div
+                className="absolute inset-y-0 rounded-full bg-amber-500 transition-[left,width] duration-500"
+                style={{ left: `calc(${completedWidth} + ${inProgressWidth} + ${failedWidth})`, width: skippedWidth }}
+              />
             )}
           </div>
 
@@ -92,9 +132,11 @@ export function TodoProgressBar({ conversationId }: { conversationId: number }) 
           <span className="shrink-0 text-xs tabular-nums text-muted-foreground whitespace-nowrap">
             <span className="font-semibold text-foreground">{completed}</span>
             <span className="text-muted-foreground/60">/{total}</span>
-            {inProgress > 0 && (
+            {isFinished ? (
+              <span className="ml-1 text-emerald-600 dark:text-emerald-400">· finished</span>
+            ) : inProgress > 0 ? (
               <span className="ml-1 text-blue-600 dark:text-blue-400">· {inProgress} active</span>
-            )}
+            ) : null}
           </span>
 
           {/* Expand toggle */}
@@ -140,7 +182,9 @@ export function TodoProgressBar({ conversationId }: { conversationId: number }) 
             </div>
           </div>
         </div>
-      </div>
-    </div>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

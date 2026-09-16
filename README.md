@@ -275,6 +275,26 @@ Beyond coding tasks, RemiAI's tool-use and file-agent behavior is benchmarked wi
 
 Each test run file includes the exact prompts used, expected vs. actual results, and an independently verified score.
 
+## Stress Test
+
+**Setup:** No prompt was written for the target AI. It was given exactly two files, `challenge.md` (problem spec, constraints, required output format) and `data.json` (the 7-project dataset), and asked to solve blind.
+
+**Reference answer:** Computed independently via exhaustive brute-force search (all feasible subsets × all dependency-valid orderings) — 128 subsets, verified optimum $25,717.90.
+
+**Model response:**
+- Order: MarketingSiteRevamp → CapsulePro → QuickWin → VeloraExpansion → WidgetSDK
+- Revenue: $25,717.90
+- Hours/Budget: 350 / 3900
+- Claimed a $32.89 margin over the next-best ordering
+
+**Match:** Exact on every field. The margin claim was independently re-verified against the full result set and confirmed correct to the cent (25685.01 second-best).
+
+**Process (from the reasoning trace):** The model ran two separate Python passes — a full brute-force search over subsets and dependency-valid orderings, then a second confirmatory script explicitly to check the top candidates against its chosen answer before committing. It couldn't read `data.json` directly inside its execution tool, so it hand-transcribed the dataset into code rather than loading the file — a manual step that introduces a real, if unrealized, risk of a silent transcription error.
+
+**Rating: 97%**
+
+Verification trail is visible: this wasn't a lucky guess, it was checked against alternatives before being reported, which is exactly what the challenge demanded. The remaining 3 points are docked for two things: the model didn't surface any of that verification in its actual answer to
+
 ## Demo
 
 A live demo is available at [demo.remiai.crickdevs.com](https://demo.remiai.crickdevs.com).

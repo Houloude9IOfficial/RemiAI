@@ -3,20 +3,51 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { conversations } from "@/db/schema";
 
-export function buildModeTool(conversationId: number) {
+type SwitchableMode = "chat" | "goal" | "plan" | "build";
+
+function normalizeMode(mode: SwitchableMode | "code"): SwitchableMode {
+  return mode === "code" ? "build" : mode;
+}
+
+export function buildModeTool(
+  conversationId: number,
+  onModeChange?: (mode: SwitchableMode) => void,
+) {
   return {
     description:
-      "Switch the conversation between plan and goal mode. Use plan when requirements are unclear and you need to ask or research questions; use goal when the requirements are clear and you are ready to build and verify. The new mode applies to the next user turn.",
+      "Switch the conversation between normal, plan, goal, and build modes. Use plan when requirements are unclear, goal when executing autonomously, and build/code when implementing and verifying file changes. The new mode applies immediately to the current run and following turns.",
     inputSchema: z.object({
-      mode: z.enum(["plan", "goal"]).describe("The mode to use on the next user turn"),
+      mode: z
+        .enum(["chat", "plan", "goal", "build", "code"])
+        .describe("The mode to use: chat/normal, plan, goal, build, or code"),
       reason: z.string().min(1).max(500).describe("Brief reason for switching modes"),
     }),
-    execute: async ({ mode, reason }: { mode: "plan" | "goal"; reason: string }) => {
-      await db
-        .update(conversations)
-        .set({ mode, updatedAt: new Date().toISOString() })
-        .where(eq(conversations.id, conversationId));
-      return `Mode changed to ${mode}. It will apply on the next user turn. Reason: ${reason}`;
+    execute: async ({ mode: requestedMode, reason }: { mode: SwitchableMode | "code"; reason: string }) => {
+      const mode = normalizeMode(requestedMode);
+      const current = await db
+        .select({ mode: conversations.mode })
+        .from(conversations)
+        .where(eq(conversations.id, conversationId))
+        .get();
+      const fromMode = (current?.mode as SwitchableMode | undefined) ?? "chat";
+      const changed = fromMode !== mode;
+
+      if (changed) {
+        await db
+          .update(conversations)
+          .set({ mode, updatedAt: new Date().toISOString() })
+          .where(eq(conversations.id, conversationId));
+        onModeChange?.(mode);
+      }
+
+      return {
+        type: "mode_transition",
+        fromMode,
+        mode,
+        changed,
+        reason,
+        appliesOn: "this_and_next_turns",
+      };
     },
   };
 }
