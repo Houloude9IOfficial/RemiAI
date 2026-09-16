@@ -292,6 +292,18 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     togglable: false,
     requiresApiKey: false,
   },
+  // ── Mode switching (builtin, always on, not togglable) ──
+  {
+    id: "switch_mode",
+    name: "Switch mode",
+    description:
+      "Let the AI move between read-only planning and execution-oriented goal mode when the task state changes.",
+    toolNames: ["switch_mode"],
+    category: "builtin",
+    subgroup: "AI & Assistance",
+    togglable: false,
+    requiresApiKey: false,
+  },
   // ── Notifications (builtin, always on, not togglable) ──
   {
     id: "notifications",

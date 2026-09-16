@@ -33,6 +33,7 @@ import { useErrorHandler } from "@/lib/hooks/use-error-handler";
 import { conversationsApi } from "@/lib/api/conversations";
 import { useStreamingContext } from "@/lib/chat/streaming-context";
 import { findActiveQuestions } from "@/lib/chat/questions";
+import { shouldPromotePlanToGoal } from "@/lib/chat/mode-transition";
 import { useSidebar } from "@/components/sidebar/SidebarContext";
 import {
   SESSION_FILES_PRESENT_EVENT,
@@ -822,12 +823,20 @@ function ConversationChat({
       // turn's silent resumes must not leak into the new request.
       autoContinueBudgetRef.current = MAX_AUTO_CONTINUES_PER_MESSAGE;
       setPendingUserTurn(true);
+      // Keep the UI and persisted conversation in sync with the server's
+      // automatic Plan → Goal transition when the user answers planning
+      // questions. This must happen before the request starts so the client
+      // does not keep filtering the response as Plan mode.
+      if (shouldPromotePlanToGoal(mode, messagesRef.current)) {
+        setMode("goal");
+        void conversationsApi.update(conversationId, { mode: "goal" }).catch(() => {});
+      }
       // A fresh request starts a fresh present — the previous request's canvas
       // no longer claims the panel slot.
       canvasWinsRef.current = false;
       sendMessage({ text });
     },
-    [clearError, clearChatError, sendMessage, status],
+    [clearError, clearChatError, conversationId, mode, sendMessage, status],
   );
 
   // A user message can survive locally even when its assistant request never
@@ -1083,6 +1092,14 @@ function ConversationChat({
   // survives reloads (any user message after a questions part marks it answered).
   const activeQuestions = useMemo(() => findActiveQuestions(messages), [messages]);
 
+  const handleModeChange = useCallback(
+    (nextMode: ChatMode) => {
+      setMode(nextMode);
+      void conversationsApi.update(conversationId, { mode: nextMode }).catch(() => {});
+    },
+    [conversationId],
+  );
+
   const handleModelChange = async (nextProviderId: number, nextModelId: string) => {
     await conversationsApi.update(conversationId, {
       providerId: nextProviderId,
@@ -1170,7 +1187,7 @@ function ConversationChat({
                 status={status}
                 disabled={!providerId || !modelId}
                 mode={mode}
-                onModeChange={setMode}
+                onModeChange={handleModeChange}
                 qualityPolicy={qualityPolicy}
                 onQualityPolicyChange={setQualityPolicy}
                 providerId={providerId}
@@ -1259,7 +1276,7 @@ function ConversationChat({
                     status={status}
                     disabled={!providerId || !modelId}
                     mode={mode}
-                    onModeChange={setMode}
+                    onModeChange={handleModeChange}
                     qualityPolicy={qualityPolicy}
                     onQualityPolicyChange={setQualityPolicy}
                     providerId={providerId}

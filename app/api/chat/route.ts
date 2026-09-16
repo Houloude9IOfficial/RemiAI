@@ -94,6 +94,8 @@ import { buildProfileTools } from "@/lib/tools/profile";
 import { buildRoutinesTools } from "@/lib/tools/routines";
 import { buildScheduleTool } from "@/lib/tools/schedule";
 import { buildToolHelpTool, buildListAvailableToolsTool } from "@/lib/tools/tool-help";
+import { buildModeTool } from "@/lib/tools/mode";
+import { shouldPromotePlanToGoal } from "@/lib/chat/mode-transition";
 import { buildSkillsToolSet } from "@/lib/skills/tools";
 import { buildActiveSkillsSection } from "@/lib/skills/system-prompt";
 import { buildTaggedSkillsSection } from "@/lib/skills/tagged-skill";
@@ -393,14 +395,7 @@ export async function POST(req: Request) {
       })
       .where(eq(conversations.id, conversationId));
 
-    const previousMessage = uiMessages[uiMessages.length - 2];
-    const answeredPlanQuestions = mode === "plan" && previousMessage?.role === "assistant" &&
-      previousMessage.parts.some((part) => {
-        if (!part || typeof part !== "object" || !("output" in part)) return false;
-        const output = part.output;
-        return output !== null && typeof output === "object" &&
-          "type" in output && output.type === "questions";
-      });
+    const answeredPlanQuestions = shouldPromotePlanToGoal(mode, uiMessages);
     if (answeredPlanQuestions) {
       mode = "goal";
       await db.update(conversations)
@@ -529,6 +524,7 @@ export async function POST(req: Request) {
     }),
     ask_questions: askQuestionsTool,
     suggest_followups: suggestFollowupsTool,
+    switch_mode: buildModeTool(conversationId),
     set_run_name: setRunNameTool,
     ...createVisualToolSet,
     ...buildToolHelpTool(),
@@ -647,7 +643,25 @@ You are currently in **Plan mode**. This means:
 - Your goal is to help the user plan their project by asking clarifying questions, researching options, and creating a detailed todo plan.
 - Focus on understanding the user's requirements, exploring their codebase, and proposing a clear implementation plan.
 - Use \`todos_init\` at the start to lay out the steps you'll help them plan.
+- Stay in Plan mode while requirements are unclear or questions remain unanswered.
+- When the user has answered the planning questions and the requirements are clear, call \`switch_mode({ mode: "goal", reason: "..." })\` before the next user turn. Do not attempt build/write tools in Plan mode.
+- If new ambiguity appears while working, call \`switch_mode({ mode: "plan", reason: "..." })\` and ask focused questions; return to Goal mode only after they are answered.
+- Mode changes apply to the next user turn. Never claim to have changed modes without calling \`switch_mode\`.
 - Do NOT attempt to modify any files — you don't have permission to write in this mode.`
+      : "";
+  const goalModePrompt =
+    mode === "goal"
+      ? `
+
+## GOAL MODE — Execute until the task is complete
+
+You are currently in **Goal mode**. The user's requirements are considered clear enough to execute.
+- Use the available read, write, execution, and verification tools to complete the task.
+- Do not stop at a plan or ask broad discovery questions; ask only a focused question if a genuinely blocking ambiguity appears.
+- If a blocking ambiguity appears, call \`switch_mode({ mode: "plan", reason: "..." })\` before asking questions. That change applies to the next user turn.
+- After the user answers, call \`switch_mode({ mode: "goal", reason: "..." })\` if needed, then continue the implementation.
+- Verify the result with the narrowest relevant check before reporting completion.
+`
       : "";
   const buildModePrompt =
     mode === "build"
@@ -1108,7 +1122,7 @@ Definition of done:
 
   const dynamicSystemPromptBase =
     systemTip + profileTip + memoryTip + fileChangeTip + summarySection +
-    planModePrompt + buildModePrompt + canvasSection + _remiCardsSection + existingCardSection + (Object.keys(_remiCardToolSet).length ? REMI_CARD_PRESENTATION_RULES + REMI_CARD_SCOPE_RULES : "") + activeSkillsSection +
+    planModePrompt + goalModePrompt + buildModePrompt + canvasSection + _remiCardsSection + existingCardSection + (Object.keys(_remiCardToolSet).length ? REMI_CARD_PRESENTATION_RULES + REMI_CARD_SCOPE_RULES : "") + activeSkillsSection +
     taggedSkillsSection + qualityPolicyPrompt;
 
   const dynamicSystemPrompt = dynamicSystemPromptBase + toolAvailabilityNote;
