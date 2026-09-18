@@ -2,7 +2,7 @@
 
 import type { UIMessage } from "ai";
 import { isTextUIPart, isToolUIPart, isReasoningUIPart, getToolName } from "ai";
-import { Component, useEffect, useRef, useState } from "react";
+import { Component, useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Copy, Check, Play, RefreshCw, Pencil, X, ChevronDown, ChevronUp } from "lucide-react";
 import { ToolCallGroup, FileChangeDigest, extractFileChanges } from "./ToolCallGroup";
@@ -299,43 +299,75 @@ function EditMessageForm({
   onSave: (text: string) => void;
 }) {
   const [text, setText] = useState(initialText);
+  const textareaId = useId();
+  const canSave = text.trim().length > 0;
+
+  const save = () => {
+    if (canSave) onSave(text);
+  };
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-2">
+    <form
+      className="w-full min-w-0 rounded-2xl border border-primary/30 bg-muted/30 p-3 shadow-sm"
+      onSubmit={(event) => {
+        event.preventDefault();
+        save();
+      }}
+    >
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <label htmlFor={textareaId} className="text-sm font-medium text-foreground">
+          Edit message
+        </label>
+        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+          {text.length.toLocaleString()} characters
+        </span>
+      </div>
       <textarea
+        id={textareaId}
         autoFocus
         value={text}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => {
-          if (event.key === "Escape") onCancel();
-          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+          if (event.key === "Escape" && !event.nativeEvent.isComposing) {
             event.preventDefault();
-            onSave(text);
+            onCancel();
+          }
+          if (
+            event.key === "Enter" &&
+            (event.metaKey || event.ctrlKey) &&
+            !event.nativeEvent.isComposing
+          ) {
+            event.preventDefault();
+            save();
           }
         }}
-        aria-label="Edit message"
-        className="min-h-24 w-full resize-y rounded-2xl border border-primary/40 bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
+        aria-describedby={`${textareaId}-help`}
+        className="field-sizing-content min-h-32 max-h-[min(50vh,32rem)] w-full resize-y rounded-xl border border-input bg-background px-3 py-2.5 text-[15px] leading-relaxed text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20"
       />
-      <div className="flex items-center justify-end gap-1.5">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          <X className="h-3.5 w-3.5" />
-          Cancel
-        </button>
-        <button
-          type="button"
-          onClick={() => onSave(text)}
-          disabled={!text.trim()}
-          className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Check className="h-3.5 w-3.5" />
-          Save & resend
-        </button>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <p id={`${textareaId}-help`} className="text-xs text-muted-foreground">
+          This restarts the conversation from this message. Press ⌘/Ctrl + Enter to resend.
+        </p>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <X className="h-3.5 w-3.5" />
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={!canSave}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Check className="h-3.5 w-3.5" />
+            Save & resend
+          </button>
+        </div>
       </div>
-    </div>
+    </form>
   );
 }
 
@@ -849,7 +881,7 @@ function UserMessageBubble({
 
   return (
     <div className="group flex justify-end">
-      <div className="flex max-w-[min(85%,36rem)] flex-col items-end gap-1">
+      <div className="flex w-full max-w-[42rem] flex-col items-end gap-1">
         {isEditing ? (
           <EditMessageForm
             initialText={inlineText}
