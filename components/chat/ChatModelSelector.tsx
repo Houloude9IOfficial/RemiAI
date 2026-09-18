@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { Bot, ChevronDown, Settings2 } from "lucide-react";
+import { LuBrain } from "react-icons/lu";
 import {
   SiGooglegemini,
   SiDeepseek,
@@ -37,6 +38,7 @@ import { availableModelsApi, type AvailableProvider } from "@/lib/api/available-
 import type { ProviderKind } from "@/lib/api/providers";
 import { PROVIDER_KIND_META } from "@/components/settings/provider-kind";
 import { cn } from "@/lib/utils";
+import { AUTO_MODEL_ID, isAutoModel } from "@/lib/chat/auto-model";
 
 function encode(providerId: number, modelId: string) {
   return `${providerId}::${modelId}`;
@@ -65,7 +67,7 @@ const MODEL_NAME_ICONS: Record<
   string,
   null | React.ComponentType<React.SVGProps<SVGSVGElement>>
 > = {
-  auto: FaBrain,
+  auto: LuBrain,
   gemini: SiGooglegemini,
   gemma: SiGooglegemini,
   deepseek: SiDeepseek,
@@ -169,10 +171,15 @@ export function ChatModelSelector({
   });
 
   const value = providerId && modelId ? encode(providerId, modelId) : "";
+  const modelCount = availableProviders.reduce((total, provider) => total + provider.models.length, 0);
+  const autoAvailable = modelCount > 2;
+  const autoSelected = isAutoModel(modelId);
 
   const currentProvider = availableProviders.find((p) => p.providerId === providerId);
   const currentModel = currentProvider?.models.find((m) => m.modelId === modelId);
-  const modelLabel = currentModel?.modelLabel
+  const modelLabel = autoSelected
+    ? "Auto"
+    : currentModel?.modelLabel
     ? currentModel.modelLabel
     : modelId
       ? prettyModelLabel(modelId)
@@ -189,7 +196,7 @@ export function ChatModelSelector({
   // re-evaluates on every refresh.
   const healedRef = useRef<string | null>(null);
   const selectionKey = value;
-  const selectionIsStale = !!selectionKey && !currentModel;
+  const selectionIsStale = !!selectionKey && !currentModel && (!autoSelected || !autoAvailable);
 
   useEffect(() => {
     if (!isSuccess || !selectionIsStale) return;
@@ -243,7 +250,7 @@ export function ChatModelSelector({
         <ProviderBrandIcon
           kind={currentProvider?.kind}
           modelId={modelId}
-          className={`h-4 w-4 shrink-0 ${modelLabel == 'Auto' ? 'hidden' : ''}`}
+          className={`h-4 w-4 shrink-0 ${modelLabel === "Auto" ? "hidden" : ""}`}
         />
         <span className="max-w-36 truncate">{modelLabel}</span>
         <ChevronDown
@@ -254,14 +261,14 @@ export function ChatModelSelector({
         />
       </DropdownMenuTrigger>
 
-      {/* Fixed width overrides the default --anchor-width so long model ids
-          render in full (same approach as the header ModelPicker). */}
+      {/* Fixed width keeps provider groups easy to scan without widening the
+          compact composer controls. Raw IDs remain available as item titles. */}
       <DropdownMenuContent
         align="start"
         side="top"
         sideOffset={6}
-        style={{ width: "18rem" }}
-        className="p-1.5"
+        style={{ width: "19rem" }}
+        className="rounded-2xl border border-border/70 bg-popover/95 p-2 shadow-xl backdrop-blur-xl"
       >
         {nothingConfigured ? (
           <div className="flex flex-col items-center gap-2 px-1 py-4 text-center">
@@ -286,31 +293,45 @@ export function ChatModelSelector({
               setOpen(false);
             }}
           >
+            {autoAvailable && availableProviders[0] && (
+              <>
+                <DropdownMenuLabel className="px-2.5 pb-1 pt-0.5 text-[10px] font-semibold tracking-[0.08em] text-muted-foreground/75 uppercase">
+                  Automatic
+                </DropdownMenuLabel>
+                <DropdownMenuRadioItem
+                  value={encode(availableProviders[0].providerId, AUTO_MODEL_ID)}
+                  className="min-h-10 gap-2.5 rounded-xl px-2.5 py-1.5 data-[checked]:bg-primary/10 data-[checked]:text-foreground"
+                >
+                  <LuBrain className="h-4 w-4 shrink-0" />
+                  <span className="flex min-w-0 flex-col items-start">
+                    <span className="text-[13px] font-medium text-foreground">Auto</span>
+                    <span className="text-[11px] leading-4 text-muted-foreground">Try enabled models in order</span>
+                  </span>
+                </DropdownMenuRadioItem>
+                <DropdownMenuSeparator className="my-1.5" />
+              </>
+            )}
             {availableProviders.map((provider, idx) => {
               return (
                 <div key={provider.providerId}>
-                  {idx > 0 && <DropdownMenuSeparator className="my-1" />}
-                  <DropdownMenuLabel className="px-2 py-1 text-[10px] font-semibold tracking-wider text-muted-foreground/80 uppercase">
+                  {idx > 0 && <DropdownMenuSeparator className="my-1.5" />}
+                  <DropdownMenuLabel className="px-2.5 pb-1 pt-0.5 text-[10px] font-semibold tracking-[0.08em] text-muted-foreground/75 uppercase">
                     {provider.label}
                   </DropdownMenuLabel>
                   {provider.models.map((m) => (
                     <DropdownMenuRadioItem
                       key={m.modelId}
                       value={encode(provider.providerId, m.modelId)}
-                      className="gap-2.5 rounded-lg py-1.5 pr-8 pl-2"
+                      title={m.modelId}
+                      className="min-h-9 gap-2.5 rounded-xl px-2.5 py-1.5 data-[checked]:bg-primary/10 data-[checked]:text-foreground"
                     >
                       <ProviderBrandIcon
                         kind={provider.kind}
                         modelId={m.modelId}
                         className="h-4 w-4 shrink-0"
                       />
-                      <span className="flex min-w-0 flex-col items-start">
-                        <span className="truncate text-[13px] leading-tight font-medium text-foreground">
-                          {m.modelLabel ?? prettyModelLabel(m.modelId)}
-                        </span>
-                        <span className="truncate font-mono text-[10px] leading-tight text-muted-foreground">
-                          {m.modelId}
-                        </span>
+                      <span className="min-w-0 truncate text-[13px] font-medium text-foreground">
+                        {m.modelLabel ?? prettyModelLabel(m.modelId)}
                       </span>
                     </DropdownMenuRadioItem>
                   ))}
@@ -322,10 +343,10 @@ export function ChatModelSelector({
 
         {!nothingConfigured && (
           <>
-            <DropdownMenuSeparator className="my-1" />
+            <DropdownMenuSeparator className="my-1.5" />
             <DropdownMenuItem
               onClick={() => router.push("/settings/providers")}
-              className="justify-center gap-1.5 rounded-lg py-1.5 text-xs text-muted-foreground"
+              className="min-h-9 justify-center gap-1.5 rounded-xl py-1.5 text-xs font-medium text-muted-foreground"
             >
               <Settings2 className="h-3.5 w-3.5" />
               Manage models

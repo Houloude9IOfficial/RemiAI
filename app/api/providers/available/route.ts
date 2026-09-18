@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { providers, providerModels } from "@/db/schema";
 import { contextWindowFor } from "@/lib/providers/catalog";
@@ -42,7 +42,8 @@ export async function GET() {
       providerModels,
       and(eq(providerModels.providerId, providers.id), eq(providerModels.enabled, true)),
     )
-    .where(eq(providers.enabled, true));
+    .where(eq(providers.enabled, true))
+    .orderBy(asc(providers.id), asc(providerModels.id));
 
   type AvailableModelRow = (typeof rows)[number] & { contextWindow: number };
   const grouped = new Map<

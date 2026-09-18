@@ -1364,57 +1364,84 @@ export function ChatInput({
                   )}
                 />
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" side="top" sideOffset={6} className="w-64">
+              <DropdownMenuContent
+                align="start"
+                side="top"
+                sideOffset={8}
+                className="w-72 rounded-2xl border border-border/70 bg-popover/95 p-2 shadow-xl backdrop-blur-xl"
+              >
                 <DropdownMenuGroup>
-                  <DropdownMenuLabel>Attach files for context</DropdownMenuLabel>
-                  <DropdownMenuItem onClick={openFilePicker}>
+                  <DropdownMenuLabel className="px-2.5 pb-1 pt-0.5 text-[10px] font-semibold tracking-[0.08em] text-muted-foreground/75 uppercase">
+                    Add context
+                  </DropdownMenuLabel>
+                  <DropdownMenuItem
+                    onClick={openFilePicker}
+                    className="min-h-9 gap-2.5 rounded-xl px-2.5 py-2 text-[13px] font-medium"
+                  >
                     <Paperclip className="h-4 w-4" />
                     Add photos &amp; files
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setFileDialogOpen(true)}>
+                  <DropdownMenuItem
+                    onClick={() => setFileDialogOpen(true)}
+                    className="min-h-9 gap-2.5 rounded-xl px-2.5 py-2 text-[13px] font-medium"
+                  >
                     <FolderOpen className="h-4 w-4" />
-                    Directories / files context
+                    Add folders
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
 
                 {onModeChange && (
                   <>
-                    <DropdownMenuSeparator />
+                    <DropdownMenuSeparator className="my-1.5" />
                     <DropdownMenuGroup>
-                      <DropdownMenuLabel>Mode · How Remi should work</DropdownMenuLabel>
+                      <DropdownMenuLabel className="px-2.5 pb-1 pt-0.5 text-[10px] font-semibold tracking-[0.08em] text-muted-foreground/75 uppercase">
+                        Work mode
+                      </DropdownMenuLabel>
                       <DropdownMenuCheckboxItem
                         checked={mode === "build"}
-                        onCheckedChange={(checked) => onModeChange(checked ? "build" : "chat")}
+                        onCheckedChange={(checked) => {
+                          onModeChange(checked ? "build" : "chat");
+                          setDropdownOpen(false);
+                        }}
+                        className="min-h-11 gap-2.5 rounded-xl px-2.5 py-1.5 data-[checked]:bg-primary/10 data-[checked]:text-foreground"
                       >
                         <Hammer className="h-4 w-4" />
                         <span>
-                          <span className="block">Build mode</span>
-                          <span className="block text-[10px] font-normal text-muted-foreground">
-                            Change files and run checks
+                          <span className="block text-[13px] font-medium">Build</span>
+                          <span className="block text-[11px] leading-4 font-normal text-muted-foreground">
+                            Change files and verify work
                           </span>
                         </span>
                       </DropdownMenuCheckboxItem>
                       <DropdownMenuCheckboxItem
                         checked={mode === "goal"}
-                        onCheckedChange={(checked) => onModeChange(checked ? "goal" : "chat")}
+                        onCheckedChange={(checked) => {
+                          onModeChange(checked ? "goal" : "chat");
+                          setDropdownOpen(false);
+                        }}
+                        className="min-h-11 gap-2.5 rounded-xl px-2.5 py-1.5 data-[checked]:bg-primary/10 data-[checked]:text-foreground"
                       >
                         <Sparkles className="h-4 w-4" />
                         <span>
-                          <span className="block">Goal mode</span>
-                          <span className="block text-[10px] font-normal text-muted-foreground">
-                            Works autonomously until finish
+                          <span className="block text-[13px] font-medium">Goal</span>
+                          <span className="block text-[11px] leading-4 font-normal text-muted-foreground">
+                            Keep working until it’s done
                           </span>
                         </span>
                       </DropdownMenuCheckboxItem>
                       <DropdownMenuCheckboxItem
                         checked={mode === "plan"}
-                        onCheckedChange={(checked) => onModeChange(checked ? "plan" : "chat")}
+                        onCheckedChange={(checked) => {
+                          onModeChange(checked ? "plan" : "chat");
+                          setDropdownOpen(false);
+                        }}
+                        className="min-h-11 gap-2.5 rounded-xl px-2.5 py-1.5 data-[checked]:bg-primary/10 data-[checked]:text-foreground"
                       >
                         <ListChecks className="h-4 w-4" />
                         <span>
-                          <span className="block">Plan mode</span>
-                          <span className="block text-[10px] font-normal text-muted-foreground">
-                            Read and plan without writing files
+                          <span className="block text-[13px] font-medium">Plan</span>
+                          <span className="block text-[11px] leading-4 font-normal text-muted-foreground">
+                            Explore without making changes
                           </span>
                         </span>
                       </DropdownMenuCheckboxItem>
@@ -1424,57 +1451,38 @@ export function ChatInput({
 
                 {!demo && onQualityPolicyChange && (
                   <>
-                    <DropdownMenuSeparator />
+                    <DropdownMenuSeparator className="my-1.5" />
                     <DropdownMenuGroup>
-                      <DropdownMenuLabel>Reasoning effort</DropdownMenuLabel>
+                      <DropdownMenuLabel className="px-2.5 pb-1 pt-0.5 text-[10px] font-semibold tracking-[0.08em] text-muted-foreground/75 uppercase">
+                        Reasoning
+                      </DropdownMenuLabel>
                       <DropdownMenuCheckboxItem
                         checked={activeQualityPolicy === "minimal"}
                         onCheckedChange={(checked) => checked && onQualityPolicyChange("minimal")}
+                        className="min-h-8 rounded-lg px-2.5 py-1.5 text-[13px] font-medium data-[checked]:bg-primary/10 data-[checked]:text-foreground"
                       >
-                        <span>
-                          <span className="block">Minimal</span>
-                          <span className="block text-[10px] font-normal text-muted-foreground">
-                            Least reasoning · fastest response
-                          </span>
-                        </span>
+                        Minimal
                       </DropdownMenuCheckboxItem>
                       <DropdownMenuCheckboxItem
                         checked={activeQualityPolicy === "low"}
                         onCheckedChange={(checked) => checked && onQualityPolicyChange("low")}
+                        className="min-h-8 rounded-lg px-2.5 py-1.5 text-[13px] font-medium data-[checked]:bg-primary/10 data-[checked]:text-foreground"
                       >
-                        <span>
-                          <span className="block">Low</span>
-                          <span className="block text-[10px] font-normal text-muted-foreground">
-                            Light reasoning · quick responses
-                          </span>
-                        </span>
+                        Low
                       </DropdownMenuCheckboxItem>
                       <DropdownMenuCheckboxItem
                         checked={activeQualityPolicy === "medium"}
                         onCheckedChange={(checked) => checked && onQualityPolicyChange("medium")}
+                        className="min-h-8 rounded-lg px-2.5 py-1.5 text-[13px] font-medium data-[checked]:bg-primary/10 data-[checked]:text-foreground"
                       >
-                        <span>
-                          <span className="block">
-                            Medium
-                            {/* <span className="ml-1.5 rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary">
-                              Recommended
-                            </span> */}
-                          </span>
-                          <span className="block text-[10px] font-normal text-muted-foreground">
-                            Balanced for most tasks
-                          </span>
-                        </span>
+                        Medium
                       </DropdownMenuCheckboxItem>
                       <DropdownMenuCheckboxItem
                         checked={activeQualityPolicy === "high"}
                         onCheckedChange={(checked) => checked && onQualityPolicyChange("high")}
+                        className="min-h-8 rounded-lg px-2.5 py-1.5 text-[13px] font-medium data-[checked]:bg-primary/10 data-[checked]:text-foreground"
                       >
-                        <span>
-                          <span className="block">High</span>
-                          <span className="block text-[10px] font-normal text-muted-foreground">
-                            Deep reasoning · slower · may cost more
-                          </span>
-                        </span>
+                        High
                       </DropdownMenuCheckboxItem>
                     </DropdownMenuGroup>
                   </>
@@ -1482,20 +1490,23 @@ export function ChatInput({
 
                 {!demo && (onTemporaryChange || onMemoryChange) && (
                   <>
-                    <DropdownMenuSeparator />
+                    <DropdownMenuSeparator className="my-1.5" />
                     <DropdownMenuGroup>
-                      <DropdownMenuLabel>Chat settings</DropdownMenuLabel>
+                      <DropdownMenuLabel className="px-2.5 pb-1 pt-0.5 text-[10px] font-semibold tracking-[0.08em] text-muted-foreground/75 uppercase">
+                        Chat settings
+                      </DropdownMenuLabel>
                       {onMemoryChange && (
                         <DropdownMenuCheckboxItem
                           checked={memoryEnabled !== false}
                           onCheckedChange={(checked) => onMemoryChange(checked === true)}
+                          className="min-h-10 gap-2.5 rounded-xl px-2.5 py-1.5 data-[checked]:bg-primary/10 data-[checked]:text-foreground"
                         >
                           <Brain className="h-4 w-4" />
                           <span>
-                            <span className="block">Memory</span>
-                            <span className="block text-[10px] font-normal text-muted-foreground">
+                            <span className="block text-[13px] font-medium">Memory</span>
+                            <span className="block text-[11px] leading-4 font-normal text-muted-foreground">
                               {memoryEnabled === false
-                                ? "Disabled. No memory, profile, preferences, or file access"
+                                ? "This chat stays isolated"
                                 : "Remembers you across conversations"}
                             </span>
                           </span>
@@ -1505,11 +1516,12 @@ export function ChatInput({
                         <DropdownMenuCheckboxItem
                           checked={isTemporary === true}
                           onCheckedChange={(checked) => onTemporaryChange(checked === true)}
+                          className="min-h-10 gap-2.5 rounded-xl px-2.5 py-1.5 data-[checked]:bg-primary/10 data-[checked]:text-foreground"
                         >
                           <Timer className="h-4 w-4" />
                           <span>
-                            <span className="block">Temporary chat</span>
-                            <span className="block text-[10px] font-normal text-muted-foreground">
+                            <span className="block text-[13px] font-medium">Temporary chat</span>
+                            <span className="block text-[11px] leading-4 font-normal text-muted-foreground">
                               {isTemporary === true
                                 ? `Deleted after ${TEMPORARY_CHAT_RETENTION_DAYS} days of inactivity`
                                 : "Make this chat temporary"}
@@ -1521,9 +1533,11 @@ export function ChatInput({
                   </>
                 )}
 
-                <DropdownMenuSeparator />
+                <DropdownMenuSeparator className="my-1.5" />
                 {!demo && <DropdownMenuGroup>
-                  <DropdownMenuLabel>Extra capabilities</DropdownMenuLabel>
+                  <DropdownMenuLabel className="px-2.5 pb-1 pt-0.5 text-[10px] font-semibold tracking-[0.08em] text-muted-foreground/75 uppercase">
+                    Extra capabilities
+                  </DropdownMenuLabel>
                   <DropdownMenuItem
                     onClick={() => {
                       if (codeExecutionOn) {
@@ -1532,7 +1546,9 @@ export function ChatInput({
                       } else {
                         router.push("/settings/tools");
                       }
+                      setDropdownOpen(false);
                     }}
+                    className="min-h-9 gap-2.5 rounded-xl px-2.5 py-1.5 text-[13px] font-medium"
                   >
                     <Code2 className="h-4 w-4" />
                     Code
@@ -1554,7 +1570,11 @@ export function ChatInput({
                       filesystem/shell reach and private-network requests, and
                       is carried into newly-created conversations. */}
                   <DropdownMenuItem
-                    onClick={() => setBashModeValue(bashMode === "sandboxed" ? "full" : "sandboxed")}
+                    onClick={() => {
+                      setBashModeValue(bashMode === "sandboxed" ? "full" : "sandboxed");
+                      setDropdownOpen(false);
+                    }}
+                    className="min-h-9 gap-2.5 rounded-xl px-2.5 py-1.5 text-[13px] font-medium"
                   >
                     <Terminal className="h-4 w-4" />
                     Access: {bashMode === "full" ? "Full" : "Limited"}

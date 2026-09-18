@@ -16,7 +16,7 @@ import { isQuestionsOutput } from "@/lib/chat/questions";
 import { persistUIMessage } from "@/lib/chat/persist";
 import { streamRegistry } from "@/lib/chat/stream-registry";
 import { periodicallyPersistMessages } from "@/lib/chat/persist-interval";
-import { eq, sql, count } from "drizzle-orm";
+import { asc, eq, sql, count } from "drizzle-orm";
 import { db, initializeApp } from "@/db";
 import {
   conversations,
@@ -26,7 +26,8 @@ import {
   userPreferences,
   messages,
 } from "@/db/schema";
-import { getLanguageModel } from "@/lib/providers/factory";
+import { getAutoLanguageModel, getLanguageModel } from "@/lib/providers/factory";
+import { isAutoModel } from "@/lib/chat/auto-model";
 import { streamingReasoningProviderOptions } from "@/lib/providers/reasoning";
 import {
   SYSTEM_PROMPT_BASE,
@@ -917,13 +918,15 @@ Definition of done:
     .select()
     .from(providers)
     .where(eq(providers.enabled, true))
+    .orderBy(asc(providers.id))
     .all();
   const enabledRouteModels = await db
     .select()
     .from(providerModels)
     .where(eq(providerModels.enabled, true))
+    .orderBy(asc(providerModels.id))
     .all();
-  const selectedRouteCandidate: ModelRouteCandidate = {
+  const savedRouteCandidate: ModelRouteCandidate = {
     providerId: provider.id,
     providerKind: provider.kind,
     providerLabel: provider.label,
@@ -939,7 +942,13 @@ Definition of done:
         modelId: routeModel.modelId,
       })),
   );
-  if (!routeCandidates.some((candidate) =>
+  // New Auto selections are exposed only with 3+ enabled models. Keep older
+  // Auto conversations resilient if the user later disables models.
+  const autoMode = isAutoModel(conversation.modelId) && routeCandidates.length > 0;
+  const selectedRouteCandidate = autoMode
+    ? routeCandidates[0]!
+    : savedRouteCandidate;
+  if (!autoMode && !routeCandidates.some((candidate) =>
     candidate.providerId === selectedRouteCandidate.providerId &&
     candidate.modelId === selectedRouteCandidate.modelId,
   )) {
@@ -957,7 +966,15 @@ Definition of done:
     (routeProvider) => routeProvider.id === qualityRoute.active.providerId,
   ) ?? provider;
   const activeModelId = qualityRoute.active.modelId;
-  const model = getLanguageModel(activeProvider, activeModelId, qualityStrategy.policy);
+  const model = autoMode
+    ? getAutoLanguageModel(
+        routeCandidates.map((candidate) => ({
+          provider: enabledRouteProviders.find((routeProvider) => routeProvider.id === candidate.providerId)!,
+          modelId: candidate.modelId,
+        })),
+        qualityStrategy.policy,
+      )
+    : getLanguageModel(activeProvider, activeModelId, qualityStrategy.policy);
   trace.metric("qualityPolicy", qualityStrategy.policy);
   trace.metric("taskComplexity", qualityStrategy.complexity);
   trace.metric("selectedProviderId", provider.id);

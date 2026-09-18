@@ -9,10 +9,12 @@ import {
   wrapLanguageModel,
   type LanguageModel,
 } from "ai";
+import type { LanguageModelV4, LanguageModelV4CallOptions } from "@ai-sdk/provider";
 import type { providers } from "@/db/schema";
 import { createCompatFetch } from "./compat";
 import { nemotronChatTemplateKwargs } from "./reasoning";
 import type { QualityPolicy } from "@/lib/chat/quality-policy";
+import { AUTO_MODEL_ID } from "@/lib/chat/auto-model";
 
 type ProviderRow = typeof providers.$inferSelect;
 
@@ -107,4 +109,51 @@ export function getLanguageModel(
       });
     }
   }
+}
+
+/**
+ * A virtual model that starts with the first enabled model and tries each
+ * later model only when the previous provider rejects the request before a
+ * response stream is established. Once streaming has started we cannot safely
+ * replay a prompt without duplicating a partial answer, so that error is left
+ * to the normal stream error handling.
+ */
+export function getAutoLanguageModel(
+  candidates: Array<{ provider: ProviderRow; modelId: string }>,
+  effort: QualityPolicy = "medium",
+): LanguageModel {
+  const models = candidates.map(({ provider, modelId }) =>
+    getLanguageModel(provider, modelId, effort) as LanguageModelV4,
+  );
+  return createAutoFailoverLanguageModel(models);
+}
+
+/** Exported for a small, provider-free regression test of Auto failover. */
+export function createAutoFailoverLanguageModel(
+  models: LanguageModelV4[],
+): LanguageModelV4 {
+  const primary = models[0];
+  if (!primary) throw new Error("Auto needs at least one enabled model");
+
+  const tryInOrder = async <T>(
+    call: (model: LanguageModelV4) => PromiseLike<T>,
+  ): Promise<T> => {
+    let lastError: unknown;
+    for (const model of models) {
+      try {
+        return await call(model);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError ?? new Error("No enabled model could start the request");
+  };
+
+  return {
+    ...primary,
+    provider: "remiai-auto",
+    modelId: AUTO_MODEL_ID,
+    doGenerate: (options: LanguageModelV4CallOptions) => tryInOrder((model) => model.doGenerate(options)),
+    doStream: (options: LanguageModelV4CallOptions) => tryInOrder((model) => model.doStream(options)),
+  };
 }
