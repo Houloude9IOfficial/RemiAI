@@ -45,19 +45,21 @@ import {
 import { Button } from "@/components/ui/button";
 import { isRemiCardOutput, remiCardPartIdentity } from "@/lib/chat/card-identity";
 import { extractSearchTrace, isSearchTraceToolPart } from "@/lib/chat/search-trace";
+import { getStreamDisplayCharsPerSecond } from "@/lib/chat/stream-display-rate";
 
 // ── Helpers ───────────────────────────────────────────────────────────
-
-// Cap display throughput so buffered/proxy providers that flush an entire
-// answer at once still read as a steady stream instead of a text jump.
-const MAX_STREAM_DISPLAY_CHARS_PER_SECOND = 130;
 
 /**
  * Decouples visible text from provider deltas. The display can never outrun
  * this clock, so a fast response remains legible; a slow response is shown as
- * soon as each new character becomes available.
+ * soon as each new character becomes available. Once the provider finishes,
+ * a buffered tail accelerates enough to clear within five seconds.
  */
-function useSmoothedStreamContent(content: string, sourceStreaming: boolean) {
+function useSmoothedStreamContent(
+  content: string,
+  sourceStreaming: boolean,
+  messageStreaming: boolean,
+) {
   const [visibleLength, setVisibleLength] = useState(() =>
     sourceStreaming ? 0 : content.length,
   );
@@ -68,9 +70,11 @@ function useSmoothedStreamContent(content: string, sourceStreaming: boolean) {
     const previousContent = previousContentRef.current;
     previousContentRef.current = content;
 
-    // A different/recovered stream can be shorter than the old buffer.
+    // A recovered stream can be shorter than the old buffer. Keep the portion
+    // already revealed when possible so a transient replacement never makes
+    // the entire response appear to restart from the beginning.
     if (content.length < previousContent.length) {
-      const nextLength = sourceStreaming ? 0 : content.length;
+      const nextLength = Math.min(visibleLengthRef.current, content.length);
       visibleLengthRef.current = nextLength;
       setVisibleLength(nextLength);
     }
@@ -79,12 +83,17 @@ function useSmoothedStreamContent(content: string, sourceStreaming: boolean) {
   useEffect(() => {
     if (visibleLengthRef.current >= content.length) return;
 
+    const remainingCharacters = content.length - visibleLengthRef.current;
+    const charactersPerSecond = getStreamDisplayCharsPerSecond(
+      remainingCharacters,
+      messageStreaming,
+    );
     let frame = 0;
     let previousTime: number | null = null;
     let carry = 0;
     const advance = (time: number) => {
       if (previousTime !== null) {
-        carry += ((time - previousTime) * MAX_STREAM_DISPLAY_CHARS_PER_SECOND) / 1000;
+        carry += ((time - previousTime) * charactersPerSecond) / 1000;
         const count = Math.floor(carry);
         if (count > 0) {
           carry -= count;
@@ -100,7 +109,7 @@ function useSmoothedStreamContent(content: string, sourceStreaming: boolean) {
     };
     frame = requestAnimationFrame(advance);
     return () => cancelAnimationFrame(frame);
-  }, [content.length]);
+  }, [content.length, messageStreaming]);
 
   const displayStreaming = sourceStreaming || visibleLength < content.length;
   return {
@@ -377,13 +386,20 @@ function UserMessageText({ text }: { text: string }) {
 function StreamingSafeMarkdown({
   content,
   isStreaming,
+  messageStreaming,
   citations,
 }: {
   content: string;
   isStreaming?: boolean;
+  /** True until the entire assistant message, including any tool steps, ends. */
+  messageStreaming?: boolean;
   citations?: Map<string, CitationRef> | null;
 }) {
-  const display = useSmoothedStreamContent(content, isStreaming ?? false);
+  const display = useSmoothedStreamContent(
+    content,
+    isStreaming ?? false,
+    messageStreaming ?? false,
+  );
   const [hasStarted, setHasStarted] = useState(false);
 
   useEffect(() => {
@@ -1193,6 +1209,7 @@ export function MessageBubble({
                   isStreaming={
                     isStreaming && idx === bodySegments.length - 1
                   }
+                  messageStreaming={isStreaming}
                   citations={!isStreaming ? messageSources.byUrl : null}
                 />
               </div>
