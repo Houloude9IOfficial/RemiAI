@@ -349,10 +349,10 @@ export function ProfileForm() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-lg font-semibold">Profile</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          {/* <p className="mt-1 text-sm text-muted-foreground">
             Your personal details, social links, and AI preferences. Remi uses
             this information to personalise every conversation.
-          </p>
+          </p> */}
         </div>
         <div className="flex flex-shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
           {updateMutation.isPending || dirty ? (

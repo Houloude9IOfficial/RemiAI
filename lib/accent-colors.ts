@@ -22,6 +22,7 @@ export interface AccentPreset {
 
 export const ACCENT_PRESETS: AccentPreset[] = [
   { id: "blue", label: "Blue", light: "#2563eb", dark: "#60a5fa" },
+  { id: "navy", label: "Navy", light: "#1e3a8a", dark: "#3b82f6" },
   { id: "indigo", label: "Indigo", light: "#4f46e5", dark: "#818cf8" },
   { id: "violet", label: "Violet", light: "#7c3aed", dark: "#a78bfa" },
   { id: "purple", label: "Purple", light: "#9333ea", dark: "#c084fc" },
@@ -35,7 +36,7 @@ export const ACCENT_PRESETS: AccentPreset[] = [
   { id: "green", label: "Green", light: "#16a34a", dark: "#4ade80" },
   { id: "emerald", label: "Emerald", light: "#059669", dark: "#34d399" },
   { id: "teal", label: "Teal", light: "#0d9488", dark: "#2dd4bf" },
-  { id: "cyan", label: "Cyan", light: "#0e7490", dark: "#22d3ee" },
+  // { id: "cyan", label: "Cyan", light: "#0e7490", dark: "#22d3ee" },
 ];
 
 /** Text-on-accent foreground, matching globals.css defaults. */
