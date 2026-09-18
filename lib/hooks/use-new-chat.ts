@@ -44,6 +44,7 @@ export function useNewChat(
     },
     onSuccess: (conversation) => {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["sidebar-conversations"] });
       router.push(`/chat/${conversation.id}`);
       onSuccess?.();
     },
@@ -52,6 +53,7 @@ export function useNewChat(
       // The page will gracefully handle the empty state.
       conversationsApi.create().then((conversation) => {
         queryClient.invalidateQueries({ queryKey: ["conversations"] });
+        queryClient.invalidateQueries({ queryKey: ["sidebar-conversations"] });
         router.push(`/chat/${conversation.id}`);
         onSuccess?.();
       });

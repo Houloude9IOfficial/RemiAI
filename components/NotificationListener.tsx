@@ -220,6 +220,7 @@ export function NotificationListener() {
         if (data.run) {
           queryClient.invalidateQueries({ queryKey: ["automation-runs"] });
           queryClient.invalidateQueries({ queryKey: ["conversations"] });
+          queryClient.invalidateQueries({ queryKey: ["sidebar-conversations"] });
           showAutomationNotification(data.run);
         }
       } catch {
@@ -250,6 +251,7 @@ export function NotificationListener() {
           // Invalidate queries so UI updates
           queryClient.invalidateQueries({ queryKey: ["scheduled-tasks"] });
           queryClient.invalidateQueries({ queryKey: ["conversations"] });
+          queryClient.invalidateQueries({ queryKey: ["sidebar-conversations"] });
 
           if (hasPermission.current) {
             const isSuccess = task.status === "completed";
@@ -314,6 +316,7 @@ export function NotificationListener() {
         if (data.type === "scheduled_task_completed") {
           queryClient.invalidateQueries({ queryKey: ["scheduled-tasks"] });
           queryClient.invalidateQueries({ queryKey: ["conversations"] });
+          queryClient.invalidateQueries({ queryKey: ["sidebar-conversations"] });
           showNotification(data.task);
         }
       } catch {

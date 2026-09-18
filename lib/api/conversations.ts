@@ -20,6 +20,11 @@ export type Conversation = {
   updatedAt: string;
 };
 
+export type ConversationPage = {
+  conversations: Conversation[];
+  nextCursor: string | null;
+};
+
 export function applyConversationTitleUpdate(
   queryClient: QueryClient,
   conversationId: number,
@@ -52,6 +57,7 @@ export function applyConversationTitleUpdate(
         : conversation,
     ),
   );
+  queryClient.invalidateQueries({ queryKey: ["sidebar-conversations"] });
 }
 
 async function unwrap<T>(res: Response): Promise<T> {
@@ -71,6 +77,12 @@ async function unwrap<T>(res: Response): Promise<T> {
 export const conversationsApi = {
   list: (): Promise<Conversation[]> =>
     fetch("/api/conversations").then((res) => unwrap<Conversation[]>(res)),
+
+  listPage: ({ cursor, limit = 20 }: { cursor?: string; limit?: number } = {}): Promise<ConversationPage> => {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (cursor) params.set("cursor", cursor);
+    return fetch(`/api/conversations?${params}`).then((res) => unwrap<ConversationPage>(res));
+  },
 
   create: (input?: {
     providerId?: number | null;

@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn, normalizeDate } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import {
@@ -254,10 +254,37 @@ export function ConversationList() {
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { data: conversations = [] } = useQuery({
-    queryKey: ["conversations"],
-    queryFn: conversationsApi.list,
+  const {
+    data: conversationPages,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useInfiniteQuery({
+    queryKey: ["sidebar-conversations"],
+    queryFn: async ({ pageParam }) => {
+      // Let the current scroll settle before appending another page. Without a
+      // short pause, an observer can repeatedly fire while layout is changing.
+      if (pageParam) await new Promise((resolve) => setTimeout(resolve, 1_000));
+      return conversationsApi.listPage({ cursor: pageParam, limit: pageParam ? 20 : 40 });
+    },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
+
+  // A chat can move to the top while another page is loading. De-duplicate by
+  // id so a refetch never renders the same unchanged tile twice.
+  const conversations = useMemo(() => {
+    const seen = new Set<number>();
+    return (conversationPages?.pages.flatMap((page) => page.conversations) ?? []).filter((conversation) => {
+      if (seen.has(conversation.id)) return false;
+      seen.add(conversation.id);
+      return true;
+    });
+  }, [conversationPages]);
 
   // Filter out empty conversations (no tokens consumed) unless they're the
   // currently active conversation or actively streaming. This prevents
@@ -271,6 +298,41 @@ export function ConversationList() {
       pathname === `/chat/${c.id}` ||
       activeStreams.has(c.id),
   );
+
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+  const [hasScrolledConversationList, setHasScrolledConversationList] = useState(false);
+
+  useEffect(() => {
+    const markScrolled = () => setHasScrolledConversationList(true);
+    // Scroll events do not bubble, but capture sees the actual desktop or
+    // mobile scrolling element even when it is supplied by a wrapper.
+    document.addEventListener("scroll", markScrolled, { capture: true, passive: true });
+    return () => document.removeEventListener("scroll", markScrolled, true);
+  }, []);
+
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || !hasScrolledConversationList || !hasNextPage || isFetchingNextPage) return;
+    let scrollRoot: Element | null = target.parentElement;
+    while (scrollRoot && scrollRoot !== document.body) {
+      const overflowY = window.getComputedStyle(scrollRoot).overflowY;
+      if (overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay") break;
+      scrollRoot = scrollRoot.parentElement;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) fetchNextPage();
+      },
+      { root: scrollRoot === document.body ? null : scrollRoot, rootMargin: "96px" },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [fetchNextPage, hasNextPage, hasScrolledConversationList, isFetchingNextPage]);
+
+  const refreshConversationLists = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    queryClient.invalidateQueries({ queryKey: ["sidebar-conversations"] });
+  }, [queryClient]);
 
   const grouped = filteredConversations.reduce(
     (acc, conversation) => {
@@ -306,7 +368,7 @@ export function ConversationList() {
     mutationFn: ({ id, title }: { id: number; title: string }) =>
       conversationsApi.update(id, { title }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      refreshConversationLists();
       setRenamingId(null);
       toast.success("Conversation renamed");
     },
@@ -316,7 +378,7 @@ export function ConversationList() {
   const deleteMutation = useMutation({
     mutationFn: conversationsApi.remove,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      refreshConversationLists();
       setDeletingId(null);
       toast.success("Conversation deleted");
     },
@@ -326,7 +388,7 @@ export function ConversationList() {
   const batchDeleteMutation = useMutation({
     mutationFn: conversationsApi.removeMany,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      refreshConversationLists();
       setBatchDeleteConfirm(false);
       setSelectedIds(new Set());
       setSelectMode(false);
@@ -343,7 +405,7 @@ export function ConversationList() {
   const duplicateMutation = useMutation({
     mutationFn: conversationsApi.duplicate,
     onSuccess: (conversation) => {
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      refreshConversationLists();
       router.push(`/chat/${conversation.id}`);
       toast.success("Conversation duplicated");
     },
@@ -355,7 +417,7 @@ export function ConversationList() {
     mutationFn: ({ id, temporary }: { id: number; temporary: boolean }) =>
       conversationsApi.update(id, { isTemporary: temporary }),
     onSuccess: (_, { temporary }) => {
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      refreshConversationLists();
       toast.success(temporary ? "Converted to temporary chat" : "Made permanent");
     },
     onError: (err: Error) => toast.error(err.message),
@@ -445,6 +507,22 @@ export function ConversationList() {
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, [contextMenuId]);
+
+  if (isLoading) {
+    return <p className="px-2 py-2 text-xs text-muted-foreground/70">Loading conversations…</p>;
+  }
+
+  if (isError && conversations.length === 0) {
+    return (
+      <button
+        type="button"
+        onClick={() => refetch()}
+        className="px-2 py-2 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+      >
+        Could not load conversations. Retry
+      </button>
+    );
+  }
 
   if (filteredConversations.length === 0) {
     return (
@@ -684,6 +762,19 @@ export function ConversationList() {
             </div>
           );
         })}
+      </div>
+
+      <div ref={loadMoreRef} className="flex min-h-8 items-center justify-center py-2" aria-live="polite">
+        {isFetchingNextPage && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-label="Loading more conversations" />}
+        {isError && (
+          <button
+            type="button"
+            onClick={() => fetchNextPage()}
+            className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          >
+            {error instanceof Error ? "Could not load more conversations. Retry" : "Retry loading conversations"}
+          </button>
+        )}
       </div>
 
       {/* Single delete confirmation dialog */}

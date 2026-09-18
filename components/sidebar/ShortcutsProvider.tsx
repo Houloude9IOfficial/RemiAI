@@ -36,6 +36,7 @@ export function ShortcutsProvider({ children }: { children: React.ReactNode }) {
 
   const openShortcuts = useCallback(() => setIsShortcutsOpen(true), []);
   const closeShortcuts = useCallback(() => setIsShortcutsOpen(false), []);
+  const openCommandPalette = useCallback(() => setIsCommandPaletteOpen(true), []);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -103,6 +104,7 @@ export function ShortcutsProvider({ children }: { children: React.ReactNode }) {
         isShortcutsOpen,
         openShortcuts,
         closeShortcuts,
+        openCommandPalette,
       }}
     >
       {children}

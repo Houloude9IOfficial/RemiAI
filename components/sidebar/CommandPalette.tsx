@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import Fuse from "fuse.js";
 import { useRouter } from "next/navigation";
 import { ArrowRight, FileText, MessageSquarePlus, Moon, PanelLeft, Search, Settings2, Sparkles, Sun, Wrench, X } from "lucide-react";
 import { conversationsApi } from "@/lib/api/conversations";
@@ -45,7 +46,14 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const items = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     const filtered = commands.filter((item) => !normalized || item.label.toLowerCase().includes(normalized));
-    const chats: PaletteItem[] = conversations.filter((conversation) => !normalized || conversation.title.toLowerCase().includes(normalized)).slice(0, 5).map((conversation) => ({
+    const matchedConversations = !normalized
+      ? conversations.slice(0, 5)
+      : new Fuse(conversations, {
+          keys: ["title"],
+          threshold: 0.4,
+          ignoreLocation: true,
+        }).search(query).slice(0, 5).map((result) => result.item);
+    const chats: PaletteItem[] = matchedConversations.map((conversation) => ({
       label: conversation.title,
       icon: MessageSquarePlus,
       run: () => { router.push(`/chat/${conversation.id}`); onClose(); },

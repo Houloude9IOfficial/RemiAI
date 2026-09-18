@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { desc } from "drizzle-orm";
+import { and, desc, eq, lt, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { conversations } from "@/db/schema";
@@ -14,9 +14,66 @@ const createSchema = z.object({
   memoryEnabled: z.boolean().optional(),
 });
 
-export async function GET() {
-  const rows = await db.select().from(conversations).orderBy(desc(conversations.updatedAt));
-  return NextResponse.json(rows);
+const pageSchema = z.object({
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+  cursor: z.string().optional(),
+});
+
+type ConversationCursor = { updatedAt: string; id: number };
+
+function decodeCursor(value: string): ConversationCursor | null {
+  try {
+    const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+    return typeof parsed.updatedAt === "string" && Number.isSafeInteger(parsed.id)
+      ? parsed
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function encodeCursor(cursor: ConversationCursor): string {
+  return Buffer.from(JSON.stringify(cursor)).toString("base64url");
+}
+
+export async function GET(req: Request) {
+  const searchParams = new URL(req.url).searchParams;
+
+  // Preserve the existing full-list response for consumers such as the command
+  // palette and settings. The sidebar opts into this bounded page mode.
+  if (!searchParams.has("limit") && !searchParams.has("cursor")) {
+    const rows = await db.select().from(conversations).orderBy(desc(conversations.updatedAt));
+    return NextResponse.json(rows);
+  }
+
+  const parsed = pageSchema.safeParse(Object.fromEntries(searchParams));
+  if (!parsed.success) return jsonError(parsed.error);
+
+  const cursor = parsed.data.cursor ? decodeCursor(parsed.data.cursor) : null;
+  if (parsed.data.cursor && !cursor) {
+    return NextResponse.json({ error: "Invalid conversation cursor" }, { status: 400 });
+  }
+
+  const rows = await db
+    .select()
+    .from(conversations)
+    .where(cursor
+      ? or(
+          lt(conversations.updatedAt, cursor.updatedAt),
+          and(eq(conversations.updatedAt, cursor.updatedAt), lt(conversations.id, cursor.id)),
+        )
+      : undefined)
+    .orderBy(desc(conversations.updatedAt), desc(conversations.id))
+    .limit(parsed.data.limit + 1);
+
+  const page = rows.slice(0, parsed.data.limit);
+  const last = page.at(-1);
+  return NextResponse.json({
+    conversations: page,
+    nextCursor: rows.length > parsed.data.limit && last
+      ? encodeCursor({ updatedAt: last.updatedAt, id: last.id })
+      : null,
+  });
 }
 
 export async function POST(req: Request) {

@@ -353,6 +353,7 @@ export default function ConversationPage({
         providerId && modelId ? { providerId, modelId } : undefined,
       );
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["sidebar-conversations"] });
       router.replace(`/chat/${conversation.id}`);
     } catch (err) {
       // Creation failed too (e.g. DB is down) — stay on the error card, but
@@ -405,9 +406,10 @@ export default function ConversationPage({
           initialConversation={data.conversation}
           initialMessages={data.messages}
           isReconnecting={hasActiveStream}
-          onConversationChanged={() =>
-            queryClient.invalidateQueries({ queryKey: ["conversations"] })
-          }
+          onConversationChanged={() => {
+            queryClient.invalidateQueries({ queryKey: ["conversations"] });
+            queryClient.invalidateQueries({ queryKey: ["sidebar-conversations"] });
+          }}
         />
       )}
     </motion.div>
@@ -587,6 +589,7 @@ function ConversationChat({
       .update(conversationId, { isTemporary })
       .then(() => {
         queryClient.invalidateQueries({ queryKey: ["conversations"] });
+        queryClient.invalidateQueries({ queryKey: ["sidebar-conversations"] });
       })
       .catch(() => {
         // Persist failed — roll the ref back so the next toggle retries.
@@ -603,6 +606,7 @@ function ConversationChat({
       .update(conversationId, { memoryEnabled })
       .then(() => {
         queryClient.invalidateQueries({ queryKey: ["conversations"] });
+        queryClient.invalidateQueries({ queryKey: ["sidebar-conversations"] });
       })
       .catch(() => {
         lastPersistedMemoryEnabled.current = prev;

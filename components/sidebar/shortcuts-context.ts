@@ -6,6 +6,7 @@ interface ShortcutsContextValue {
   isShortcutsOpen: boolean;
   openShortcuts: () => void;
   closeShortcuts: () => void;
+  openCommandPalette: () => void;
 }
 
 export const ShortcutsContext = createContext<ShortcutsContextValue | null>(

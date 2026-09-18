@@ -64,9 +64,9 @@ export function SidebarProfile({ collapsed = false }: { collapsed?: boolean }) {
           </div>
 
           {/* Settings icon — appears on hover */}
-          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+          {/* <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md opacity-0 transition-opacity duration-200 group-hover:opacity-100">
             <Settings className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-muted-foreground" />
-          </div>
+          </div> */}
         </>
       )}
     </Link>
