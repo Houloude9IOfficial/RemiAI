@@ -12,7 +12,7 @@ export function searchTraceSummary(entries: SearchTraceEntry[]): string {
   const results = entries.filter((entry) => entry.action === "result").length;
   const opened = entries.length - results;
   const parts: string[] = [];
-  if (results) parts.push(`Searched ${results} result${results === 1 ? "" : "s"}`);
+  if (results) parts.push(`Retrieved ${results} result${results === 1 ? "" : "s"}`);
   if (opened) parts.push(`opened ${opened} page${opened === 1 ? "" : "s"}`);
   return parts.join(" · ") || "Searched the web";
 }

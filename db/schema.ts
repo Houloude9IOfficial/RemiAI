@@ -109,6 +109,14 @@ export const userPreferences = sqliteTable("user_preferences", {
     .$type<Record<string, string>>()
     .notNull()
     .default({}),
+  // Chat display preferences. Long user messages and active reasoning retain
+  // their existing behavior unless the user opts out in Settings > Options.
+  collapseLongUserMessages: integer("collapse_long_user_messages", { mode: "boolean" })
+    .notNull()
+    .default(true),
+  expandReasoningWhileWorking: integer("expand_reasoning_while_working", { mode: "boolean" })
+    .notNull()
+    .default(true),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 

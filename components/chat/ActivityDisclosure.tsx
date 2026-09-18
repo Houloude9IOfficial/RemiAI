@@ -24,6 +24,7 @@ export function ActivityDisclosure({
   hasSearchActivity = false,
   isStreaming,
   responseStreaming,
+  autoExpandWhileWorking = true,
 }: {
   /** Merged reasoning text (or null when the run had no reasoning phase). */
   reasoning: { text: string; isStreaming: boolean } | null;
@@ -39,6 +40,8 @@ export function ActivityDisclosure({
   isStreaming: boolean;
   /** Whether the final text answer has started generating. */
   responseStreaming: boolean;
+  /** Whether an active reasoning/tool chain should open automatically. */
+  autoExpandWhileWorking?: boolean;
 }) {
   const contentId = useId();
   const [open, setOpen] = useState(false);
@@ -52,13 +55,19 @@ export function ActivityDisclosure({
   const hasQuestions = summary.hasQuestions;
   const mixedOutcome = summary.hasError && summary.hasSuccess;
 
-  // Search progress opens as results arrive, then always collapses when the
-  // answer begins. Users can reopen the completed trace afterward.
-  const shouldOpen = isStreaming && !responseStreaming;
-  const working = shouldOpen || summary.running || reasoningStreaming;
+  // Search progress opens as results arrive only when the user's working-time
+  // reasoning preference permits it. The compact activity label remains
+  // visible either way, and users can always open it manually.
+  const isActive = isStreaming && !responseStreaming;
+  const shouldOpen = autoExpandWhileWorking && isActive;
+  const working = isActive || summary.running || reasoningStreaming;
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
+      if (!autoExpandWhileWorking) {
+        setOpen(false);
+        return;
+      }
       if (shouldOpen && hasSearchActivity && !userToggledRef.current) {
         setOpen(true);
       }
@@ -68,7 +77,7 @@ export function ActivityDisclosure({
       }
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [shouldOpen, hasQuestions, hasSearchActivity]);
+  }, [autoExpandWhileWorking, shouldOpen, hasQuestions, hasSearchActivity]);
 
   if (!reasoning && !hasTools && !hasSearchActivity) return null;
 

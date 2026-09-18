@@ -183,6 +183,8 @@ export function ensureRemiPrefsColumns(): void {
   ensure("remi_api_url", 'ALTER TABLE "user_preferences" ADD COLUMN "remi_api_url" TEXT NOT NULL DEFAULT \'\'');
   ensure("remi_api_enabled", 'ALTER TABLE "user_preferences" ADD COLUMN "remi_api_enabled" INTEGER NOT NULL DEFAULT 1');
   ensure("card_display_modes", 'ALTER TABLE "user_preferences" ADD COLUMN "card_display_modes" TEXT NOT NULL DEFAULT \'{}\'');
+  ensure("collapse_long_user_messages", 'ALTER TABLE "user_preferences" ADD COLUMN "collapse_long_user_messages" INTEGER NOT NULL DEFAULT 1');
+  ensure("expand_reasoning_while_working", 'ALTER TABLE "user_preferences" ADD COLUMN "expand_reasoning_while_working" INTEGER NOT NULL DEFAULT 1');
 }
 
 export function ensureMemoryColumns(): void {

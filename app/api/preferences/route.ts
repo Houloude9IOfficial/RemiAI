@@ -22,6 +22,8 @@ const DEFAULT_PREFERENCES = {
   remiApiUrl: "",
   remiApiEnabled: true,
   cardDisplayModes: {} as Record<string, string>,
+  collapseLongUserMessages: true,
+  expandReasoningWhileWorking: true,
 };
 
 function isMissingColumnError(e: unknown): boolean {
@@ -67,6 +69,8 @@ export async function GET() {
     remiApiUrl: ((prefs as Record<string, unknown>).remiApiUrl as string | undefined) ?? "",
     remiApiEnabled: ((prefs as Record<string, unknown>).remiApiEnabled as boolean | undefined) ?? true,
     cardDisplayModes: ((prefs as Record<string, unknown>).cardDisplayModes as Record<string, string> | undefined) ?? {},
+    collapseLongUserMessages: ((prefs as Record<string, unknown>).collapseLongUserMessages as boolean | undefined) ?? true,
+    expandReasoningWhileWorking: ((prefs as Record<string, unknown>).expandReasoningWhileWorking as boolean | undefined) ?? true,
   });
 }
 
@@ -90,6 +94,8 @@ export async function PUT(req: Request) {
     remiApiUrl?: string;
     remiApiEnabled?: boolean;
     cardDisplayModes?: Record<string, string>;
+    collapseLongUserMessages?: boolean;
+    expandReasoningWhileWorking?: boolean;
   };
 
   let existing: (typeof userPreferences.$inferSelect) | undefined;
@@ -120,6 +126,8 @@ export async function PUT(req: Request) {
     remiApiUrl: body.remiApiUrl ?? ((existing as unknown as Record<string, unknown> | null)?.remiApiUrl as string | undefined) ?? "",
     remiApiEnabled: body.remiApiEnabled ?? ((existing as unknown as Record<string, unknown> | null)?.remiApiEnabled as boolean | undefined) ?? true,
     cardDisplayModes: body.cardDisplayModes ?? ((existing as unknown as Record<string, unknown> | null)?.cardDisplayModes as Record<string, string> | undefined) ?? {},
+    collapseLongUserMessages: body.collapseLongUserMessages ?? ((existing as unknown as Record<string, unknown> | null)?.collapseLongUserMessages as boolean | undefined) ?? true,
+    expandReasoningWhileWorking: body.expandReasoningWhileWorking ?? ((existing as unknown as Record<string, unknown> | null)?.expandReasoningWhileWorking as boolean | undefined) ?? true,
     updatedAt: new Date().toISOString(),
   };
 

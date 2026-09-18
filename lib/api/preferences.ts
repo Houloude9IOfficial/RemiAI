@@ -17,6 +17,8 @@ export type UserPreferences = {
   remiApiUrl: string;
   remiApiEnabled: boolean;
   cardDisplayModes: Record<string, string>;
+  collapseLongUserMessages: boolean;
+  expandReasoningWhileWorking: boolean;
 };
 
 export const CARD_IDS = [

@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Brain, Cloud, Cog, Gauge, Link2, ListTodo, Settings2, Shield, UserRound, Wrench } from "lucide-react";
+import { Brain, Cloud, Cog, Gauge, ListTodo, MessageSquareText, Settings2, Shield, UserRound, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const groups = [
   { label: "Profile", href: "/settings/profile", icon: UserRound },
   { label: "Appearance", href: "/settings/profile#appearance", icon: Settings2 },
+  { label: "Options", href: "/settings/options", icon: MessageSquareText },
   { label: "Models", href: "/settings/providers", icon: Cloud },
   { label: "Memory", href: "/settings/memories", icon: Brain },
   {

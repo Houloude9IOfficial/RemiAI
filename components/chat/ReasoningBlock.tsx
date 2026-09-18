@@ -25,6 +25,7 @@ export function ReasoningBlock({
   isStreaming = false,
   messageStreaming = false,
   responseStreaming = false,
+  autoExpandWhileWorking = true,
 }: {
   text: string;
   isStreaming?: boolean;
@@ -32,6 +33,8 @@ export function ReasoningBlock({
   messageStreaming?: boolean;
   /** Whether the final text answer has started generating (collapses the block immediately). */
   responseStreaming?: boolean;
+  /** Whether active reasoning should open automatically. */
+  autoExpandWhileWorking?: boolean;
 }) {
   const contentId = useId();
   const [open, setOpen] = useState(false);
@@ -43,55 +46,74 @@ export function ReasoningBlock({
   const finalizedRef = useRef(false);
 
   useEffect(() => {
-    const wasStreaming = previousStreamingRef.current;
-    previousStreamingRef.current = isStreaming;
+    const frame = requestAnimationFrame(() => {
+      const wasStreaming = previousStreamingRef.current;
+      previousStreamingRef.current = isStreaming;
 
-    // A reasoning phase started — begin timing it and open the block. If a
-    // final answer already collapsed the block (e.g. text followed by another
-    // reasoning phase in an agentic run), let it re-open and finalize again.
-    if (!wasStreaming && isStreaming && phaseStartRef.current == null) {
-      phaseStartRef.current = Date.now();
-      finalizedRef.current = false;
-      setFinalized(false);
-      setDurationSeconds(null);
-      setOpen(true);
-    }
+      // A reasoning phase started — begin timing it and open the block. If a
+      // final answer already collapsed the block (e.g. text followed by another
+      // reasoning phase in an agentic run), let it re-open and finalize again.
+      if (!wasStreaming && isStreaming && phaseStartRef.current == null) {
+        phaseStartRef.current = Date.now();
+        finalizedRef.current = false;
+        setFinalized(false);
+        setDurationSeconds(null);
+        if (autoExpandWhileWorking) setOpen(true);
+      }
 
-    // A reasoning phase ended — fold its elapsed time into the total. The
-    // block stays open (messageStreaming is still true during tool gaps).
-    if (wasStreaming && !isStreaming && phaseStartRef.current != null) {
-      accumulatedMsRef.current += Date.now() - phaseStartRef.current;
-      phaseStartRef.current = null;
-    }
-
-    const finalize = () => {
-      if (phaseStartRef.current != null) {
+      // A reasoning phase ended — fold its elapsed time into the total. The
+      // block stays open (messageStreaming is still true during tool gaps).
+      if (wasStreaming && !isStreaming && phaseStartRef.current != null) {
         accumulatedMsRef.current += Date.now() - phaseStartRef.current;
         phaseStartRef.current = null;
       }
-      if (accumulatedMsRef.current > 0) {
-        setDurationSeconds(
-          Math.max(1, Math.round(accumulatedMsRef.current / 1000)),
-        );
+
+      const finalize = () => {
+        if (phaseStartRef.current != null) {
+          accumulatedMsRef.current += Date.now() - phaseStartRef.current;
+          phaseStartRef.current = null;
+        }
+        if (accumulatedMsRef.current > 0) {
+          setDurationSeconds(
+            Math.max(1, Math.round(accumulatedMsRef.current / 1000)),
+          );
+        }
+        finalizedRef.current = true;
+        setFinalized(true);
+        setOpen(false);
+      };
+
+      // The final response started generating — reasoning is over, so finalize
+      // the accumulated duration and collapse the block the moment the answer
+      // begins streaming instead of keeping it open (and labeled "Reasoning...")
+      // through the whole response.
+      if (responseStreaming && !finalizedRef.current) {
+        finalize();
       }
-      finalizedRef.current = true;
-      setFinalized(true);
-      setOpen(false);
-    };
 
-    // The final response started generating — reasoning is over, so finalize
-    // the accumulated duration and collapse the block the moment the answer
-    // begins streaming instead of keeping it open (and labeled "Reasoning...")
-    // through the whole response.
-    if (responseStreaming && !finalizedRef.current) {
-      finalize();
-    }
+      // The whole message finished (or aborted) — finalize exactly once.
+      if (!messageStreaming && !finalizedRef.current) {
+        finalize();
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [isStreaming, messageStreaming, responseStreaming, autoExpandWhileWorking]);
 
-    // The whole message finished (or aborted) — finalize exactly once.
-    if (!messageStreaming && !finalizedRef.current) {
-      finalize();
-    }
-  }, [isStreaming, messageStreaming, responseStreaming]);
+  // Apply a changed display preference to active reasoning immediately. This
+  // is separate from the phase lifecycle above so enabling it mid-stream can
+  // open an already-running phase without waiting for a new one to start.
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      if (!autoExpandWhileWorking) {
+        setOpen(false);
+        return;
+      }
+      if (isStreaming && messageStreaming && !responseStreaming && !finalizedRef.current) {
+        setOpen(true);
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [autoExpandWhileWorking, isStreaming, messageStreaming, responseStreaming]);
 
   if (!text.trim()) return null;
 

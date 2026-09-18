@@ -80,6 +80,8 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   remiApiUrl: "",
   remiApiEnabled: true,
   cardDisplayModes: {},
+  collapseLongUserMessages: true,
+  expandReasoningWhileWorking: true,
 };
 
 interface LinkEntry {

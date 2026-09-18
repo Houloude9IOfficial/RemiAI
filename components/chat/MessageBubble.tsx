@@ -387,7 +387,9 @@ function StreamingSafeMarkdown({
   const [hasStarted, setHasStarted] = useState(false);
 
   useEffect(() => {
-    if (display.content) setHasStarted(true);
+    if (!display.content) return;
+    const frame = requestAnimationFrame(() => setHasStarted(true));
+    return () => cancelAnimationFrame(frame);
   }, [display.content]);
 
   return (
@@ -790,18 +792,18 @@ function UserMessageBubble({
   message,
   onEdit,
   onContinue,
+  collapseLongUserMessages,
 }: {
   message: UIMessage;
   onEdit?: (messageId: string, text: string) => void;
   onContinue?: () => void;
+  collapseLongUserMessages: boolean;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const inlineText = message.parts
     .filter(isTextUIPart)
     .map((p) => p.text)
     .join("");
-  if (!inlineText) return null;
-
   const attachments = parseAttachments(inlineText);
   const cleanText = stripAttachmentMarkdown(inlineText);
   const hasText = cleanText.length > 0;
@@ -813,7 +815,9 @@ function UserMessageBubble({
     cleanText.length > USER_MESSAGE_AUTO_COLLAPSE_CHAR_THRESHOLD ||
     cleanText.split("\n").length > USER_MESSAGE_AUTO_COLLAPSE_LINE_THRESHOLD;
 
-  const [isCollapsed, setIsCollapsed] = useState<boolean>(() => isInitiallyLong);
+  const [isCollapsed, setIsCollapsed] = useState<boolean>(() =>
+    collapseLongUserMessages && isInitiallyLong,
+  );
   const [canCollapse, setCanCollapse] = useState<boolean>(() => isInitiallyLong);
   const textContainerRef = useRef<HTMLDivElement>(null);
 
@@ -824,6 +828,8 @@ function UserMessageBubble({
       setCanCollapse(true);
     }
   }, [cleanText]);
+
+  if (!inlineText) return null;
 
   return (
     <div className="group flex justify-end">
@@ -989,6 +995,8 @@ function UserMessageBubble({
 
 export function MessageBubble({
   message,
+  collapseLongUserMessages = true,
+  expandReasoningWhileWorking = true,
   isStreaming,
   onRegenerate,
   onEdit,
@@ -997,6 +1005,10 @@ export function MessageBubble({
   conversationId,
 }: {
   message: UIMessage;
+  /** Whether eligible user messages should default to their collapsed view. */
+  collapseLongUserMessages?: boolean;
+  /** Whether active reasoning disclosures should automatically open. */
+  expandReasoningWhileWorking?: boolean;
   isStreaming?: boolean;
   /** Called with the message id to regenerate (AI messages only). */
   onRegenerate?: (messageId: string) => void;
@@ -1012,9 +1024,14 @@ export function MessageBubble({
   if (message.role === "user") {
     return (
       <UserMessageBubble
+        // Changing the global display preference resets each message to its
+        // preference-driven default while retaining local manual toggles until
+        // the preference changes again.
+        key={`${message.id}-${collapseLongUserMessages ? "collapsed" : "expanded"}`}
         message={message}
         onEdit={onEdit}
         onContinue={onContinue}
+        collapseLongUserMessages={collapseLongUserMessages}
       />
     );
   }
@@ -1150,6 +1167,7 @@ export function MessageBubble({
               hasSearchActivity={hasSearchActivity}
               isStreaming={isStreaming ?? false}
               responseStreaming={responseStreaming ?? false}
+              autoExpandWhileWorking={expandReasoningWhileWorking}
             />
           )}
 
@@ -1190,6 +1208,7 @@ export function MessageBubble({
                 // Collapse the block the moment the final answer starts
                 // generating (text streaming, no reasoning left).
                 responseStreaming={responseStreaming}
+                autoExpandWhileWorking={expandReasoningWhileWorking}
               />
             ) : segment.type === "visual" ? (
               <VisualCardSegment key={`visual-${idx}`} part={segment.part} />

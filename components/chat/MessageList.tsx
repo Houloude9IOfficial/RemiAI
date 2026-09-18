@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import type { UIMessage } from "ai";
 import { MessageBubble } from "./MessageBubble";
 import { ChatMessageProvider } from "./ChatMessageContext";
 import { GeneratingIndicator } from "./GeneratingIndicator";
+import { preferencesApi } from "@/lib/api/preferences";
 
 // ── Component ────────────────────────────────────────────────────────
 
@@ -29,6 +31,14 @@ export function MessageList({
   conversationId?: number;
 }) {
   const waitingMessageRef = useRef<HTMLDivElement>(null);
+  const { data: preferences } = useQuery({
+    queryKey: ["preferences"],
+    queryFn: preferencesApi.get,
+  });
+  // Preserve the prior UI defaults while preferences are loading or if a
+  // legacy response does not yet include these fields.
+  const collapseLongUserMessages = preferences?.collapseLongUserMessages ?? true;
+  const expandReasoningWhileWorking = preferences?.expandReasoningWhileWorking ?? true;
   // Defensive safety net: the AI SDK merges streamed assistant messages into
   // this list by id, and under rare interleaved-stream conditions (two
   // concurrent requests on the same chat) the same id can appear twice. A
@@ -110,6 +120,8 @@ export function MessageList({
                 >
                   <MessageBubble
                     message={message}
+                    collapseLongUserMessages={collapseLongUserMessages}
+                    expandReasoningWhileWorking={expandReasoningWhileWorking}
                     isStreaming={
                       idx === deduped.length - 1 && status === "streaming"
                     }
