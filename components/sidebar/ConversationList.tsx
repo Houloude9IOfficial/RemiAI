@@ -32,6 +32,7 @@ import {
   MoreHorizontal,
 } from "lucide-react";
 import { conversationsApi, type Conversation } from "@/lib/api/conversations";
+import { ConversationTitle } from "@/components/sidebar/ConversationTitle";
 import { toast } from "sonner";
 import { useActiveStreams } from "@/lib/chat/streaming-context";
 
@@ -606,14 +607,13 @@ export function ConversationList() {
                           <Square className="h-4 w-4" />
                         )}
                       </div>
-                      <span
+                      <ConversationTitle
+                        title={conversation.title}
                         className={cn(
                           "ml-2 flex-1 truncate text-sm",
                           isSelected && "text-foreground font-medium",
                         )}
-                      >
-                        {conversation.title}
-                      </span>
+                      />
                     </div>
                   ) : (
                     /* ---- Normal view: the whole row is the link ---- */
@@ -632,13 +632,12 @@ export function ConversationList() {
                           </span>
                         </span>
                       )} */}
-                      <span
+                      <ConversationTitle
+                        title={conversation.title}
                         className={cn(
                           "min-w-0 flex-1 truncate transition-[padding-right] duration-300 ease-out group-hover/conversation:pr-8 group-focus-within/conversation:pr-8",
                         )}
-                      >
-                        {conversation.title}
-                      </span>
+                      />
 
                       {(conversation.isTemporary || isStreaming) && (
                         <span className={`ml-0.5 flex shrink-0 items-center transition-transform duration-300 ease-out group-hover/conversation:-translate-x-8 group-focus-within/conversation:-translate-x-8 ${isActive ? "bg-sidebar-accent text-sidebar-foreground" : "text-sidebar-foreground/75"}`}>

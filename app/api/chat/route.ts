@@ -26,7 +26,8 @@ import {
   userPreferences,
   messages,
 } from "@/db/schema";
-import { getAutoLanguageModel, getLanguageModel } from "@/lib/providers/factory";
+import { getAutoLanguageModel } from "@/lib/providers/factory";
+import { resolveLanguageModel } from "@/lib/providers/resolve-model";
 import { isAutoModel } from "@/lib/chat/auto-model";
 import { streamingReasoningProviderOptions } from "@/lib/providers/reasoning";
 import {
@@ -968,7 +969,7 @@ Definition of done:
         })),
         qualityStrategy.policy,
       )
-    : getLanguageModel(activeProvider, activeModelId, qualityStrategy.policy);
+    : await resolveLanguageModel(activeProvider, activeModelId, qualityStrategy.policy);
   trace.metric("qualityPolicy", qualityStrategy.policy);
   trace.metric("taskComplexity", qualityStrategy.complexity);
   trace.metric("selectedProviderId", provider.id);

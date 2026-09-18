@@ -1304,7 +1304,7 @@ export function ChatInput({
             </div>
           )}
 
-          <div className={hasChips ? (large ? "px-2 pt-2" : "px-3.5 pt-2") : large ? "px-2 pt-4" : "px-3.5 pt-3"}>
+          <div className={hasChips ? (large ? "px-2 pt-2" : "px-3.5 pt-2") : large ? "px-2 pt-4" : "px-1.5 pt-3"}>
             <Textarea
               ref={inputRef}
               value={text}

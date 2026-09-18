@@ -3,7 +3,7 @@ import { streamText, type LanguageModel, type ToolSet } from "ai";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { providers, agentTasks, conversations } from "@/db/schema";
-import { getLanguageModel } from "@/lib/providers/factory";
+import { resolveLanguageModel } from "@/lib/providers/resolve-model";
 import { markLastToolForCache } from "@/lib/chat/prompt-cache";
 import { buildFilesystemTools } from "@/lib/fs/tools";
 import { buildMemoryTools } from "@/lib/tools/memories";
@@ -448,7 +448,9 @@ async function executeAgentExecution(
       await startAutomationRun(runId);
     }
 
-    const model = getLanguageModel(provider, modelId);
+    // Auto-aware: sub-agents inherit the conversation's model, which may be
+    // pinned to the virtual Auto model.
+    const model = await resolveLanguageModel(provider, modelId);
 
     // Build chain context so this agent can spawn sub-agents
     const chainContext: ChainContext = {
@@ -799,10 +801,7 @@ Sub-agents can spawn their own agents up to a chain depth of ${MAX_CHAIN_DEPTH}.
         }
 
         // ── Blocking mode ──
-        const model = getLanguageModel(
-          providerRow,
-          modelId,
-        );
+        const model = await resolveLanguageModel(providerRow, modelId);
 
         const result = await runAgent(
           model,

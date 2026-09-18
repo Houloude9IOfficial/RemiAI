@@ -9,7 +9,7 @@ import { streamText } from "ai";
 import { db } from "@/db";
 import { providers, providerModels } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
-import { getLanguageModel } from "@/lib/providers/factory";
+import { resolveLanguageModel } from "@/lib/providers/resolve-model";
 import { normalizeStreamError, encodeStreamError } from "@/lib/chat/error-payload";
 import { buildContextTools } from "@/lib/tools/context";
 import { buildMemoryTools } from "@/lib/tools/memories";
@@ -131,7 +131,9 @@ export async function POST(req: Request) {
       );
     }
 
-    const model = getLanguageModel(provider, resolvedModelId);
+    // Auto-aware: Talk Mode receives the conversation's model id, which may
+    // be the virtual Auto sentinel.
+    const model = await resolveLanguageModel(provider, resolvedModelId);
 
     // Convert messages to core format
     const coreMessages = messages.map((m) => ({

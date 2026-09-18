@@ -13,7 +13,12 @@ import {
   conversationTitleEventBus,
   emitConversationTitleUpdated,
 } from "@/lib/chat/title-events";
-import { canApplyAutoTitle, needsGeneratedTitle } from "@/lib/chat/title-generator";
+import {
+  canApplyAutoTitle,
+  needsGeneratedTitle,
+  sanitizeTitle,
+  titleCandidate,
+} from "@/lib/chat/title-generator";
 
 const conversation = (id: number, title: string): Conversation => ({
   id,
@@ -52,6 +57,26 @@ assert.equal(canApplyAutoTitle("A manual title", "First request"), false);
 assert.equal(needsGeneratedTitle("New chat", "First request"), true);
 assert.equal(needsGeneratedTitle("First request", "First request"), true);
 assert.equal(needsGeneratedTitle("A manual title", "First request"), false);
+
+assert.equal(sanitizeTitle("Particle Engine Error Fix"), "Particle Engine Error Fix");
+assert.equal(sanitizeTitle("Title: Particle Engine Error Fix"), "Particle Engine Error Fix");
+assert.equal(sanitizeTitle("```\nParticle Engine Error Fix\n```"), "Particle Engine Error Fix");
+assert.equal(sanitizeTitle("  \"Casual Greeting\"  "), "Casual Greeting");
+assert.equal(sanitizeTitle(""), null);
+assert.equal(sanitizeTitle("word ".repeat(40)), null);
+
+// Free/multi-model gateways serve models that narrate their reasoning in the
+// CONTENT stream and land the title last. A finished reply is read from its
+// last line; a length-capped reply is never salvaged (salvaging one produced
+// rule text like "- No ending punctuation. Under 60 characters").
+assert.equal(titleCandidate("Casual Greeting", "stop"), "Casual Greeting");
+assert.equal(
+  titleCandidate("We need a 2-6 word title.\n\nThe chat is a greeting.\n\nCasual Greeting", "stop"),
+  "Casual Greeting",
+);
+assert.equal(titleCandidate("We need a 2-6 word title, only the title. The conversation is", "length"), null);
+assert.equal(titleCandidate("", "stop"), null);
+assert.equal(titleCandidate("\n\n", "stop"), null);
 
 assert.equal(hasFuzzyMemoryHintOverlap("Help me plan travle", "The user plans travel frequently."), true);
 assert.equal(hasFuzzyMemoryHintOverlap("My budget is 2500", "The user's travel budget is 2500."), true);

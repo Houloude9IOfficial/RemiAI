@@ -2,7 +2,7 @@ import { generateText } from "ai";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { conversations, messages as messagesTable, providers } from "@/db/schema";
-import { getLanguageModel } from "@/lib/providers/factory";
+import { resolveLanguageModel } from "@/lib/providers/resolve-model";
 import { createRunTrace } from "@/lib/observability/run-trace";
 
 /**
@@ -162,7 +162,8 @@ export async function summarizeConversationBackground(opts: {
       return;
     }
 
-    const model = getLanguageModel(provider, modelId);
+    // Auto-aware: the conversation may be pinned to the virtual Auto model.
+    const model = await resolveLanguageModel(provider, modelId);
     const result = await generateText({
       model,
       system: SUMMARY_SYSTEM_PROMPT,

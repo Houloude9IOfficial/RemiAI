@@ -29,7 +29,7 @@ import {
   mcpServers,
   userPreferences,
 } from "@/db/schema";
-import { getLanguageModel } from "@/lib/providers/factory";
+import { resolveLanguageModel } from "@/lib/providers/resolve-model";
 import { SYSTEM_PROMPT } from "@/lib/chat/system-prompt";
 import {
   buildCachedInstructions,
@@ -325,7 +325,8 @@ export async function processWebhookEvent(opts: {
 
     // ── Run the AI ──────────────────────────────────────────────────
     const result = await generateText({
-      model: getLanguageModel(provider, conversation.modelId),
+      // Auto-aware: the conversation may be pinned to the virtual Auto model.
+      model: await resolveLanguageModel(provider, conversation.modelId),
       instructions: buildCachedInstructions(provider, staticSystemPrompt, dynamicSystemPrompt),
       messages: [
         {

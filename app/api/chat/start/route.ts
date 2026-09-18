@@ -7,7 +7,7 @@ import {
 import { eq, sql } from "drizzle-orm";
 import { db, initializeApp } from "@/db";
 import { conversations, providers, userPreferences } from "@/db/schema";
-import { getLanguageModel } from "@/lib/providers/factory";
+import { resolveLanguageModel } from "@/lib/providers/resolve-model";
 import { streamingReasoningProviderOptions } from "@/lib/providers/reasoning";
 import { normalizeQualityPolicy } from "@/lib/chat/quality-policy";
 import { SYSTEM_PROMPT, SYSTEM_PROMPT_NO_MEMORY } from "@/lib/chat/system-prompt";
@@ -66,7 +66,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Provider not found" }, { status: 404 });
   }
 
-  const model = getLanguageModel(
+  // Auto-aware: goal mode auto-starts turns on conversations that may be
+  // pinned to the virtual Auto model.
+  const model = await resolveLanguageModel(
     provider,
     conversation.modelId,
     normalizeQualityPolicy(conversation.qualityPolicy),

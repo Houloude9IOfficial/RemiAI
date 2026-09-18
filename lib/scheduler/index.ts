@@ -17,7 +17,7 @@ import {
   mcpServers,
   userPreferences,
 } from "@/db/schema";
-import { getLanguageModel } from "@/lib/providers/factory";
+import { resolveLanguageModel } from "@/lib/providers/resolve-model";
 import { SYSTEM_PROMPT } from "@/lib/chat/system-prompt";
 import {
   buildCachedInstructions,
@@ -286,7 +286,9 @@ export async function executeTask(task: ScheduledTaskRow) {
       throw new Error(`Provider #${conversation.providerId} not found`);
     }
 
-    const model = getLanguageModel(provider, conversation.modelId);
+    // Auto-aware: scheduled tasks run against conversations that may be
+    // pinned to the virtual Auto model.
+    const model = await resolveLanguageModel(provider, conversation.modelId);
 
     // ── Build tools (same set as the chat route) ──
     const enabledMcpServers = provider.id
