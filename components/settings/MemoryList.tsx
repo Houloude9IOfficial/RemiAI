@@ -718,14 +718,15 @@ export function MemoryList() {
       </Dialog>
 
       <Dialog open={importOpen} onOpenChange={setImportOpen}>
-        <DialogContent className="max-w-[calc(100vw-2rem)] overflow-x-hidden sm:max-w-[900px]">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] flex-col overflow-hidden sm:max-w-[900px]">
+          <DialogHeader className="shrink-0">
             <DialogTitle>Import memories to Remi</DialogTitle>
             <DialogDescription>
               Copy the Remi guide into another AI, then paste its formatted response below. Review the memories before saving.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex min-w-0 flex-col gap-6 overflow-x-hidden py-2">
+          <div className="min-h-0 min-w-0 overflow-x-hidden overflow-y-auto overscroll-contain py-2">
+            <div className="flex min-w-0 flex-col gap-6">
             <div className="flex items-center justify-between border-b pb-4">
               <p className="text-sm text-muted-foreground">Use the guide with another AI, then bring the formatted memories back here.</p>
               <Button variant="outline" size="sm" className="gap-1.5" onClick={() => { navigator.clipboard.writeText(REMI_MEMORY_EXPORT_PROMPT); setImportCopied(true); setTimeout(() => setImportCopied(false), 1500); }}><Copy className="h-3.5 w-3.5" /> {importCopied ? "Copied" : "Copy guide"}</Button>
@@ -735,7 +736,6 @@ export function MemoryList() {
                 <Label htmlFor="memory-import-text">Paste the export</Label>
                 <Textarea id="memory-import-text" value={importText} onChange={(e) => setImportText(e.target.value)} rows={14} className="h-[320px] max-h-[45vh] resize-none overflow-y-auto" placeholder="Paste the formatted memories here..." />
               </div>
-              <DialogFooter><Button variant="outline" onClick={() => setImportOpen(false)}>Cancel</Button><Button onClick={extractImport} disabled={importBusy || !importText.trim()}>{importBusy && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}Extract memories</Button></DialogFooter>
             </> : <>
               <p className="text-sm text-muted-foreground">Review {imported.length} extracted memories. Entries matching an existing memory are marked as duplicates and will be skipped.</p>
               <div className="flex min-w-0 flex-col gap-3">
@@ -748,9 +748,18 @@ export function MemoryList() {
                   </div>;
                 })}
               </div>
-              <DialogFooter><Button variant="outline" onClick={() => setImported([])}>Back</Button><Button onClick={saveImported} disabled={importBusy || !imported.length}>{importBusy && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}Save memories</Button></DialogFooter>
             </>}
+            </div>
           </div>
+          <DialogFooter className="shrink-0">
+            {!imported.length ? <>
+              <Button variant="outline" onClick={() => setImportOpen(false)}>Cancel</Button>
+              <Button onClick={extractImport} disabled={importBusy || !importText.trim()}>{importBusy && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}Extract memories</Button>
+            </> : <>
+              <Button variant="outline" onClick={() => setImported([])}>Back</Button>
+              <Button onClick={saveImported} disabled={importBusy || !imported.length}>{importBusy && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}Save memories</Button>
+            </>}
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
