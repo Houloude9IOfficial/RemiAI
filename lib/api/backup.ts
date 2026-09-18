@@ -150,15 +150,14 @@ export const backupApi = {
   ): Promise<ImportResponse> => {
     // Send the encrypted text as the raw request body. This avoids both
     // multipart parsing differences and JSON body limits for large backups.
-    const encrypted = await file.text();
-
     const res = await fetch("/api/backup/import", {
       method: "POST",
       headers: {
-        "Content-Type": "text/plain;charset=UTF-8",
+        "Content-Type": "application/octet-stream",
         "X-RemiAI-Backup-Password": password,
       },
-      body: encrypted,
+      // Preserve v3 binary bytes and let fetch stream the File directly.
+      body: file,
     });
     return parseJson<ImportResponse>(res, "Restoring backup");
   },

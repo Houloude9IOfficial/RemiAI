@@ -1,14 +1,15 @@
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
+import { Readable } from "node:stream";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { backupHistory } from "@/db/schema";
 import { UPLOAD_DIR, AVATAR_DIR, SESSION_FILES_DIR, SKILLS_DIR } from "@/lib/paths";
-import { stageBackup } from "./download";
-import { encryptBackup } from "./crypto";
+import { createBackupStage, publishBackupStage } from "./download";
+import { encryptBackupStream } from "./crypto";
 import { getAllTables } from "./schema";
-import { BACKUP_VERSION, type BackupFiles } from "./types";
+import { BACKUP_VERSION } from "./types";
 
 // ---------------------------------------------------------------------------
 // App version (read from package.json at import time)
@@ -35,42 +36,6 @@ const APP_VERSION = (() => {
 
 
 // ---------------------------------------------------------------------------
-// Read all files from a directory as base64
-// ---------------------------------------------------------------------------
-
-async function collectFiles(
-  dir: string,
-  basePrefix: string,
-): Promise<Record<string, string>> {
-  const result: Record<string, string> = {};
-
-  try {
-    await fsp.access(dir);
-  } catch {
-    return result;
-  }
-
-  async function walk(current: string, relativePrefix: string): Promise<void> {
-    const entries = await fsp.readdir(current, { withFileTypes: true });
-    for (const entry of entries) {
-      const fullPath = path.join(current, entry.name);
-      const relPath = relativePrefix
-        ? `${relativePrefix}/${entry.name}`
-        : entry.name;
-      if (entry.isDirectory()) {
-        await walk(fullPath, relPath);
-      } else if (entry.isFile()) {
-        const buffer = await fsp.readFile(fullPath);
-        result[relPath] = buffer.toString("base64");
-      }
-    }
-  }
-
-  await walk(dir, basePrefix);
-  return result;
-}
-
-// ---------------------------------------------------------------------------
 // Export: gather all data, encrypt, return base64
 // ---------------------------------------------------------------------------
 
@@ -86,7 +51,7 @@ export interface BackupHistoryData {
 }
 
 export interface ExportResult {
-  encrypted: string;
+  staged: { token: string; size: number };
   history: BackupHistoryData;
   stats: {
     tables: Record<string, number>;
@@ -111,12 +76,6 @@ export async function recordBackupHistory(data: BackupHistoryData): Promise<void
  * in the export JSON response. The token is intentionally separate from the
  * history metadata so it cannot expose the backup or its password.
  */
-export async function stageExportBackup(
-  encrypted: string,
-): Promise<{ token: string; size: number }> {
-  return stageBackup(encrypted);
-}
-
 export async function exportBackup(
   password: string,
   includeFiles: boolean,
@@ -140,21 +99,11 @@ export async function exportBackup(
   }
 
   // ── Collect files ──────────────────────────────────────────────────────
-  let files: BackupFiles = {
-    uploads: {},
-    avatars: {},
-    sessionFiles: {},
-    skills: {},
-  };
-  if (includeFiles) {
-    const [uploads, avatars, sessionFiles, skills] = await Promise.all([
-      collectFiles(UPLOAD_DIR, ""),
-      collectFiles(AVATAR_DIR, ""),
-      collectFiles(SESSION_FILES_DIR, ""),
-      collectFiles(SKILLS_DIR, "skills"),
-    ]);
-    files = { uploads, avatars, sessionFiles, skills };
-  }
+  const roots = [
+    ["uploads", UPLOAD_DIR], ["avatars", AVATAR_DIR],
+    ["sessionFiles", SESSION_FILES_DIR], ["skills", SKILLS_DIR],
+  ] as const;
+  const fileCounts = { uploads: 0, avatars: 0, sessionFiles: 0, skills: 0 };
 
   // ── Build payload ──────────────────────────────────────────────────────
   const payload = {
@@ -164,32 +113,79 @@ export async function exportBackup(
     includesFiles: includeFiles,
     data: {
       ...tableData,
-      files,
     },
   };
 
-  // ── Serialise & encrypt ────────────────────────────────────────────────
-  const plaintext = JSON.stringify(payload);
-  const encrypted = encryptBackup(plaintext, password);
-
-  return {
-    encrypted,
-    history: {
-      exportedAt: payload.exportedAt,
-      totalSize: encrypted.length,
-      includesFiles: includeFiles,
-      tableStats,
-      uploadCount: Object.keys(files.uploads).length,
-      avatarCount: Object.keys(files.avatars).length,
-      skillCount: Object.keys(files.skills).length,
-      appVersion: APP_VERSION,
-    },
-    stats: {
-      tables: tableStats,
-      uploads: Object.keys(files.uploads).length,
-      avatars: Object.keys(files.avatars).length,
-      sessionFiles: Object.keys(files.sessionFiles).length,
-      skills: Object.keys(files.skills).length,
-    },
-  };
+  async function* archive(): AsyncGenerator<Buffer> {
+    // Emit the v2 JSON shape a small piece at a time. Its contents remain
+    // compatible with the existing restore validator; only its encrypted
+    // envelope changes in v3.
+    const { data: tableDataOnly, ...manifest } = payload;
+    yield Buffer.from(`${JSON.stringify(manifest).slice(0, -1)},"data":${JSON.stringify(tableDataOnly).slice(0, -1)},"files":{`);
+    let firstRoot = true;
+    if (!includeFiles) {
+      yield Buffer.from("}}}");
+      return;
+    }
+    for (const [root, directory] of roots) {
+      if (!firstRoot) yield Buffer.from(",");
+      firstRoot = false;
+      yield Buffer.from(`${JSON.stringify(root)}:{`);
+      let firstFile = true;
+      const walk = async function* (current: string, relative = ""): AsyncGenerator<{ fullPath: string; relative: string }> {
+        let entries: fs.Dirent[];
+        try { entries = await fsp.readdir(current, { withFileTypes: true }); } catch { return; }
+        for (const entry of entries) {
+          const next = path.join(current, entry.name);
+          const rel = relative ? `${relative}/${entry.name}` : entry.name;
+          if (entry.isDirectory()) yield* walk(next, rel);
+          else if (entry.isFile()) yield { fullPath: next, relative: rel };
+        }
+      };
+      for await (const file of walk(directory)) {
+        const size = (await fsp.stat(file.fullPath)).size;
+        fileCounts[root]++;
+        if (!firstFile) yield Buffer.from(",");
+        firstFile = false;
+        yield Buffer.from(`${JSON.stringify(file.relative)}:`);
+        yield Buffer.from('"');
+        let remainder = Buffer.alloc(0);
+        for await (const part of fs.createReadStream(file.fullPath)) {
+          const chunk = Buffer.concat([remainder, Buffer.from(part)]);
+          const usable = chunk.length - (chunk.length % 3);
+          if (usable) yield Buffer.from(chunk.subarray(0, usable).toString("base64"));
+          remainder = chunk.subarray(usable);
+        }
+        if (remainder.length) yield Buffer.from(remainder.toString("base64"));
+        yield Buffer.from('"');
+      }
+      yield Buffer.from("}");
+    }
+    yield Buffer.from("}}}");
+  }
+  const stage = await createBackupStage();
+  console.info("[backup/export] streaming v3 archive", { includeFiles, tableCount: tables.length });
+  try {
+    await encryptBackupStream(Readable.from(archive()), stage.temporaryPath, password);
+    const staged = await publishBackupStage(stage);
+    console.info("[backup/export] staged v3 archive", { size: staged.size, ...fileCounts });
+    return {
+      staged,
+      history: {
+        exportedAt: payload.exportedAt,
+        totalSize: staged.size,
+        includesFiles: includeFiles,
+        tableStats,
+        uploadCount: fileCounts.uploads,
+        avatarCount: fileCounts.avatars,
+        skillCount: fileCounts.skills,
+        appVersion: APP_VERSION,
+      },
+      stats: { tables: tableStats, uploads: fileCounts.uploads, avatars: fileCounts.avatars, sessionFiles: fileCounts.sessionFiles, skills: fileCounts.skills },
+    };
+  } catch (err) {
+    await fsp.unlink(stage.temporaryPath).catch(() => undefined);
+    console.error("[backup/export] streaming failed", err);
+    throw err;
+  }
 }

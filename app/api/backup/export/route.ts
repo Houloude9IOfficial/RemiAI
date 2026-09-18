@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { exportBackup, stageExportBackup } from "@/lib/backup/export";
+import { exportBackup } from "@/lib/backup/export";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
 
     const includeFiles = body.includeFiles ?? true;
     const result = await exportBackup(body.password, includeFiles);
-    const staged = await stageExportBackup(result.encrypted);
+    const staged = result.staged;
 
     return NextResponse.json({
       downloadUrl: `/api/backup/download/${staged.token}`,

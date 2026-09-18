@@ -88,6 +88,24 @@ export async function stageBackup(encrypted: string): Promise<{ token: string; s
   }
 }
 
+/** Reserve a private staging path for a streamed export, then publish it atomically. */
+export async function createBackupStage(): Promise<{ token: string; temporaryPath: string; finalPath: string }> {
+  await ensureDownloadDirectory();
+  await cleanupExpiredBackupDownloads(false);
+  const token = crypto.randomBytes(TOKEN_BYTES).toString("base64url");
+  return {
+    token,
+    temporaryPath: path.join(DOWNLOAD_DIR, `.${token}.${process.pid}.${crypto.randomBytes(8).toString("hex")}.tmp`),
+    finalPath: pendingPath(token),
+  };
+}
+
+export async function publishBackupStage(stage: { token: string; temporaryPath: string; finalPath: string }): Promise<{ token: string; size: number }> {
+  const stats = await fsp.stat(stage.temporaryPath);
+  await fsp.rename(stage.temporaryPath, stage.finalPath);
+  return { token: stage.token, size: stats.size };
+}
+
 /**
  * Atomically claim a staged backup for one download request.
  * A token cannot be downloaded twice concurrently or reused after claiming.

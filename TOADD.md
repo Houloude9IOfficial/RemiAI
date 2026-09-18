@@ -330,4 +330,4 @@ the ai users bash to write/edit/delete files, but it should use bash for command
 
 <!-- while searching do not show sources, show searching and in a temp chain of though show each search result. Show sources only when the AI is done searching and has a final answer (end of request). -->
 
-Add a darker blue accent color for the app.
+<!-- Add a darker blue accent color for the app. -->

@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { importBackup } from "@/lib/backup/import";
+import crypto from "node:crypto";
+import fs from "node:fs";
+import fsp from "node:fs/promises";
+import path from "node:path";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { importBackup, importBackupFile } from "@/lib/backup/import";
+import { DATA_DIR } from "@/lib/paths";
 
 /**
  * POST /api/backup/import
@@ -28,8 +35,20 @@ export async function POST(req: NextRequest) {
       password = typeof formData.get("password") === "string" ? formData.get("password") as string : null;
       encrypted = file instanceof File ? await file.text() : null;
     } else if (contentType.toLowerCase().startsWith("text/plain") || contentType.toLowerCase().startsWith("application/octet-stream")) {
-      encrypted = await req.text();
       password = req.headers.get("x-remiai-backup-password");
+      if (!req.body) return NextResponse.json({ error: "No backup file provided." }, { status: 400 });
+      if (!password || password.length < 4) return NextResponse.json({ error: "Password must be at least 4 characters." }, { status: 400 });
+      const importDir = path.join(DATA_DIR, "backup-imports");
+      await fsp.mkdir(importDir, { recursive: true, mode: 0o700 });
+      const input = path.join(importDir, `${crypto.randomBytes(24).toString("base64url")}.upload`);
+      try {
+        console.info("[backup/import] receiving streamed upload");
+        await pipeline(Readable.fromWeb(req.body as never), fs.createWriteStream(input, { flags: "wx", mode: 0o600 }));
+        const result = await importBackupFile(input, password);
+        return NextResponse.json(result);
+      } finally {
+        await fsp.unlink(input).catch(() => undefined);
+      }
     } else {
       const body = await req.json() as { encrypted?: unknown; password?: unknown };
       encrypted = typeof body.encrypted === "string" ? body.encrypted : null;

@@ -1,4 +1,6 @@
 import crypto from "node:crypto";
+import fs from "node:fs";
+import { pipeline } from "node:stream/promises";
 
 // ---------------------------------------------------------------------------
 // Cryptographic constants
@@ -11,6 +13,68 @@ const SALT_LENGTH = 32;
 const TAG_LENGTH = 16; // GCM auth tag
 const PBKDF2_ITERATIONS = 600_000;
 const DIGEST = "sha512";
+
+/** Binary, streamable backup envelope. The GCM tag is deliberately last so
+ * encrypted data can be written without retaining it in memory. */
+export const STREAM_BACKUP_MAGIC = Buffer.from("REMI3BK1");
+const STREAM_HEADER_LENGTH = STREAM_BACKUP_MAGIC.length + SALT_LENGTH + IV_LENGTH;
+
+export function isStreamBackup(buffer: Buffer): boolean {
+  return buffer.subarray(0, STREAM_BACKUP_MAGIC.length).equals(STREAM_BACKUP_MAGIC);
+}
+
+function deriveKey(password: string, salt: Buffer): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    crypto.pbkdf2(password, salt, PBKDF2_ITERATIONS, KEY_LENGTH, DIGEST, (err: Error | null, key: Buffer) =>
+      err ? reject(err) : resolve(key),
+    );
+  });
+}
+
+/** Encrypt a readable source directly into a v3 backup file. */
+export async function encryptBackupStream(
+  source: NodeJS.ReadableStream,
+  destination: string,
+  password: string,
+): Promise<number> {
+  const salt = crypto.randomBytes(SALT_LENGTH);
+  const iv = crypto.randomBytes(IV_LENGTH);
+  const key = await deriveKey(password, salt);
+  const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
+  const output = fs.createWriteStream(destination, { flags: "wx", mode: 0o600 });
+
+  output.write(Buffer.concat([STREAM_BACKUP_MAGIC, salt, iv]));
+  await pipeline(source, cipher, output, { end: false });
+  await new Promise<void>((resolve, reject) => output.write(cipher.getAuthTag(), (err) => err ? reject(err) : resolve()));
+  await new Promise<void>((resolve, reject) => output.end((err?: Error | null) => err ? reject(err) : resolve()));
+  return (await fs.promises.stat(destination)).size;
+}
+
+/** Decrypt a v3 file. Kept separate from legacy base64 encryption. */
+export async function decryptBackupStreamFile(
+  input: string,
+  output: string,
+  password: string,
+): Promise<void> {
+  const stat = await fs.promises.stat(input);
+  if (stat.size <= STREAM_HEADER_LENGTH + TAG_LENGTH) throw new Error("Backup file is too short or corrupted.");
+  const header = Buffer.alloc(STREAM_HEADER_LENGTH);
+  const handle = await fs.promises.open(input, "r");
+  try { await handle.read(header, 0, header.length, 0); } finally { await handle.close(); }
+  if (!isStreamBackup(header)) throw new Error("Backup file is not a v3 stream backup.");
+  const salt = header.subarray(STREAM_BACKUP_MAGIC.length, STREAM_BACKUP_MAGIC.length + SALT_LENGTH);
+  const iv = header.subarray(STREAM_BACKUP_MAGIC.length + SALT_LENGTH);
+  const tag = Buffer.alloc(TAG_LENGTH);
+  const tagHandle = await fs.promises.open(input, "r");
+  try { await tagHandle.read(tag, 0, TAG_LENGTH, stat.size - TAG_LENGTH); } finally { await tagHandle.close(); }
+  const decipher = crypto.createDecipheriv(ALGORITHM, await deriveKey(password, salt), iv);
+  decipher.setAuthTag(tag);
+  await pipeline(
+    fs.createReadStream(input, { start: STREAM_HEADER_LENGTH, end: stat.size - TAG_LENGTH - 1 }),
+    decipher,
+    fs.createWriteStream(output, { flags: "wx", mode: 0o600 }),
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Encrypt a JSON string into a binary buffer

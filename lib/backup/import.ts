@@ -1,9 +1,11 @@
 import fsp from "node:fs/promises";
+import fs from "node:fs";
+import crypto from "node:crypto";
 import path from "node:path";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
-import { UPLOAD_DIR, AVATAR_DIR, SESSION_FILES_DIR, SKILLS_DIR } from "@/lib/paths";
-import { decryptBackup } from "./crypto";
+import { UPLOAD_DIR, AVATAR_DIR, SESSION_FILES_DIR, SKILLS_DIR, DATA_DIR } from "@/lib/paths";
+import { decryptBackup, decryptBackupStreamFile, isStreamBackup } from "./crypto";
 import { getAllTables } from "./schema";
 import {
   BACKUP_VERSION,
@@ -422,8 +424,6 @@ export async function importBackup(
   encrypted: string,
   password: string,
 ): Promise<RestoreResult> {
-  const warnings: string[] = [];
-
   // ── Decrypt ─────────────────────────────────────────────────────────────
   let plaintext: string;
   try {
@@ -434,6 +434,12 @@ export async function importBackup(
     );
   }
 
+  return importBackupPlaintext(plaintext);
+}
+
+/** Restore an already-authenticated JSON payload. Shared by legacy and v3. */
+export async function importBackupPlaintext(plaintext: string): Promise<RestoreResult> {
+  const warnings: string[] = [];
   // ── Parse & validate (with v1→v2 migration) ────────────────────────────
   let payload: ReturnType<typeof validatePayload>;
   try {
@@ -577,4 +583,25 @@ export async function importBackup(
     appVersion: payload.appVersion,
     warnings,
   };
+}
+
+/** Restore a v3 binary upload without ever reading the encrypted file as text. */
+export async function importBackupFile(input: string, password: string): Promise<RestoreResult> {
+  const header = Buffer.alloc(8);
+  const handle = await fsp.open(input, "r");
+  try { await handle.read(header, 0, header.length, 0); } finally { await handle.close(); }
+  if (!isStreamBackup(header)) return importBackup(await fsp.readFile(input, "utf8"), password);
+  const importDir = path.join(DATA_DIR, "backup-imports");
+  await fsp.mkdir(importDir, { recursive: true, mode: 0o700 });
+  const plaintextPath = path.join(importDir, `${crypto.randomBytes(24).toString("base64url")}.json`);
+  try {
+    console.info("[backup/import] decrypting v3 stream");
+    await decryptBackupStreamFile(input, plaintextPath, password);
+    // JSON.parse necessarily materializes structured DB rows for the current
+    // transactional restore implementation, but raw encrypted/file bytes
+    // were streamed and never base64-expanded on the export side.
+    return importBackupPlaintext(await fsp.readFile(plaintextPath, "utf8"));
+  } finally {
+    await fsp.unlink(plaintextPath).catch(() => undefined);
+  }
 }
