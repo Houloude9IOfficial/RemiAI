@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { ToolCallGroup, summarizeToolActivity } from "./ToolCallGroup";
 import { ChatStatusOrb } from "./ChatStatusOrb";
+import { AnimatedSearchTrace, searchTraceSummary } from "./AnimatedSearchTrace";
+import type { SearchTraceEntry } from "@/lib/chat/search-trace";
 
 /**
  * Claude-style collapsed "activity" line. While a message's leading reasoning
@@ -18,6 +20,8 @@ import { ChatStatusOrb } from "./ChatStatusOrb";
 export function ActivityDisclosure({
   reasoning,
   toolGroups,
+  searchTrace = [],
+  hasSearchActivity = false,
   isStreaming,
   responseStreaming,
 }: {
@@ -27,6 +31,10 @@ export function ActivityDisclosure({
   toolGroups: Array<{
     parts: Parameters<typeof ToolCallGroup>[0]["parts"];
   }>;
+  /** Search result and opened-page URLs, in streamed call order. */
+  searchTrace?: SearchTraceEntry[];
+  /** Keeps the disclosure visible while a search call has no output yet. */
+  hasSearchActivity?: boolean;
   /** Whether the whole message is still generating. */
   isStreaming: boolean;
   /** Whether the final text answer has started generating. */
@@ -39,22 +47,34 @@ export function ActivityDisclosure({
   const allParts = toolGroups.flatMap((g) => g.parts);
   const summary = summarizeToolActivity(allParts);
   const hasTools = allParts.length > 0;
+  const hasSearchTrace = searchTrace.length > 0;
   const reasoningStreaming = reasoning?.isStreaming === true;
   const hasQuestions = summary.hasQuestions;
   const mixedOutcome = summary.hasError && summary.hasSuccess;
 
-  // Collapse when the final answer starts or the message completes — unless
-  // the user explicitly toggled the disclosure.
+  // Search progress opens as results arrive, then always collapses when the
+  // answer begins. Users can reopen the completed trace afterward.
   const shouldOpen = isStreaming && !responseStreaming;
   const working = shouldOpen || summary.running || reasoningStreaming;
 
   useEffect(() => {
-    if (!shouldOpen && !userToggledRef.current && !hasQuestions) setOpen(false);
-  }, [shouldOpen, hasQuestions]);
+    const timer = window.setTimeout(() => {
+      if (shouldOpen && hasSearchActivity && !userToggledRef.current) {
+        setOpen(true);
+      }
+      if (!shouldOpen && !hasQuestions) {
+        userToggledRef.current = false;
+        setOpen(false);
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [shouldOpen, hasQuestions, hasSearchActivity]);
 
-  if (!reasoning && !hasTools) return null;
+  if (!reasoning && !hasTools && !hasSearchActivity) return null;
 
-  const label = working
+  const label = hasSearchTrace && !shouldOpen
+    ? searchTraceSummary(searchTrace)
+    : working
     ? reasoningStreaming
       ? "Working…"
       : summary.running
@@ -67,7 +87,7 @@ export function ActivityDisclosure({
       : "Work complete";
       // : "Reasoning complete";
 
-  const callSuffix =
+  const callSuffix = !hasSearchTrace &&
     hasTools && summary.count > 1 ? ` · ${summary.count} calls` : "";
 
   return (
@@ -170,6 +190,13 @@ export function ActivityDisclosure({
                       />
                     </div>
                   </div>
+                )}
+                {hasSearchTrace && (
+                  <AnimatedSearchTrace
+                    entries={searchTrace}
+                    active={shouldOpen}
+                    showUrls={!shouldOpen}
+                  />
                 )}
                 {toolGroups.map((group, idx) => (
                   <ToolCallGroup key={`trace-${idx}`} parts={group.parts} headerless />

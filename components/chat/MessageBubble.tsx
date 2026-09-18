@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { isRemiCardOutput, remiCardPartIdentity } from "@/lib/chat/card-identity";
+import { extractSearchTrace, isSearchTraceToolPart } from "@/lib/chat/search-trace";
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -1063,13 +1064,22 @@ export function MessageBubble({
   // Sources card (per-tool "sources" segments are folded into it).
   const messageSources = collectMessageSources(message.parts);
   const hasRetrievedSources = messageSources.list.length > 0;
+  const searchTrace = extractSearchTrace(message.parts);
+  const hasSearchActivity = message.parts.some(isSearchTraceToolPart);
 
   // Segments that render in the message body — suggestions and sources are
   // hoisted out (suggestions to the bottom, sources into one card).
-  const renderableSegments = segments.filter(
-    (s): s is Exclude<Segment, { type: "suggestions" } | { type: "sources" }> =>
-      s.type !== "suggestions" && s.type !== "sources",
-  );
+  const renderableSegments = segments
+    .map((segment) =>
+      segment.type === "tool"
+        ? { ...segment, parts: segment.parts.filter((part) => !isSearchTraceToolPart(part)) }
+        : segment,
+    )
+    .filter((segment) => segment.type !== "tool" || segment.parts.length > 0)
+    .filter(
+      (s): s is Exclude<Segment, { type: "suggestions" } | { type: "sources" }> =>
+        s.type !== "suggestions" && s.type !== "sources",
+    );
 
   // Claude-style activity: the LEADING reasoning + tool run collapses into a
   // single quiet line at the top; everything after it (text, visuals, present
@@ -1091,8 +1101,9 @@ export function MessageBubble({
       parts: s.parts as unknown as Parameters<typeof ToolCallGroup>[0]["parts"],
     }));
   const hasActivity =
-    leadingActivity.length > 0 &&
-    (activityReasoning !== undefined || activityToolGroups.length > 0);
+    (leadingActivity.length > 0 &&
+      (activityReasoning !== undefined || activityToolGroups.length > 0)) ||
+    hasSearchActivity;
 
   // Canvas cards are hoisted to the BOTTOM of the message (next to the file
   // digest) instead of interrupting the tool/answer flow.
@@ -1135,6 +1146,8 @@ export function MessageBubble({
                   : null
               }
               toolGroups={activityToolGroups}
+              searchTrace={searchTrace}
+              hasSearchActivity={hasSearchActivity}
               isStreaming={isStreaming ?? false}
               responseStreaming={responseStreaming ?? false}
             />
@@ -1151,16 +1164,18 @@ export function MessageBubble({
                 <StreamingSafeMarkdown
                   content={
                     hasRetrievedSources
-                      ? wrapBareSourceUrls(
-                          stripTrailingSourcesSection(segment.text),
-                          messageSources.byUrl,
-                        )
+                      ? !isStreaming
+                        ? wrapBareSourceUrls(
+                            stripTrailingSourcesSection(segment.text),
+                            messageSources.byUrl,
+                          )
+                        : stripTrailingSourcesSection(segment.text)
                       : segment.text
                   }
                   isStreaming={
                     isStreaming && idx === bodySegments.length - 1
                   }
-                  citations={messageSources.byUrl}
+                  citations={!isStreaming ? messageSources.byUrl : null}
                 />
               </div>
             ) : segment.type === "reasoning" ? (
@@ -1205,7 +1220,7 @@ export function MessageBubble({
           {/* Aggregated Sources card — the full numbered list behind the
               inline citation chips. The model's own trailing Sources section
               is stripped from the text above so this is the single list. */}
-          {hasRetrievedSources && (
+          {!isStreaming && hasRetrievedSources && (
             <SourceEvidenceCard
               key="sources-card"
               data={{ sources: messageSources.list }}
