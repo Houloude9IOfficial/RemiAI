@@ -325,3 +325,7 @@ the ai users bash to write/edit/delete files, but it should use bash for command
 <!-- Tell the AI while in planning mode so it know when it's time to switch to goal mode, and also allow the AI to switch back to planning mode if needed. -->
 
 <!-- add image generation tool with options to generate images from text prompts, and allow the AI to use it to generate images based on user requests or its own ideas. Use https://libraries.dev/image for image card --- ABANDONED IDEA -->
+
+<!-- allow collapsing messages of user (and automatically collapse them if they are too long). -->
+
+while searching do not show sources, show searching and in a temp chain of though show each search result. Show sources only when the AI is done searching and has a final answer (end of request).

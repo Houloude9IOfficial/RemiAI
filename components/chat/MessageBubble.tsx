@@ -4,7 +4,7 @@ import type { UIMessage } from "ai";
 import { isTextUIPart, isToolUIPart, isReasoningUIPart, getToolName } from "ai";
 import { Component, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Copy, Check, Play, RefreshCw, Pencil, X } from "lucide-react";
+import { Copy, Check, Play, RefreshCw, Pencil, X, ChevronDown, ChevronUp } from "lucide-react";
 import { ToolCallGroup, FileChangeDigest, extractFileChanges } from "./ToolCallGroup";
 import { ActivityDisclosure } from "./ActivityDisclosure";
 import { VisualCard } from "./VisualCard";
@@ -781,6 +781,10 @@ function buildSegments(parts: UIMessage["parts"]): Segment[] {
   return mergeInRowToolSegments(mergeReasoningSegments(dedupedCardSegments));
 }
 
+const USER_MESSAGE_AUTO_COLLAPSE_CHAR_THRESHOLD = 450;
+const USER_MESSAGE_AUTO_COLLAPSE_LINE_THRESHOLD = 8;
+const USER_MESSAGE_MAX_HEIGHT_COLLAPSED_PX = 180;
+
 function UserMessageBubble({
   message,
   onEdit,
@@ -803,6 +807,23 @@ function UserMessageBubble({
   const imageAttachments = attachments.filter((a) => a.isImage);
   const fileAttachments = attachments.filter((a) => !a.isImage);
 
+  // Heuristic based on character count and line breaks
+  const isInitiallyLong =
+    cleanText.length > USER_MESSAGE_AUTO_COLLAPSE_CHAR_THRESHOLD ||
+    cleanText.split("\n").length > USER_MESSAGE_AUTO_COLLAPSE_LINE_THRESHOLD;
+
+  const [isCollapsed, setIsCollapsed] = useState<boolean>(() => isInitiallyLong);
+  const [canCollapse, setCanCollapse] = useState<boolean>(() => isInitiallyLong);
+  const textContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!textContainerRef.current) return;
+    const scrollHeight = textContainerRef.current.scrollHeight;
+    if (scrollHeight > USER_MESSAGE_MAX_HEIGHT_COLLAPSED_PX + 20) {
+      setCanCollapse(true);
+    }
+  }, [cleanText]);
+
   return (
     <div className="group flex justify-end">
       <div className="flex max-w-[min(85%,36rem)] flex-col items-end gap-1">
@@ -819,12 +840,62 @@ function UserMessageBubble({
         ) : (
           <div
             className={cn(
-              "flex flex-col gap-2",
+              "relative flex flex-col gap-2 transition-[max-height] duration-200",
               hasText &&
                 "rounded-2xl bg-primary/90 px-3.5 py-2.5 text-[15px] leading-relaxed text-primary-foreground",
             )}
           >
-            {hasText && <UserMessageText text={cleanText} />}
+            {hasText && (
+              <div className="relative">
+                <div
+                  ref={textContainerRef}
+                  style={{
+                    maxHeight: isCollapsed
+                      ? `${USER_MESSAGE_MAX_HEIGHT_COLLAPSED_PX}px`
+                      : undefined,
+                    maskImage: isCollapsed
+                      ? "linear-gradient(to bottom, black 0%, black 45%, rgba(0,0,0,0.85) 60%, rgba(0,0,0,0.45) 75%, rgba(0,0,0,0.15) 88%, transparent 100%)"
+                      : undefined,
+                    WebkitMaskImage: isCollapsed
+                      ? "linear-gradient(to bottom, black 0%, black 45%, rgba(0,0,0,0.85) 60%, rgba(0,0,0,0.45) 75%, rgba(0,0,0,0.15) 88%, transparent 100%)"
+                      : undefined,
+                  }}
+                  className={cn(
+                    "overflow-hidden transition-[max-height] duration-200",
+                  )}
+                >
+                  <UserMessageText text={cleanText} />
+                </div>
+
+                {isCollapsed && (canCollapse || isInitiallyLong) && (
+                  <div className="absolute inset-x-0 bottom-0 flex justify-center pb-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setIsCollapsed(false)}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-primary-foreground/15 px-3 py-1 text-xs font-medium text-primary-foreground shadow-xs backdrop-blur-md transition-all hover:bg-white/25 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary-foreground"
+                      aria-expanded={false}
+                    >
+                      <span>Show more</span>
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {hasText && !isCollapsed && (canCollapse || isInitiallyLong) && (
+              <div className="flex justify-end pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => setIsCollapsed(true)}
+                  className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium text-primary-foreground/80 transition-colors hover:bg-white/15 hover:text-primary-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary-foreground"
+                  aria-expanded={true}
+                >
+                  <span>Show less</span>
+                  <ChevronUp className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
 
             {imageAttachments.length > 0 && (
               <div
@@ -878,11 +949,29 @@ function UserMessageBubble({
                 <Play className="h-3.5 w-3.5" />
               </button>
             )}
+            {hasText && (
+              <button
+                type="button"
+                onClick={() => setIsCollapsed((prev) => !prev)}
+                aria-label={isCollapsed ? "Expand message" : "Collapse message"}
+                title={isCollapsed ? "Expand message" : "Collapse message"}
+                className="flex h-6.5 w-6.5 items-center justify-center rounded-md text-muted-foreground/55 transition-colors hover:text-foreground active:scale-90"
+              >
+                {isCollapsed ? (
+                  <ChevronDown className="h-3.5 w-3.5" />
+                ) : (
+                  <ChevronUp className="h-3.5 w-3.5" />
+                )}
+              </button>
+            )}
             {hasText && <CopyButton text={cleanText} ariaLabel="Copy message" />}
             {onEdit && (
               <button
                 type="button"
-                onClick={() => setIsEditing(true)}
+                onClick={() => {
+                  setIsCollapsed(false);
+                  setIsEditing(true);
+                }}
                 aria-label="Edit message"
                 title="Edit message"
                 className="flex h-6.5 w-6.5 items-center justify-center rounded-md text-muted-foreground/55 transition-colors hover:text-foreground active:scale-90"
