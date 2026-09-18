@@ -24,6 +24,7 @@ const DEFAULT_PREFERENCES = {
   cardDisplayModes: {} as Record<string, string>,
   collapseLongUserMessages: true,
   expandReasoningWhileWorking: true,
+  enableTitleGeneration: true,
 };
 
 function isMissingColumnError(e: unknown): boolean {
@@ -71,6 +72,7 @@ export async function GET() {
     cardDisplayModes: ((prefs as Record<string, unknown>).cardDisplayModes as Record<string, string> | undefined) ?? {},
     collapseLongUserMessages: ((prefs as Record<string, unknown>).collapseLongUserMessages as boolean | undefined) ?? true,
     expandReasoningWhileWorking: ((prefs as Record<string, unknown>).expandReasoningWhileWorking as boolean | undefined) ?? true,
+    enableTitleGeneration: ((prefs as Record<string, unknown>).enableTitleGeneration as boolean | undefined) ?? true,
   });
 }
 
@@ -96,6 +98,7 @@ export async function PUT(req: Request) {
     cardDisplayModes?: Record<string, string>;
     collapseLongUserMessages?: boolean;
     expandReasoningWhileWorking?: boolean;
+    enableTitleGeneration?: boolean;
   };
 
   let existing: (typeof userPreferences.$inferSelect) | undefined;
@@ -128,6 +131,7 @@ export async function PUT(req: Request) {
     cardDisplayModes: body.cardDisplayModes ?? ((existing as unknown as Record<string, unknown> | null)?.cardDisplayModes as Record<string, string> | undefined) ?? {},
     collapseLongUserMessages: body.collapseLongUserMessages ?? ((existing as unknown as Record<string, unknown> | null)?.collapseLongUserMessages as boolean | undefined) ?? true,
     expandReasoningWhileWorking: body.expandReasoningWhileWorking ?? ((existing as unknown as Record<string, unknown> | null)?.expandReasoningWhileWorking as boolean | undefined) ?? true,
+    enableTitleGeneration: body.enableTitleGeneration ?? ((existing as unknown as Record<string, unknown> | null)?.enableTitleGeneration as boolean | undefined) ?? true,
     updatedAt: new Date().toISOString(),
   };
 

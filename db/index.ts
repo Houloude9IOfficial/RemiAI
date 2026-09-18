@@ -185,6 +185,7 @@ export function ensureRemiPrefsColumns(): void {
   ensure("card_display_modes", 'ALTER TABLE "user_preferences" ADD COLUMN "card_display_modes" TEXT NOT NULL DEFAULT \'{}\'');
   ensure("collapse_long_user_messages", 'ALTER TABLE "user_preferences" ADD COLUMN "collapse_long_user_messages" INTEGER NOT NULL DEFAULT 1');
   ensure("expand_reasoning_while_working", 'ALTER TABLE "user_preferences" ADD COLUMN "expand_reasoning_while_working" INTEGER NOT NULL DEFAULT 1');
+  ensure("enable_title_generation", 'ALTER TABLE "user_preferences" ADD COLUMN "enable_title_generation" INTEGER NOT NULL DEFAULT 1');
 }
 
 export function ensureMemoryColumns(): void {

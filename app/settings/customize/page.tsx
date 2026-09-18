@@ -7,7 +7,7 @@ export default function OldCustomizeRedirect() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace("/settings/profile");
+    router.replace("/settings/appearance");
   }, [router]);
 
   return null;

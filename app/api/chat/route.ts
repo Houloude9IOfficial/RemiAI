@@ -1842,7 +1842,12 @@ Definition of done:
       // Keep trying after any successful user turn until the fallback title
       // is replaced by a real generated title. Manual/generated titles never
       // enter this branch and the expected-title guard below prevents races.
-      if (titleNeedsGeneration && !capturedErrorPayload && runText.trim()) {
+      if (
+        (prefs?.enableTitleGeneration ?? true) &&
+        titleNeedsGeneration &&
+        !capturedErrorPayload &&
+        runText.trim()
+      ) {
         const titleUser = [...uiMessages].reverse().find((m) => m.role === "user");
         if (titleUser) {
           const userText = titleUser.parts

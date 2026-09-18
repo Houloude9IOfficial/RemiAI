@@ -19,6 +19,7 @@ export type UserPreferences = {
   cardDisplayModes: Record<string, string>;
   collapseLongUserMessages: boolean;
   expandReasoningWhileWorking: boolean;
+  enableTitleGeneration: boolean;
 };
 
 export const CARD_IDS = [

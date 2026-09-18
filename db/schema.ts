@@ -117,6 +117,11 @@ export const userPreferences = sqliteTable("user_preferences", {
   expandReasoningWhileWorking: integer("expand_reasoning_while_working", { mode: "boolean" })
     .notNull()
     .default(true),
+  // Controls the background model call that replaces a new chat's fallback
+  // title with a concise, descriptive title.
+  enableTitleGeneration: integer("enable_title_generation", { mode: "boolean" })
+    .notNull()
+    .default(true),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 

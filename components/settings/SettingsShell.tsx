@@ -2,12 +2,23 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Brain, Cloud, Cog, Gauge, ListTodo, MessageSquareText, Settings2, Shield, UserRound, Wrench } from "lucide-react";
+import {
+  Brain,
+  Cloud,
+  Cog,
+  Gauge,
+  ListTodo,
+  MessageSquareText,
+  Settings2,
+  Shield,
+  UserRound,
+  Wrench,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const groups = [
   { label: "Profile", href: "/settings/profile", icon: UserRound },
-  { label: "Appearance", href: "/settings/profile#appearance", icon: Settings2 },
+  { label: "Appearance", href: "/settings/appearance", icon: Settings2 },
   { label: "Options", href: "/settings/options", icon: MessageSquareText },
   { label: "Models", href: "/settings/providers", icon: Cloud },
   { label: "Memory", href: "/settings/memories", icon: Brain },
@@ -55,22 +66,50 @@ export function SettingsShell({ children }: { children: React.ReactNode }) {
         <nav className="grid gap-1 md:block" aria-label="Settings">
           {groups.map((group) => {
             const Icon = group.icon;
-            const active = group.href ? pathname === group.href || pathname.startsWith(`${group.href}/`) : group.children?.some(([, href]) => pathname.startsWith(href));
+            const active = group.href
+              ? pathname === group.href || pathname.startsWith(`${group.href}/`)
+              : group.children?.some(([, href]) => pathname.startsWith(href));
             return (
               <div key={group.label} className="mb-1">
                 {group.href ? (
-                  <Link href={group.href} className={cn("flex items-center gap-2 rounded-md px-2.5 py-2 text-sm transition-colors", active ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>
-                    <Icon className="h-4 w-4" />{group.label}
+                  <Link
+                    href={group.href}
+                    className={cn(
+                      "flex items-center gap-2 rounded-md px-2.5 py-2 text-sm transition-colors",
+                      active
+                        ? "bg-accent text-foreground"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {group.label}
                   </Link>
                 ) : (
-                  <div className={cn("flex items-center gap-2 px-2.5 py-2 text-sm font-medium", active ? "text-foreground" : "text-muted-foreground")}>
-                    <Icon className="h-4 w-4" />{group.label}
+                  <div
+                    className={cn(
+                      "flex items-center gap-2 px-2.5 py-2 text-sm font-medium",
+                      active ? "text-foreground" : "text-muted-foreground",
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {group.label}
                   </div>
                 )}
                 {group.children && (
                   <div className="ml-8 grid gap-0.5 border-l border-border/40 pl-2">
                     {group.children.map(([label, href]) => (
-                      <Link key={href} href={href} className={cn("rounded-md px-2 py-1.5 text-xs transition-colors", pathname.startsWith(href) ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>{label}</Link>
+                      <Link
+                        key={href}
+                        href={href}
+                        className={cn(
+                          "rounded-md px-2 py-1.5 text-xs transition-colors",
+                          pathname.startsWith(href)
+                            ? "bg-accent text-foreground"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                        )}
+                      >
+                        {label}
+                      </Link>
                     ))}
                   </div>
                 )}

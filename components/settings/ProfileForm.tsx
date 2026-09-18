@@ -34,32 +34,9 @@ import {
   Medal,
   Plus,
   X,
-  Palette,
   Check,
-  CloudSun,
-  Clock,
-  DollarSign,
-  Bitcoin,
-  Newspaper,
-  TrendingUp,
-  LayoutGrid,
-  Map as MapIcon,
 } from "lucide-react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
-import { ACCENT_PRESETS } from "@/lib/accent-colors";
-import { BACKGROUND_PRESETS } from "@/lib/background-colors";
-import { useTheme } from "@/components/ThemeProvider";
-import { useAppearancePreview } from "@/components/AppearancePreviewProvider";
-import { Switch } from "@/components/ui/switch";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { CARD_IDS, type CardId } from "@/lib/api/preferences";
 
 const DEFAULT_PREFERENCES: UserPreferences = {
   preferredName: "",
@@ -82,6 +59,7 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   cardDisplayModes: {},
   collapseLongUserMessages: true,
   expandReasoningWhileWorking: true,
+  enableTitleGeneration: true,
 };
 
 interface LinkEntry {
@@ -89,10 +67,31 @@ interface LinkEntry {
   value: string;
 }
 
-const LINK_PRESETS = [    { key: "github", label: "GitHub", icon: Code2, placeholder: "https://github.com/username" },
-  { key: "twitter", label: "Twitter / X", icon: MessageCircle, placeholder: "https://x.com/username" },
-  { key: "website", label: "Website", icon: Globe, placeholder: "https://example.com" },
-  { key: "linkedin", label: "LinkedIn", icon: Link, placeholder: "https://linkedin.com/in/username" },
+const LINK_PRESETS = [
+  {
+    key: "github",
+    label: "GitHub",
+    icon: Code2,
+    placeholder: "https://github.com/username",
+  },
+  {
+    key: "twitter",
+    label: "Twitter / X",
+    icon: MessageCircle,
+    placeholder: "https://x.com/username",
+  },
+  {
+    key: "website",
+    label: "Website",
+    icon: Globe,
+    placeholder: "https://example.com",
+  },
+  {
+    key: "linkedin",
+    label: "LinkedIn",
+    icon: Link,
+    placeholder: "https://linkedin.com/in/username",
+  },
 ];
 
 function linksToObject(links: LinkEntry[]): Record<string, string> {
@@ -118,11 +117,15 @@ function linksEqual(
   return true;
 }
 
-function cardModesEqual(a: Record<string, string>, b: Record<string, string>): boolean {
+function cardModesEqual(
+  a: Record<string, string>,
+  b: Record<string, string>,
+): boolean {
   const ak = Object.keys(a).sort();
   const bk = Object.keys(b).sort();
   if (ak.length !== bk.length) return false;
-  for (let i = 0; i < ak.length; i++) if (ak[i] !== bk[i] || a[ak[i]] !== b[bk[i]]) return false;
+  for (let i = 0; i < ak.length; i++)
+    if (ak[i] !== bk[i] || a[ak[i]] !== b[bk[i]]) return false;
   return true;
 }
 
@@ -149,29 +152,8 @@ function preferencesEqual(a: UserPreferences, b: UserPreferences): boolean {
   );
 }
 
-const CARD_META: Record<CardId, { label: string; icon: typeof CloudSun; hint: string }> = {
-  weather: { label: "Weather", icon: CloudSun, hint: "Open-Meteo + Nominatim" },
-  timezone: { label: "Timezone", icon: Clock, hint: "WorldTimeAPI / TimeAPI" },
-  currency: { label: "Currency", icon: DollarSign, hint: "Frankfurter / ECB" },
-  map: { label: "Map", icon: MapIcon, hint: "OSM / Nominatim" },
-  crypto: { label: "Crypto", icon: Bitcoin, hint: "CoinGecko" },
-  news: { label: "News", icon: Newspaper, hint: "Integrated news" },
-  stock: { label: "Stock", icon: TrendingUp, hint: "Market data" },
-};
-
 export function ProfileForm() {
-  const { resolvedTheme } = useTheme();
-  const {
-    setAccentPreview,
-    setBackgroundPreview,
-    clearPreviews,
-    setAccentHover,
-    clearAccentHover,
-    setBackgroundHover,
-    clearBackgroundHover,
-  } = useAppearancePreview();
   const queryClient = useQueryClient();
-  const accentTheme: "light" | "dark" = resolvedTheme === "dark" ? "dark" : "light";
   const [form, setForm] = useState<UserPreferences>(DEFAULT_PREFERENCES);
   const [links, setLinks] = useState<LinkEntry[]>([]);
   const [customLinkKey, setCustomLinkKey] = useState("");
@@ -208,11 +190,6 @@ export function ProfileForm() {
   useEffect(() => {
     if (data) serverRef.current = data;
   }, [data]);
-
-  // Revert any unsaved accent/background preview when leaving this page.
-  useEffect(() => {
-    return () => clearPreviews();
-  }, [clearPreviews]);
 
   const updateMutation = useMutation({
     mutationFn: (data: Partial<UserPreferences>) => preferencesApi.update(data),
@@ -287,9 +264,7 @@ export function ProfileForm() {
       toast.success("Profile picture saved");
     } catch (err: unknown) {
       toast.error(
-        err instanceof Error
-          ? err.message
-          : "Failed to upload profile picture",
+        err instanceof Error ? err.message : "Failed to upload profile picture",
       );
     } finally {
       setAvatarUploading(false);
@@ -438,153 +413,6 @@ export function ProfileForm() {
         </CardContent>
       </Card>
 
-      {/* Appearance Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-sm font-medium">
-            <Palette className="h-4 w-4 text-primary" />
-            Appearance
-          </CardTitle>
-          <CardDescription className="text-xs">
-            Personalise the app&apos;s accent color and background palette.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Accent color */}
-          <div className="space-y-2.5">
-            <p className="text-xs font-semibold">Accent color</p>
-            <div className="flex flex-wrap items-center gap-2.5">
-              {/* Default */}
-              <button
-                type="button"
-                onClick={() => {
-                  setAccentPreview("");
-                  setForm({ ...form, accentColor: "" });
-                }}
-                onMouseEnter={() => setAccentHover("")}
-                onMouseLeave={() => clearAccentHover()}
-                className={cn(
-                  "flex h-9 w-9 items-center justify-center rounded-full border border-border transition-all duration-150 hover:scale-110 hover:border-foreground/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                  form.accentColor === "" &&
-                    "ring-2 ring-foreground ring-offset-2",
-                )}
-                style={{
-                  background:
-                    accentTheme === "dark"
-                      ? "oklch(0.72 0.12 252)"
-                      : "oklch(0.58 0.14 252)",
-                }}
-                title="Default"
-                aria-label="Default accent color"
-              >
-                {form.accentColor === "" && (
-                  <Check
-                    className={cn(
-                      "h-4 w-4",
-                      accentTheme === "dark" ? "text-foreground" : "text-white",
-                    )}
-                  />
-                )}
-              </button>
-
-              {/* Presets */}
-              {ACCENT_PRESETS.map((preset) => {
-                const selected = form.accentColor === preset.id;
-                return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => {
-                      setAccentPreview(preset.id);
-                      setForm({ ...form, accentColor: preset.id });
-                    }}
-                    onMouseEnter={() => setAccentHover(preset.id)}
-                    onMouseLeave={() => clearAccentHover()}
-                    className={cn(
-                      "flex h-9 w-9 items-center justify-center rounded-full border border-border/40 transition-all duration-150 hover:scale-110 hover:border-foreground/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                      selected && "ring-2 ring-foreground ring-offset-2",
-                    )}
-                    style={{
-                      backgroundColor:
-                        accentTheme === "dark" ? preset.dark : preset.light,
-                    }}
-                    title={preset.label}
-                    aria-label={`${preset.label} accent color`}
-                  >
-                    {selected && (
-                      <Check
-                        className={cn(
-                          "h-4 w-4",
-                          accentTheme === "dark"
-                            ? "text-foreground"
-                            : "text-white",
-                        )}
-                      />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-            <p className="text-[11px] text-muted-foreground/60">
-              Used for buttons, highlights, and focus rings.
-            </p>
-          </div>
-
-          {/* Background */}
-          <div className="space-y-2.5">
-            <p className="text-xs font-semibold">Background</p>
-            <div className="flex flex-wrap items-center gap-2.5">
-              <button
-                type="button"
-                onClick={() => {
-                  setBackgroundPreview("");
-                  setForm({ ...form, backgroundColor: "" });
-                }}
-                onMouseEnter={() => setBackgroundHover("")}
-                onMouseLeave={() => clearBackgroundHover()}
-                className={cn(
-                  "rounded-full border px-4 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                  form.backgroundColor === ""
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border text-foreground hover:border-foreground/40 hover:bg-accent/40",
-                )}
-                aria-pressed={form.backgroundColor === ""}
-              >
-                Default
-              </button>
-
-              {BACKGROUND_PRESETS.map((preset) => {
-                const selected = form.backgroundColor === preset.id;
-                return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => {
-                      setBackgroundPreview(preset.id);
-                      setForm({ ...form, backgroundColor: preset.id });
-                    }}
-                    onMouseEnter={() => setBackgroundHover(preset.id)}
-                    onMouseLeave={() => clearBackgroundHover()}
-                    className={cn(
-                      "rounded-full border px-4 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                      selected
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border text-foreground hover:border-foreground/40 hover:bg-accent/40",
-                    )}
-                    aria-pressed={selected}
-                  >
-                    {preset.label}
-                  </button>
-                );
-              })}
-            </div>
-            <p className="text-[11px] text-muted-foreground/60">
-              The canvas, cards, and sidebar palette.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Personal Details Card */}
       <Card>
         <CardHeader>
@@ -601,7 +429,8 @@ export function ProfileForm() {
             {/* Preferred Name */}
             <div className="space-y-2">
               <Label htmlFor="preferredName">
-                Preferred Name <span className="text-muted-foreground/40">*</span>
+                Preferred Name{" "}
+                <span className="text-muted-foreground/40">*</span>
               </Label>
               <Input
                 id="preferredName"
@@ -623,9 +452,7 @@ export function ProfileForm() {
                 id="pronouns"
                 placeholder="e.g. they/them, she/her, he/him"
                 value={form.pronouns}
-                onChange={(e) =>
-                  setForm({ ...form, pronouns: e.target.value })
-                }
+                onChange={(e) => setForm({ ...form, pronouns: e.target.value })}
               />
             </div>
 
@@ -635,15 +462,15 @@ export function ProfileForm() {
                 <Cake className="h-3 w-3 text-muted-foreground/60" />
                 Birthday
               </Label>
-<DatePicker
-  value={form.birthday}
-  onChange={(date) =>
-    setForm({
-      ...form,
-      birthday: date ? format(date, "yyyy-MM-dd") : "",
-    })
-  }
-/>
+              <DatePicker
+                value={form.birthday}
+                onChange={(date) =>
+                  setForm({
+                    ...form,
+                    birthday: date ? format(date, "yyyy-MM-dd") : "",
+                  })
+                }
+              />
             </div>
 
             {/* Location */}
@@ -656,9 +483,7 @@ export function ProfileForm() {
                 id="location"
                 placeholder="e.g. San Francisco, CA"
                 value={form.location}
-                onChange={(e) =>
-                  setForm({ ...form, location: e.target.value })
-                }
+                onChange={(e) => setForm({ ...form, location: e.target.value })}
               />
             </div>
 
@@ -782,9 +607,7 @@ export function ProfileForm() {
 
           {/* Custom links */}
           {links
-            .filter(
-              (l) => !LINK_PRESETS.some((p) => p.key === l.key),
-            )
+            .filter((l) => !LINK_PRESETS.some((p) => p.key === l.key))
             .map((link) => (
               <div key={link.key} className="flex items-center gap-2">
                 <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border bg-muted/50">
@@ -796,7 +619,11 @@ export function ProfileForm() {
                   </span>
                   <input
                     className="flex h-8 w-full rounded-md border border-input bg-transparent px-2 pl-[calc(0.75rem+var(--key-width,60px))] text-sm shadow-xs transition-colors placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                    style={{ "--key-width": `${link.key.length * 8 + 16}px` } as React.CSSProperties}
+                    style={
+                      {
+                        "--key-width": `${link.key.length * 8 + 16}px`,
+                      } as React.CSSProperties
+                    }
                     value={link.value}
                     onChange={(e) => updateLink(link.key, e.target.value)}
                     placeholder="https://..."
@@ -841,78 +668,6 @@ export function ProfileForm() {
               <Plus className="h-3.5 w-3.5" />
               Add
             </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* RemiAPI — edge cache + card controls */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-sm font-medium">
-            <LayoutGrid className="h-4 w-4 text-primary" />
-            RemiAPI &amp; Visual Cards
-          </CardTitle>
-          <CardDescription className="text-xs">
-            Caching proxy for the zero-cost card set. Fixed by default; toggle cards and choose their display mode.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between rounded-lg border border-border/50 bg-muted/20 px-3 py-2.5">
-            <div>
-              <p className="text-xs font-semibold">Enable visual cards</p>
-              {/* <p className="text-[11px] text-muted-foreground/70">Master toggle for the 7 card tools.</p> */}
-            </div>
-            <Switch
-              checked={form.remiApiEnabled ?? true}
-              onCheckedChange={(v) => setForm({ ...form, remiApiEnabled: v })}
-              aria-label="Toggle RemiAPI cards"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="remiApiUrl" className="text-xs">RemiAPI Worker URL (optional override)</Label>
-            <Input
-              id="remiApiUrl"
-              placeholder="https://remiapi.your-subdomain.workers.dev  (leave blank for default)"
-              value={form.remiApiUrl ?? ""}
-              onChange={(e) => setForm({ ...form, remiApiUrl: e.target.value })}
-            />
-            <p className="text-[11px] text-muted-foreground/60">Set in Profile once the Worker is live; otherwise the app uses the built-in default. No secrets here.</p>
-          </div>
-          <div className="space-y-2.5">
-            <p className="text-xs font-semibold">Per-card display</p>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {CARD_IDS.map((id) => {
-                const meta = CARD_META[id as CardId];
-                const Icon = meta.icon;
-                const mode = (form.cardDisplayModes?.[id] as string) ?? "card";
-                return (
-                  <div key={id} className="flex items-center justify-between gap-2 rounded-lg border border-border/40 bg-card px-2.5 py-2">
-                    <span className="flex items-center gap-2 text-xs font-medium">
-                      <span className="flex h-7 w-7 items-center justify-center rounded-md bg-muted"><Icon className="h-3.5 w-3.5" /></span>
-                      <span>{meta.label}</span>
-                      <span className="hidden text-[10px] font-normal text-muted-foreground sm:inline">{meta.hint}</span>
-                    </span>
-                    <Select
-                      value={mode}
-                      onValueChange={(v) =>
-                        setForm({
-                          ...form,
-                          cardDisplayModes: { ...(form.cardDisplayModes ?? {}), [id]: v } as Record<string, string>,
-                        })
-                      }
-                    >
-                      <SelectTrigger className="h-7 w-[88px] text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="card">Card</SelectItem>
-                        <SelectItem value="text">Text</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                );
-              })}
-            </div>
-            <p className="text-[11px] text-muted-foreground/60">Each card can render as a visual card or as plain text. Cards can also be used card-only with an optional description, or mixed with other tools.</p>
-            <p className="text-[11px] text-muted-foreground/60">Learn about <a target="_blank" rel="noopener noreferrer" href="https://github.com/Houloude9IOfficial/RemiAI/blob/main/workers/remiapi/README.md" className="underline">RemiAPI</a>.</p>
           </div>
         </CardContent>
       </Card>
@@ -965,7 +720,6 @@ export function ProfileForm() {
               etc.
             </p>
           </div>
-
         </CardContent>
       </Card>
     </div>

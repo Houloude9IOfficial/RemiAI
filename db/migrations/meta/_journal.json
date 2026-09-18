@@ -330,6 +330,13 @@
       "when": 1790000000000,
       "tag": "0051_conversation_recency_index",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "6",
+      "when": 1790100000000,
+      "tag": "0052_title_generation_preference",
+      "breakpoints": true
     }
   ]
 }
