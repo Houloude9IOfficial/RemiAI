@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Brain, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MarkdownRenderer } from "./MarkdownRenderer";
+import { ChatStatusOrb } from "./ChatStatusOrb";
 
 /**
  * A Nexus-inspired reasoning disclosure for reasoning text supplied by the
@@ -99,7 +100,7 @@ export function ReasoningBlock({
   // (final answer streaming or message complete) the final total takes over.
   const label =
     !finalized && messageStreaming
-      ? "Reasoning..."
+      ? "Working…"
       : durationSeconds != null
         ? `Reasoned for ${durationSeconds} ${durationSeconds === 1 ? "second" : "seconds"}`
         : "Reasoning complete";
@@ -120,7 +121,11 @@ export function ReasoningBlock({
           isStreaming && "cursor-pointer",
         )}
       >
-        <Brain className="h-4 w-4 shrink-0" aria-hidden="true" />
+        {!finalized && messageStreaming ? (
+          <ChatStatusOrb state="working" />
+        ) : (
+          <Brain className="h-4 w-4 shrink-0" aria-hidden="true" />
+        )}
         <span
           className={cn(
             "text-sm leading-6",

@@ -7,7 +7,6 @@ import {
   BarChart3,
   Code2,
   FileText,
-  Loader2,
   Search,
   type LucideIcon,
 } from "lucide-react";
@@ -17,6 +16,7 @@ import type { QualityPolicy } from "@/lib/chat/quality-policy";
 import { Timer } from "lucide-react";
 import { TEMPORARY_CHAT_RETENTION_DAYS } from "@/lib/chat/temporary-chat-constants";
 import { focusChatInput } from "@/lib/chat-input-registry";
+import { ChatStatusOrb } from "./ChatStatusOrb";
 
 const OUTCOME_SUGGESTIONS: Array<{
   label: string;
@@ -279,8 +279,8 @@ export function EmptyChatState({
           >
             {isAiStarting ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Remi is thinking...</span>
+                <ChatStatusOrb state="working" />
+                <span>Agent thinking…</span>
               </>
             ) : (
               <span>Let Remi start the conversation</span>

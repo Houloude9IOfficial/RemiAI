@@ -47,6 +47,12 @@ export const CORE_TOOLS: ReadonlySet<string> = new Set([
   "load_tool_groups",
   "ask_questions",
   "suggest_followups",
+  // Memory is core for memory-enabled chats so the assistant can proactively
+  // save, retrieve, and correct durable user context without a loading step.
+  "remember",
+  "update_memory",
+  "get_recent_memories",
+  "search_memories",
 ]);
 
 interface ToolGroup {

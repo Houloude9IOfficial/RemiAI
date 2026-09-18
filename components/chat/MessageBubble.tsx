@@ -2,14 +2,13 @@
 
 import type { UIMessage } from "ai";
 import { isTextUIPart, isToolUIPart, isReasoningUIPart, getToolName } from "ai";
-import { Component, useRef, useState } from "react";
+import { Component, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Copy, Check, Play, RefreshCw, Pencil, X } from "lucide-react";
 import { ToolCallGroup, FileChangeDigest, extractFileChanges } from "./ToolCallGroup";
 import { ActivityDisclosure } from "./ActivityDisclosure";
 import { VisualCard } from "./VisualCard";
 import { RemiCard } from "./RemiCard";
-import { GeneratingIndicator } from "./GeneratingIndicator";
 import { ReasoningBlock } from "./ReasoningBlock";
 import { FollowupSuggestions } from "./FollowupSuggestions";
 import { MarkdownRenderer } from "./MarkdownRenderer";
@@ -48,67 +47,65 @@ import { isRemiCardOutput, remiCardPartIdentity } from "@/lib/chat/card-identity
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
-/** Characters that are structurally significant to markdown syntax. */
-const MARKDOWN_SYNTAX = new Set([
-  "*", "#", "`", ">", "-", "_", "[", "]", "(", ")", "!", "~", "|", "\\", "&",
-]);
-
-// A single character waits at most this long before fading in. Without a
-// cap, every new character in a flush gets `i * 12ms` of delay — a 2,000-
-// char answer (common at the end of a big multi-tool run, or from buffered
-// proxy providers that emit huge deltas) would leave its tail invisible for
-// ~24 seconds with `animation-fill-mode: both` (opacity: 0 before start).
-// The chat then looks blank / partially rendered while streaming.
-const MAX_LETTER_FADE_DELAY_MS = 240;
-
-// Flushes larger than this skip the letter-by-letter treatment entirely and
-// render as plain text: thousands of individually animated spans freeze the
-// tab, and capping the delay alone would still flash hundreds of characters
-// on at once. Big chunks appear immediately instead.
-const MAX_FADE_CHARS_PER_FLUSH = 120;
+// Cap display throughput so buffered/proxy providers that flush an entire
+// answer at once still read as a steady stream instead of a text jump.
+const MAX_STREAM_DISPLAY_CHARS_PER_SECOND = 130;
 
 /**
- * Wraps each non-markdown-syntax character in the `newChars` portion of
- * `text` in an individually animated `<span>`. The `prevLength` is the
- * number of already-rendered characters; everything beyond it gets the
- * letter-by-letter fade-in treatment.
- *
- * Characters that are part of markdown syntax (e.g. `*`, `#`, `` ` ``) are
- * left unwrapped so the markdown parser sees them natively.
- *
- * Whitespace is ALSO left unwrapped: markdown-to-jsx silently drops space
- * characters that sit inside an inline HTML tag (`<span> </span>` renders
- * as an empty tag), which glued words together into "Hi,mynameis" while
- * streaming. Plain-text whitespace between spans is preserved.
- *
- * Returns a raw HTML string that markdown-to-jsx will pass through.
+ * Decouples visible text from provider deltas. The display can never outrun
+ * this clock, so a fast response remains legible; a slow response is shown as
+ * soon as each new character becomes available.
  */
-function wrapNewCharsWithFadeIn(text: string, prevLength: number): string {
-  if (prevLength >= text.length) return text;
+function useSmoothedStreamContent(content: string, sourceStreaming: boolean) {
+  const [visibleLength, setVisibleLength] = useState(() =>
+    sourceStreaming ? 0 : content.length,
+  );
+  const visibleLengthRef = useRef(visibleLength);
+  const previousContentRef = useRef(content);
 
-  const before = text.slice(0, prevLength);
-  const toWrap = text.slice(prevLength);
+  useEffect(() => {
+    const previousContent = previousContentRef.current;
+    previousContentRef.current = content;
 
-  // Large single flushes render immediately — the typewriter effect is only
-  // worth its cost for small deltas (see MAX_FADE_CHARS_PER_FLUSH).
-  if (toWrap.length > MAX_FADE_CHARS_PER_FLUSH) return text;
-
-  let result = "";
-  for (let i = 0; i < toWrap.length; i++) {
-    const char = toWrap[i];
-    // Skip wrapping for markdown structural characters and whitespace
-    // (spaces, tabs, newlines — `\s` covers all of them).
-    if (MARKDOWN_SYNTAX.has(char) || /\s/.test(char)) {
-      result += char;
-    } else {
-      const delay = Math.min(i * 12, MAX_LETTER_FADE_DELAY_MS); // 12ms per char, capped
-      // Escape HTML special characters to prevent injection
-      const escaped = char === "&" ? "&amp;" : char === "<" ? "&lt;" : char === ">" ? "&gt;" : char === '"' ? "&quot;" : char;
-      result += `<span class="animate-letter-fade-in" style="animation-delay:${delay}ms;color:inherit">${escaped}</span>`;
+    // A different/recovered stream can be shorter than the old buffer.
+    if (content.length < previousContent.length) {
+      const nextLength = sourceStreaming ? 0 : content.length;
+      visibleLengthRef.current = nextLength;
+      setVisibleLength(nextLength);
     }
-  }
+  }, [content, sourceStreaming]);
 
-  return before + result;
+  useEffect(() => {
+    if (visibleLengthRef.current >= content.length) return;
+
+    let frame = 0;
+    let previousTime: number | null = null;
+    let carry = 0;
+    const advance = (time: number) => {
+      if (previousTime !== null) {
+        carry += ((time - previousTime) * MAX_STREAM_DISPLAY_CHARS_PER_SECOND) / 1000;
+        const count = Math.floor(carry);
+        if (count > 0) {
+          carry -= count;
+          const nextLength = Math.min(content.length, visibleLengthRef.current + count);
+          visibleLengthRef.current = nextLength;
+          setVisibleLength(nextLength);
+        }
+      }
+      previousTime = time;
+      if (visibleLengthRef.current < content.length) {
+        frame = requestAnimationFrame(advance);
+      }
+    };
+    frame = requestAnimationFrame(advance);
+    return () => cancelAnimationFrame(frame);
+  }, [content.length]);
+
+  const displayStreaming = sourceStreaming || visibleLength < content.length;
+  return {
+    content: content.slice(0, visibleLength),
+    isStreaming: displayStreaming,
+  };
 }
 
 // ── Error boundary ────────────────────────────────────────────────────
@@ -372,9 +369,9 @@ function UserMessageText({ text }: { text: string }) {
 // ── Streaming-aware markdown wrapper ──────────────────────────────────
 
 /**
- * Wraps SafeMarkdown to provide letter-by-letter fade-in for the last
- * streaming segment. Tracks the `prevLength` across renders so only
- * newly arrived characters get animated.
+ * Renders buffered Markdown in real time. The response receives one durable
+ * entrance animation when its first displayed content arrives; later parser
+ * updates retain their formatting and whitespace instead of remounting spans.
  */
 function StreamingSafeMarkdown({
   content,
@@ -385,31 +382,22 @@ function StreamingSafeMarkdown({
   isStreaming?: boolean;
   citations?: Map<string, CitationRef> | null;
 }) {
-  const prevLengthRef = useRef(0);
+  const display = useSmoothedStreamContent(content, isStreaming ?? false);
+  const [hasStarted, setHasStarted] = useState(false);
 
-  if (!isStreaming) {
-    // Streaming done — reset tracker and render clean markdown
-    // eslint-disable-next-line react-hooks/refs -- render-time animation bookkeeping must use the previous streamed length
-    prevLengthRef.current = 0;
-    return <SafeMarkdown content={content} isStreaming={false} citations={citations} />;
-  }
+  useEffect(() => {
+    if (display.content) setHasStarted(true);
+  }, [display.content]);
 
-  // Text shrunk (e.g. error recovery / new stream starting) — reset
-  // eslint-disable-next-line react-hooks/refs -- render-time animation bookkeeping must compare the previous streamed length
-  if (content.length < prevLengthRef.current) {
-    // eslint-disable-next-line react-hooks/refs -- render-time animation bookkeeping resets the previous streamed length
-    prevLengthRef.current = 0;
-  }
-
-  // eslint-disable-next-line react-hooks/refs -- render-time animation bookkeeping reads the previous streamed length
-  const prevLen = prevLengthRef.current;
-  // eslint-disable-next-line react-hooks/refs -- render-time animation bookkeeping stores the current streamed length
-  prevLengthRef.current = content.length;
-
-  // Wrap newly arrived characters in individually animated spans
-  const enriched = wrapNewCharsWithFadeIn(content, prevLen);
-
-  return <SafeMarkdown content={enriched} isStreaming={true} citations={citations} />;
+  return (
+    <div className={hasStarted ? "animate-streaming-response-in" : undefined}>
+      <SafeMarkdown
+        content={display.content}
+        isStreaming={display.isStreaming}
+        citations={citations}
+      />
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -655,7 +643,6 @@ function buildSegments(parts: UIMessage["parts"]): Segment[] {
   for (const part of parts) {
     if (isReasoningUIPart(part)) {
       const reasoningText = part.text ?? "";
-      if (!reasoningText.trim()) continue;
       const last = segments[segments.length - 1];
       const reasoningStreaming = part.state === "streaming";
       if (last?.type === "reasoning") {
@@ -888,7 +875,7 @@ function UserMessageBubble({
                 title="Continue response"
                 className="flex h-6.5 w-6.5 items-center justify-center rounded-md text-muted-foreground/55 transition-colors hover:text-foreground active:scale-90"
               >
-                <Play className="h-3.5 w-3.5 fill-current" />
+                <Play className="h-3.5 w-3.5" />
               </button>
             )}
             {hasText && <CopyButton text={cleanText} ariaLabel="Copy message" />}
@@ -958,18 +945,12 @@ export function MessageBubble({
       (part) => isReasoningUIPart(part) && part.state === "streaming",
     );
 
-  // If nothing to render yet, show a polished streaming placeholder.
+  // Keep the chat quiet until the provider emits an actual reasoning, tool,
+  // or response part. This avoids flashing a generic state before real
+  // activity begins.
   if (!hasAnyContent && isStreaming) {
-    return (
-      <GeneratingIndicator
-        label="Thinking"
-        variant="pill"
-        className="animate-fade-in"
-      />
-    );
+    return null;
   }
-
-  const showThinking = isStreaming && hasAnyContent;
 
   // Plain-text representation of the response (for the copy button): all
   // text parts joined, mirroring what the markdown renderer displays.
@@ -1166,11 +1147,6 @@ export function MessageBubble({
             </div>
           )}
         </div>
-
-        {/* Thinking indicator — shown under content while AI is still processing */}
-        {showThinking && (
-          <GeneratingIndicator label="Thinking" className="mt-10" />
-        )}
 
         {/* Actions — hidden while the response is still streaming */}
         {!isStreaming && (hasAnyContent || copyableText.length > 0) && (

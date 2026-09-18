@@ -317,3 +317,11 @@ the ai users bash to write/edit/delete files, but it should use bash for command
 <!-- opening profile settings takes a long time, and it should be faster. -->
 
 <!-- Add fully functional Heartbeat system that allows the AI to auto-run automatically at any moment with no client connected to execute stuff, or just do stuff on it's own, for example use mcp social-media like tools and others, or follow a prompt. Not in a chat, but keep tools and stuff, configurable and save a result and tool calls, and other statistics. -->
+
+<!-- fix import memories modal not scrolling fully -->
+
+<!-- allow replying to questions while AI is responding and add answers to next request while running, do not wait for end of messaging, also allow skipping questions, make the send button be send on last question and mid-questions to be next. -->
+
+<!-- Tell the AI while in planning mode so it know when it's time to switch to goal mode, and also allow the AI to switch back to planning mode if needed. -->
+
+<!-- add image generation tool with options to generate images from text prompts, and allow the AI to use it to generate images based on user requests or its own ideas. Use https://libraries.dev/image for image card --- ABANDONED IDEA -->

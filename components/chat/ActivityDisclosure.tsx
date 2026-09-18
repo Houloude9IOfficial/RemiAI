@@ -2,15 +2,16 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Brain, ChevronDown, Loader2, Wrench } from "lucide-react";
+import { AlertTriangle, Brain, ChevronDown, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { ToolCallGroup, summarizeToolActivity } from "./ToolCallGroup";
+import { ChatStatusOrb } from "./ChatStatusOrb";
 
 /**
  * Claude-style collapsed "activity" line. While a message's leading reasoning
- * + tool run streams, this stays open so the user sees progress; once the
- * run finishes it collapses into a single quiet summary — e.g.
+ * + tool run streams, this starts as a quiet summary and expands on demand;
+ * once the run finishes it remains a single compact summary — e.g.
  * "Edited session file · 5 calls" — that expands to reveal the reasoning
  * text and the chained tool trace.
  */
@@ -32,7 +33,7 @@ export function ActivityDisclosure({
   responseStreaming: boolean;
 }) {
   const contentId = useId();
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const userToggledRef = useRef(false);
 
   const allParts = toolGroups.flatMap((g) => g.parts);
@@ -42,27 +43,29 @@ export function ActivityDisclosure({
   const hasQuestions = summary.hasQuestions;
   const mixedOutcome = summary.hasError && summary.hasSuccess;
 
-  // Auto-open while the run is working; collapse when the final answer starts
-  // or the message completes — unless the user explicitly toggled it.
+  // Collapse when the final answer starts or the message completes — unless
+  // the user explicitly toggled the disclosure.
   const shouldOpen = isStreaming && !responseStreaming;
   const working = shouldOpen || summary.running || reasoningStreaming;
 
   useEffect(() => {
-    if (working && !userToggledRef.current) setOpen(true);
     if (!shouldOpen && !userToggledRef.current && !hasQuestions) setOpen(false);
-  }, [working, shouldOpen, hasQuestions]);
+  }, [shouldOpen, hasQuestions]);
 
-  if (!reasoning?.text.trim() && !hasTools) return null;
+  if (!reasoning && !hasTools) return null;
 
   const label = working
     ? reasoningStreaming
-      ? "Thinking…"
+      ? "Working…"
       : summary.running
-        ? summary.present
+        ? summary.searching
+          ? "Searching…"
+          : summary.present
         : "Working…"
     : hasTools
       ? summary.runName ?? summary.past
-      : "Reasoning complete";
+      : "Work complete";
+      // : "Reasoning complete";
 
   const callSuffix =
     hasTools && summary.count > 1 ? ` · ${summary.count} calls` : "";
@@ -84,7 +87,7 @@ export function ActivityDisclosure({
       >
         <span
           className={cn(
-            "flex h-4 w-4 shrink-0 items-center justify-center",
+            "flex h-5 w-5 shrink-0 items-center justify-center",
             mixedOutcome
               ? "text-status-warning"
               : summary.hasError && !working
@@ -93,7 +96,10 @@ export function ActivityDisclosure({
           )}
         >
           {working ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            // Future per-activity states: summary.searching ? "searching" : "working".
+            <ChatStatusOrb
+              state="working"
+            />
           ) : mixedOutcome ? (
             <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
           ) : hasTools ? (
@@ -115,7 +121,6 @@ export function ActivityDisclosure({
           className={cn(
             "ml-0.5 h-4 w-4 shrink-0 transition-transform duration-200 group-hover:opacity-100",
             open ? "rotate-180 opacity-100" : "opacity-0",
-            working && "hidden",
           )}
           aria-hidden="true"
         />

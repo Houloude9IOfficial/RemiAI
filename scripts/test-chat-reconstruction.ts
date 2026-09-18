@@ -482,10 +482,13 @@ async function main() {
       "load_tool_groups",
       "ask_questions",
       "suggest_followups",
+      "remember",
+      "update_memory",
+      "get_recent_memories",
+      "search_memories",
     ];
     const tools = Object.fromEntries([
       ...required.map((name) => [name, {}]),
-      ["remember", {}],
       ["query_recent_changes", {}],
       ["list_permitted_roots", {}],
       ["read_file", {}],
@@ -497,7 +500,6 @@ async function main() {
     const filtered = filterTools(tools, new Set());
     for (const name of required) assert.ok(name in filtered, `${name} was filtered out`);
     for (const name of [
-      "remember",
       "query_recent_changes",
       "list_permitted_roots",
       "read_file",
@@ -509,7 +511,7 @@ async function main() {
       assert.equal(name in filtered, false, `${name} was unexpectedly loaded`);
     }
     assert.ok(CORE_TOOLS.has("web_search"));
-    assert.equal(CORE_TOOLS.size, 9);
+    assert.equal(CORE_TOOLS.size, 13);
   });
 
   ok("reports web search as loaded", () => {

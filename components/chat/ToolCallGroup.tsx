@@ -405,10 +405,21 @@ export function summarizeToolActivity(parts: AnyToolPart[]) {
     count: groupParts.length,
     runName: getRunName(parts),
     running: groupParts.some(isPartRunning),
+    searching: groupParts.some((part) => isPartRunning(part) && isSearchTool(part)),
     hasError: groupParts.some(isPartError),
     hasSuccess: groupParts.some(isPartComplete),
     hasQuestions: groupParts.some(isQuestionsPart),
   };
+}
+
+/** Search is a distinct AI activity state across local, memory, and web tools. */
+function isSearchTool(part: AnyToolPart): boolean {
+  try {
+    const name = bareToolName(getToolName(part));
+    return name.includes("search") || name === "glob_files";
+  } catch {
+    return false;
+  }
 }
 
 function getGroupLabel(parts: AnyToolPart[]): ToolLabel {

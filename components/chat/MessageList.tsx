@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { UIMessage } from "ai";
 import { MessageBubble } from "./MessageBubble";
 import { ChatMessageProvider } from "./ChatMessageContext";
@@ -28,6 +28,7 @@ export function MessageList({
   onContinue?: () => void;
   conversationId?: number;
 }) {
+  const waitingMessageRef = useRef<HTMLDivElement>(null);
   // Defensive safety net: the AI SDK merges streamed assistant messages into
   // this list by id, and under rare interleaved-stream conditions (two
   // concurrent requests on the same chat) the same id can appear twice. A
@@ -66,7 +67,20 @@ export function MessageList({
   const lastUserIndex = deduped.findLastIndex((message) => message.role === "user");
   const isWaiting =
     (status === "submitted" || status === "streaming") &&
-    (!lastMessage || lastMessage.role === "user");
+    (!lastMessage ||
+      lastMessage.role === "user" ||
+      (lastMessage.role === "assistant" && !lastAssistantHasOutput));
+
+  // A send should bring the new request to the top of the readable area and
+  // leave deliberate room below it for the pending state, rather than keeping
+  // the prior conversation in view.
+  useEffect(() => {
+    if (!isWaiting) return;
+    const frame = requestAnimationFrame(() => {
+      waitingMessageRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [isWaiting, lastUserIndex]);
 
   // Empty conversations render a code-editor-style centered composer via
   // EmptyChatState — nothing to show here until there are messages.
@@ -89,7 +103,11 @@ export function MessageList({
           <div className="flex flex-col gap-5 md:gap-6">
             {deduped.map((message, idx) => {
               return (
-                <div key={message.id} className="animate-fade-in">
+                <div
+                  key={message.id}
+                  ref={idx === lastUserIndex && isWaiting ? waitingMessageRef : undefined}
+                  className="animate-fade-in"
+                >
                   <MessageBubble
                     message={message}
                     isStreaming={
@@ -114,12 +132,13 @@ export function MessageList({
 
             {isWaiting && (
               <div className="flex justify-start animate-fade-in">
-                <GeneratingIndicator label="Thinking" />
+                <GeneratingIndicator state="working" label={null} />
               </div>
             )}
 
-            {/* Spacer — room for the next stream without oversized empty chrome */}
-            <div className="h-28 shrink-0 md:h-36" />
+            {/* Keep a stable response area after every request so completing
+                a run never pulls the conversation back upward. */}
+            <div className="h-64 shrink-0 md:h-80" />
           </div>
         </div>
       </div>
