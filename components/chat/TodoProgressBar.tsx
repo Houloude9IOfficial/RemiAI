@@ -54,7 +54,7 @@ export function TodoProgressBar({
   mode = "chat",
 }: {
   conversationId: number;
-  mode?: "chat" | "goal" | "plan" | "build";
+  mode?: "chat" | "instant" | "goal" | "plan" | "build";
 }) {
   const [dismissed, setDismissed] = useState(false);
   const [expanded, setExpanded] = useState(false);

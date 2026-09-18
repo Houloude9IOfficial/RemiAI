@@ -22,6 +22,7 @@ import {
   Check,
   Brain,
   Timer,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 import { TEMPORARY_CHAT_RETENTION_DAYS } from "@/lib/chat/temporary-chat-constants";
@@ -177,7 +178,7 @@ const MAX_PASTE_TEXT_CHARS = 10_000;
  */
 const CODE_CHIP_KEY = "remi-code-per-session";
 
-export type ChatMode = "chat" | "goal" | "plan" | "build";
+export type ChatMode = "chat" | "instant" | "goal" | "plan" | "build";
 
 function qualityPolicyLabel(policy: QualityPolicy): string {
   const normalized = normalizeQualityPolicy(policy);
@@ -1299,21 +1300,27 @@ export function ChatInput({
               {hasModeChip && (
                 <CapabilityChip
                   icon={
-                    mode === "goal"
+                    mode === "instant"
+                      ? Zap
+                      : mode === "goal"
                       ? Sparkles
                       : mode === "build"
                         ? Hammer
                         : ListChecks
                   }
                   label={
-                    mode === "goal"
+                    mode === "instant"
+                      ? "Instant mode"
+                      : mode === "goal"
                       ? "Goal mode"
                       : mode === "build"
                         ? "Build mode"
                         : "Plan mode"
                   }
                   title={
-                    mode === "goal"
+                    mode === "instant"
+                      ? "Instant mode — fast, concise answers with web search when needed"
+                      : mode === "goal"
                       ? "Goal mode — works until the task is complete"
                       : mode === "build"
                         ? "Build mode — changes files and runs checks"
@@ -1434,10 +1441,28 @@ export function ChatInput({
                   <>
                     <DropdownMenuSeparator className="my-1" />
                     <DropdownMenuGroup>
-                      <DropdownMenuLabel className="px-2 pb-0.5 pt-0.5 text-[9px] font-semibold tracking-[0.08em] text-muted-foreground/75 uppercase">
-                        Work mode
-                      </DropdownMenuLabel>
-                      <DropdownMenuCheckboxItem
+                    <DropdownMenuLabel className="px-2 pb-0.5 pt-0.5 text-[9px] font-semibold tracking-[0.08em] text-muted-foreground/75 uppercase">
+                      Work mode
+                    </DropdownMenuLabel>
+                    <DropdownMenuCheckboxItem
+                      checked={mode === "instant"}
+                      onCheckedChange={(checked) => {
+                        onModeChange(checked ? "instant" : "chat");
+                        setDropdownOpen(false);
+                      }}
+                      className="min-h-9 gap-2 rounded-lg px-2 py-1 data-[checked]:bg-primary/10 data-[checked]:text-foreground"
+                    >
+                      <Zap className="h-4 w-4" />
+                      <span>
+                        <span className="block text-[12px] font-medium">
+                          Instant
+                        </span>
+                        <span className="block text-[10px] leading-3.5 font-normal text-muted-foreground">
+                          Fast, concise answers with quick web search
+                        </span>
+                      </span>
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem
                         checked={mode === "build"}
                         onCheckedChange={(checked) => {
                           onModeChange(checked ? "build" : "chat");

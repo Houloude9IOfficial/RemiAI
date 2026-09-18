@@ -1,6 +1,6 @@
 import type { UIMessage } from "ai";
 
-export type ChatMode = "chat" | "goal" | "plan" | "build";
+export type ChatMode = "chat" | "instant" | "goal" | "plan" | "build";
 
 type QuestionsOutput = { type: "questions"; questions: unknown[] };
 
@@ -51,5 +51,5 @@ export function shouldPromotePlanToGoal(
 }
 
 export function isChatMode(value: unknown): value is ChatMode {
-  return value === "chat" || value === "goal" || value === "plan" || value === "build";
+  return value === "chat" || value === "instant" || value === "goal" || value === "plan" || value === "build";
 }

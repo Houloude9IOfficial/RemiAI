@@ -102,6 +102,15 @@ import { buildScheduleTool } from "@/lib/tools/schedule";
 import { buildToolHelpTool, buildListAvailableToolsTool } from "@/lib/tools/tool-help";
 import { buildModeTool } from "@/lib/tools/mode";
 import { shouldPromotePlanToGoal } from "@/lib/chat/mode-transition";
+import {
+  INSTANT_INSTRUCTIONS,
+  INSTANT_MAX_OUTPUT_TOKENS,
+  INSTANT_MAX_RETRIES,
+  INSTANT_MAX_TOOL_CALLS,
+  instantMessageWindow,
+  instantToolNames,
+  pickInstantTools,
+} from "@/lib/chat/instant-mode";
 import { buildSkillsToolSet } from "@/lib/skills/tools";
 import { buildActiveSkillsSection } from "@/lib/skills/system-prompt";
 import { buildTaggedSkillsSection } from "@/lib/skills/tagged-skill";
@@ -346,9 +355,10 @@ async function runChatRequest(req: Request, questionRun: QuestionRun) {
 
   // Read mode from the conversation in the database
   let mode = conversation.mode ?? "chat";
-  const setLiveMode = (nextMode: "chat" | "plan" | "goal" | "build") => {
+  const setLiveMode = (nextMode: "chat" | "instant" | "plan" | "goal" | "build") => {
     mode = nextMode;
   };
+  const instantMode = mode === "instant";
 
   // Per-chat memory switch: when off, NO saved memories are injected into the
   // system prompt and the memory tools (remember / search_memories /
@@ -906,7 +916,7 @@ Definition of done:
       .map((p) => p.text)
       .join(" ") ?? "";
   const qualityStrategy = chooseQualityStrategy(
-    normalizeQualityPolicy(conversation.qualityPolicy),
+    instantMode ? "minimal" : normalizeQualityPolicy(conversation.qualityPolicy),
     estimateTaskComplexity(lastUserText, mode),
   );
   const enabledRouteProviders = await db
@@ -993,7 +1003,7 @@ Definition of done:
 
   // Prompt only compact, query-matched memory leads. Full recall remains an
   // explicit search_memories tool call, and isolated chats never retrieve.
-  const memoryHints = memoryEnabled ? await retrieveFuzzyMemoryHints(lastUserText) : [];
+  const memoryHints = !instantMode && memoryEnabled ? await retrieveFuzzyMemoryHints(lastUserText) : [];
   const memoryTip = buildMemoryHintPromptBlock(memoryHints);
 
   // ── Intent-based dynamic tool loading ─────────────────────────────
@@ -1005,7 +1015,7 @@ Definition of done:
   const storedToolGroups = parseStoredToolState(conversation.toolGroups);
   // `let`: prepareStep below updates it when load_tool_groups enables a group
   // mid-stream, so onFinish's persist uses the freshest active set.
-  let activeToolGroups = computeActiveToolGroups({
+  let activeToolGroups = instantMode ? new Set<string>() : computeActiveToolGroups({
     userText: lastUserText,
     // Keep groups alive that were used in the recent window (mid-project
     // follow-ups like "make the button blue" must not lose session files).
@@ -1023,14 +1033,37 @@ Definition of done:
   // (the AI SDK accepts these raw `{ description, inputSchema, execute }`
   // objects, e.g. in lib/tools/*.ts) — it also keeps the load_tool_groups
   // shape from breaking the ToolSet union.
-  const baseTools: Record<string, unknown> = {
-    ...filterDemoTools(tools),
-    // Appended LAST on purpose: markLastToolForCache puts the Anthropic
-    // cache breakpoint on it, and since load_tool_groups is always active
-    // and always last in the per-step filtered set, the tool-definitions
-    // prefix stays cacheable on every step of the loop.
-    load_tool_groups: buildLoadToolGroupsTool(conversationId, tools),
-  };
+  const baseTools: Record<string, unknown> = instantMode
+    ? (() => {
+        let toolCallCount = 0;
+        const instantTools = Object.fromEntries(
+          Object.entries(pickInstantTools(tools, memoryEnabled)).map(([name, rawTool]) => {
+            if (!rawTool || typeof rawTool !== "object") return [name, rawTool];
+            const tool = rawTool as Record<string, unknown>;
+            const execute = tool.execute;
+            if (typeof execute !== "function") return [name, rawTool];
+            return [name, {
+              ...tool,
+              execute: async (args: Record<string, unknown>) => {
+                toolCallCount += 1;
+                if (toolCallCount > INSTANT_MAX_TOOL_CALLS) {
+                  return `Instant mode has reached its ${INSTANT_MAX_TOOL_CALLS}-tool-call limit. Answer with the information already available.`;
+                }
+                return (execute as (input: Record<string, unknown>) => unknown)(args);
+              },
+            }];
+          }),
+        );
+        return isDemoMode() ? filterDemoTools(instantTools) : instantTools;
+      })()
+    : {
+        ...filterDemoTools(tools),
+        // Appended LAST on purpose: markLastToolForCache puts the Anthropic
+        // cache breakpoint on it, and since load_tool_groups is always active
+        // and always last in the per-step filtered set, the tool-definitions
+        // prefix stays cacheable on every step of the loop.
+        load_tool_groups: buildLoadToolGroupsTool(conversationId, tools),
+      };
 
   // AI SDK v7 requires `inputSchema` on every tool definition — some builders
   // in this codebase still emit the legacy `parameters` key, which the SDK
@@ -1049,7 +1082,9 @@ Definition of done:
   // The initial active set = core + classified + stored groups (identical to
   // the old filtered set). prepareStep re-derives it before every step.
   const activeToolNamesForMode = (groups: ReadonlySet<string>) =>
-    isDemoMode()
+    instantMode
+      ? instantToolNames(memoryEnabled).filter((name) => baseTools[name] !== undefined)
+      : isDemoMode()
       ? Object.keys(filterDemoTools(tools))
       : mode === "plan"
         ? activeToolNames(tools, groups)
@@ -1072,7 +1107,7 @@ Definition of done:
   // Inject recent file changes into the system prompt for freshness.
   // Capped to 5 — the model can call query_recent_changes for more. Skipped
   // for fully isolated (memory-disabled) chats — that's the user's data.
-  const recentChanges = memoryEnabled ? await queryRecentChanges(5) : [];
+  const recentChanges = !instantMode && memoryEnabled ? await queryRecentChanges(5) : [];
   const fileChangeTip = recentChanges.length > 0
     ? `\n\n## Recent file changes\nRecently modified in your watched directories (most recent first):\n${recentChanges.map((c) => `- [${c.changeType}] ${c.directoryLabel}/${c.relativePath}`).join("\n")}`
     : "";
@@ -1116,7 +1151,9 @@ Definition of done:
   // base prompt WITHOUT the memory guidance section — see lib/chat/system-prompt.ts.
   const promptBase = memoryEnabled ? SYSTEM_PROMPT_BASE : SYSTEM_PROMPT_BASE_NO_MEMORY;
 
-  const staticSystemPrompt = researchRequested
+  const staticSystemPrompt = instantMode
+    ? INSTANT_INSTRUCTIONS
+    : researchRequested
     ? (isLowCapability
       ? promptBase + visualSection + researchSection + SESSION_FILES_SECTION + PERSISTENCE_GUIDANCE +
         `\n\n**CRITICAL: Keep responses very short and focused.** Use the simplest tool for each task. If unsure about a tool, call \`get_tool_help\`. Avoid multi-step planning unless the task truly requires it.`
@@ -1151,7 +1188,7 @@ Definition of done:
   // toggling a skill never invalidates the cached prefix. Full instructions
   // load on demand via the always-available load_skill tool. Skipped for
   // fully isolated chats (the skills tools aren't registered either).
-  const activeSkillsSection = memoryEnabled
+  const activeSkillsSection = !instantMode && memoryEnabled
     ? await buildActiveSkillsSection(isLowCapability)
     : "";
 
@@ -1160,7 +1197,7 @@ Definition of done:
   // instructions are inlined here so the model is guaranteed to follow them
   // for this request instead of having to discover the skill itself.
   const taggedSkillsSection =
-    memoryEnabled && !isDemoMode()
+    !instantMode && memoryEnabled && !isDemoMode()
       ? await buildTaggedSkillsSection(lastUserText)
       : "";
 
@@ -1168,23 +1205,28 @@ Definition of done:
   // instructions with a FRESH note once load_tool_groups enables a group
   // mid-stream (the note is the only part of the dynamic prompt that can
   // change mid-request).
-  const qualityPolicyPrompt = `\n\n## Reasoning effort — ${qualityStrategy.label}\nTask complexity estimate: ${qualityStrategy.complexity}. ${qualityStrategy.verificationGuidance}\nSelected model: ${selectedRouteCandidate.providerLabel} / ${selectedRouteCandidate.modelId}. Active route: ${qualityRoute.active.providerLabel} / ${qualityRoute.active.modelId}. ${qualityRoute.reason} Routing is deterministic and bounded; never make another provider call unless the High-effort verifier is eligible.`;
+  const qualityPolicyPrompt = instantMode
+    ? ""
+    : `\n\n## Reasoning effort — ${qualityStrategy.label}\nTask complexity estimate: ${qualityStrategy.complexity}. ${qualityStrategy.verificationGuidance}\nSelected model: ${selectedRouteCandidate.providerLabel} / ${selectedRouteCandidate.modelId}. Active route: ${qualityRoute.active.providerLabel} / ${qualityRoute.active.modelId}. ${qualityRoute.reason} Routing is deterministic and bounded; never make another provider call unless the High-effort verifier is eligible.`;
 
   // Canvas guidance — only injected when the canvas group is loaded (it rides
   // on session files for writing, but the workflow guidance is canvas-specific
   // and must not steer ordinary chats). Part of the dynamic prompt because it
   // depends on activeToolGroups, which can change mid-request via
   // load_tool_groups.
-  const canvasSection = activeToolGroups.has("canvas") ? CANVAS_SECTION : "";
+  const canvasSection = !instantMode && activeToolGroups.has("canvas") ? CANVAS_SECTION : "";
 
-  const dynamicSystemPromptBase =
-    systemTip + profileTip + memoryTip + fileChangeTip + summarySection +
-    planModePrompt + goalModePrompt + buildModePrompt + canvasSection + _remiCardsSection + existingCardSection + (Object.keys(_remiCardToolSet).length ? REMI_CARD_PRESENTATION_RULES + REMI_CARD_SCOPE_RULES : "") + activeSkillsSection +
-    taggedSkillsSection + qualityPolicyPrompt;
+  const dynamicSystemPromptBase = instantMode
+    ? ""
+    : systemTip + profileTip + memoryTip + fileChangeTip + summarySection +
+      planModePrompt + goalModePrompt + buildModePrompt + canvasSection + _remiCardsSection + existingCardSection + (Object.keys(_remiCardToolSet).length ? REMI_CARD_PRESENTATION_RULES + REMI_CARD_SCOPE_RULES : "") + activeSkillsSection +
+      taggedSkillsSection + qualityPolicyPrompt;
   const liveModeNote = () =>
     `\n\n## AUTHORITATIVE LIVE MODE\nThe active mode for this run is **${mode}**. This live mode overrides any earlier mode wording in the conversation. After a successful switch_mode call, immediately follow the new mode's rules and use its available tools.`;
 
-  const dynamicSystemPrompt = dynamicSystemPromptBase + liveModeNote() + toolAvailabilityNote;
+  const dynamicSystemPrompt = instantMode
+    ? ""
+    : dynamicSystemPromptBase + liveModeNote() + toolAvailabilityNote;
 
   const fullSystemPrompt = staticSystemPrompt + dynamicSystemPrompt;
 
@@ -1196,7 +1238,9 @@ Definition of done:
   // - Messages covered by the rolling summary are dropped from the payload.
   const modelMessages = await convertToModelMessages(
     optimizeMessageHistory(
-      historyDrop > 0 ? uiMessages.slice(historyDrop) : uiMessages,
+      instantMode
+        ? instantMessageWindow(uiMessages)
+        : historyDrop > 0 ? uiMessages.slice(historyDrop) : uiMessages,
     ),
   );
 
@@ -1404,13 +1448,15 @@ Definition of done:
         return { ...lastStepComputed, messages: liveMessages };
       }
 
-      const currentRow = await db
-        .select({ toolGroups: conversations.toolGroups })
-        .from(conversations)
-        .where(eq(conversations.id, conversationId))
-        .get();
+      const currentRow = instantMode
+        ? undefined
+        : await db
+          .select({ toolGroups: conversations.toolGroups })
+          .from(conversations)
+          .where(eq(conversations.id, conversationId))
+          .get();
       const freshStored = parseStoredToolState(currentRow?.toolGroups);
-      const freshActive = computeActiveToolGroups({
+      const freshActive = instantMode ? new Set<string>() : computeActiveToolGroups({
         userText: lastUserText,
         recentMessages: uiMessages.slice(-10),
         stored: freshStored,
@@ -1425,17 +1471,19 @@ Definition of done:
         instructions: buildCachedInstructions(
           activeProvider,
           staticSystemPrompt,
-          dynamicSystemPromptBase +
-            liveModeNote() +
-            repairNote +
-            buildToolAvailabilityNote(tools, freshActive),
+          instantMode
+            ? ""
+            : dynamicSystemPromptBase +
+              liveModeNote() +
+              repairNote +
+              buildToolAvailabilityNote(tools, freshActive),
         ),
       };
       return { ...lastStepComputed, messages: liveMessages };
     },
     // Retry retryable provider failures (network, 5xx, rate limits) up to
     // 3 times with exponential backoff before surfacing the error.
-    maxRetries: qualityStrategy.maxRetries,
+    maxRetries: instantMode ? INSTANT_MAX_RETRIES : qualityStrategy.maxRetries,
     // The quality policy adjusts effort without creating hidden provider calls.
     // Complex Goal/Build tasks retain the larger execution budget. Chat-mode
     // requests that loaded WRITE/agentic tool groups (canvas builds, session
@@ -1444,8 +1492,9 @@ Definition of done:
     // ends the whole run as "step limit reached" right before it would have
     // called its next tool. Never let a "simple"-classified prompt starve the
     // run that actually does the work.
-    maxOutputTokens:
-      mode === "goal" ||
+    maxOutputTokens: instantMode
+      ? INSTANT_MAX_OUTPUT_TOKENS
+      : mode === "goal" ||
         mode === "build" ||
         activeToolGroups.has("canvas") ||
         activeToolGroups.has("session_files") ||
@@ -1455,7 +1504,7 @@ Definition of done:
         : qualityStrategy.maxOutputTokens,
     // Allow up to 100 steps normally (chat/plan), or 500 in goal mode
     // so the model can work autonomously until task completion
-    stopWhen: stepCountIs(mode === "goal" || mode === "build" ? 10000 : 7500),
+    stopWhen: stepCountIs(instantMode ? INSTANT_MAX_TOOL_CALLS : mode === "goal" || mode === "build" ? 10000 : 7500),
     onStart: ({ callId, provider: modelProvider, modelId: modelName }) => {
       trace.recordState("executing", { callId });
       trace.event("generation.start", {
@@ -1760,10 +1809,12 @@ Definition of done:
       // forever; the request's own classifier∪recency set is stored as
       // `recent` so short follow-ups ("yes", "do it") inherit the tools the
       // conversation was using — and stale groups decay once a project ends.
-      void persistActiveToolGroups({
-        conversationId,
-        activeGroups: activeToolGroups,
-      });
+      if (!instantMode) {
+        void persistActiveToolGroups({
+          conversationId,
+          activeGroups: activeToolGroups,
+        });
+      }
 
       // ── Background rolling summary ─────────────────────────────────
       // When the conversation has grown far past the last summary, fire a
@@ -1773,7 +1824,7 @@ Definition of done:
       // summarized messages from the model payload, capping input-token
       // growth on long conversations. Fire-and-forget — never blocks the
       // stream and swallows all errors.
-      if (!capturedErrorPayload) {
+      if (!instantMode && !capturedErrorPayload) {
         const covered = conversation.summaryMessageCount ?? 0;
         if (shouldSummarize({ totalMessages: uiMessages.length, coveredMessages: covered })) {
           const untilCount = Math.max(0, uiMessages.length - SUMMARIZE_RECENT_KEEP);

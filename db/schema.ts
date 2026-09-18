@@ -127,7 +127,7 @@ export const conversations = sqliteTable("conversations", {
     onDelete: "set null",
   }),
   modelId: text("model_id"),
-  mode: text("mode", { enum: ["chat", "goal", "plan", "build"] }).notNull().default("chat"),
+  mode: text("mode", { enum: ["chat", "instant", "goal", "plan", "build"] }).notNull().default("chat"),
   qualityPolicy: text("quality_policy", {
     enum: ["minimal", "low", "medium", "high"],
   })

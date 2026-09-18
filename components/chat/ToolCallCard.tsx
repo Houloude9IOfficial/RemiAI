@@ -191,7 +191,7 @@ function minorSummary(name: string, output: unknown, running: boolean): string {
   return name.replace(/_/g, " ");
 }
 
-type TransitionMode = "chat" | "goal" | "plan" | "build";
+type TransitionMode = "chat" | "instant" | "goal" | "plan" | "build";
 
 function getModeTransition(
   input: unknown,
@@ -204,6 +204,7 @@ function getModeTransition(
   if (
     outputRecord?.type === "mode_transition" &&
     (outputRecord.mode === "chat" ||
+      outputRecord.mode === "instant" ||
       outputRecord.mode === "plan" ||
       outputRecord.mode === "goal" ||
       outputRecord.mode === "build")
@@ -211,7 +212,7 @@ function getModeTransition(
     const fromMode = outputRecord.fromMode;
     return {
       mode: outputRecord.mode,
-      fromMode: fromMode === "chat" || fromMode === "goal" || fromMode === "plan" || fromMode === "build" ? fromMode : undefined,
+      fromMode: fromMode === "chat" || fromMode === "instant" || fromMode === "goal" || fromMode === "plan" || fromMode === "build" ? fromMode : undefined,
       changed: outputRecord.changed !== false,
       reason: typeof outputRecord.reason === "string" ? outputRecord.reason : undefined,
     };

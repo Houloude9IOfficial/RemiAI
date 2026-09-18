@@ -24,6 +24,7 @@ import {
   MessageSquare,
   Plug,
   Sparkles,
+  Zap,
   Wrench,
   type LucideIcon,
 } from "lucide-react";
@@ -105,7 +106,8 @@ type CommandId =
   | "plan"
   | "build"
   | "goal"
-  | "chat";
+  | "chat"
+  | "instant";
 
 const COMMANDS: Array<{
   id: CommandId;
@@ -275,6 +277,13 @@ const COMMANDS: Array<{
     description: "Direct answers with minimal overhead",
     icon: MessageSquare,
   },
+  {
+    id: "instant",
+    trigger: "instant",
+    label: "Instant mode",
+    description: "Fast, concise answers with quick web search when needed",
+    icon: Zap,
+  },
 ];
 
 const MODE_BY_COMMAND: Partial<Record<CommandId, ChatMode>> = {
@@ -282,6 +291,7 @@ const MODE_BY_COMMAND: Partial<Record<CommandId, ChatMode>> = {
   build: "build",
   goal: "goal",
   chat: "chat",
+  instant: "instant",
 };
 
 // ---------------------------------------------------------------------------

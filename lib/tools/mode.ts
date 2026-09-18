@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { conversations } from "@/db/schema";
 
-type SwitchableMode = "chat" | "goal" | "plan" | "build";
+type SwitchableMode = "chat" | "instant" | "goal" | "plan" | "build";
 
 function normalizeMode(mode: SwitchableMode | "code"): SwitchableMode {
   return mode === "code" ? "build" : mode;
@@ -15,11 +15,11 @@ export function buildModeTool(
 ) {
   return {
     description:
-      "Switch the conversation between normal, plan, goal, and build modes. Use plan when requirements are unclear, goal when executing autonomously, and build/code when implementing and verifying file changes. The new mode applies immediately to the current run and following turns.",
+      "Switch the conversation between normal, instant, plan, goal, and build modes. Use instant for fast concise answers, plan when requirements are unclear, goal when executing autonomously, and build/code when implementing and verifying file changes. The new mode applies immediately to the current run and following turns.",
     inputSchema: z.object({
       mode: z
-        .enum(["chat", "plan", "goal", "build", "code"])
-        .describe("The mode to use: chat/normal, plan, goal, build, or code"),
+        .enum(["chat", "instant", "plan", "goal", "build", "code"])
+        .describe("The mode to use: chat/normal, instant, plan, goal, build, or code"),
       reason: z.string().min(1).max(500).describe("Brief reason for switching modes"),
     }),
     execute: async ({ mode: requestedMode, reason }: { mode: SwitchableMode | "code"; reason: string }) => {
