@@ -46,9 +46,15 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const items = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     const filtered = commands.filter((item) => !normalized || item.label.toLowerCase().includes(normalized));
+    const searchableConversations = conversations.filter(
+  (conversation) =>
+    !["new chat", "temporary chat"].includes(
+      conversation.title.trim().toLowerCase()
+    )
+);
     const matchedConversations = !normalized
-      ? conversations.slice(0, 5)
-      : new Fuse(conversations, {
+      ? searchableConversations.slice(0, 5)
+      : new Fuse(searchableConversations, {
           keys: ["title"],
           threshold: 0.4,
           ignoreLocation: true,

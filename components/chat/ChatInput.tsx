@@ -45,15 +45,15 @@ import {
 import { ChatModelSelector } from "./ChatModelSelector";
 import { dispatchSessionFilesChanged } from "@/lib/api/session-files";
 import { toast } from "sonner";
-import { FileAttachmentPreview, type AttachedFile } from "./FileAttachmentPreview";
+import {
+  FileAttachmentPreview,
+  type AttachedFile,
+} from "./FileAttachmentPreview";
 import { formatFileSize } from "@/lib/file-types";
 import { conversationsApi } from "@/lib/api/conversations";
 import { useDemoMode } from "@/components/demo/use-demo-mode";
 import { toolsApi } from "@/lib/api/tools";
-import {
-  downscaleImageFile,
-  isDownscalableImage,
-} from "@/lib/image-utils";
+import { downscaleImageFile, isDownscalableImage } from "@/lib/image-utils";
 import {
   CHAT_INPUT_PREFILL_EVENT,
   CHAT_INPUT_TOGGLE_PREFIX_EVENT,
@@ -276,7 +276,9 @@ export function ChatInput({
     staleTime: 60_000,
   });
 
-  const codeExecutionOn = !demo && !!toolConfigs?.find((t) => t.id === "code_execution")?.config.enabled;
+  const codeExecutionOn =
+    !demo &&
+    !!toolConfigs?.find((t) => t.id === "code_execution")?.config.enabled;
 
   // Hydrate this conversation's chip preference after mount (avoids SSR
   // mismatch — the initial render always starts with the chip hidden).
@@ -287,7 +289,9 @@ export function ChatInput({
       if (stored) {
         const map: unknown = JSON.parse(stored);
         if (map && typeof map === "object") {
-          const enabled = (map as Record<string, unknown>)[String(conversationId)];
+          const enabled = (map as Record<string, unknown>)[
+            String(conversationId)
+          ];
           // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional post-hydration sync from localStorage (matches AppSidebar pattern)
           setCodeChipOn(enabled === true);
         }
@@ -314,7 +318,8 @@ export function ChatInput({
   }, [codeChipOn, conversationId]);
 
   useEffect(() => {
-    conversationsApi.get(conversationId)
+    conversationsApi
+      .get(conversationId)
       .then(({ conversation }) => {
         setBashMode(conversation.bashMode ?? "sandboxed");
       })
@@ -380,7 +385,9 @@ export function ChatInput({
       const prefill = detail?.text;
       if (typeof prefill !== "string" || !prefill.trim()) return;
       setText((previous) =>
-        previous.trim() ? `${previous.trim()}\n\n${prefill.trim()}` : prefill.trim(),
+        previous.trim()
+          ? `${previous.trim()}\n\n${prefill.trim()}`
+          : prefill.trim(),
       );
       requestAnimationFrame(() => {
         inputRef.current?.focus();
@@ -388,24 +395,35 @@ export function ChatInput({
       });
     };
     window.addEventListener(CHAT_INPUT_PREFILL_EVENT, onPrefill);
-    return () => window.removeEventListener(CHAT_INPUT_PREFILL_EVENT, onPrefill);
+    return () =>
+      window.removeEventListener(CHAT_INPUT_PREFILL_EVENT, onPrefill);
   }, [resize]);
 
   useEffect(() => {
     const onTogglePrefix = (event: Event) => {
-      const detail = (event as CustomEvent<{ text?: unknown; prefixes?: unknown }>).detail;
+      const detail = (
+        event as CustomEvent<{ text?: unknown; prefixes?: unknown }>
+      ).detail;
       const phrase = detail?.text;
       if (typeof phrase !== "string" || !phrase.trim()) return;
       const exactPhrase = phrase.trim();
       const knownPrefixes = Array.isArray(detail.prefixes)
-        ? detail.prefixes.filter((prefix): prefix is string => typeof prefix === "string").map((prefix) => prefix.trim()).filter(Boolean)
+        ? detail.prefixes
+            .filter((prefix): prefix is string => typeof prefix === "string")
+            .map((prefix) => prefix.trim())
+            .filter(Boolean)
         : [exactPhrase];
       const currentText = inputRef.current?.value ?? "";
       const leading = currentText.trimStart();
-      const currentPrefix = knownPrefixes.find((prefix) =>
-        leading === prefix || leading.startsWith(`${prefix} `) || leading.startsWith(`${prefix}\n`),
+      const currentPrefix = knownPrefixes.find(
+        (prefix) =>
+          leading === prefix ||
+          leading.startsWith(`${prefix} `) ||
+          leading.startsWith(`${prefix}\n`),
       );
-      const remaining = currentPrefix ? leading.slice(currentPrefix.length).trimStart() : leading;
+      const remaining = currentPrefix
+        ? leading.slice(currentPrefix.length).trimStart()
+        : leading;
       const nextText =
         currentPrefix === exactPhrase
           ? remaining
@@ -428,7 +446,11 @@ export function ChatInput({
       });
     };
     window.addEventListener(CHAT_INPUT_TOGGLE_PREFIX_EVENT, onTogglePrefix);
-    return () => window.removeEventListener(CHAT_INPUT_TOGGLE_PREFIX_EVENT, onTogglePrefix);
+    return () =>
+      window.removeEventListener(
+        CHAT_INPUT_TOGGLE_PREFIX_EVENT,
+        onTogglePrefix,
+      );
   }, [resize]);
 
   // -----------------------------------------------------------------------
@@ -501,9 +523,7 @@ export function ChatInput({
         if (e.lengthComputable) {
           const pct = Math.round((e.loaded / e.total) * 100);
           setAttachedFiles((prev) =>
-            prev.map((f) =>
-              itemIds.has(f.id) ? { ...f, progress: pct } : f,
-            ),
+            prev.map((f) => (itemIds.has(f.id) ? { ...f, progress: pct } : f)),
           );
         }
       });
@@ -519,9 +539,7 @@ export function ChatInput({
             setAttachedFiles((prev) =>
               prev.map((f) => {
                 if (!itemIds.has(f.id)) return f;
-                const match = uploadedFiles.find(
-                  (u) => u.name === f.file.name,
-                );
+                const match = uploadedFiles.find((u) => u.name === f.file.name);
                 if (match) {
                   return {
                     ...f,
@@ -603,10 +621,7 @@ export function ChatInput({
         );
       });
 
-      xhr.open(
-        "POST",
-        `/api/chat/upload?conversationId=${conversationId}`,
-      );
+      xhr.open("POST", `/api/chat/upload?conversationId=${conversationId}`);
       xhr.send(formData);
     },
     [conversationId],
@@ -804,10 +819,7 @@ export function ChatInput({
       if (pastedText.length > MAX_PASTE_TEXT_CHARS) {
         e.preventDefault();
 
-        const ts = new Date()
-          .toISOString()
-          .replace(/[:.]/g, "-")
-          .slice(0, 19);
+        const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
         const textFile = new File([pastedText], `Pasted-${ts}.txt`, {
           type: "text/plain",
         });
@@ -830,14 +842,15 @@ export function ChatInput({
           `Pasted text was too long (${pastedText.length.toLocaleString()} chars) — attached as a file instead.`,
           {
             duration: 6000,
-            action: textAttached && attached
-              ? {
-                  label: "Undo",
-                  onClick: () => {
-                    for (const f of attached) removeFile(f.id);
-                  },
-                }
-              : undefined,
+            action:
+              textAttached && attached
+                ? {
+                    label: "Undo",
+                    onClick: () => {
+                      for (const f of attached) removeFile(f.id);
+                    },
+                  }
+                : undefined,
           },
         );
         return;
@@ -936,7 +949,11 @@ export function ChatInput({
       // Backing out to the command list leaves the composer untouched.
       if (el && anchor >= 0 && level.kind !== "command") {
         const commandWord =
-          level.kind === "tools" ? "tool" : level.kind === "skills" ? "skill" : "mcp";
+          level.kind === "tools"
+            ? "tool"
+            : level.kind === "skills"
+              ? "skill"
+              : "mcp";
         const next = `${el.value.slice(0, anchor)}/${commandWord} `;
         setText(next);
         requestAnimationFrame(() => {
@@ -1196,7 +1213,7 @@ export function ChatInput({
             </motion.div>
           )}
         </AnimatePresence>
-            {/* {mode === "build" && (
+        {/* {mode === "build" && (
               <div className="mb-2 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 px-1 text-[10px] text-muted-foreground">
                 <span className="font-medium text-foreground/75">Definition of done</span>
                 <span>inspect</span>
@@ -1213,7 +1230,12 @@ export function ChatInput({
             composer and shift the box up ~22px on every send, then drop it
             back down when the response finishes. Dimmed (not removed) while
             streaming so the input box never changes size or position. */}
-        <div className={cn("mb-1.5 flex min-h-4 items-center gap-2 px-1 text-[11px] text-muted-foreground transition-opacity duration-200", isStreaming && "opacity-50")}>
+        <div
+          className={cn(
+            "mb-1.5 flex min-h-4 items-center gap-2 px-1 text-[11px] text-muted-foreground transition-opacity duration-200",
+            isStreaming && "opacity-50",
+          )}
+        >
           {isTemporary && (
             <>
               <span aria-hidden="true">·</span>
@@ -1233,11 +1255,13 @@ export function ChatInput({
                   ? "Change files, run checks, and report what was verified"
                   : "Direct answer with minimal overhead"}
           </span> */}
-          {!demo && onQualityPolicyChange && activeQualityPolicy !== "medium" && (
-            <span className="rounded-full bg-primary/8 px-2 py-0.5 font-medium text-primary">
-              {qualityPolicyLabel(activeQualityPolicy)}
-            </span>
-          )}
+          {!demo &&
+            onQualityPolicyChange &&
+            activeQualityPolicy !== "medium" && (
+              <span className="rounded-full bg-primary/8 px-2 py-0.5 font-medium text-primary">
+                {qualityPolicyLabel(activeQualityPolicy)}
+              </span>
+            )}
         </div>
 
         <div
@@ -1274,7 +1298,13 @@ export function ChatInput({
             <div className="flex flex-wrap items-center gap-1.5 px-3 pt-3">
               {hasModeChip && (
                 <CapabilityChip
-                  icon={mode === "goal" ? Sparkles : mode === "build" ? Hammer : ListChecks}
+                  icon={
+                    mode === "goal"
+                      ? Sparkles
+                      : mode === "build"
+                        ? Hammer
+                        : ListChecks
+                  }
                   label={
                     mode === "goal"
                       ? "Goal mode"
@@ -1304,7 +1334,17 @@ export function ChatInput({
             </div>
           )}
 
-          <div className={hasChips ? (large ? "px-2 pt-2" : "px-3.5 pt-2") : large ? "px-2 pt-4" : "px-1.5 pt-3"}>
+          <div
+            className={
+              hasChips
+                ? large
+                  ? "px-2 pt-2"
+                  : "px-3.5 pt-2"
+                : large
+                  ? "px-2 pt-4"
+                  : "px-1.5 pt-3"
+            }
+          >
             <Textarea
               ref={inputRef}
               value={text}
@@ -1368,22 +1408,22 @@ export function ChatInput({
                 align="start"
                 side="top"
                 sideOffset={8}
-                className="w-72 rounded-2xl border border-border/70 bg-popover/95 p-2 shadow-xl backdrop-blur-xl"
+                className="w-64 rounded-xl border border-border/70 bg-popover/95 p-1.5 shadow-xl backdrop-blur-xl"
               >
                 <DropdownMenuGroup>
-                  <DropdownMenuLabel className="px-2.5 pb-1 pt-0.5 text-[10px] font-semibold tracking-[0.08em] text-muted-foreground/75 uppercase">
+                  <DropdownMenuLabel className="px-2 pb-0.5 pt-0.5 text-[9px] font-semibold tracking-[0.08em] text-muted-foreground/75 uppercase">
                     Add context
                   </DropdownMenuLabel>
                   <DropdownMenuItem
                     onClick={openFilePicker}
-                    className="min-h-9 gap-2.5 rounded-xl px-2.5 py-2 text-[13px] font-medium"
+                    className="min-h-8 gap-2 rounded-lg px-2 py-1.5 text-[12px] font-medium"
                   >
                     <Paperclip className="h-4 w-4" />
                     Add photos &amp; files
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => setFileDialogOpen(true)}
-                    className="min-h-9 gap-2.5 rounded-xl px-2.5 py-2 text-[13px] font-medium"
+                    className="min-h-8 gap-2 rounded-lg px-2 py-1.5 text-[12px] font-medium"
                   >
                     <FolderOpen className="h-4 w-4" />
                     Add folders
@@ -1392,9 +1432,9 @@ export function ChatInput({
 
                 {onModeChange && (
                   <>
-                    <DropdownMenuSeparator className="my-1.5" />
+                    <DropdownMenuSeparator className="my-1" />
                     <DropdownMenuGroup>
-                      <DropdownMenuLabel className="px-2.5 pb-1 pt-0.5 text-[10px] font-semibold tracking-[0.08em] text-muted-foreground/75 uppercase">
+                      <DropdownMenuLabel className="px-2 pb-0.5 pt-0.5 text-[9px] font-semibold tracking-[0.08em] text-muted-foreground/75 uppercase">
                         Work mode
                       </DropdownMenuLabel>
                       <DropdownMenuCheckboxItem
@@ -1403,12 +1443,14 @@ export function ChatInput({
                           onModeChange(checked ? "build" : "chat");
                           setDropdownOpen(false);
                         }}
-                        className="min-h-11 gap-2.5 rounded-xl px-2.5 py-1.5 data-[checked]:bg-primary/10 data-[checked]:text-foreground"
+                        className="min-h-9 gap-2 rounded-lg px-2 py-1 data-[checked]:bg-primary/10 data-[checked]:text-foreground"
                       >
                         <Hammer className="h-4 w-4" />
                         <span>
-                          <span className="block text-[13px] font-medium">Build</span>
-                          <span className="block text-[11px] leading-4 font-normal text-muted-foreground">
+                          <span className="block text-[12px] font-medium">
+                            Build
+                          </span>
+                          <span className="block text-[10px] leading-3.5 font-normal text-muted-foreground">
                             Change files and verify work
                           </span>
                         </span>
@@ -1419,12 +1461,14 @@ export function ChatInput({
                           onModeChange(checked ? "goal" : "chat");
                           setDropdownOpen(false);
                         }}
-                        className="min-h-11 gap-2.5 rounded-xl px-2.5 py-1.5 data-[checked]:bg-primary/10 data-[checked]:text-foreground"
+                        className="min-h-9 gap-2 rounded-lg px-2 py-1 data-[checked]:bg-primary/10 data-[checked]:text-foreground"
                       >
                         <Sparkles className="h-4 w-4" />
                         <span>
-                          <span className="block text-[13px] font-medium">Goal</span>
-                          <span className="block text-[11px] leading-4 font-normal text-muted-foreground">
+                          <span className="block text-[12px] font-medium">
+                            Goal
+                          </span>
+                          <span className="block text-[10px] leading-3.5 font-normal text-muted-foreground">
                             Keep working until it’s done
                           </span>
                         </span>
@@ -1435,12 +1479,14 @@ export function ChatInput({
                           onModeChange(checked ? "plan" : "chat");
                           setDropdownOpen(false);
                         }}
-                        className="min-h-11 gap-2.5 rounded-xl px-2.5 py-1.5 data-[checked]:bg-primary/10 data-[checked]:text-foreground"
+                        className="min-h-9 gap-2 rounded-lg px-2 py-1 data-[checked]:bg-primary/10 data-[checked]:text-foreground"
                       >
                         <ListChecks className="h-4 w-4" />
                         <span>
-                          <span className="block text-[13px] font-medium">Plan</span>
-                          <span className="block text-[11px] leading-4 font-normal text-muted-foreground">
+                          <span className="block text-[12px] font-medium">
+                            Plan
+                          </span>
+                          <span className="block text-[10px] leading-3.5 font-normal text-muted-foreground">
                             Explore without making changes
                           </span>
                         </span>
@@ -1451,36 +1497,44 @@ export function ChatInput({
 
                 {!demo && onQualityPolicyChange && (
                   <>
-                    <DropdownMenuSeparator className="my-1.5" />
+                    <DropdownMenuSeparator className="my-1" />
                     <DropdownMenuGroup>
-                      <DropdownMenuLabel className="px-2.5 pb-1 pt-0.5 text-[10px] font-semibold tracking-[0.08em] text-muted-foreground/75 uppercase">
+                      <DropdownMenuLabel className="px-2 pb-0.5 pt-0.5 text-[9px] font-semibold tracking-[0.08em] text-muted-foreground/75 uppercase">
                         Reasoning
                       </DropdownMenuLabel>
                       <DropdownMenuCheckboxItem
                         checked={activeQualityPolicy === "minimal"}
-                        onCheckedChange={(checked) => checked && onQualityPolicyChange("minimal")}
-                        className="min-h-8 rounded-lg px-2.5 py-1.5 text-[13px] font-medium data-[checked]:bg-primary/10 data-[checked]:text-foreground"
+                        onCheckedChange={(checked) =>
+                          checked && onQualityPolicyChange("minimal")
+                        }
+                        className="min-h-7 rounded-md px-2 py-1 text-[12px] font-medium data-[checked]:bg-primary/10 data-[checked]:text-foreground"
                       >
                         Minimal
                       </DropdownMenuCheckboxItem>
                       <DropdownMenuCheckboxItem
                         checked={activeQualityPolicy === "low"}
-                        onCheckedChange={(checked) => checked && onQualityPolicyChange("low")}
-                        className="min-h-8 rounded-lg px-2.5 py-1.5 text-[13px] font-medium data-[checked]:bg-primary/10 data-[checked]:text-foreground"
+                        onCheckedChange={(checked) =>
+                          checked && onQualityPolicyChange("low")
+                        }
+                        className="min-h-7 rounded-md px-2 py-1 text-[12px] font-medium data-[checked]:bg-primary/10 data-[checked]:text-foreground"
                       >
                         Low
                       </DropdownMenuCheckboxItem>
                       <DropdownMenuCheckboxItem
                         checked={activeQualityPolicy === "medium"}
-                        onCheckedChange={(checked) => checked && onQualityPolicyChange("medium")}
-                        className="min-h-8 rounded-lg px-2.5 py-1.5 text-[13px] font-medium data-[checked]:bg-primary/10 data-[checked]:text-foreground"
+                        onCheckedChange={(checked) =>
+                          checked && onQualityPolicyChange("medium")
+                        }
+                        className="min-h-7 rounded-md px-2 py-1 text-[12px] font-medium data-[checked]:bg-primary/10 data-[checked]:text-foreground"
                       >
                         Medium
                       </DropdownMenuCheckboxItem>
                       <DropdownMenuCheckboxItem
                         checked={activeQualityPolicy === "high"}
-                        onCheckedChange={(checked) => checked && onQualityPolicyChange("high")}
-                        className="min-h-8 rounded-lg px-2.5 py-1.5 text-[13px] font-medium data-[checked]:bg-primary/10 data-[checked]:text-foreground"
+                        onCheckedChange={(checked) =>
+                          checked && onQualityPolicyChange("high")
+                        }
+                        className="min-h-7 rounded-md px-2 py-1 text-[12px] font-medium data-[checked]:bg-primary/10 data-[checked]:text-foreground"
                       >
                         High
                       </DropdownMenuCheckboxItem>
@@ -1490,21 +1544,25 @@ export function ChatInput({
 
                 {!demo && (onTemporaryChange || onMemoryChange) && (
                   <>
-                    <DropdownMenuSeparator className="my-1.5" />
+                    <DropdownMenuSeparator className="my-1" />
                     <DropdownMenuGroup>
-                      <DropdownMenuLabel className="px-2.5 pb-1 pt-0.5 text-[10px] font-semibold tracking-[0.08em] text-muted-foreground/75 uppercase">
+                      <DropdownMenuLabel className="px-2 pb-0.5 pt-0.5 text-[9px] font-semibold tracking-[0.08em] text-muted-foreground/75 uppercase">
                         Chat settings
                       </DropdownMenuLabel>
                       {onMemoryChange && (
                         <DropdownMenuCheckboxItem
                           checked={memoryEnabled !== false}
-                          onCheckedChange={(checked) => onMemoryChange(checked === true)}
-                          className="min-h-10 gap-2.5 rounded-xl px-2.5 py-1.5 data-[checked]:bg-primary/10 data-[checked]:text-foreground"
+                          onCheckedChange={(checked) =>
+                            onMemoryChange(checked === true)
+                          }
+                          className="min-h-9 gap-2 rounded-lg px-2 py-1 mb-1 data-[checked]:bg-primary/10 data-[checked]:text-foreground"
                         >
                           <Brain className="h-4 w-4" />
                           <span>
-                            <span className="block text-[13px] font-medium">Memory</span>
-                            <span className="block text-[11px] leading-4 font-normal text-muted-foreground">
+                            <span className="block text-[12px] font-medium">
+                              Memory
+                            </span>
+                            <span className="block text-[10px] leading-3.5 font-normal text-muted-foreground">
                               {memoryEnabled === false
                                 ? "This chat stays isolated"
                                 : "Remembers you across conversations"}
@@ -1515,13 +1573,17 @@ export function ChatInput({
                       {onTemporaryChange && (
                         <DropdownMenuCheckboxItem
                           checked={isTemporary === true}
-                          onCheckedChange={(checked) => onTemporaryChange(checked === true)}
-                          className="min-h-10 gap-2.5 rounded-xl px-2.5 py-1.5 data-[checked]:bg-primary/10 data-[checked]:text-foreground"
+                          onCheckedChange={(checked) =>
+                            onTemporaryChange(checked === true)
+                          }
+                          className="min-h-9 gap-2 rounded-lg px-2 py-1 data-[checked]:bg-primary/10 data-[checked]:text-foreground"
                         >
                           <Timer className="h-4 w-4" />
                           <span>
-                            <span className="block text-[13px] font-medium">Temporary chat</span>
-                            <span className="block text-[11px] leading-4 font-normal text-muted-foreground">
+                            <span className="block text-[12px] font-medium">
+                              Temporary chat
+                            </span>
+                            <span className="block text-[10px] leading-3.5 font-normal text-muted-foreground">
                               {isTemporary === true
                                 ? `Deleted after ${TEMPORARY_CHAT_RETENTION_DAYS} days of inactivity`
                                 : "Make this chat temporary"}
@@ -1533,56 +1595,64 @@ export function ChatInput({
                   </>
                 )}
 
-                <DropdownMenuSeparator className="my-1.5" />
-                {!demo && <DropdownMenuGroup>
-                  <DropdownMenuLabel className="px-2.5 pb-1 pt-0.5 text-[10px] font-semibold tracking-[0.08em] text-muted-foreground/75 uppercase">
-                    Extra capabilities
-                  </DropdownMenuLabel>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      if (codeExecutionOn) {
-                        // Per-conversation opt-in — this conversation only.
-                        setCodeChipOn((on) => !on);
-                      } else {
-                        router.push("/settings/tools");
-                      }
-                      setDropdownOpen(false);
-                    }}
-                    className="min-h-9 gap-2.5 rounded-xl px-2.5 py-1.5 text-[13px] font-medium"
-                  >
-                    <Code2 className="h-4 w-4" />
-                    Code
-                    <span className="ml-auto flex items-center">
-                      {codeExecutionOn ? (
-                        codeChipOn ? (
-                          <Check className="h-3.5 w-3.5 text-primary" />
+                <DropdownMenuSeparator className="my-1" />
+                {!demo && (
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel className="px-2 pb-0.5 pt-0.5 text-[9px] font-semibold tracking-[0.08em] text-muted-foreground/75 uppercase">
+                      Extra capabilities
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem
+                      onClick={() => {
+                        if (codeExecutionOn) {
+                          // Per-conversation opt-in — this conversation only.
+                          setCodeChipOn((on) => !on);
+                        } else {
+                          router.push("/settings/tools");
+                        }
+                        setDropdownOpen(false);
+                      }}
+                      className="min-h-8 gap-2 rounded-lg px-2 py-1 text-[12px] font-medium"
+                    >
+                      <Code2 className="h-4 w-4" />
+                      Code
+                      <span className="ml-auto flex items-center">
+                        {codeExecutionOn ? (
+                          codeChipOn ? (
+                            <Check className="h-3.5 w-3.5 text-primary" />
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground">
+                              Off for this chat
+                            </span>
+                          )
                         ) : (
                           <span className="text-[10px] text-muted-foreground">
-                            Off for this chat
+                            Set up
                           </span>
-                        )
-                      ) : (
-                        <span className="text-[10px] text-muted-foreground">Set up</span>
-                      )}
-                    </span>
-                  </DropdownMenuItem>
-                  {/* Unified Bash + HTTP access tier. The same setting controls
+                        )}
+                      </span>
+                    </DropdownMenuItem>
+                    {/* Unified Bash + HTTP access tier. The same setting controls
                       filesystem/shell reach and private-network requests, and
                       is carried into newly-created conversations. */}
-                  <DropdownMenuItem
-                    onClick={() => {
-                      setBashModeValue(bashMode === "sandboxed" ? "full" : "sandboxed");
-                      setDropdownOpen(false);
-                    }}
-                    className="min-h-9 gap-2.5 rounded-xl px-2.5 py-1.5 text-[13px] font-medium"
-                  >
-                    <Terminal className="h-4 w-4" />
-                    Access: {bashMode === "full" ? "Full" : "Limited"}
-                    <span className="ml-auto text-[10px] text-muted-foreground">
-                      {bashMode === "full" ? "Switch to Limited" : "Switch to Full"}
-                    </span>
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>}
+                    <DropdownMenuItem
+                      onClick={() => {
+                        setBashModeValue(
+                          bashMode === "sandboxed" ? "full" : "sandboxed",
+                        );
+                        setDropdownOpen(false);
+                      }}
+                      className="min-h-8 gap-2 rounded-lg px-2 py-1 text-[12px] font-medium"
+                    >
+                      <Terminal className="h-4 w-4" />
+                      Access: {bashMode === "full" ? "Full" : "Limited"}
+                      <span className="ml-auto text-[10px] text-muted-foreground">
+                        {bashMode === "full"
+                          ? "Switch to Limited"
+                          : "Switch to Full"}
+                      </span>
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
 
@@ -1623,7 +1693,12 @@ export function ChatInput({
                 title={canContinue ? "Continue response" : "Send message"}
               >
                 {canContinue ? (
-                  <Play className={cn(large ? "h-5 w-5" : "h-4 w-4", "fill-current")} />
+                  <Play
+                    className={cn(
+                      large ? "h-5 w-5" : "h-4 w-4",
+                      "fill-current",
+                    )}
+                  />
                 ) : (
                   <ArrowUp className={large ? "h-5 w-5" : "h-4 w-4"} />
                 )}
