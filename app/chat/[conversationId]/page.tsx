@@ -30,7 +30,7 @@ import { ErrorCard } from "@/components/ui/error-card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useErrorHandler } from "@/lib/hooks/use-error-handler";
-import { conversationsApi } from "@/lib/api/conversations";
+import { applyConversationTitleUpdate, conversationsApi } from "@/lib/api/conversations";
 import { useStreamingContext } from "@/lib/chat/streaming-context";
 import { findActiveQuestions, type QuestionAnswerSubmission } from "@/lib/chat/questions";
 import { shouldPromotePlanToGoal } from "@/lib/chat/mode-transition";
@@ -444,6 +444,39 @@ function ConversationChat({
     initialConversation.memoryEnabled !== false,
   );
   const queryClient = useQueryClient();
+
+  // The server sends a snapshot on connect and pushes the generated title
+  // later, so both the visible header and sidebar update without waiting for
+  // the old post-response polling delay.
+  useEffect(() => {
+    const eventSource = new EventSource(`/api/conversations/${conversationId}/title-events`);
+    eventSource.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data) as {
+          type?: string;
+          conversationId?: number;
+          title?: string;
+          updatedAt?: string;
+        };
+        if (
+          payload.type !== "conversation-title-updated" ||
+          payload.conversationId !== conversationId ||
+          typeof payload.title !== "string"
+        ) {
+          return;
+        }
+        applyConversationTitleUpdate(
+          queryClient,
+          conversationId,
+          payload.title,
+          payload.updatedAt,
+        );
+      } catch {
+        // Ignore malformed/reconnect events; EventSource will reconnect itself.
+      }
+    };
+    return () => eventSource.close();
+  }, [conversationId, queryClient]);
   const [panelOpen, setPanelOpen] = useState(false);
   // When the AI presents a single file (session_present_file), the panel
   // opens straight to that file in the viewer.
@@ -673,15 +706,6 @@ function ConversationChat({
         onConversationChanged();
         queryClient.invalidateQueries({ queryKey: ["build-runs", conversationId] });
       }, 500);
-      // First exchange in a brand-new chat (user + assistant only): the
-      // server generates a real AI title in the background, so refetch again
-      // shortly after to pick it up in the sidebar AND the header.
-      if (messagesRef.current.length <= 2) {
-        setTimeout(() => {
-          onConversationChanged();
-          queryClient.invalidateQueries({ queryKey: ["conversation"] });
-        }, 6_000);
-      }
       endStream(conversationId);
     },
   });

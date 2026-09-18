@@ -23,6 +23,13 @@ export const MEMORY_BUDGET_CHARS = 2000;
 /** Never inject more than this many memories regardless of budget. */
 export const MEMORY_MAX_ITEMS = 12;
 
+/** Guard against spending retrieval work on unusually large pasted requests. */
+export const MEMORY_HINT_MAX_WORDS = 2_000;
+
+/** Small prompt-only previews; the model can call search_memories for detail. */
+export const MEMORY_HINT_MAX_CHARS = 600;
+export const MEMORY_HINT_MAX_ITEMS = 3;
+
 /** Minimum word length to count as a signal token (skips stopwords/noise). */
 const MIN_WORD_LEN = 3;
 
@@ -43,6 +50,93 @@ function significantTokens(text: string): Set<string> {
     }
   }
   return tokens;
+}
+
+function alphabeticTokens(text: string): Set<string> {
+  return new Set([...significantTokens(text)].filter((token) => !/^\d+$/.test(token)));
+}
+
+/** Numbers are exact-only relevance signals and never participate in fuzzing. */
+function numericTokens(text: string): Set<string> {
+  return new Set(text.match(/\b\d{2,}\b/g) ?? []);
+}
+
+function editDistanceAtMostOne(a: string, b: string): boolean {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  // Treat one adjacent transposition as a typo too (e.g. "travle" →
+  // "travel"), while keeping all other multi-character differences out.
+  if (a.length === b.length) {
+    const firstDifference = [...a].findIndex((char, index) => char !== b[index]);
+    if (
+      firstDifference >= 0 &&
+      firstDifference + 1 < a.length &&
+      a[firstDifference] === b[firstDifference + 1] &&
+      a[firstDifference + 1] === b[firstDifference] &&
+      a.slice(firstDifference + 2) === b.slice(firstDifference + 2)
+    ) {
+      return true;
+    }
+  }
+  let i = 0;
+  let j = 0;
+  let differences = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      i++;
+      j++;
+      continue;
+    }
+    if (++differences > 1) return false;
+    if (a.length > b.length) i++;
+    else if (b.length > a.length) j++;
+    else {
+      i++;
+      j++;
+    }
+  }
+  return true;
+}
+
+/** Exact matches dominate; one-character typos are accepted only for long words. */
+function fuzzyTokenOverlapScore(query: Set<string>, candidate: Set<string>): number {
+  if (query.size === 0 || candidate.size === 0) return 0;
+  let score = 0;
+  for (const token of query) {
+    if (candidate.has(token)) {
+      score += 1;
+      continue;
+    }
+    if (token.length >= 5 && [...candidate].some((other) =>
+      other.length >= 5 && editDistanceAtMostOne(token, other),
+    )) {
+      score += 0.7;
+    }
+  }
+  return score / Math.sqrt(query.size * candidate.size);
+}
+
+function hasExactNumberOverlap(query: Set<string>, candidate: Set<string>): boolean {
+  for (const token of query) if (candidate.has(token)) return true;
+  return false;
+}
+
+export function wordCount(text: string): number {
+  return text.trim() ? text.trim().split(/\s+/).length : 0;
+}
+
+/** Pure relevance gate used by the bounded prompt-hint path and its tests. */
+export function hasFuzzyMemoryHintOverlap(query: string, content: string): boolean {
+  const queryTokens = alphabeticTokens(query);
+  if (queryTokens.size === 0) return false;
+  const contentTokens = alphabeticTokens(content);
+  const wordOverlap = fuzzyTokenOverlapScore(queryTokens, contentTokens) > 0;
+  // Numbers only strengthen a match already grounded in meaningful words;
+  // a shared date, ID, or amount alone is too ambiguous to expose a memory.
+  return wordOverlap;
+}
+
+export function shouldRetrieveFuzzyMemoryHints(query: string, memoryEnabled = true): boolean {
+  return memoryEnabled && Boolean(query.trim()) && wordCount(query) <= MEMORY_HINT_MAX_WORDS;
 }
 
 function tokenOverlapScore(a: Set<string>, b: Set<string>): number {
@@ -84,7 +178,15 @@ export interface MemoryRow {
  */
 export async function retrieveRelevantMemories(
   query: string,
-  opts: { maxChars?: number; maxItems?: number; category?: MemoryCategory } = {},
+  opts: {
+    maxChars?: number;
+    maxItems?: number;
+    category?: MemoryCategory;
+    /** Exclude the normal recency fallback when there is no real match. */
+    requireOverlap?: boolean;
+    /** Allow conservative one-character typo matching for meaningful words. */
+    fuzzy?: boolean;
+  } = {},
 ): Promise<MemoryRow[]> {
   const maxChars = opts.maxChars ?? MEMORY_BUDGET_CHARS;
   const maxItems = opts.maxItems ?? MEMORY_MAX_ITEMS;
@@ -120,11 +222,26 @@ export async function retrieveRelevantMemories(
     if (filtered.length > 0) pool = filtered;
   }
 
-  const queryTokens = significantTokens(query);
+  const queryTokens = opts.fuzzy ? alphabeticTokens(query) : significantTokens(query);
+  const queryNumbers = numericTokens(query);
   const scored = pool.map((row, index) => {
-    const overlap = tokenOverlapScore(queryTokens, significantTokens(row.content));
+    const rowTokens = opts.fuzzy ? alphabeticTokens(row.content) : significantTokens(row.content);
+    const overlap = opts.fuzzy
+      ? fuzzyTokenOverlapScore(queryTokens, rowTokens)
+      : tokenOverlapScore(queryTokens, rowTokens);
+    // Numeric matches can strengthen an ordinary language request, but a bare
+    // number is too ambiguous to retrieve a personal memory by itself.
+    const numericOverlap = queryTokens.size > 0 &&
+      hasExactNumberOverlap(queryNumbers, numericTokens(row.content));
+    const hasOverlap = opts.fuzzy
+      ? hasFuzzyMemoryHintOverlap(query, row.content)
+      : overlap > 0 || numericOverlap;
     const recency = Math.max(0.6, 1 - index / 250);
-    return { row, score: overlap + (queryTokens.size === 0 ? recency : recency * 0.15) };
+    return {
+      row,
+      hasOverlap,
+      score: overlap + (numericOverlap ? 0.2 : 0) + (queryTokens.size === 0 ? recency : recency * 0.15),
+    };
   });
 
   scored.sort((a, b) => b.score - a.score);
@@ -133,8 +250,9 @@ export async function retrieveRelevantMemories(
   const selectedContents: string[] = [];
   let used = 0;
 
-  for (const { row } of scored) {
+  for (const { row, hasOverlap } of scored) {
     if (selected.length >= maxItems) break;
+    if (opts.requireOverlap && !hasOverlap) continue;
     if (isNearDuplicate(row.content, selectedContents)) continue;
     // Estimate cost includes category + date prefix
     const prefixLen = row.category !== "general" ? row.category.length + 4 : 0;
@@ -199,4 +317,20 @@ export function buildMemoryPromptBlock(memories: MemoryRow[]): string {
   if (memories.length === 0) return "";
   const body = formatGroupedMemories(memories);
   return `\n\n## Saved memories\nThings you have remembered about the user across conversations, grouped by category and ranked by relevance to the current request. Use them to personalize responses. Dates in [YYYY-MM-DD] are event dates (when the fact became true); if absent, the memory's save time is the only date.\n${body}`;
+}
+
+/** Prompt-only memory leads: deliberately small and never a recency fallback. */
+export async function retrieveFuzzyMemoryHints(query: string): Promise<MemoryRow[]> {
+  if (!shouldRetrieveFuzzyMemoryHints(query)) return [];
+  return retrieveRelevantMemories(query, {
+    maxChars: MEMORY_HINT_MAX_CHARS,
+    maxItems: MEMORY_HINT_MAX_ITEMS,
+    requireOverlap: true,
+    fuzzy: true,
+  });
+}
+
+export function buildMemoryHintPromptBlock(memories: MemoryRow[]): string {
+  if (memories.length === 0) return "";
+  return `\n\n## Related memory hints\nSome saved memories may relate to the user's request. These are limited previews, not a complete result:\n${formatGroupedMemories(memories)}\n\nIf a memory would materially improve your answer, call \`search_memories\` before relying on it so you can retrieve the relevant details.`;
 }

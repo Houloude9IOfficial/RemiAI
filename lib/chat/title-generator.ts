@@ -14,11 +14,12 @@ import { db } from "@/db";
 import { conversations, providers } from "@/db/schema";
 import { getLanguageModel } from "@/lib/providers/factory";
 import { createRunTrace } from "@/lib/observability/run-trace";
+import { emitConversationTitleUpdated } from "@/lib/chat/title-events";
 
 type ProviderRow = typeof providers.$inferSelect;
 
 /** How much of each message we send to the titling model (keeps it cheap). */
-const MAX_MESSAGE_CHARS = 1500;
+const MAX_MESSAGE_CHARS = 600;
 
 /** Hard cap for titles shown in the sidebar. */
 const MAX_TITLE_CHARS = 80;
@@ -68,6 +69,24 @@ export function sanitizeTitle(raw: string): string | null {
   return t;
 }
 
+/** Never replace a title the user changed while the background call ran. */
+export function canApplyAutoTitle(currentTitle: string | undefined, expectedTitle: string): boolean {
+  return currentTitle === expectedTitle;
+}
+
+/**
+ * A fallback title is derived directly from the first user message. Treat it
+ * like an untitled chat so a later successful turn can still generate a real
+ * descriptive title. Any other title is considered user-managed/generated.
+ */
+export function needsGeneratedTitle(
+  currentTitle: string | undefined,
+  fallbackTitle: string | undefined,
+): boolean {
+  const title = currentTitle?.trim() ?? "";
+  return !title || title === "New chat" || (fallbackTitle !== undefined && title === fallbackTitle);
+}
+
 /**
  * Generates a title for the conversation and writes it to the database.
  *
@@ -105,14 +124,13 @@ export async function autoTitleConversation(opts: {
     if (userText) messages.push({ role: "user", content: userText });
     if (assistantText) messages.push({ role: "assistant", content: assistantText });
 
-    const model = getLanguageModel(opts.provider, opts.modelId);
+    const model = getLanguageModel(opts.provider, opts.modelId, "minimal");
     const result = await generateText({
       model,
       system: TITLE_SYSTEM_PROMPT,
       messages,
-      // A title needs only a handful of tokens, but the budget is generous
-      // enough that reasoning models don't burn it all on hidden reasoning.
-      maxOutputTokens: 100,
+      // A tiny budget keeps this best-effort side job fast and inexpensive.
+      maxOutputTokens: 48,
       onLanguageModelCallStart: ({ callId, provider: modelProvider, modelId }) => {
         trace.modelCallStart({ callId, provider: modelProvider, modelId });
       },
@@ -142,15 +160,17 @@ export async function autoTitleConversation(opts: {
       .from(conversations)
       .where(eq(conversations.id, opts.conversationId))
       .get();
-    if (!current || current.title !== opts.expectedTitle) {
+    if (!current || !canApplyAutoTitle(current.title, opts.expectedTitle)) {
       trace.finish("cancelled", { phase: "title_changed" });
       return;
     }
 
+    const updatedAt = new Date().toISOString();
     await db
       .update(conversations)
-      .set({ title })
+      .set({ title, updatedAt })
       .where(eq(conversations.id, opts.conversationId));
+    emitConversationTitleUpdated(opts.conversationId, title, updatedAt);
     trace.finish("completed", { outputChars: result.text.length });
   } catch (err) {
     trace.providerError(err);

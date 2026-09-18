@@ -16,7 +16,7 @@ import { isQuestionsOutput } from "@/lib/chat/questions";
 import { persistUIMessage } from "@/lib/chat/persist";
 import { streamRegistry } from "@/lib/chat/stream-registry";
 import { periodicallyPersistMessages } from "@/lib/chat/persist-interval";
-import { asc, eq, sql, count } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import { db, initializeApp } from "@/db";
 import {
   conversations,
@@ -51,7 +51,7 @@ import {
   optimizeMessageHistory,
   RECENT_MESSAGES_KEPT,
 } from "@/lib/chat/history-optimizer";
-import { buildMemoryPromptBlock, retrieveRelevantMemories } from "@/lib/chat/memories";
+import { buildMemoryHintPromptBlock, retrieveFuzzyMemoryHints } from "@/lib/chat/memories";
 import {
   summarizeConversationBackground,
   shouldSummarize,
@@ -69,7 +69,7 @@ import {
   reconstructConversationHistory,
   MAX_DELTA_MESSAGES,
 } from "@/lib/chat/history-reconstruction";
-import { autoTitleConversation } from "@/lib/chat/title-generator";
+import { autoTitleConversation, needsGeneratedTitle } from "@/lib/chat/title-generator";
 import { createMcpToolsManager } from "@/lib/mcp/tools";
 import { buildFilesystemTools } from "@/lib/fs/tools";
 import { buildContextTools } from "@/lib/tools/context";
@@ -377,24 +377,6 @@ async function runChatRequest(req: Request, questionRun: QuestionRun) {
     );
   }
 
-  // ── First-exchange detection (for background auto-titling) ───────────
-  // A brand-new chat starts with zero persisted messages and the default
-  // "New chat" title. If that still holds at request time, the response we
-  // are about to generate is the FIRST AI response — when it completes we'll
-  // kick off a cheap background completion that turns the first two messages
-  // into a proper title (e.g. "Particle Engine Error Fix"), so the sidebar
-  // shows something meaningful even if the user already navigated away.
-  const messageCountStartedAt = performance.now();
-  const [countRow] = await db
-    .select({ count: count() })
-    .from(messages)
-    .where(eq(messages.conversationId, conversationId))
-    .all();
-  trace.dbQuery("message_count", messageCountStartedAt);
-  const existingMessageCount = countRow?.count ?? 0;
-  const isFirstExchange =
-    existingMessageCount === 0 && conversation.title === "New chat";
-
   // ── Reconstruct the full conversation server-side (ChatGPT-style) ───
   // The client only sent the newest message(s). Load everything already
   // persisted for this conversation, apply regenerate truncation, merge the
@@ -414,21 +396,33 @@ async function runChatRequest(req: Request, questionRun: QuestionRun) {
   trace.metric("reconstructedMessageCount", uiMessages.length);
 
   const lastMessage = uiMessages[uiMessages.length - 1];
+  const firstUserMessage = uiMessages.find((message) => message.role === "user");
+  const firstUserFallbackTitle = firstUserMessage
+    ? titleFromMessage(firstUserMessage)
+    : undefined;
+  const titleNeedsGeneration = needsGeneratedTitle(
+    conversation.title,
+    firstUserFallbackTitle,
+  );
+  // The expected title is updated below when a default "New chat" title is
+  // replaced with the newest user-message fallback.
+  let expectedAutoTitle = conversation.title;
   // The SDK continues the final assistant message using its existing ID.
   if (lastMessage?.role === "assistant") {
     questionRun.assistantId = lastMessage.id;
     questionRun.initialAssistantMessage = structuredClone(lastMessage);
   }
   if (lastMessage?.role === "user") {
+    const fallbackTitle = titleFromMessage(lastMessage);
+    const shouldSetFallbackTitle = !conversation.title.trim() || conversation.title === "New chat";
     await db
       .update(conversations)
       .set({
-        title: conversation.title === "New chat"
-          ? titleFromMessage(lastMessage)
-          : conversation.title,
+        title: shouldSetFallbackTitle ? fallbackTitle : conversation.title,
         updatedAt: new Date().toISOString(),
       })
       .where(eq(conversations.id, conversationId));
+    if (shouldSetFallbackTitle) expectedAutoTitle = fallbackTitle;
 
     const answeredPlanQuestions = shouldPromotePlanToGoal(mode, uiMessages);
     if (answeredPlanQuestions) {
@@ -996,12 +990,10 @@ Definition of done:
     verifierEligible: qualityRoute.verifierEligible,
   });
 
-  // Memory-disabled chats get NO saved-memories block — the model must answer
-  // from this conversation alone (the memory tools aren't registered either).
-  // Grouped by category so the model sees health/work/etc separately; dates
-  // are inline as [YYYY-MM-DD] next to the content when present.
-  const relevantMemories = memoryEnabled ? await retrieveRelevantMemories(lastUserText) : [];
-  const memoryTip = buildMemoryPromptBlock(relevantMemories as any);
+  // Prompt only compact, query-matched memory leads. Full recall remains an
+  // explicit search_memories tool call, and isolated chats never retrieve.
+  const memoryHints = memoryEnabled ? await retrieveFuzzyMemoryHints(lastUserText) : [];
+  const memoryTip = buildMemoryHintPromptBlock(memoryHints);
 
   // ── Intent-based dynamic tool loading ─────────────────────────────
   // Simple chats register only the CORE tool subset (~2-3k tokens instead of
@@ -1795,14 +1787,13 @@ Definition of done:
       }
 
       // ── Background auto-title ─────────────────────────────────────
-      // First AI response in a brand-new chat: fire a tiny, cheap request
-      // that reads the first user message + this reply and writes a short
-      // title to the DB. Fire-and-forget — never blocks the stream, and it
-      // keeps running server-side even after the user navigates away.
-      if (isFirstExchange && !capturedErrorPayload && runText.trim()) {
-        const firstUser = uiMessages.find((m) => m.role === "user");
-        if (firstUser) {
-          const userText = firstUser.parts
+      // Keep trying after any successful user turn until the fallback title
+      // is replaced by a real generated title. Manual/generated titles never
+      // enter this branch and the expected-title guard below prevents races.
+      if (titleNeedsGeneration && !capturedErrorPayload && runText.trim()) {
+        const titleUser = [...uiMessages].reverse().find((m) => m.role === "user");
+        if (titleUser) {
+          const userText = titleUser.parts
             .filter(
               (p): p is { type: "text"; text: string } => p.type === "text",
             )
@@ -1810,11 +1801,14 @@ Definition of done:
             .join(" ");
           void autoTitleConversation({
             conversationId,
-            provider,
-            modelId: conversationModelId,
+            // Use the concrete active route rather than the conversation's
+            // virtual Auto sentinel, so title generation remains lightweight
+            // and valid for every model-selection mode.
+            provider: activeProvider,
+            modelId: activeModelId,
             userText,
             assistantText: runText,
-            expectedTitle: titleFromMessage(firstUser),
+            expectedTitle: expectedAutoTitle,
             parentTraceId: trace.traceId,
           });
         }

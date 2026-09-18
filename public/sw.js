@@ -1,6 +1,6 @@
 // RemiAI Service Worker — PWA installability and background Web Push.
 
-const CACHE_NAME = "remiai-v2";
+const CACHE_NAME = "remiai-v3";
 const STATIC_ASSETS = ["/", "/manifest.json"];
 
 self.addEventListener("install", (event) => {
@@ -76,8 +76,16 @@ self.addEventListener("notificationclick", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
-  if (new URL(event.request.url).pathname === "/sw.js") {
+  const requestUrl = new URL(event.request.url);
+  if (requestUrl.pathname === "/sw.js") {
     event.respondWith(fetch(event.request));
+    return;
+  }
+
+  // EventSource requests must remain browser-owned. Caching or wrapping an
+  // SSE response can break its long-lived body and surface as a service-worker
+  // interception failure before the route handler receives the request.
+  if (event.request.headers.get("accept")?.includes("text/event-stream")) {
     return;
   }
 
@@ -94,7 +102,7 @@ self.addEventListener("fetch", (event) => {
   // intercept them at all. Calling respondWith(fetch(...)) here is unnecessary
   // and can throw in Firefox for encoded App Router chunk URLs; leaving the
   // event untouched lets the browser request the asset directly from Next.js.
-  if (new URL(event.request.url).pathname.startsWith("/_next/")) return;
+  if (requestUrl.pathname.startsWith("/_next/")) return;
 
   event.respondWith(
     caches.match(event.request).then((cached) => cached ?? fetch(event.request))

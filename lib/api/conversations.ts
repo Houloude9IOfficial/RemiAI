@@ -1,4 +1,5 @@
 import type { UIMessage } from "ai";
+import type { QueryClient } from "@tanstack/react-query";
 
 export type Conversation = {
   id: number;
@@ -18,6 +19,40 @@ export type Conversation = {
   createdAt: string;
   updatedAt: string;
 };
+
+export function applyConversationTitleUpdate(
+  queryClient: QueryClient,
+  conversationId: number,
+  title: string,
+  updatedAt?: string,
+): void {
+  queryClient.setQueryData<{
+    conversation: Conversation;
+    messages: UIMessage[];
+  }>(["conversation", conversationId], (current) =>
+    current
+      ? {
+          ...current,
+          conversation: {
+            ...current.conversation,
+            title,
+            updatedAt: updatedAt ?? current.conversation.updatedAt,
+          },
+        }
+      : current,
+  );
+  queryClient.setQueryData<Conversation[]>(["conversations"], (current) =>
+    current?.map((conversation) =>
+      conversation.id === conversationId
+        ? {
+            ...conversation,
+            title,
+            updatedAt: updatedAt ?? conversation.updatedAt,
+          }
+        : conversation,
+    ),
+  );
+}
 
 async function unwrap<T>(res: Response): Promise<T> {
   const data = await res.json().catch(() => ({}));
