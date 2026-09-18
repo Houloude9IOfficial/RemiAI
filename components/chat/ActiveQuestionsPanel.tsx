@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Check,
@@ -12,26 +12,25 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { QuestionsData, QuestionsQuestion } from "@/lib/chat/questions";
+import type { QuestionAnswerSubmission, QuestionsData, QuestionsQuestion } from "@/lib/chat/questions";
 
 const CUSTOM_SENTINEL = "__custom__";
 
 /**
  * Nexus-style "active" questions card rendered above the composer. One
- * question at a time with numbered option rows (single choice auto-advances),
+ * question at a time with numbered option rows and explicit Next/Skip actions,
  * an "Other…" custom answer for select questions, free-text textareas, and a
  * footer with navigation + submit. Collapses to a slim pill via the dismiss
- * button; answers submit as a formatted user message.
+ * button; complete answer sets submit independently of the active stream.
  */
 export function ActiveQuestionsPanel({
   data,
-  status,
+  toolCallId,
   onSubmit,
 }: {
   data: QuestionsData;
-  /** Chat stream status — submit is locked while a response is in flight. */
-  status?: string;
-  onSubmit: (text: string) => void;
+  toolCallId: string;
+  onSubmit: (submission: QuestionAnswerSubmission) => Promise<void>;
 }) {
   const { title, questions } = data;
   const [index, setIndex] = useState(0);
@@ -40,13 +39,18 @@ export function ActiveQuestionsPanel({
   const [collapsed, setCollapsed] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  const isBusy = status === "submitted" || status === "streaming";
+  const [skipped, setSkipped] = useState<Record<string, boolean>>({});
+  const [isBusy, setIsBusy] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const submissionId = useRef<string | null>(null);
+  const submitGuard = useRef(false);
   const onLast = index >= questions.length - 1;
 
   const isAnswered = useCallback(
     (q: QuestionsQuestion) => {
       const answer = answers[q.id];
       if (q.type === "free_text") return Boolean(customTexts[q.id]?.trim());
+      if (q.type === "multi_select") return (Array.isArray(answer) && answer.length > 0) || Boolean(customTexts[q.id]?.trim());
       if (!answer || (Array.isArray(answer) && answer.length === 0)) {
         return false;
       }
@@ -58,21 +62,21 @@ export function ActiveQuestionsPanel({
     [answers, customTexts],
   );
 
-  const answeredCount = questions.filter(isAnswered).length;
-  const allAnswered = answeredCount === questions.length;
-  const remaining = questions.length - answeredCount;
+  const answeredCount = questions.filter((q) => !skipped[q.id] && isAnswered(q)).length;
+  const skippedCount = questions.filter((q) => skipped[q.id]).length;
+  const allResolved = questions.every((q) => isAnswered(q) || skipped[q.id]);
+  const remaining = questions.length - answeredCount - skippedCount;
 
   const selectSingle = useCallback(
     (questionId: string, option: string) => {
       setAnswers((prev) => ({ ...prev, [questionId]: option }));
-      // Single choice auto-advances to the next question (Nexus behavior) —
-      // unless it's the last one, where the footer's Submit takes over.
-      if (!onLast) setIndex((i) => i + 1);
+      setSkipped((prev) => ({ ...prev, [questionId]: false }));
     },
-    [onLast],
+    [],
   );
 
   const toggleOption = useCallback((questionId: string, option: string) => {
+    setSkipped((prev) => ({ ...prev, [questionId]: false }));
     setAnswers((prev) => {
       const current = Array.isArray(prev[questionId]) ? prev[questionId] : [];
       const next = current.includes(option)
@@ -84,8 +88,9 @@ export function ActiveQuestionsPanel({
 
   const handleCustomChange = useCallback(
     (questionId: string, value: string) => {
+      setSkipped((prev) => ({ ...prev, [questionId]: false }));
       setCustomTexts((prev) => ({ ...prev, [questionId]: value }));
-      if (value.trim()) {
+      if (value.trim() && questions.find((q) => q.id === questionId)?.type !== "multi_select") {
         setAnswers((prev) =>
           prev[questionId] === CUSTOM_SENTINEL
             ? prev
@@ -93,36 +98,48 @@ export function ActiveQuestionsPanel({
         );
       }
     },
-    [],
+    [questions],
   );
 
-  const handleSubmit = useCallback(() => {
-    if (!allAnswered || isBusy) return;
-
-    // Same formatted answer shape the previous in-chat card used, so the
-    // persisted user message reads naturally in the transcript.
-    const lines: string[] = [];
-    if (title) {
-      lines.push(`## ${title}`);
-      lines.push("");
+  const handleSubmit = useCallback(async (skipId?: string) => {
+    if (submitGuard.current || (!allResolved && !questions.every((q) => isAnswered(q) || skipped[q.id] || q.id === skipId))) return;
+    submitGuard.current = true;
+    setIsBusy(true);
+    setSubmitError(null);
+    submissionId.current ??= crypto.randomUUID();
+    try {
+      await onSubmit({
+        submissionId: submissionId.current,
+        toolCallId,
+        answers: questions.map((q) => {
+          if (skipped[q.id] || q.id === skipId) return { questionId: q.id, skipped: true };
+          const answer = answers[q.id];
+          return {
+            questionId: q.id,
+            ...(q.type === "multi_select"
+              ? { value: Array.isArray(answer) ? answer : [], custom: customTexts[q.id]?.trim() || undefined }
+              : q.type === "free_text" || answer === CUSTOM_SENTINEL
+              ? { custom: customTexts[q.id]?.trim() }
+              : { value: answer }),
+          };
+        }),
+      });
+      setSubmitted(true);
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Could not send answers. Try again.");
+    } finally {
+      submitGuard.current = false;
+      setIsBusy(false);
     }
-    for (const q of questions) {
-      const answer = answers[q.id];
-      let answerText = "";
-      if (q.type === "free_text" || answer === CUSTOM_SENTINEL) {
-        answerText = customTexts[q.id]?.trim() ?? "";
-      } else {
-        answerText = Array.isArray(answer) ? answer.join(", ") : (answer ?? "");
-      }
-      lines.push(`**${q.question}**`);
-      lines.push(answerText);
-      lines.push("");
-    }
+  }, [allResolved, questions, isAnswered, skipped, answers, customTexts, onSubmit, toolCallId]);
 
-    const message = lines.join("\n").trim();
-    setSubmitted(true);
-    onSubmit(message);
-  }, [allAnswered, isBusy, title, questions, answers, customTexts, onSubmit]);
+  const handleSkip = () => {
+    const id = questions[index].id;
+    setSkipped((prev) => ({ ...prev, [id]: true }));
+    if (onLast) void handleSubmit(id);
+    else setIndex((i) => i + 1);
+  };
+  const canProceed = onLast ? allResolved : isAnswered(questions[index]) || skipped[questions[index].id];
 
   if (submitted) {
     return (
@@ -160,7 +177,8 @@ export function ActiveQuestionsPanel({
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 pb-2 md:px-6">
-      <div className="overflow-hidden rounded-3xl border border-border/70 bg-surface-1">
+      <div className="overflow-hidden rounded-3xl border border-border/70 bg-surface-1" aria-busy={isBusy}>
+        <fieldset disabled={isBusy} className="min-w-0">
         {/* ── Header ── */}
         <div className="flex items-center gap-2.5 px-4 pt-3 pb-1.5">
           <HelpCircle className="h-4 w-4 shrink-0 text-primary" />
@@ -169,6 +187,7 @@ export function ActiveQuestionsPanel({
           </span>
           <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
             {answeredCount}/{questions.length} answered
+            {skippedCount > 0 && ` · ${skippedCount} skipped`}
           </span>
           <button
             type="button"
@@ -195,12 +214,14 @@ export function ActiveQuestionsPanel({
                 answer={answers[questions[index]?.id]}
                 customText={customTexts[questions[index]?.id] ?? ""}
                 isCustom={
-                  answers[questions[index]?.id] === CUSTOM_SENTINEL
+                  answers[questions[index]?.id] === CUSTOM_SENTINEL ||
+                  (questions[index]?.type === "multi_select" && Boolean(customTexts[questions[index]?.id]?.trim()))
                 }
                 onSelect={selectSingle}
                 onToggle={toggleOption}
                 onCustomChange={handleCustomChange}
               />
+              {skipped[questions[index]?.id] && <p className="mt-2 text-xs text-muted-foreground">Skipped</p>}
             </motion.div>
           </AnimatePresence>
         </div>
@@ -231,25 +252,27 @@ export function ActiveQuestionsPanel({
             </button>
           </div>
           <div className="flex-1" />
+          <button type="button" onClick={handleSkip} disabled={isBusy}
+            className="rounded-full px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted">
+            Skip
+          </button>
           <button
             type="button"
-            onClick={handleSubmit}
-            disabled={!allAnswered || isBusy}
+            onClick={() => onLast ? void handleSubmit() : setIndex((i) => i + 1)}
+            disabled={!canProceed || isBusy}
             className={cn(
               "flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium transition-all duration-150",
-              allAnswered && !isBusy
+              canProceed && !isBusy
                 ? "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 active:scale-[0.98]"
                 : "cursor-not-allowed bg-muted text-muted-foreground/50",
             )}
           >
-            <Send className="h-3 w-3" />
-            {isBusy
-              ? "Waiting for the assistant…"
-              : allAnswered
-                ? "Send answers"
-                : `Answer ${remaining} more`}
+            {onLast ? <Send className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+            {isBusy ? "Sending…" : onLast ? "Send" : "Next"}
           </button>
         </div>
+        {submitError && <p role="alert" className="px-4 pb-3 text-xs text-destructive">{submitError}</p>}
+        </fieldset>
       </div>
     </div>
   );

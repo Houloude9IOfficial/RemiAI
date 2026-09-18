@@ -9,7 +9,7 @@
  * The stream must come from `toUIMessageStream()` (raw UIMessageChunk
  * objects), NOT the SSE-encoded version.
  */
-import { sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { messages } from "@/db/schema";
 import type { UIMessage, UIMessageChunk } from "ai";
@@ -69,21 +69,25 @@ export async function periodicallyPersistMessages(
     };
 
     // Persist the assistant message (upsert — updates parts if already exists)
-    await persistDb
-      .insert(messages)
-      .values({
-        uiId: snapshot.id,
-        conversationId,
-        role: snapshot.role,
-        parts: snapshot.parts as Record<string, unknown>[],
-        orderIndex: originalMessages.length,
-      })
-      .onConflictDoUpdate({
-        target: [messages.conversationId, messages.uiId],
-        set: {
-          parts: sql`excluded.parts`,
-        },
-      });
+    persistDb.transaction((tx) => {
+      const last = tx.select({ orderIndex: messages.orderIndex }).from(messages)
+        .where(eq(messages.conversationId, conversationId)).orderBy(desc(messages.orderIndex)).get();
+      tx
+        .insert(messages)
+        .values({
+          uiId: snapshot.id,
+          conversationId,
+          role: snapshot.role,
+          parts: snapshot.parts as Record<string, unknown>[],
+          orderIndex: (last?.orderIndex ?? -1) + 1,
+        })
+        .onConflictDoUpdate({
+          target: [messages.conversationId, messages.uiId],
+          set: {
+            parts: sql`excluded.parts`,
+          },
+        }).run();
+    });
 
     trace?.dbQuery("persist_assistant_snapshot", persistStartedAt, {
       partCount: parts.length,
@@ -128,6 +132,15 @@ export async function periodicallyPersistMessages(
     switch (type) {
       case "start":
         messageId = (chunk.messageId as string) || messageId;
+        if (!parts.length) {
+          const previous = originalMessages.at(-1);
+          if (previous?.role === "assistant" && previous.id === messageId) {
+            parts.push(...structuredClone(previous.parts));
+            parts.forEach((part, index) => {
+              if ("toolCallId" in part && typeof part.toolCallId === "string") toolById.set(part.toolCallId, index);
+            });
+          }
+        }
         break;
 
       case "text-start": {

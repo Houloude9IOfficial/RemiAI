@@ -4,7 +4,7 @@ import { use, useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
+import { DefaultChatTransport, type UIMessage } from "ai";
 import { motion, AnimatePresence } from "framer-motion";
 import { Files, Menu, Plus, Timer } from "lucide-react";
 import { MessageList } from "@/components/chat/MessageList";
@@ -32,7 +32,7 @@ import { toast } from "sonner";
 import { useErrorHandler } from "@/lib/hooks/use-error-handler";
 import { conversationsApi } from "@/lib/api/conversations";
 import { useStreamingContext } from "@/lib/chat/streaming-context";
-import { findActiveQuestions } from "@/lib/chat/questions";
+import { findActiveQuestions, type QuestionAnswerSubmission } from "@/lib/chat/questions";
 import { shouldPromotePlanToGoal } from "@/lib/chat/mode-transition";
 import { useSidebar } from "@/components/sidebar/SidebarContext";
 import {
@@ -686,6 +686,101 @@ function ConversationChat({
     },
   });
 
+  const [questionAnswerMessages, setQuestionAnswerMessages] = useState<UIMessage[]>([]);
+  const [resolvedQuestionIds, setResolvedQuestionIds] = useState<string[]>([]);
+  const questionStatusRef = useRef(status);
+  useEffect(() => { questionStatusRef.current = status; }, [status]);
+  const stoppedQuestionRunRef = useRef<string | null>(null);
+  const reconnectingQuestionRunRef = useRef(false);
+  const seenQuestionRunsRef = useRef(new Set<string>());
+  useEffect(() => {
+    const last = messages.at(-1);
+    if (status === "streaming" && last?.role === "assistant") seenQuestionRunsRef.current.add(last.id);
+  }, [messages, status]);
+  const displayMessages = useMemo(() => {
+    const known = new Set(messages.map((message) => message.id));
+    return [...messages, ...questionAnswerMessages.filter((message) => !known.has(message.id))];
+  }, [messages, questionAnswerMessages]);
+
+  useEffect(() => {
+    let disposed = false;
+    let polling = false;
+    let idleSynced = false;
+    let done = false;
+    const streamIsBusy = () => questionStatusRef.current === "streaming" || questionStatusRef.current === "submitted";
+    const poll = async () => {
+      if (polling || disposed || done) return;
+      polling = true;
+      try {
+        const response = await fetch(`/api/chat/${conversationId}/question-answers`);
+        if (!response.ok || disposed) return;
+        const state = await response.json() as {
+          resolvedIds: string[]; answerMessages: UIMessage[]; activeAssistantId: string | null; initialAssistantMessage: UIMessage | null; mode: string | null; hasAutomaticPending: boolean;
+        };
+        if (disposed) return;
+        if (state.mode === "goal") setMode((previous) => previous === "plan" ? "goal" : previous);
+        setResolvedQuestionIds((previous) => previous.join("\0") === state.resolvedIds.join("\0") ? previous : state.resolvedIds);
+        setQuestionAnswerMessages((previous) => previous.map((m) => m.id).join("\0") === state.answerMessages.map((m) => m.id).join("\0") ? previous : state.answerMessages);
+        if (streamIsBusy()) return;
+        if (state.activeAssistantId && stoppedQuestionRunRef.current !== "*" && !seenQuestionRunsRef.current.has(state.activeAssistantId) && !reconnectingQuestionRunRef.current) {
+          // A server-owned follow-up may start after the original finish chunk.
+          // Reconnect rather than issuing another generation request.
+          const streamState = await fetch(`/api/chat/${conversationId}/stream/status`).then((r) => r.json());
+          if (disposed || !streamState.active || streamIsBusy()) return;
+          reconnectingQuestionRunRef.current = true;
+          seenQuestionRunsRef.current.add(state.activeAssistantId);
+          const current = messagesRef.current;
+          const activeIndex = current.findIndex((message) => message.id === state.activeAssistantId);
+          if (activeIndex >= 0) {
+            // The reconnect stream replays this run from the start. Retain only
+            // the pre-run seed so saved partial text isn't duplicated.
+            setMessages([...current.slice(0, activeIndex), ...(state.initialAssistantMessage ? [state.initialAssistantMessage] : [])]);
+          } else {
+            const known = new Set(current.map((message) => message.id));
+            setMessages([...current, ...state.answerMessages.filter((message) => !known.has(message.id))]);
+          }
+          try { await resumeStream(); } catch {
+            seenQuestionRunsRef.current.delete(state.activeAssistantId);
+          } finally { reconnectingQuestionRunRef.current = false; }
+        } else if (!state.activeAssistantId && state.resolvedIds.length && !idleSynced) {
+          const transcript = await fetch(`/api/chat/${conversationId}/question-answers?transcript=1`).then((r) => r.ok ? r.json() : null);
+          if (disposed || streamIsBusy() || transcript?.activeAssistantId) return;
+          if (transcript?.messages) {
+            const persisted = transcript.messages as UIMessage[];
+            const known = new Set(persisted.map((message) => message.id));
+            setMessages([...persisted, ...messagesRef.current.filter((message) => !known.has(message.id))]);
+          }
+          idleSynced = true;
+        }
+        if (!state.activeAssistantId && !state.hasAutomaticPending) done = true;
+      } catch {
+        // A transient polling failure must not disturb the active stream.
+      } finally { polling = false; }
+    };
+    void poll();
+    const timer = setInterval(() => void poll(), 1000);
+    return () => { disposed = true; clearInterval(timer); };
+  }, [conversationId, status, resolvedQuestionIds.length, resumeStream, setMessages]);
+
+  const handleQuestionSubmit = useCallback(async (submission: QuestionAnswerSubmission) => {
+    const response = await fetch(`/api/chat/${conversationId}/question-answers`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(submission),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error ?? "Could not send answers. Try again.");
+    stoppedQuestionRunRef.current = null;
+    setResolvedQuestionIds((previous) => previous.includes(result.toolCallId) ? previous : [...previous, result.toolCallId]);
+    setQuestionAnswerMessages((previous) => previous.some((message) => message.id === result.message.id) ? previous : [...previous, result.message]);
+  }, [conversationId]);
+
+  const handleStop = useCallback(() => {
+    stoppedQuestionRunRef.current = "*";
+    void fetch(`/api/chat/${conversationId}/question-answers`, { method: "DELETE" }).catch(() => {
+      toast.error("Could not stop the server response. Try again.");
+    });
+    void stop();
+  }, [conversationId, stop]);
+
   // Keep the latest message list available to the retryable closure without
   // putting the (constantly changing) `messages` array in the effect deps:
   // editing the deps array LENGTH under Fast Refresh makes React throw
@@ -838,6 +933,7 @@ function ConversationChat({
   const handleSend = useCallback(
     (text: string) => {
       if (sendGuardRef.current || status === "submitted" || status === "streaming") return;
+      stoppedQuestionRunRef.current = null;
       sendGuardRef.current = true;
       clearError();
       clearChatError();
@@ -866,6 +962,7 @@ function ConversationChat({
   // last message so the SDK/server can generate the missing assistant reply.
   const handleContinueLastMessage = useCallback(() => {
     if (status === "submitted" || status === "streaming") return;
+    stoppedQuestionRunRef.current = null;
     clearError();
     clearChatError();
     autoContinueBudgetRef.current = MAX_AUTO_CONTINUES_PER_MESSAGE;
@@ -1112,7 +1209,7 @@ function ConversationChat({
   // The newest unanswered ask_questions set — drives the Nexus-style "active"
   // questions panel above the composer. Derived from the message list, so it
   // survives reloads (any user message after a questions part marks it answered).
-  const activeQuestions = useMemo(() => findActiveQuestions(messages), [messages]);
+  const activeQuestions = useMemo(() => findActiveQuestions(displayMessages, resolvedQuestionIds), [displayMessages, resolvedQuestionIds]);
 
   const handleModeChange = useCallback(
     (nextMode: ChatMode) => {
@@ -1216,7 +1313,7 @@ function ConversationChat({
                 modelId={modelId}
                 onModelChange={handleModelChange}
                 onSend={handleSend}
-                onStop={stop}
+                onStop={handleStop}
                 onAiStart={handleAiStart}
                 isAiStarting={isAiStarting}
                 isTemporary={isTemporary}
@@ -1238,7 +1335,7 @@ function ConversationChat({
               </EmptyChatState>
             ) : (
               <MessageList
-                messages={messages}
+                messages={displayMessages}
                 status={status}
                 onSend={(text) => sendMessage({ text })}
                 onRegenerate={handleRegenerate}
@@ -1280,8 +1377,8 @@ function ConversationChat({
                     >
                       <ActiveQuestionsPanel
                         data={activeQuestions.data}
-                        status={status}
-                        onSubmit={handleSend}
+                        toolCallId={activeQuestions.id}
+                        onSubmit={handleQuestionSubmit}
                       />
                     </motion.div>
                   )}
@@ -1308,7 +1405,7 @@ function ConversationChat({
                     onContinue={
                       hasUnansweredLastMessage ? handleContinueLastMessage : undefined
                     }
-                    onStop={stop}
+                    onStop={handleStop}
                     isTemporary={isTemporary}
                     memoryEnabled={memoryEnabled}
                     onTemporaryChange={setIsTemporary}

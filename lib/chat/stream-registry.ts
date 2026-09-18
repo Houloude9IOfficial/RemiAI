@@ -7,7 +7,8 @@
  * stream via the GET /api/chat/[id]/stream endpoint.
  */
 
-const activeStreams = new Map<number, ReadableStream<string>>();
+const sharedStreams = globalThis as typeof globalThis & { remiActiveStreams?: Map<number, ReadableStream<string>> };
+const activeStreams = sharedStreams.remiActiveStreams ??= new Map<number, ReadableStream<string>>();
 
 export const streamRegistry = {
   register(conversationId: number, stream: ReadableStream<string>) {
@@ -25,8 +26,12 @@ export const streamRegistry = {
     // Auto-remove when the stream ends or errors (both branches finish)
     cleanupBranch
       .pipeTo(new WritableStream())
-      .then(() => activeStreams.delete(conversationId))
-      .catch(() => activeStreams.delete(conversationId));
+      .then(() => {
+        if (activeStreams.get(conversationId) === clientBranch) activeStreams.delete(conversationId);
+      })
+      .catch(() => {
+        if (activeStreams.get(conversationId) === clientBranch) activeStreams.delete(conversationId);
+      });
   },
 
   get(conversationId: number): ReadableStream<string> | null {

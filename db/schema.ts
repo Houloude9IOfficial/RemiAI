@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { sqliteTable, text, integer, unique } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, unique, foreignKey } from "drizzle-orm/sqlite-core";
 import { MEMORY_CATEGORIES } from "@/lib/memory-categories";
 export { MEMORY_CATEGORIES };
 
@@ -324,6 +324,23 @@ export const messages = sqliteTable(
     orderIndex: integer("order_index").notNull(),
   },
   (t) => [unique().on(t.conversationId, t.uiId)],
+);
+
+export const questionSubmissions = sqliteTable(
+  "question_submissions",
+  {
+    id: text("id").primaryKey(),
+    conversationId: integer("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+    toolCallId: text("tool_call_id").notNull(),
+    messageId: text("message_id").notNull(),
+    text: text("text").notNull(),
+    delivered: integer("delivered", { mode: "boolean" }).notNull().default(false),
+    autoContinue: integer("auto_continue", { mode: "boolean" }).notNull().default(true),
+  },
+  (t) => [
+    unique().on(t.conversationId, t.toolCallId),
+    foreignKey({ columns: [t.conversationId, t.messageId], foreignColumns: [messages.conversationId, messages.uiId] }).onDelete("cascade"),
+  ],
 );
 
 export const todoItems = sqliteTable(

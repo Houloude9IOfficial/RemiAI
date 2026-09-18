@@ -10,6 +10,10 @@ import {
   type UIMessageChunk,
   type ToolSet,
 } from "ai";
+import { questionRuns, startQuestionRun, pendingQuestionSubmissions, prepareQuestionAnswerStep, finishQuestionRun, type QuestionRun } from "@/lib/chat/question-delivery";
+import { continuePendingQuestionAnswers } from "@/lib/chat/question-continuation";
+import { isQuestionsOutput } from "@/lib/chat/questions";
+import { persistUIMessage } from "@/lib/chat/persist";
 import { streamRegistry } from "@/lib/chat/stream-registry";
 import { periodicallyPersistMessages } from "@/lib/chat/persist-interval";
 import { eq, sql, count } from "drizzle-orm";
@@ -256,11 +260,33 @@ const chatRequestSchema = z.object({
       MAX_DELTA_MESSAGES,
       `A chat request can carry at most ${MAX_DELTA_MESSAGES} messages — new clients only send the delta; the server reconstructs the full history`,
     ),
+  questionContinuation: z.boolean().optional(),
   trigger: z.enum(["submit-message", "regenerate-message"]).optional(),
   messageId: z.string().optional(),
 });
 
 export async function POST(req: Request) {
+  await initializeApp();
+  let body: unknown;
+  try { body = await req.clone().json(); } catch { return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 }); }
+  const parsed = chatRequestSchema.safeParse(body);
+  if (!parsed.success) return jsonError(parsed.error);
+  const { conversationId, questionContinuation } = parsed.data;
+  if (questionRuns.has(conversationId)) return NextResponse.json({ error: "A response is already running" }, { status: 409 });
+  if (questionContinuation && !pendingQuestionSubmissions(db, conversationId, true).length) return new NextResponse(null, { status: 204 });
+  const run = startQuestionRun(conversationId);
+  if (!run) return NextResponse.json({ error: "A response is already running" }, { status: 409 });
+  try {
+    const response = await runChatRequest(req, run);
+    if (!response.ok) finishQuestionRun(db, conversationId, run, false);
+    return response;
+  } catch (error) {
+    finishQuestionRun(db, conversationId, run, false);
+    throw error;
+  }
+}
+
+async function runChatRequest(req: Request, questionRun: QuestionRun) {
   await initializeApp();
   const trace = createRunTrace({ kind: "chat" });
   trace.metric("retryBudget", 3);
@@ -387,6 +413,11 @@ export async function POST(req: Request) {
   trace.metric("reconstructedMessageCount", uiMessages.length);
 
   const lastMessage = uiMessages[uiMessages.length - 1];
+  // The SDK continues the final assistant message using its existing ID.
+  if (lastMessage?.role === "assistant") {
+    questionRun.assistantId = lastMessage.id;
+    questionRun.initialAssistantMessage = structuredClone(lastMessage);
+  }
   if (lastMessage?.role === "user") {
     await db
       .update(conversations)
@@ -525,7 +556,14 @@ export async function POST(req: Request) {
       mode: conversation.bashMode === "full" ? "full" : "sandboxed",
       allowMutations: mode !== "plan",
     }),
-    ask_questions: askQuestionsTool,
+    ask_questions: {
+      ...askQuestionsTool,
+      execute: async (input: Parameters<typeof askQuestionsTool.execute>[0], options: { toolCallId: string }) => {
+        const output = await askQuestionsTool.execute(input);
+        if (isQuestionsOutput(output)) questionRun.questions.set(options.toolCallId, output);
+        return output;
+      },
+    },
     suggest_followups: suggestFollowupsTool,
     switch_mode: buildModeTool(conversationId, setLiveMode),
     set_run_name: setRunNameTool,
@@ -1296,7 +1334,12 @@ Definition of done:
     }
   }
 
+  // Reserve the assistant row before live user answers can be accepted.
+  await persistUIMessage(conversationId, { id: questionRun.assistantId, role: "assistant", parts: [] });
+  const initialQuestionMessageIds = new Set(uiMessages.map((message) => message.id));
+
   const result = streamText({
+    abortSignal: questionRun.controller.signal,
     model,
     instructions: buildCachedInstructions(
       activeProvider,
@@ -1324,7 +1367,16 @@ Definition of done:
     // tool-availability note so the model stops treating the group as
     // unloaded. (The per-step set is a subset of the base set, so unloaded
     // definitions never reach the provider and token savings are preserved.)
-    prepareStep: async ({ steps }) => {
+    prepareStep: async ({ steps, messages: stepMessages }) => {
+      // Do this before the cached-tool fast path. SDK message overrides carry
+      // forward, so newly accepted answers are inserted exactly once.
+      const delivery = await prepareQuestionAnswerStep(db, conversationId, stepMessages, initialQuestionMessageIds);
+      const liveMessages = delivery.messages;
+      if (delivery.deliveredCount && mode === "plan") {
+        mode = "goal";
+        await db.update(conversations).set({ mode: "goal" }).where(eq(conversations.id, conversationId));
+      }
+
       // Fast path: unless load_tool_groups ran in the previous step, the
       // active tool set cannot have changed — reuse the cached result so
       // ordinary multi-step runs pay zero extra DB reads / prompt rebuilds.
@@ -1339,7 +1391,7 @@ Definition of done:
         (check) => check.status !== "passed",
       );
       if (!enabledGroupsThisRound && lastStepComputed && lastStepMode === mode && !buildHasFailure) {
-        return lastStepComputed;
+        return { ...lastStepComputed, messages: liveMessages };
       }
 
       const currentRow = await db
@@ -1369,7 +1421,7 @@ Definition of done:
             buildToolAvailabilityNote(tools, freshActive),
         ),
       };
-      return lastStepComputed;
+      return { ...lastStepComputed, messages: liveMessages };
     },
     // Retry retryable provider failures (network, 5xx, rate limits) up to
     // 3 times with exponential backoff before surfacing the error.
@@ -1766,7 +1818,7 @@ Definition of done:
     // Forward structured reasoning parts when the selected provider emits
     // them; providers without reasoning output simply emit none.
     sendReasoning: true,
-    generateMessageId: () => crypto.randomUUID(),
+    generateMessageId: () => questionRun.assistantId,
     // Return the PLAIN error message here. The SDK uses this callback's return
     // value as the `errorText` for inline tool errors (tool-input-error,
     // tool-output-error parts) that render directly on the tool card — encoding
@@ -1826,90 +1878,100 @@ Definition of done:
   // Periodically persist partial messages to the DB (every 2s).
   // This ensures a page refresh shows partial AI responses.
   periodicallyPersistMessages(conversationId, uiMessages, persistBranch, async () => {
-    // Cleanup after stream finishes:
-    if (closeMcpClients) {
-      await closeMcpClients();
-    }
-    // If onFinish failed or was skipped, apply tokens here as a fallback.
-    // Only runs if onFinish didn't already apply them (avoids double-count).
-    if (!tokensApplied) {
-      try {
-        const streamUsage = await result.usage;
-        const inputTokens = streamUsage?.inputTokens ?? 0;
-        const outputTokens = streamUsage?.outputTokens ?? 0;
+    let cleanupSucceeded = false;
+    try {
+      // Cleanup after stream finishes:
+      if (closeMcpClients) {
+        await closeMcpClients();
+      }
+      // If onFinish failed or was skipped, apply tokens here as a fallback.
+      // Only runs if onFinish didn't already apply them (avoids double-count).
+      if (!tokensApplied) {
+        try {
+          const streamUsage = await result.usage;
+          const inputTokens = streamUsage?.inputTokens ?? 0;
+          const outputTokens = streamUsage?.outputTokens ?? 0;
 
-        // Estimate input from system prompt + messages if provider didn't give usage
-        const estimatedInput =
-          inputTokens > 0
-            ? inputTokens
-            : estimateTokenCount(
-                fullSystemPrompt +
-                  uiMessages
-                    .map(
-                      (m) =>
-                        m.parts
-                          .filter(
-                            (p): p is { type: "text"; text: string } =>
-                              p.type === "text",
-                          )
-                          .map((p) => p.text)
-                          .join(" "),
-                    )
-                    .join("\n"),
-              );
+          // Estimate input from system prompt + messages if provider didn't give usage
+          const estimatedInput =
+            inputTokens > 0
+              ? inputTokens
+              : estimateTokenCount(
+                  fullSystemPrompt +
+                    uiMessages
+                      .map(
+                        (m) =>
+                          m.parts
+                            .filter(
+                              (p): p is { type: "text"; text: string } =>
+                                p.type === "text",
+                            )
+                            .map((p) => p.text)
+                            .join(" "),
+                      )
+                      .join("\n"),
+                );
 
-        // Also grab the final output text from stream usage's total
-        const estimatedOutput =
-          outputTokens > 0
-            ? outputTokens
-            : estimateTokenCount(await result.text);
+          // Also grab the final output text from stream usage's total
+          const estimatedOutput =
+            outputTokens > 0
+              ? outputTokens
+              : estimateTokenCount(await result.text);
 
-        const tokenFallbackStartedAt = performance.now();
-        await db
-          .update(conversations)
-          .set({
-            totalInputTokens: sql`total_input_tokens + ${estimatedInput}`,
-            totalOutputTokens: sql`total_output_tokens + ${estimatedOutput}`,
-            updatedAt: new Date().toISOString(),
-          })
-          .where(eq(conversations.id, conversationId));
-        trace.dbQuery("token_usage_fallback_update", tokenFallbackStartedAt, {
-          inputTokens: estimatedInput,
-          outputTokens: estimatedOutput,
-        });
-      } catch (err) {
-        console.error("Failed to update token usage in cleanup:", err);
+          const tokenFallbackStartedAt = performance.now();
+          await db
+            .update(conversations)
+            .set({
+              totalInputTokens: sql`total_input_tokens + ${estimatedInput}`,
+              totalOutputTokens: sql`total_output_tokens + ${estimatedOutput}`,
+              updatedAt: new Date().toISOString(),
+            })
+            .where(eq(conversations.id, conversationId));
+          trace.dbQuery("token_usage_fallback_update", tokenFallbackStartedAt, {
+            inputTokens: estimatedInput,
+            outputTokens: estimatedOutput,
+          });
+        } catch (err) {
+          if (!questionRun.controller.signal.aborted) console.error("Failed to update token usage in cleanup:", err);
+          await db
+            .update(conversations)
+            .set({ updatedAt: new Date().toISOString() })
+            .where(eq(conversations.id, conversationId));
+        }
+      } else {
+        // Tokens already applied — just update updatedAt
+        const updatedAtStartedAt = performance.now();
         await db
           .update(conversations)
           .set({ updatedAt: new Date().toISOString() })
           .where(eq(conversations.id, conversationId));
+        trace.dbQuery("conversation_updated_at", updatedAtStartedAt);
       }
-    } else {
-      // Tokens already applied — just update updatedAt
-      const updatedAtStartedAt = performance.now();
-      await db
-        .update(conversations)
-        .set({ updatedAt: new Date().toISOString() })
-        .where(eq(conversations.id, conversationId));
-      trace.dbQuery("conversation_updated_at", updatedAtStartedAt);
-    }
 
-    const state = aborted
-      ? "cancelled"
-      : capturedErrorPayload
-        ? capturedErrorPayload.shouldResume
-          ? "partially_completed"
-          : "failed"
-        : "completed";
-    trace.recordState(state, {
-      finishReason: finalFinishReason,
-      finalStepCount,
-    });
-    trace.finish(state, {
-      finishReason: finalFinishReason,
-      finalStepCount,
-    });
-  }, trace);
+      const state = aborted
+        ? "cancelled"
+        : capturedErrorPayload
+          ? capturedErrorPayload.shouldResume
+            ? "partially_completed"
+            : "failed"
+          : "completed";
+      trace.recordState(state, {
+        finishReason: finalFinishReason,
+        finalStepCount,
+      });
+      trace.finish(state, {
+        finishReason: finalFinishReason,
+        finalStepCount,
+      });
+      cleanupSucceeded = state === "completed";
+    } finally {
+      finishQuestionRun(db, conversationId, questionRun, cleanupSucceeded);
+      if (cleanupSucceeded) continuePendingQuestionAnswers(db, req.url, req.headers, conversationId);
+    }
+  }, trace).catch((error) => {
+    finishQuestionRun(db, conversationId, questionRun, false);
+    console.error("[chat] Stream persistence failed:", error);
+  });
 
   // Build the SSE response for the client, and register the SSE stream
   // for reconnection support.
