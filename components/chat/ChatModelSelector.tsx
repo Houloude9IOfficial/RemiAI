@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Bot, ChevronDown, Settings2 } from "lucide-react";
 import { LuBrain } from "react-icons/lu";
 import {
@@ -20,7 +20,6 @@ import {
   SiGoogle,
   SiMoonshotai,
 } from "react-icons/si";
-import { FaBrain } from "react-icons/fa";
 import { BsOpenai } from "react-icons/bs";
 import { RiGrokAiFill } from "react-icons/ri";
 import {
@@ -30,7 +29,6 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuLabel,
-  DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -159,7 +157,6 @@ export function ChatModelSelector({
   /** Larger pill to match the centered "new chat" composer. */
   large?: boolean;
 }) {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
 
   const {
@@ -292,15 +289,12 @@ export function ChatModelSelector({
             <p className="text-xs text-muted-foreground">
               No models enabled yet.
             </p>
-            <DropdownMenuItem
-              className="min-h-8 justify-center rounded-lg py-1 text-xs font-medium"
-              onClick={() => {
-                setOpen(false);
-                router.push("/settings/providers");
-              }}
+            <Link
+              href="/settings/providers"
+              className="flex min-h-8 items-center justify-center rounded-lg px-1.5 py-1 text-xs font-medium outline-hidden hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
             >
               Open model settings
-            </DropdownMenuItem>
+            </Link>
           </div>
         ) : (
           <DropdownMenuRadioGroup
@@ -371,13 +365,13 @@ export function ChatModelSelector({
         {!nothingConfigured && (
           <>
             <DropdownMenuSeparator className="my-1" />
-            <DropdownMenuItem
-              onClick={() => router.push("/settings/providers")}
-              className="min-h-8 justify-center gap-1.5 rounded-lg py-1 text-[11px] font-medium text-muted-foreground"
+            <Link
+              href="/settings/providers"
+              className="flex min-h-8 items-center justify-center gap-1.5 rounded-lg px-1.5 py-1 text-[11px] font-medium text-muted-foreground outline-hidden hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
             >
               <Settings2 className="h-3 w-3" />
               Manage models
-            </DropdownMenuItem>
+            </Link>
           </>
         )}
       </DropdownMenuContent>

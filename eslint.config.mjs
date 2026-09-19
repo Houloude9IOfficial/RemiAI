@@ -18,6 +18,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "electron-dist/**",
+    // Generated Electron installers contain bundled third-party JavaScript.
+    // Linting them after `dist:mac` creates false release-check failures.
+    "release/**",
     "data/**",
     "creations/**",
     "next-env.d.ts",
