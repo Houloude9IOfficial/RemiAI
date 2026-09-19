@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   MessageSquareText,
@@ -184,12 +184,9 @@ function RemiApiOptions({
   disabled: boolean;
   onUpdate: (data: Partial<UserPreferences>) => void;
 }) {
-  const [url, setUrl] = useState("");
-  useEffect(
-    () => setUrl(preferences?.remiApiUrl ?? ""),
-    [preferences?.remiApiUrl],
-  );
+  const urlRef = useRef<HTMLInputElement>(null);
   const saveUrl = () => {
+    const url = urlRef.current?.value ?? "";
     if (url !== (preferences?.remiApiUrl ?? "")) onUpdate({ remiApiUrl: url });
   };
   const cardDisplayModes = preferences?.cardDisplayModes ?? {};
@@ -220,18 +217,19 @@ function RemiApiOptions({
             RemiAPI Worker URL (optional override)
           </Label>
           <Input
+            key={preferences?.remiApiUrl ?? ""}
             id="remiApiUrl"
+            ref={urlRef}
             disabled={disabled}
             placeholder="https://remiapi.your-subdomain.workers.dev  (leave blank for default)"
-            value={url}
-            onChange={(event) => setUrl(event.target.value)}
+            defaultValue={preferences?.remiApiUrl ?? ""}
             onBlur={saveUrl}
           />
           <p className="text-[11px] text-muted-foreground/60">
             Leave blank to use the built-in default. No secrets here.
           </p>
         </div>
-        <div className="space-y-2.5">
+        <div className="space-y-2.5 hidden">
           <p className="text-xs font-semibold">Per-card display</p>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {CARD_IDS.map((id) => {

@@ -192,6 +192,12 @@ function minorSummary(name: string, output: unknown, running: boolean): string {
 }
 
 type TransitionMode = "chat" | "instant" | "goal" | "plan" | "build";
+type ModeTransition = {
+  mode: TransitionMode;
+  fromMode?: TransitionMode;
+  changed: boolean;
+  reason?: string;
+};
 
 function getModeTransition(
   input: unknown,
@@ -231,6 +237,28 @@ function getModeTransition(
   };
 }
 
+function ModeTransitionEvent({
+  transition,
+  isRunning,
+}: {
+  transition: ModeTransition | null;
+  isRunning: boolean;
+}) {
+  const dispatchedModeRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!transition?.changed || isRunning || typeof window === "undefined") return;
+    const key = `${transition.fromMode ?? "unknown"}->${transition.mode}`;
+    if (dispatchedModeRef.current === key) return;
+    dispatchedModeRef.current = key;
+    window.dispatchEvent(
+      new CustomEvent("remi:mode-changed", { detail: { mode: transition.mode } }),
+    );
+  }, [isRunning, transition?.changed, transition?.fromMode, transition?.mode]);
+
+  return null;
+}
+
 function operationSummary(name: string, running: boolean): string {
   if (running) return `Working on ${name.replace(/_/g, " ")}`;
   const labels: Record<string, string> = {
@@ -262,7 +290,6 @@ export function ToolCallCard({
   compact?: boolean;
 }) {
   const [inputOpen, setInputOpen] = useState(false);
-  const dispatchedModeRef = useRef<string | null>(null);
   // Collapsed by default — avoids oversized cards and nested scroll traps.
   const [outputOpen, setOutputOpen] = useState(false);
   const [minorOpen, setMinorOpen] = useState(false);
@@ -382,25 +409,6 @@ export function ToolCallCard({
     ? getModeTransition(input, output)
     : null;
 
-  useEffect(() => {
-    if (
-      toolBare !== "switch_mode" ||
-      !modeTransition?.changed ||
-      isRunning ||
-      typeof window === "undefined"
-    ) {
-      return;
-    }
-    const key = `${modeTransition.fromMode ?? "unknown"}->${modeTransition.mode}`;
-    if (dispatchedModeRef.current === key) return;
-    dispatchedModeRef.current = key;
-    window.dispatchEvent(
-      new CustomEvent("remi:mode-changed", {
-        detail: { mode: modeTransition.mode },
-      }),
-    );
-  }, [isRunning, modeTransition?.changed, modeTransition?.fromMode, modeTransition?.mode, toolBare]);
-
   // Special rich outputs — always take precedence
   if (compact && toolBare === "switch_mode" && modeTransition) {
     if (!modeTransition.changed) return null;
@@ -427,7 +435,9 @@ export function ToolCallCard({
       : "mode-handoff--goal";
     const transitionVerb = isRunning ? "Switching to" : "Switched to";
     return (
-      <div
+      <>
+        <ModeTransitionEvent transition={modeTransition} isRunning={isRunning} />
+        <div
         className={cn(
           "flex min-w-0 max-w-full items-center gap-2 overflow-hidden rounded-lg border px-3 py-2",            modeTransition.mode === "plan"
               ? "border-status-warning/25 bg-status-warning/5"
@@ -459,7 +469,8 @@ export function ToolCallCard({
             {modeTransition.reason ? ` · ${modeTransition.reason}` : ""}
           </p>
         </div>
-      </div>
+        </div>
+      </>
     );
   }
 
@@ -676,7 +687,9 @@ export function ToolCallCard({
 
   // ---- Full-width layout (standalone) ----
   return (
-    <div
+    <>
+      <ModeTransitionEvent transition={modeTransition} isRunning={isRunning} />
+      <div
       className={cn(
         "overflow-hidden rounded-xl border text-sm",
         isError
@@ -776,7 +789,8 @@ export function ToolCallCard({
             : "Tool call requires approval"}
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }
 
