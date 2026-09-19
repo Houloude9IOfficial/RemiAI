@@ -12,6 +12,13 @@ export type ChatTokenUsage = {
   updatedAt: string;
 };
 
+export type DailyTokenUsage = {
+  date: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+};
+
 export type TokenUsageStats = {
   chatUsage: ChatTokenUsage[];
   totalInputTokens: number;
@@ -20,6 +27,7 @@ export type TokenUsageStats = {
   last24hTokens: number;
   last7dTokens: number;
   last30dTokens: number;
+  dailyUsage: DailyTokenUsage[];
 };
 
 // Helper to get date N days ago
@@ -93,6 +101,46 @@ export async function GET() {
     .sort((a, b) => b.totalTokens - a.totalTokens)
     .slice(0, 20); // Top 20 chats
 
+  // Calculate daily usage
+  const toDateKey = (dateValue: string | Date | null | undefined): string | null => {
+    if (!dateValue) return null;
+    const str = String(dateValue).trim();
+    const match = str.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (match) return match[1];
+    try {
+      const d = new Date(str);
+      if (!isNaN(d.getTime())) {
+        return d.toISOString().split("T")[0];
+      }
+    } catch {
+      // fallback
+    }
+    return null;
+  };
+
+  const dailyMap = new Map<string, { inputTokens: number; outputTokens: number }>();
+  for (const conv of allConversations) {
+    const dateKey = toDateKey(conv.updatedAt);
+    if (!dateKey) continue;
+    const input = conv.inputTokens || 0;
+    const output = conv.outputTokens || 0;
+    if (input === 0 && output === 0) continue;
+
+    const current = dailyMap.get(dateKey) || { inputTokens: 0, outputTokens: 0 };
+    current.inputTokens += input;
+    current.outputTokens += output;
+    dailyMap.set(dateKey, current);
+  }
+
+  const dailyUsage: DailyTokenUsage[] = Array.from(dailyMap.entries())
+    .map(([date, tokens]) => ({
+      date,
+      inputTokens: tokens.inputTokens,
+      outputTokens: tokens.outputTokens,
+      totalTokens: tokens.inputTokens + tokens.outputTokens,
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
   const stats: TokenUsageStats = {
     chatUsage,
     totalInputTokens,
@@ -101,6 +149,7 @@ export async function GET() {
     last24hTokens,
     last7dTokens,
     last30dTokens,
+    dailyUsage,
   };
 
   return NextResponse.json(stats);

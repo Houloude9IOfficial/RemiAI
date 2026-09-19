@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import CenteredLayout from "@/components/layout/CenteredLayout";
 import { TokenUsageByChat } from "@/components/settings/TokenUsageByChat";
+import { TokenUsageCalendar, type DailyTokenUsage } from "@/components/settings/TokenUsageCalendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -23,6 +24,7 @@ type TokenUsageStats = {
   last24hTokens: number;
   last7dTokens: number;
   last30dTokens: number;
+  dailyUsage?: DailyTokenUsage[];
 };
 
 async function fetchUsageStats(): Promise<TokenUsageStats> {
@@ -57,11 +59,18 @@ export default function UsagePage() {
               Token consumption statistics. Data is approximate.
             </p>
           </div>
+          <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
+            <Skeleton className="h-20 w-full rounded-xl" />
+            <Skeleton className="h-20 w-full rounded-xl" />
+            <Skeleton className="h-20 w-full rounded-xl" />
+            <Skeleton className="h-20 w-full rounded-xl" />
+          </div>
+          <Skeleton className="h-44 w-full rounded-2xl" />
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <Skeleton className="h-8 w-32" />
-            <Skeleton className="h-8 w-32" />
-            <Skeleton className="h-8 w-32" />
-            <Skeleton className="h-8 w-32" />
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
           </div>
           <Skeleton className="h-64 w-full" />
         </div>
@@ -118,6 +127,9 @@ export default function UsagePage() {
             Token consumption statistics. Data is approximate.
           </p>
         </div>
+
+        {/* Token Activity Board & Key Stats */}
+        <TokenUsageCalendar dailyUsage={data.dailyUsage} totalTokens={data.totalTokens} />
 
         {/* Time Period Stats */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
