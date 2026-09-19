@@ -26,6 +26,13 @@ const electronAPI = {
 
   getPlatform: (): Promise<string> => ipcRenderer.invoke("get-platform"),
 
+  // ── First-run authentication ────────────────────────────────────
+  // Available only to the local RemiAI renderer; the main process keeps the
+  // code in memory and clears it after successful signup.
+  getSignupCode: (): Promise<string | null> => ipcRenderer.invoke("get-signup-code"),
+
+  clearSignupCode: (): Promise<void> => ipcRenderer.invoke("clear-signup-code"),
+
   // ── File Dialogs ─────────────────────────────────────────────────
   openFileDialog: (
     options?: { title?: string; filters?: { name: string; extensions: string[] }[] },

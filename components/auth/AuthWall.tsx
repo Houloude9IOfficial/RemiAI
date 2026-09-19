@@ -6,10 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { AlertCircle, LockKeyhole, Loader2 } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 
 type Mode = "login" | "signup";
 type FormErrors = Partial<Record<"email" | "password" | "displayName" | "code", string>>;
+type ElectronAuthBridge = {
+  getSignupCode: () => Promise<string | null>;
+  clearSignupCode: () => Promise<void>;
+};
 
 const emptyErrors: FormErrors = {};
 
@@ -20,6 +24,7 @@ export function AuthWall({ children }: { children: React.ReactNode }) {
   const [errors, setErrors] = useState<FormErrors>(emptyErrors);
   const [submitError, setSubmitError] = useState("");
   const [pending, setPending] = useState(false);
+  const [isElectron, setIsElectron] = useState(false);
   const emailRef = useRef<HTMLInputElement>(null);
 
   // When an account already exists, only show login. Otherwise show signup.
@@ -27,6 +32,16 @@ export function AuthWall({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     fetch("/api/auth/status", { cache: "no-store" }).then((response) => response.json()).then((data) => setDemo(data.demo === true)).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    const electronApi = (window as Window & { electronAPI?: ElectronAuthBridge }).electronAPI;
+    if (!electronApi) return;
+    void electronApi.getSignupCode().then((code) => {
+      setIsElectron(true);
+      if (!code) return;
+      setForm((current) => current.code ? current : { ...current, code });
+    }).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -69,6 +84,8 @@ export function AuthWall({ children }: { children: React.ReactNode }) {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error ?? "We couldn’t complete that. Please try again.");
       await refresh();
+      const electronApi = (window as Window & { electronAPI?: ElectronAuthBridge }).electronAPI;
+      if (mode === "signup" && electronApi) void electronApi.clearSignupCode();
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "We couldn’t complete that. Please try again.");
     } finally {
@@ -92,7 +109,7 @@ export function AuthWall({ children }: { children: React.ReactNode }) {
         {mode === "signup" && <div className="space-y-1.5"><Label htmlFor="displayName">Name</Label><Input id="displayName" value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} autoComplete="name" autoFocus={!form.email} aria-invalid={Boolean(fieldError("displayName"))} aria-describedby={fieldError("displayName") ? "displayName-error" : undefined} />{fieldError("displayName") && <FieldError id="displayName-error">{fieldError("displayName")}</FieldError>}</div>}
         <div className="space-y-1.5"><Label htmlFor="email">Email</Label><Input ref={emailRef} id="email" type="email" value={form.email} onChange={(e) => { setForm({ ...form, email: e.target.value }); setErrors({ ...errors, email: undefined }); }} autoComplete="email" aria-invalid={Boolean(fieldError("email"))} aria-describedby={fieldError("email") ? "email-error" : undefined} />{fieldError("email") && <FieldError id="email-error">{fieldError("email")}</FieldError>}</div>
         <div className="space-y-1.5"><Label htmlFor="password">Password</Label><Input id="password" type="password" value={form.password} onChange={(e) => { setForm({ ...form, password: e.target.value }); setErrors({ ...errors, password: undefined }); }} autoComplete={mode === "login" ? "current-password" : "new-password"} aria-invalid={Boolean(fieldError("password"))} aria-describedby={fieldError("password") ? "password-error" : "password-hint"} />{fieldError("password") ? <FieldError id="password-error">{fieldError("password")}</FieldError> : <p id="password-hint" className="text-xs text-muted-foreground">{mode === "signup" ? "At least 8 characters." : "Enter the password for this workspace."}</p>}</div>
-        {mode === "signup" && <div className="space-y-1.5"><Label htmlFor="code">Signup code</Label><Input id="code" value={form.code} onChange={(e) => { setForm({ ...form, code: e.target.value.toUpperCase() }); setErrors({ ...errors, code: undefined }); }} autoComplete="one-time-code" spellCheck={false} className="font-mono tracking-[0.12em]" aria-invalid={Boolean(fieldError("code"))} aria-describedby={fieldError("code") ? "code-error" : "code-hint"} />{fieldError("code") ? <FieldError id="code-error">{fieldError("code")}</FieldError> : <p id="code-hint" className="text-xs text-muted-foreground">Printed in the server console on first run.</p>}</div>}
+        {mode === "signup" && <div className="space-y-1.5"><Label htmlFor="code">Signup code</Label><Input id="code" value={form.code} onChange={(e) => { setForm({ ...form, code: e.target.value.toUpperCase() }); setErrors({ ...errors, code: undefined }); }} autoComplete="one-time-code" spellCheck={false} className="font-mono tracking-[0.12em]" aria-invalid={Boolean(fieldError("code"))} aria-describedby={fieldError("code") ? "code-error" : "code-hint"} />{fieldError("code") ? <FieldError id="code-error">{fieldError("code")}</FieldError> : <p id="code-hint" className="text-xs text-muted-foreground">{isElectron ? "Added automatically from this app’s local server." : "Printed in the server console on first run."}</p>}</div>}
         {mode === "login" && !demo && <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground"><input type="checkbox" checked={form.remember} onChange={(e) => setForm({ ...form, remember: e.target.checked })} className="accent-primary" /> Remember me for 30 days</label>}
         <div aria-live="polite" className={cn("overflow-hidden transition-all duration-200 ease-out", submitError ? "max-h-20 pt-1 opacity-100" : "max-h-0 opacity-0")}>
           {submitError && <div role="alert" className="flex items-start gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /><span>{submitError}</span></div>}

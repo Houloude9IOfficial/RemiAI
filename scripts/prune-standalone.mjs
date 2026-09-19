@@ -17,7 +17,7 @@
 //   server.js, package.json, node_modules, .next, public, db/migrations
 // (the Dockerfile relies on the same layout — it copies standalone, public
 // and db/migrations explicitly). Everything else is compile-time junk.
-import { existsSync, readdirSync, rmSync, statSync } from "node:fs";
+import { cpSync, existsSync, readdirSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -67,6 +67,16 @@ if (existsSync(dbDir)) {
     if (entry === "migrations") continue;
     rmSync(path.join(dbDir, entry), { recursive: true, force: true });
   }
+}
+
+// Next.js's standalone output deliberately omits client assets. Docker copies
+// them beside the server explicitly; Electron runs that same standalone tree,
+// so it needs the assets in the equivalent location too.
+const staticSource = path.join(root, ".next", "static");
+const staticTarget = path.join(standalone, ".next", "static");
+if (existsSync(staticSource)) {
+  rmSync(staticTarget, { recursive: true, force: true });
+  cpSync(staticSource, staticTarget, { recursive: true });
 }
 
 const after = dirSize(standalone);

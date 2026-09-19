@@ -35,6 +35,7 @@ import http from "node:http";
 import path from "node:path";
 import fs from "node:fs";
 import { autoUpdater } from "electron-updater";
+import { SignupCodeCapture } from "./signup-code";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -64,6 +65,8 @@ const APP_ROOT = app.isPackaged
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let serverProcess: ChildProcess | null = null;
+let signupCode: string | null = null;
+const signupCodeCapture = new SignupCodeCapture();
 
 /** Flag to distinguish hide-to-tray from actual quit. */
 let isQuittingApp = false;
@@ -139,6 +142,8 @@ function getNextCommand(): NextCommand {
 function startNextServer(): Promise<void> {
   return new Promise((resolve, reject) => {
     const { script, args, cwd } = getNextCommand();
+    signupCode = null;
+    signupCodeCapture.reset();
 
     // Packaged apps must NOT rely on a system `node` binary — most users
     // (especially on Windows) don't have Node.js installed, which made the
@@ -193,6 +198,8 @@ function startNextServer(): Promise<void> {
 
     serverProcess.stdout?.on("data", (data: Buffer) => {
       const text = data.toString();
+      const capturedCode = signupCodeCapture.push(text);
+      if (capturedCode) signupCode = capturedCode;
       console.log(`[next] ${text.trim()}`);
     });
 
@@ -422,6 +429,28 @@ ipcMain.handle("get-app-info", () => ({
 }));
 
 ipcMain.handle("get-platform", () => process.platform);
+
+function isLocalRemiRenderer(event: Electron.IpcMainInvokeEvent): boolean {
+  try {
+    const frameUrl = event.senderFrame?.url;
+    if (!frameUrl) return false;
+    const url = new URL(frameUrl);
+    return event.sender.id === mainWindow?.webContents.id
+      && url.protocol === "http:"
+      && url.hostname === "127.0.0.1"
+      && url.port === String(PORT);
+  } catch {
+    return false;
+  }
+}
+
+ipcMain.handle("get-signup-code", (event) =>
+  isLocalRemiRenderer(event) ? signupCode : null,
+);
+
+ipcMain.handle("clear-signup-code", (event) => {
+  if (isLocalRemiRenderer(event)) signupCode = null;
+});
 
 ipcMain.handle(
   "open-file-dialog",
