@@ -332,4 +332,4 @@ the ai users bash to write/edit/delete files, but it should use bash for command
 
 <!-- Add a darker blue accent color for the app. -->
 
-prefer the AI to use trusted sources, such as official documentation, wikipedia, and other reputable sources, and to avoid using untrusted sources, such as random blogs or forums.
+<!-- prefer the AI to use trusted sources, such as official documentation, wikipedia, and other reputable sources, and to avoid using untrusted sources, such as random blogs or forums. -->
