@@ -35,7 +35,7 @@
     "icons": "node scripts/generate-icons.mjs",
     "clean:dist": "rm -rf release .next",
     "dist": "npm run clean:dist && npm run icons && npm run build && npm run build:electron && npm run playwright:browsers && electron-builder",
-    "dist:mac": "npm run clean:dist && npm run icons && npm run build && npm run build:electron && npm run playwright:browsers && electron-builder --mac",
+    "dist:mac": "npm run clean:dist && npm rebuild better-sqlite3 && npm run icons && npm run build && npm run build:electron && npm run playwright:browsers && electron-builder --mac",
     "dist:win": "npm run clean:dist && npm run icons && npm run build && npm run build:electron && npm run playwright:browsers && electron-builder --win",
     "dist:linux": "npm run clean:dist && npm run icons && npm run build && npm run build:electron && npm run playwright:browsers && electron-builder --linux",
     "lint": "eslint",
