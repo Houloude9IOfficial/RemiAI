@@ -31,17 +31,42 @@ export function AuthWall({ children }: { children: React.ReactNode }) {
   const mode: Mode = demo || configured ? "login" : "signup";
 
   useEffect(() => {
-    fetch("/api/auth/status", { cache: "no-store" }).then((response) => response.json()).then((data) => setDemo(data.demo === true)).catch(() => undefined);
-  }, []);
-
-  useEffect(() => {
     const electronApi = (window as Window & { electronAPI?: ElectronAuthBridge }).electronAPI;
-    if (!electronApi) return;
-    void electronApi.getSignupCode().then((code) => {
+    let cancelled = false;
+
+    const initialise = async () => {
+      try {
+        const response = await fetch("/api/auth/status", { cache: "no-store" });
+        const data = await response.json();
+        if (!cancelled) setDemo(data.demo === true);
+      } catch {
+        // The AuthProvider shows the appropriate fallback state.
+      }
+
+      if (!electronApi) return;
       setIsElectron(true);
-      if (!code) return;
-      setForm((current) => current.code ? current : { ...current, code });
-    }).catch(() => undefined);
+
+      // The status request above creates the bootstrap code on a fresh
+      // workspace. Its stdout can reach Electron a moment later, so retry a
+      // few times instead of racing that server output.
+      for (let attempt = 0; attempt < 5 && !cancelled; attempt++) {
+        try {
+          const code = await electronApi.getSignupCode();
+          if (code) {
+            setForm((current) => current.code ? current : { ...current, code });
+            return;
+          }
+        } catch {
+          return;
+        }
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 100));
+      }
+    };
+
+    void initialise();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
