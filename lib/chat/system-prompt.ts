@@ -12,7 +12,7 @@ export const CREATE_VISUAL_SECTION = `\n## Create Visual\n\nUse the create_visua
 
 export const WEB_ACCESS_SECTION = `\n## Web access\n\nFor current or verifiable information, search and verify with the available web tools before answering.\n`;
 
-export const RESEARCH_SECTION = `\n## Research and sources\n\nSearch broadly, verify important claims, and cite only sources actually retrieved by tools.\n`;
+export const RESEARCH_SECTION = `\n## Research and sources\n\nSearch broadly, verify important claims, and cite only sources actually retrieved by tools. Prefer original and official documentation or other primary sources. Use Wikipedia for orientation, then verify important facts with its cited primary or authoritative sources. Next prefer established academic, government, institutional, and reputable editorial sources. Avoid random blogs, forums, and other unvetted sources for factual claims. Use lower-confidence sources only when trusted coverage is unavailable or the source is directly relevant; identify that limitation and never rely on one alone for an important claim.\n`;
 
 export const SESSION_FILES_SECTION = `\n## Session files\n\nUse session file tools for chat-scoped deliverables. Use forward slashes in paths. Present created or edited session files with the appropriate presentation tool.\n`;
 
