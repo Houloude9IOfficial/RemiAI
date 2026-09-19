@@ -12,12 +12,25 @@
               "value" : "normal"
             }
           ],
+          "fill-specializations" : [
+            {
+              "value" : "none"
+            },
+            {
+              "appearance" : "dark",
+              "value" : "none"
+            },
+            {
+              "appearance" : "tinted",
+              "value" : "none"
+            }
+          ],
           "glass-specializations" : [
             {
               "value" : false
             },
             {
-              "appearance" : "tinted",
+              "idiom" : "square",
               "value" : false
             }
           ],

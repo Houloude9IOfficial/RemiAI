@@ -154,7 +154,19 @@ function startNextServer(): Promise<void> {
     // (electron-builder rebuild + scripts/after-pack.cjs), so the ABI matches.
     // In dev we keep the system node: it exists on dev machines and matches
     // the ABI of the locally installed better-sqlite3.
-    const serverNodeBinary = app.isPackaged ? process.execPath : "node";
+    // On macOS, running the main app executable with ELECTRON_RUN_AS_NODE
+    // makes Finder register the server as a second Dock application named
+    // "exec". Electron's helper executable is a background-only process, so
+    // use it for the bundled Node runtime there. Other packaged platforms keep
+    // using the main executable, which has the required Node mode support.
+    const helperExecPath = (process as NodeJS.Process & {
+      helperExecPath?: string;
+    }).helperExecPath;
+    const serverNodeBinary = app.isPackaged
+      ? process.platform === "darwin"
+        ? helperExecPath ?? process.execPath
+        : process.execPath
+      : "node";
 
     console.log(`[electron] Starting Next.js server...`);
     console.log(

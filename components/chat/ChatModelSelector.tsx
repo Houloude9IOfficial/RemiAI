@@ -23,7 +23,6 @@ import {
 import { FaBrain } from "react-icons/fa";
 import { BsOpenai } from "react-icons/bs";
 import { RiGrokAiFill } from "react-icons/ri";
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -293,15 +292,15 @@ export function ChatModelSelector({
             <p className="text-xs text-muted-foreground">
               No models enabled yet.
             </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs"
-              onClick={() => router.push("/chat")}
+            <DropdownMenuItem
+              className="min-h-8 justify-center rounded-lg py-1 text-xs font-medium"
+              onClick={() => {
+                setOpen(false);
+                router.push("/settings/providers");
+              }}
             >
               Open model settings
-            </Button>
+            </DropdownMenuItem>
           </div>
         ) : (
           <DropdownMenuRadioGroup

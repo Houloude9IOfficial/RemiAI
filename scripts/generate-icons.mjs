@@ -35,6 +35,13 @@ function resolveSource() {
 const srcPath = resolveSource();
 console.log(`🔍 Source logo: ${srcPath}`);
 
+// Keep the macOS Dock/app icon independent from the cross-platform logo. Its
+// white background and black R remain legible in both light and dark Dock
+// modes without changing Windows, Linux, or the menu-bar tray artwork.
+const macSrcPath = "assets/remiai-macos-icon.png";
+const macIconSource = fs.existsSync(macSrcPath) ? macSrcPath : srcPath;
+console.log(`🍎 macOS icon source: ${macIconSource}`);
+
 // ── macOS .iconset (all required sizes) ─────────────────────────────
 
 const ICONSET_SIZES = [
@@ -60,7 +67,7 @@ for (const { name, size } of ICONSET_SIZES) {
   if (size > 512) {
     console.log(`   ⚠  Upscaling ${name} (${size}x${size}) from 512x512 source`);
   }
-  await sharp(srcPath)
+  await sharp(macIconSource)
     .resize(size, size, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
     .png()
     .toFile(outPath);
