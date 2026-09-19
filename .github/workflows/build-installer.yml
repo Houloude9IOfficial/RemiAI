@@ -10,12 +10,11 @@
 #   Windows — x64
 #   Linux  — AppImage + DEB + RPM
 #
-# All installers are written to ./release/
-# and attached to the GitHub Release when running from a tag.
+# All installers are written to ./release/ and attached to a draft GitHub
+# Release when running from a tag. macOS installers are currently unsigned
+# and unnotarized, so the release notes warn users about Gatekeeper.
 #
 # ──────────────────────────────────────────────────────────────────────────
-
-# NOTICE, THIS WORKFLOW IS DISABLE ON GITHUB, IT IS ONLY USED LOCALLY FOR TESTING PURPOSES. DO NOT ENABLE IT.
 
 name: Build Installer
 
@@ -57,7 +56,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -82,14 +81,16 @@ jobs:
       - name: Build macOS installer
         run: npx electron-builder --mac --${{ matrix.arch }} --publish never
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-          # macOS code signing / notarization (optional)
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # CI artifacts are intentionally unsigned until a Developer ID and
+          # notarization credentials are configured for a public release.
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          # Enabled after joining the Apple Developer Program, then
+          # removing CSC_IDENTITY_AUTO_DISCOVERY above.
+          # CSC_LINK: ${{ secrets.CSC_LINK }}
+          # CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          # APPLE_ID: ${{ secrets.APPLE_ID }}
+          # APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       # Show exactly what electron-builder generated.
       # This makes future build/output problems much easier to diagnose.
@@ -131,6 +132,10 @@ jobs:
             release/*.zip
           draft: true
           prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') }}
+          body: |
+            ## macOS installation notice
+
+            The macOS installers in this release are currently **unsigned and not notarized by Apple**. macOS Gatekeeper may show a warning or prevent the app from opening normally. Only bypass that warning if you downloaded the installer directly from this official release and trust it.
 
   # ────────────────────────────────────────────────────────────────────────
   # Windows — x64
@@ -147,7 +152,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -173,11 +178,7 @@ jobs:
         run: npx electron-builder --win --x64 --publish never
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-          # Windows code signing (optional)
-          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
       - name: Verify Windows build output
         shell: bash
@@ -234,7 +235,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install system dependencies
