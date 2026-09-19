@@ -65,6 +65,13 @@ function useSmoothedStreamContent(
   );
   const visibleLengthRef = useRef(visibleLength);
   const previousContentRef = useRef(content);
+  // Provider deltas can arrive faster than the browser paints. The animation
+  // loop reads this ref so each delta does not cancel and restart that loop.
+  const contentRef = useRef(content);
+
+  useEffect(() => {
+    contentRef.current = content;
+  }, [content]);
 
   useEffect(() => {
     const previousContent = previousContentRef.current;
@@ -81,9 +88,10 @@ function useSmoothedStreamContent(
   }, [content, sourceStreaming]);
 
   useEffect(() => {
-    if (visibleLengthRef.current >= content.length) return;
+    const initialContentLength = contentRef.current.length;
+    if (!sourceStreaming && visibleLengthRef.current >= initialContentLength) return;
 
-    const remainingCharacters = content.length - visibleLengthRef.current;
+    const remainingCharacters = initialContentLength - visibleLengthRef.current;
     const charactersPerSecond = getStreamDisplayCharsPerSecond(
       remainingCharacters,
       messageStreaming,
@@ -97,19 +105,24 @@ function useSmoothedStreamContent(
         const count = Math.floor(carry);
         if (count > 0) {
           carry -= count;
-          const nextLength = Math.min(content.length, visibleLengthRef.current + count);
+          const nextLength = Math.min(
+            contentRef.current.length,
+            visibleLengthRef.current + count,
+          );
           visibleLengthRef.current = nextLength;
           setVisibleLength(nextLength);
         }
       }
       previousTime = time;
-      if (visibleLengthRef.current < content.length) {
+      // Keep the loop ready while this text part is active, even if it has
+      // caught up with the latest delta; more text may arrive next frame.
+      if (sourceStreaming || visibleLengthRef.current < contentRef.current.length) {
         frame = requestAnimationFrame(advance);
       }
     };
     frame = requestAnimationFrame(advance);
     return () => cancelAnimationFrame(frame);
-  }, [content.length, messageStreaming]);
+  }, [sourceStreaming, messageStreaming]);
 
   const displayStreaming = sourceStreaming || visibleLength < content.length;
   return {
