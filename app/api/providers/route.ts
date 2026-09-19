@@ -9,6 +9,7 @@ import { PROVIDER_MODEL_CATALOG } from "@/lib/providers/catalog";
 import { demoBlockedResponse, isDemoMode } from "@/lib/demo-policy";
 import { ensureDemoProvider } from "@/lib/demo-provider";
 import { shouldEnableNewModels } from "@/lib/providers/model-preferences";
+import { canonicalProviderBaseUrl } from "@/lib/providers/url";
 
 export async function GET() {
   if (isDemoMode()) return demoBlockedResponse();
@@ -38,7 +39,7 @@ export async function POST(req: Request) {
       kind: body.kind,
       isPreset: body.isPreset,
       label: body.label,
-      baseUrl: body.baseUrl ?? null,
+      baseUrl: canonicalProviderBaseUrl(body.kind, body.baseUrl) ?? null,
       apiKey: body.apiKey ?? null,
     })
     .returning()

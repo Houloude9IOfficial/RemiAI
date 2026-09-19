@@ -107,6 +107,13 @@ asarUnpack:
 # ── Extra resources (copied outside asar) ────────────────────────────
 # Files too large for the asar, or that need to be on the real FS.
 extraResources:
+  # The macOS tray template is outside app.asar so the Electron main process
+  # can load the exact 1x/2x artwork at runtime.
+  - from: build/icon-tray-template.png
+    to: icon-tray-template.png
+  - from: build/icon-tray-template@2x.png
+    to: icon-tray-template@2x.png
+
   - from: node_modules/better-sqlite3
     to: better-sqlite3
     filter:

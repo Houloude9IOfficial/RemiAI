@@ -6,6 +6,7 @@ import { providerUpdateSchema } from "@/lib/validation/schemas";
 import { jsonError } from "@/lib/validation/api";
 import { maskProvider } from "@/lib/providers/mask";
 import { demoBlockedResponse, isDemoMode } from "@/lib/demo-policy";
+import { canonicalProviderBaseUrl } from "@/lib/providers/url";
 
 export async function PATCH(
   req: Request,
@@ -20,9 +21,24 @@ export async function PATCH(
     return jsonError(err);
   }
 
+  const current = await db
+    .select({ kind: providers.kind })
+    .from(providers)
+    .where(eq(providers.id, Number(id)))
+    .get();
+
+  if (!current) {
+    return NextResponse.json({ error: "Provider not found" }, { status: 404 });
+  }
+
   const row = await db
     .update(providers)
-    .set(body)
+    .set({
+      ...body,
+      ...(body.baseUrl !== undefined
+        ? { baseUrl: canonicalProviderBaseUrl(current.kind, body.baseUrl) }
+        : {}),
+    })
     .where(eq(providers.id, Number(id)))
     .returning()
     .get();

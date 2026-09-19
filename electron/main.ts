@@ -343,14 +343,27 @@ function createWindow(): void {
 function createTray(): void {
   let icon: Electron.NativeImage;
 
-  // Use the generated 22×22 icon from build/.  Fall back to public favicon
-  // in dev if the icon hasn't been generated yet.
+  // macOS menu-bar artwork is a template image so the OS adapts contrast to
+  // light/dark appearances. Other platforms retain the existing tray logo.
+  // Packaged tray artwork is copied by electron-builder to Resources, while
+  // development uses the source build directory.
+  const trayAssetsRoot = app.isPackaged ? process.resourcesPath : APP_ROOT;
+  const trayTemplatePath = path.join(
+    trayAssetsRoot,
+    app.isPackaged ? "icon-tray-template.png" : "build/icon-tray-template.png",
+  );
+  const trayTemplate2xPath = path.join(
+    trayAssetsRoot,
+    app.isPackaged ? "icon-tray-template@2x.png" : "build/icon-tray-template@2x.png",
+  );
   const trayIconPath = path.join(APP_ROOT, "build", "icon-tray.png");
   const trayIcon2xPath = path.join(APP_ROOT, "build", "icon-tray@2x.png");
   const faviconPath = path.join(APP_ROOT, "public", "favicon-16x16-Light.png");
 
-  // Try Retina first, then standard, then fallback
-  const resolvedIcon = [trayIcon2xPath, trayIconPath, faviconPath].find((p) =>
+  const candidates = process.platform === "darwin"
+    ? [trayTemplate2xPath, trayTemplatePath, trayIcon2xPath, trayIconPath, faviconPath]
+    : [trayIcon2xPath, trayIconPath, faviconPath];
+  const resolvedIcon = candidates.find((p) =>
     fs.existsSync(p),
   );
 
@@ -364,6 +377,10 @@ function createTray(): void {
         "base64",
       ),
     );
+  }
+
+  if (process.platform === "darwin") {
+    icon.setTemplateImage(true);
   }
 
   tray = new Tray(icon);

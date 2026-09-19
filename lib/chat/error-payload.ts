@@ -259,7 +259,10 @@ function extractRealDetail(
         }
       }
     } catch {
-      // Non-JSON response body — fall through to the other sources.
+      // Plain-text error pages (for example "Method Not Allowed") are often
+      // the only useful provider detail.
+      const text = responseBody.trim();
+      if (text) return text;
     }
   }
 
@@ -322,6 +325,13 @@ function classifyError(
     /\b(rate limit|too many requests|throttl)\b/i.test(lower)
   ) {
     return "rate_limit";
+  }
+
+  // A concrete client response is more reliable than wording in an SDK retry
+  // wrapper (which may say "timed out" after a 405/400). 408 remains a real
+  // timeout and is handled below.
+  if (statusCode != null && statusCode >= 400 && statusCode < 500) {
+    return "bad_request";
   }
 
   if (statusCode === 408 || statusCode === 504 || TIMEOUT_RE.test(lower)) {
@@ -439,7 +449,11 @@ export function normalizeStreamError(error: unknown): StreamErrorPayload {
   // errors stay extractable — otherwise the real message is lost.
   const parsedInput =
     typeof error === "string" ? tryParseJsonError(error) : error;
-  const err = toRecord(parsedInput) ?? toRecord(error);
+  // AI SDK stream errors are commonly serialized as `{ error: { ... } }`.
+  // Unwrap that envelope before extracting HTTP metadata so a concrete 405 is
+  // not lost and misclassified from the retry wrapper's text.
+  const parsedRecord = toRecord(parsedInput);
+  const err = toRecord(parsedRecord?.error) ?? parsedRecord ?? toRecord(error);
   const statusCode = pickStatusCode(err);
   const url = pickUrl(err);
   const responseBody = pickResponseBody(err);

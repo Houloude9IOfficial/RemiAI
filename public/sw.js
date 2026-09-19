@@ -77,6 +77,14 @@ self.addEventListener("notificationclick", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const requestUrl = new URL(event.request.url);
+
+  // CacheStorage only supports GET requests. API writes and chat streams must
+  // always reach the live server: Cache.match() on POST /api/chat can make
+  // the service worker reject the fetch and surface a synthetic 500.
+  if (event.request.method !== "GET" || requestUrl.pathname.startsWith("/api/")) {
+    return;
+  }
+
   if (requestUrl.pathname === "/sw.js") {
     event.respondWith(fetch(event.request));
     return;

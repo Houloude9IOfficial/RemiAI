@@ -15,6 +15,7 @@ import { createCompatFetch } from "./compat";
 import { nemotronChatTemplateKwargs } from "./reasoning";
 import type { QualityPolicy } from "@/lib/chat/quality-policy";
 import { AUTO_MODEL_ID } from "@/lib/chat/auto-model";
+import { canonicalProviderBaseUrl } from "./url";
 
 type ProviderRow = typeof providers.$inferSelect;
 
@@ -56,7 +57,9 @@ export function getLanguageModel(
       return createOpenRouter({ apiKey: provider.apiKey ?? undefined }).chat(modelId);
     case "ollama": {
       const model = createOpenAI({
-        baseURL: provider.baseUrl ?? "http://localhost:11434/v1",
+        // Existing databases may still contain http://ollama.com/v1. Repair
+        // it here too so a redirect cannot rewrite a chat POST into a GET.
+        baseURL: canonicalProviderBaseUrl(provider.kind, provider.baseUrl) ?? "http://localhost:11434/v1",
         apiKey: provider.apiKey ?? "ollama",
         // convertReasoningToThink folds Ollama's `delta.reasoning` stream field
         // into `<think>`-wrapped content (the @ai-sdk/openai provider drops the

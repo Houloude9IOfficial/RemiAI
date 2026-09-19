@@ -17,6 +17,7 @@ import {
   errorToDisplayMessage,
   type StreamErrorPayload,
 } from "../lib/chat/error-payload";
+import { canonicalProviderBaseUrl } from "../lib/providers/url";
 
 let passed = 0;
 function ok(name: string, fn: () => void) {
@@ -244,6 +245,41 @@ async function main() {
     assert.equal(payload.detail, undefined);
     const displayed = errorToDisplayMessage(new Error(encodeStreamError(payload)));
     assert.equal(displayed.message, payload.message);
+  });
+
+  // 10. A concrete 405 must not be hidden by retry-wrapper timeout wording.
+  ok("classifies a serialized 405 as non-resumable bad request", () => {
+    const serialized = JSON.stringify({
+      error: {
+        name: "AI_APICallError",
+        url: "http://ollama.com/v1/chat/completions",
+        statusCode: 405,
+        message: "Request timed out",
+        responseBody: "Method Not Allowed",
+      },
+    });
+    const payload = normalizeStreamError(serialized);
+    assert.equal(payload.category, "bad_request");
+    assert.equal(payload.title, "Request rejected");
+    assert.equal(payload.detail, "Method Not Allowed");
+    assert.equal(payload.retryable, false);
+    assert.equal(payload.shouldResume, false);
+  });
+
+  console.log("\nOllama Cloud base URL canonicalization");
+  ok("upgrades only Ollama Cloud HTTP to HTTPS", () => {
+    assert.equal(
+      canonicalProviderBaseUrl("ollama", "http://ollama.com/v1"),
+      "https://ollama.com/v1",
+    );
+    assert.equal(
+      canonicalProviderBaseUrl("ollama", "http://localhost:11434/v1"),
+      "http://localhost:11434/v1",
+    );
+    assert.equal(
+      canonicalProviderBaseUrl("openai-compatible", "http://ollama.com/v1"),
+      "http://ollama.com/v1",
+    );
   });
 
   // 9. decodeStreamError round-trips the new fields.

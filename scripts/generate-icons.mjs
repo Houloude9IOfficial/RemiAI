@@ -7,6 +7,7 @@
  *   - build/icon.png       (Linux / Windows source — 512x512)
  *   - build/icon-tray.png  (Tray icon — 22x22)
  *   - build/icon-tray@2x.png  (Tray icon HiDPI — 44x44)
+ *   - build/icon-tray-template.png (macOS adaptive menu-bar template)
  *
  * Usage:  node scripts/generate-icons.mjs
  */
@@ -111,6 +112,22 @@ await sharp(srcPath)
   .toFile(path.join(BUILD, "icon-tray@2x.png"));
 console.log(`✅ Tray icon: build/icon-tray@2x.png (44x44)`);
 
+// macOS menu-bar icons must be monochrome template artwork rather than the
+// white cross-platform logo. Electron uses the alpha silhouette to adapt it
+// to the current menu-bar appearance, keeping it visible in both themes.
+const trayTemplateSource = "public/RemiAI.png";
+await sharp(trayTemplateSource)
+  .resize(22, 22, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+  .png()
+  .toFile(path.join(BUILD, "icon-tray-template.png"));
+console.log(`✅ macOS tray template: build/icon-tray-template.png (22x22)`);
+
+await sharp(trayTemplateSource)
+  .resize(44, 44, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+  .png()
+  .toFile(path.join(BUILD, "icon-tray-template@2x.png"));
+console.log(`✅ macOS tray template: build/icon-tray-template@2x.png (44x44)`);
+
 // ── Clean up ────────────────────────────────────────────────────────
 
 fs.rmSync(ICONSET_DIR, { recursive: true, force: true });
@@ -120,3 +137,4 @@ console.log(`   build/icon.icns        — macOS app icon`);
 console.log(`   build/icon.png         — Linux / Windows source`);
 console.log(`   build/icon-tray.png    — Menu bar (22px)`);
 console.log(`   build/icon-tray@2x.png — Menu bar HiDPI (44px)`);
+console.log(`   build/icon-tray-template.png — macOS adaptive menu bar`);
