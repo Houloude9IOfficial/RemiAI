@@ -282,7 +282,7 @@ export function ChatModelSelector({
         side="top"
         sideOffset={6}
         style={{ width: "17rem" }}
-        className="rounded-xl border border-border/70 bg-popover/95 p-1.5 shadow-xl backdrop-blur-xl"
+        className="scrollbar-hidden rounded-xl border border-border/70 bg-popover/95 p-1.5 shadow-xl backdrop-blur-xl"
       >
         {nothingConfigured ? (
           <div className="flex flex-col items-center gap-2 px-1 py-4 text-center">
