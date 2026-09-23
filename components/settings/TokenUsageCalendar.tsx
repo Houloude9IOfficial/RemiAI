@@ -184,24 +184,51 @@ export function TokenUsageCalendar({ dailyUsage = [], totalTokens = 0, className
     };
   }, [dailyUsage, totalTokens, usageMap]);
 
+  // Reference point for shading: the median non-zero day. Scaling shades
+  // against it keeps the graph readable at any usage volume — an outlier day
+  // stands out against quiet ones, while a uniformly busy stretch stays uniform.
+  const medianDayTokens = useMemo(() => {
+    const values = dailyUsage
+      .map((item) => item.totalTokens)
+      .filter((tokens) => tokens > 0)
+      .sort((a, b) => a - b);
+
+    if (values.length === 0) {
+      return 0;
+    }
+
+    const mid = Math.floor(values.length / 2);
+    return values.length % 2 === 1 ? values[mid] : (values[mid - 1] + values[mid]) / 2;
+  }, [dailyUsage]);
+
   // Solid, low-saturation fills avoid the glossy/highlighted appearance.
+  // Levels are ratios of the median day, not fixed token counts: a day 4x the
+  // typical volume goes dark, and anything 1.25x+ is visibly heavier, so e.g.
+  // a lone 4M day among 3M days reads one shade darker instead of blending in.
   const getCellClass = (tokens: number, isFuture: boolean) => {
     if (isFuture) {
       return "bg-muted/30 border-transparent opacity-35 cursor-default";
     }
-    if (tokens === 0) {
+
+    if (tokens === 0 || medianDayTokens === 0) {
       return "bg-muted/70 border-border/40";
     }
-    if (tokens < 5_000) {
-      return "bg-[#365277] border-[#45658f]";
+
+    const ratio = tokens / medianDayTokens;
+
+    if (ratio < 0.25) {
+      return "bg-[#77a6d8] border-[#89b6e3]";
     }
-    if (tokens < 25_000) {
-      return "bg-[#426a9b] border-[#507bab]";
+
+    if (ratio < 1.25) {
+      return "bg-[#6695c9] border-[#77a6d8]";
     }
-    if (tokens < 100_000) {
+
+    if (ratio < 4) {
       return "bg-[#527fb5] border-[#628fc5]";
     }
-    return "bg-[#6695c9] border-[#77a6d8]";
+
+    return "bg-[#365277] border-[#45658f]";
   };
 
   const todayDateStr = useMemo(() => {
@@ -276,7 +303,7 @@ export function TokenUsageCalendar({ dailyUsage = [], totalTokens = 0, className
                       // Format tooltip message matching screenshot (e.g. "40.3M tokens on Sep 11")
                       const tokenCountLabel =
                         tokensToDisplay > 0 ? formatShortTokens(tokensToDisplay) : "0";
-                      const tooltipText = `${tokenCountLabel} tokens on ${monthDayStr}${isToday ? " (until today)" : ""}`;
+                      const tooltipText = `${tokenCountLabel} tokens on ${monthDayStr}${isToday ? " (until now)" : ""}`;
 
                       return (
                         <Tooltip key={day.date}>
@@ -286,7 +313,7 @@ export function TokenUsageCalendar({ dailyUsage = [], totalTokens = 0, className
                                 role="button"
                                 tabIndex={0}
                                 className={cn(
-                                  "aspect-square w-full rounded-[2px] border transition-colors select-none outline-none focus-visible:ring-1 focus-visible:ring-primary",
+                                  "aspect-square w-full rounded-[2px] border-none transition-colors select-none outline-none focus-visible:ring-1 focus-visible:ring-primary",
                                   cellColor
                                 )}
                               />
