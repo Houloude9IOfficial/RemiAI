@@ -1256,13 +1256,13 @@ export function ChatInput({
                   ? "Change files, run checks, and report what was verified"
                   : "Direct answer with minimal overhead"}
           </span> */}
-          {!demo &&
+          {/* {!demo &&
             onQualityPolicyChange &&
             activeQualityPolicy !== "medium" && (
               <span className="rounded-full bg-primary/8 px-2 py-0.5 font-medium text-primary">
                 {qualityPolicyLabel(activeQualityPolicy)}
               </span>
-            )}
+            )} */}
         </div>
 
         <div
@@ -1397,7 +1397,7 @@ export function ChatInput({
                 title="Add photos, files, or capabilities"
                 disabled={disabled || isStreaming}
                 className={cn(
-                  "flex cursor-pointer items-center justify-center rounded-full border border-border/60 transition-colors hover:bg-muted hover:text-foreground",
+                  "flex cursor-pointer items-center justify-center rounded-full border border-border/60 border-none transition-colors hover:bg-muted hover:text-foreground",
                   large ? "h-9 w-9" : "h-8 w-8",
                   (disabled || isStreaming) && "pointer-events-none opacity-40",
                 )}

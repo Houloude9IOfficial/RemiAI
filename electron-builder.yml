@@ -145,12 +145,15 @@ extraResources:
 mac:
   icon: build/icon.icns
   target:
-    - target: dmg
-      arch: [x64, arm64]
-    - target: zip
-      arch: [x64, arm64]
+    - dmg
+    - zip
   artifactName: "${productName}-${version}-mac-${arch}.${ext}"
   category: public.app-category.productivity
+  # Seal the complete app bundle with an ad-hoc signature. This avoids the
+  # incomplete bundle signature produced when signing is skipped, and never
+  # picks up an Apple Development certificate from a local keychain.
+  # Gatekeeper still requires user approval because this is not Developer ID.
+  identity: "-"
   hardenedRuntime: true
   # Tracked at repo root (the build/ dir is gitignored, so CI would not
   # have the entitlements file otherwise).
@@ -161,8 +164,8 @@ mac:
   # this key MUST be in Info.plist or the packaged app crashes on first use.
   extendInfo:
     NSMicrophoneUsageDescription: "RemiAI uses the microphone in talk mode so you can speak to your assistant."
-  # macOS code signing — set CSC_LINK / CSC_KEY_PASSWORD in CI
-  # identity: null  # uncomment to skip signing for local builds
+  # Developer ID signing and notarization require Apple Developer Program
+  # membership; replace identity above when that distribution path is chosen.
 
 # ── Windows ──────────────────────────────────────────────────────────
 win:

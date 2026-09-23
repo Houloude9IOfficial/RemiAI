@@ -256,7 +256,7 @@ export function ChatModelSelector({
         aria-label="Choose model"
         title={`Model: ${modelLabel}${currentProvider ? ` · ${currentProvider.label}` : ""}`}
         className={cn(
-          "flex cursor-pointer items-center gap-1.5 rounded-full border border-border/60 py-0 pr-2 pl-2.5 text-[13px] font-medium text-foreground/85 transition-colors select-none outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40",
+          "flex cursor-pointer items-center gap-1.5 rounded-full border border-border/60 border-none py-0 pr-2 pl-2.5 text-[13px] font-medium text-foreground/85 transition-colors select-none outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40",
           large ? "h-9" : "h-8",
           disabled && "pointer-events-none opacity-40",
         )}
@@ -267,12 +267,12 @@ export function ChatModelSelector({
           className={`h-4 w-4 shrink-0 ${modelLabel === "Auto" ? "hidden" : ""}`}
         />
         <span className="max-w-36 truncate">{modelLabel}</span>
-        <ChevronDown
+        {/* <ChevronDown
           className={cn(
             "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform",
             open && "rotate-[-180deg]",
           )}
-        />
+        /> */}
       </DropdownMenuTrigger>
 
       {/* A tight desktop menu keeps a long provider list easy to scan without

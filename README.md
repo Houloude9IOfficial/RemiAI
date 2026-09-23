@@ -180,8 +180,8 @@ RemiAI is available as a **native desktop app** for macOS, Windows, and Linux:
 
 - **System tray** with minimize-to-tray behavior
 - **Native OS notifications**
-- **Requires manual building**
-- Cross-platform installers via `npm run dist:*` (mac DMG, Windows NSIS, Linux AppImage)
+- [GitHub Releases](https://github.com/Houloude9IOfficial/RemiAI/releases) provide desktop installers
+- Local installer builds via `npm run dist:*` (mac DMG, Windows NSIS, Linux AppImage)
 
 ### PWA & Mobile
 
@@ -335,6 +335,21 @@ The database is **automatically migrated** on startup, so you don't need to run 
 Your local database, uploaded files, provider credentials, and other app data are stored under `data/`. This directory is intentionally gitignored — protect it like application data and use the encrypted Backup page before moving or resetting an installation.
 
 ### Desktop App
+
+macOS release downloads are ad-hoc signed and are not notarized by Apple. Choose
+the `arm64` DMG for Apple Silicon or `x64` for Intel, and download its matching
+`.dmg.sha256` file from the same GitHub Release. In the folder containing both,
+run `shasum -a 256 -c RemiAI-<version>-mac-<arch>.dmg.sha256`, substituting the
+release version and architecture. It should report `OK`. If it differs, delete
+the download and get a fresh copy; do not open it. ZIP downloads have matching
+`.zip.sha256` files.
+
+Open the DMG, drag RemiAI to Applications, then try opening it once. If macOS
+blocks it, open **System Settings → Privacy & Security**, scroll to **Security**,
+click **Open Anyway** for RemiAI, and confirm **Open**. This is an app-specific
+exception; the option appears for a limited time after the opening attempt.
+If macOS still says the app is damaged, report the macOS version, architecture,
+and exact alert in an issue. Do not disable Gatekeeper system-wide.
 
 Build installers for your platform:
 
@@ -742,15 +757,15 @@ To avoid data loss, use the **Backup** page in Settings to export an encrypted b
 
 The project handles Windows path normalization automatically. Use forward slashes (`/`) in all paths when talking to the AI.
 
-### Electron code signing errors (macOS)
+### macOS signing
 
-When building the macOS desktop app, you may encounter code signing errors. For development builds, skip signing:
-
-```bash
-npx electron-builder --mac --config.forceCodeSigning=false
-```
-
-For distribution builds, you'll need a valid Apple Developer ID certificate. See [electron-builder's macOS docs](https://www.electron.build/code-signing).
+The macOS builder explicitly ad-hoc signs the complete app bundle with
+`identity: "-"`. This works without Apple Developer Program membership and
+prevents a local Apple Development certificate from being selected by accident.
+It does not give Gatekeeper a trusted developer identity or notarization ticket,
+so users must approve the app as described above. Warning-free first launch
+requires a Developer ID certificate and Apple notarization; see
+[electron-builder v26's macOS guide](https://www.electron.build/v26/docs/mac/).
 
 ---
 
