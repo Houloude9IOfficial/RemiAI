@@ -2160,7 +2160,7 @@ Definition of done:
   return createUIMessageStreamResponse({
     stream: enrichedBranch,
     consumeSseStream: ({ stream }) => {
-      streamRegistry.register(conversationId, stream, questionRun.id);
+      streamRegistry.register(conversationId, stream, questionRun.id, questionRun.assistantId);
     },
   });
 }

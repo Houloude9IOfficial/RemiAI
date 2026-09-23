@@ -7,13 +7,18 @@
  * only a subscriber: closing it never cancels the producer.
  */
 
+import { publishGenerationUpdate } from "./generation-events";
+
 type Subscriber = ReadableStreamDefaultController<string>;
 type StreamEntry = {
   id: string;
+  assistantMessageId: string | null;
   chunks: string[];
   subscribers: Set<Subscriber>;
   reader: ReadableStreamDefaultReader<string>;
   active: boolean;
+  /** A newer stream replaced this one; its lifecycle belongs to that stream. */
+  replaced: boolean;
   cleanupTimer?: ReturnType<typeof setTimeout>;
 };
 
@@ -42,9 +47,11 @@ export const streamRegistry = {
     conversationId: number,
     stream: ReadableStream<string>,
     streamId = crypto.randomUUID(),
+    assistantMessageId: string | null = null,
   ): string {
     const existing = activeStreams.get(conversationId);
     if (existing) {
+      existing.replaced = true;
       if (existing.cleanupTimer) clearTimeout(existing.cleanupTimer);
       void existing.reader.cancel("Replaced by new stream").catch(() => undefined);
       closeSubscribers(existing);
@@ -53,12 +60,17 @@ export const streamRegistry = {
     const reader = stream.getReader();
     const entry: StreamEntry = {
       id: streamId,
+      assistantMessageId,
       chunks: [],
       subscribers: new Set(),
       reader,
       active: true,
+      replaced: false,
     };
     activeStreams.set(conversationId, entry);
+    publishGenerationUpdate({ conversationId, status: "running", streamId, assistantMessageId });
+
+    const isCurrent = () => activeStreams.get(conversationId) === entry;
 
     void (async () => {
       try {
@@ -74,9 +86,15 @@ export const streamRegistry = {
         }
         entry.active = false;
         closeSubscribers(entry);
+        if (!entry.replaced && isCurrent()) {
+          publishGenerationUpdate({ conversationId, status: "completed", streamId: entry.id });
+        }
       } catch (error) {
         entry.active = false;
         errorSubscribers(entry, error);
+        if (!entry.replaced && isCurrent()) {
+          publishGenerationUpdate({ conversationId, status: "failed", streamId: entry.id });
+        }
       } finally {
         reader.releaseLock();
         entry.cleanupTimer = setTimeout(() => {
@@ -113,9 +131,11 @@ export const streamRegistry = {
     const entry = activeStreams.get(conversationId);
     if (!entry) return;
     activeStreams.delete(conversationId);
+    entry.replaced = true;
     if (entry.cleanupTimer) clearTimeout(entry.cleanupTimer);
     void entry.reader.cancel(reason).catch(() => undefined);
     closeSubscribers(entry);
+    publishGenerationUpdate({ conversationId, status: "stopped", streamId: entry.id });
   },
 
   has(conversationId: number): boolean {

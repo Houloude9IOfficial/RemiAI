@@ -484,7 +484,7 @@ function ConversationChat({
   // open the wrong panel. Cleared when the user sends the next message.
   const canvasWinsRef = useRef(false);
   const pendingCanvasPresentRef = useRef<CanvasPresentDetail | null>(null);
-  const { startStream, endStream } = useStreamingContext();
+  const { startStream, endStream, streams } = useStreamingContext();
 
   const openCanvasPanel = useCallback((detail: CanvasPresentDetail) => {
     if (canvasDismissedRef.current) return;
@@ -770,71 +770,76 @@ function ConversationChat({
 
   // Discover server-owned streams even when this tab did not start them.
   // This covers switching chats, opening a second tab/device, and automatic
-  // server continuations. Each stream ID is attached at most once; the
-  // registry replays from the beginning and then fans out live chunks.
+  // server continuations. The context descriptor is pushed by the generation
+  // SSE feed, so no status polling is needed; each stream ID is attached at
+  // most once, and the registry replays from the beginning before fanning out
+  // live chunks.
   const attachedStreamIdRef = useRef<string | null>(null);
   const reconnectInFlightRef = useRef(false);
+  const reconnectAttemptsRef = useRef(0);
+  const [reconnectNonce, setReconnectNonce] = useState(0);
+  const contextStreamId = streams.get(conversationId)?.streamId ?? null;
+  const contextAssistantMessageId =
+    streams.get(conversationId)?.assistantMessageId ?? null;
   useEffect(() => {
-    let disposed = false;
-    const poll = async () => {
-      if (disposed || reconnectInFlightRef.current) return;
+    if (!contextStreamId || reconnectInFlightRef.current) return;
+
+    // The foreground request is already consuming this stream. Remember its
+    // ID so a late descriptor does not replay it after onFinish.
+    if (questionStatusRef.current === "submitted" || questionStatusRef.current === "streaming") {
+      attachedStreamIdRef.current = contextStreamId;
+      reconnectAttemptsRef.current = 0;
+      return;
+    }
+    if (attachedStreamIdRef.current === contextStreamId) return;
+
+    attachedStreamIdRef.current = contextStreamId;
+    reconnectInFlightRef.current = true;
+    clearChatError();
+    startStream(conversationId);
+    void (async () => {
       try {
-        const response = await fetch(`/api/chat/${conversationId}/stream/status`, {
-          cache: "no-store",
-        });
-        if (!response.ok || disposed) return;
-        const state = await response.json() as {
-          active?: boolean;
-          streamId?: string | null;
-          assistantMessageId?: string | null;
-        };
-        if (!state.active || !state.streamId) return;
-
-        // The foreground request is already consuming this stream. Remember
-        // its ID so the idle poll does not replay it after onFinish.
-        if (questionStatusRef.current === "submitted" || questionStatusRef.current === "streaming") {
-          attachedStreamIdRef.current = state.streamId;
-          return;
-        }
-        if (attachedStreamIdRef.current === state.streamId) return;
-
-        attachedStreamIdRef.current = state.streamId;
-        reconnectInFlightRef.current = true;
-        clearChatError();
-        startStream(conversationId);
-        try {
-          if (state.assistantMessageId) {
-            const current = messagesRef.current;
-            const activeIndex = current.findIndex(
-              (message) => message.id === state.assistantMessageId,
-            );
-            if (activeIndex >= 0) {
-              // The registry replays this assistant from its start. Retain the
-              // preceding transcript and replace the saved partial with an
-              // empty seed so text/reasoning/tool chunks cannot duplicate.
-              setMessages([
-                ...current.slice(0, activeIndex),
-                { id: state.assistantMessageId, role: "assistant", parts: [] },
-              ]);
-            }
+        if (contextAssistantMessageId) {
+          const current = messagesRef.current;
+          const activeIndex = current.findIndex(
+            (message) => message.id === contextAssistantMessageId,
+          );
+          if (activeIndex >= 0) {
+            // The registry replays this assistant from its start. Retain the
+            // preceding transcript and replace the saved partial with an
+            // empty seed so text/reasoning/tool chunks cannot duplicate.
+            setMessages([
+              ...current.slice(0, activeIndex),
+              { id: contextAssistantMessageId, role: "assistant", parts: [] },
+            ]);
           }
-          await resumeStream();
-        } catch {
-          // A disconnect is not a generation failure. Allow a later poll to
-          // reattach, and suppress the SDK's transient transport error card.
-          attachedStreamIdRef.current = null;
-          clearChatError();
-        } finally {
-          reconnectInFlightRef.current = false;
         }
+        await resumeStream();
+        reconnectAttemptsRef.current = 0;
       } catch {
-        // Offline/transition states are retried without changing chat UI.
+        // A disconnect is not a generation failure: suppress the SDK's
+        // transient transport error card and retry a bounded number of times
+        // (the descriptor will not change while the stream stays active).
+        attachedStreamIdRef.current = null;
+        clearChatError();
+        if (reconnectAttemptsRef.current < 3) {
+          reconnectAttemptsRef.current += 1;
+          setTimeout(() => setReconnectNonce((value) => value + 1), 1_000);
+        }
+      } finally {
+        reconnectInFlightRef.current = false;
       }
-    };
-    void poll();
-    const timer = setInterval(() => void poll(), 1_000);
-    return () => { disposed = true; clearInterval(timer); };
-  }, [conversationId, resumeStream, startStream, clearChatError, setMessages]);
+    })();
+  }, [
+    contextStreamId,
+    contextAssistantMessageId,
+    reconnectNonce,
+    conversationId,
+    resumeStream,
+    startStream,
+    clearChatError,
+    setMessages,
+  ]);
 
   useEffect(() => {
     if (status === "submitted" || status === "streaming") {
