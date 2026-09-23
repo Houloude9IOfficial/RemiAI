@@ -12,6 +12,14 @@ import {
 } from "ai";
 import { questionRuns, startQuestionRun, pendingQuestionSubmissions, prepareQuestionAnswerStep, finishQuestionRun, type QuestionRun } from "@/lib/chat/question-delivery";
 import { continuePendingQuestionAnswers } from "@/lib/chat/question-continuation";
+import {
+  continueInterruptedGeneration,
+  MAX_SERVER_CONTINUATIONS,
+} from "@/lib/chat/server-continuation";
+import {
+  beginDurableGeneration,
+  finishDurableGeneration,
+} from "@/lib/chat/generation-runs";
 import { isQuestionsOutput } from "@/lib/chat/questions";
 import { persistUIMessage } from "@/lib/chat/persist";
 import { streamRegistry } from "@/lib/chat/stream-registry";
@@ -19,6 +27,7 @@ import {
   abandonGenerationPresence,
   beginGenerationPresence,
   completeGenerationPresence,
+  failGenerationPresence,
 } from "@/lib/chat/generation-presence";
 import { periodicallyPersistMessages } from "@/lib/chat/persist-interval";
 import { asc, eq, sql } from "drizzle-orm";
@@ -29,7 +38,7 @@ import {
   providerModels,
   mcpServers,
   userPreferences,
-  messages,
+  chatGenerationRuns,
 } from "@/db/schema";
 import { getAutoLanguageModel } from "@/lib/providers/factory";
 import { resolveLanguageModel } from "@/lib/providers/resolve-model";
@@ -279,6 +288,9 @@ const chatRequestSchema = z.object({
   questionContinuation: z.boolean().optional(),
   trigger: z.enum(["submit-message", "regenerate-message"]).optional(),
   messageId: z.string().optional(),
+  // Internal server-owned continuation counter. Browser requests omit it.
+  continuationCount: z.coerce.number().int().min(0).max(3).optional().default(0),
+  generationRunId: z.string().uuid().optional(),
 });
 
 export async function POST(req: Request) {
@@ -288,10 +300,27 @@ export async function POST(req: Request) {
   const parsed = chatRequestSchema.safeParse(body);
   if (!parsed.success) return jsonError(parsed.error);
   const { conversationId, questionContinuation } = parsed.data;
+  if (parsed.data.generationRunId) {
+    const durable = await db.select({ status: chatGenerationRuns.status })
+      .from(chatGenerationRuns)
+      .where(eq(chatGenerationRuns.id, parsed.data.generationRunId))
+      .get();
+    if (durable?.status === "stopped") return new NextResponse(null, { status: 204 });
+  }
   if (questionRuns.has(conversationId)) return NextResponse.json({ error: "A response is already running" }, { status: 409 });
   if (questionContinuation && !pendingQuestionSubmissions(db, conversationId, true).length) return new NextResponse(null, { status: 204 });
-  const run = startQuestionRun(conversationId);
+  const run = startQuestionRun(
+    conversationId,
+    parsed.data.continuationCount,
+    parsed.data.generationRunId,
+  );
   if (!run) return NextResponse.json({ error: "A response is already running" }, { status: 409 });
+  await beginDurableGeneration({
+    id: run.generationRunId,
+    conversationId,
+    assistantMessageId: run.assistantId,
+    continuationCount: run.continuationCount,
+  });
   beginGenerationPresence(
     conversationId,
     run.id,
@@ -302,11 +331,21 @@ export async function POST(req: Request) {
     if (!response.ok) {
       abandonGenerationPresence(conversationId, run.id);
       finishQuestionRun(db, conversationId, run, false);
+      await finishDurableGeneration({
+        id: run.generationRunId,
+        status: "failed",
+        error: `Chat request failed (${response.status})`,
+      });
     }
     return response;
   } catch (error) {
     abandonGenerationPresence(conversationId, run.id);
     finishQuestionRun(db, conversationId, run, false);
+    await finishDurableGeneration({
+      id: run.generationRunId,
+      status: "failed",
+      error: error instanceof Error ? error.message : String(error),
+    });
     throw error;
   }
 }
@@ -1930,6 +1969,11 @@ Definition of done:
   // This is race-safe: streamText's onFinish fires in the SDK's upstream
   // consumer flush, which always completes before this transform's flush.
   let pendingFinishChunk: UIMessageChunk | null = null;
+  const canContinueOnServer = () =>
+    !aborted &&
+    capturedErrorPayload?.shouldResume === true &&
+    capturedErrorPayload.category === "step_limit" &&
+    questionRun.continuationCount < MAX_SERVER_CONTINUATIONS;
   const enrichedBranch = responseBranch.pipeThrough(
     new TransformStream<UIMessageChunk, UIMessageChunk>({
       transform(chunk, controller) {
@@ -1947,7 +1991,7 @@ Definition of done:
       },
       flush(controller) {
         if (!pendingFinishChunk) return;
-        if (capturedErrorPayload) {
+        if (capturedErrorPayload && !canContinueOnServer()) {
           controller.enqueue({
             type: "error",
             errorText: encodeStreamError(capturedErrorPayload),
@@ -2049,6 +2093,7 @@ Definition of done:
       });
       cleanupSucceeded = state === "completed";
     } finally {
+      const shouldContinue = canContinueOnServer();
       if (cleanupSucceeded) {
         try {
           const notificationState = await completeGenerationPresence({
@@ -2063,11 +2108,47 @@ Definition of done:
           });
           console.warn("[chat] Completion notification failed:", error);
         }
-      } else {
+      } else if (shouldContinue || aborted) {
         abandonGenerationPresence(conversationId, questionRun.id);
+      } else {
+        try {
+          await failGenerationPresence({
+            conversationId,
+            generationId: questionRun.id,
+            reason: capturedErrorPayload?.message ?? "Background generation failed.",
+          });
+        } catch (error) {
+          console.warn("[chat] Attention notification failed:", error);
+          abandonGenerationPresence(conversationId, questionRun.id);
+        }
       }
+      const durableStatus = cleanupSucceeded
+        ? "completed"
+        : shouldContinue
+          ? "continuing"
+          : aborted
+            ? "stopped"
+            : capturedErrorPayload?.shouldResume
+              ? "needs_attention"
+              : "failed";
+      await finishDurableGeneration({
+        id: questionRun.generationRunId,
+        status: durableStatus,
+        error: cleanupSucceeded ? null : capturedErrorPayload?.message ?? (aborted ? "Stopped by user" : "Generation failed"),
+      });
       finishQuestionRun(db, conversationId, questionRun, cleanupSucceeded);
-      if (cleanupSucceeded) continuePendingQuestionAnswers(db, req.url, req.headers, conversationId);
+      if (cleanupSucceeded) {
+        continuePendingQuestionAnswers(db, req.url, req.headers, conversationId);
+      } else if (shouldContinue) {
+        continueInterruptedGeneration({
+          conversationId,
+          assistantId: questionRun.assistantId,
+          generationRunId: questionRun.generationRunId,
+          continuationCount: questionRun.continuationCount,
+          requestUrl: req.url,
+          requestHeaders: req.headers,
+        });
+      }
     }
   }, trace).catch((error) => {
     finishQuestionRun(db, conversationId, questionRun, false);
@@ -2079,7 +2160,7 @@ Definition of done:
   return createUIMessageStreamResponse({
     stream: enrichedBranch,
     consumeSseStream: ({ stream }) => {
-      streamRegistry.register(conversationId, stream);
+      streamRegistry.register(conversationId, stream, questionRun.id);
     },
   });
 }

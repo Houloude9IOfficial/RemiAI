@@ -120,3 +120,31 @@ export async function completeGenerationPresence(input: {
   }));
   return "sent";
 }
+
+/** Notify an absent user when a background generation needs intervention. */
+export async function failGenerationPresence(input: {
+  conversationId: number;
+  generationId: string;
+  reason: string;
+}): Promise<"not-active" | "visible" | "missing-conversation" | "sent"> {
+  const active = presence.active.get(input.conversationId);
+  if (!active || active.id !== input.generationId) return "not-active";
+  presence.active.delete(input.conversationId);
+  if (!active.backgrounded) return "visible";
+
+  const conversation = await db
+    .select({ title: conversations.title })
+    .from(conversations)
+    .where(eq(conversations.id, input.conversationId))
+    .get();
+  if (!conversation) return "missing-conversation";
+
+  publishUserNotification({
+    conversationId: input.conversationId,
+    title: `${conversation.title} needs attention`,
+    body: plainNotificationText(input.reason).slice(0, 100),
+    url: `/chat/${input.conversationId}`,
+    requireInteraction: true,
+  });
+  return "sent";
+}

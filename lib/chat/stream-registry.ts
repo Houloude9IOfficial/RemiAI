@@ -1,48 +1,134 @@
 /**
- * Server-side stream registry for reconnection support.
+ * Replayable, multi-subscriber server-side chat stream registry.
  *
- * When the AI generates a response, the SSE stream is tee'd and one branch
- * is stored here keyed by conversation ID. If the user navigates away and
- * comes back while generation is still running, they can reconnect to this
- * stream via the GET /api/chat/[id]/stream endpoint.
+ * The AI SDK gives `consumeSseStream` a detached copy of the encoded SSE
+ * response. We consume that copy exactly once, retain its chunks, and fan
+ * them out to every reconnecting viewer. A browser connection is therefore
+ * only a subscriber: closing it never cancels the producer.
  */
 
-const sharedStreams = globalThis as typeof globalThis & { remiActiveStreams?: Map<number, ReadableStream<string>> };
-const activeStreams = sharedStreams.remiActiveStreams ??= new Map<number, ReadableStream<string>>();
+type Subscriber = ReadableStreamDefaultController<string>;
+type StreamEntry = {
+  id: string;
+  chunks: string[];
+  subscribers: Set<Subscriber>;
+  reader: ReadableStreamDefaultReader<string>;
+  active: boolean;
+  cleanupTimer?: ReturnType<typeof setTimeout>;
+};
+
+const sharedStreams = globalThis as typeof globalThis & {
+  remiActiveStreams?: Map<number, StreamEntry>;
+};
+const activeStreams = sharedStreams.remiActiveStreams ??= new Map<number, StreamEntry>();
+const COMPLETED_REPLAY_TTL_MS = 30_000;
+
+function closeSubscribers(entry: StreamEntry): void {
+  for (const subscriber of entry.subscribers) {
+    try { subscriber.close(); } catch { /* viewer already disconnected */ }
+  }
+  entry.subscribers.clear();
+}
+
+function errorSubscribers(entry: StreamEntry, error: unknown): void {
+  for (const subscriber of entry.subscribers) {
+    try { subscriber.error(error); } catch { /* viewer already disconnected */ }
+  }
+  entry.subscribers.clear();
+}
 
 export const streamRegistry = {
-  register(conversationId: number, stream: ReadableStream<string>) {
-    // If there's already a registered stream for this conversation, cancel it
+  register(
+    conversationId: number,
+    stream: ReadableStream<string>,
+    streamId = crypto.randomUUID(),
+  ): string {
     const existing = activeStreams.get(conversationId);
     if (existing) {
-      existing.cancel("Replaced by new stream").catch(() => {});
+      if (existing.cleanupTimer) clearTimeout(existing.cleanupTimer);
+      void existing.reader.cancel("Replaced by new stream").catch(() => undefined);
+      closeSubscribers(existing);
     }
 
-    // Tee the stream so one branch is served to reconnecting clients
-    // while the other is consumed for auto-cleanup detection
-    const [clientBranch, cleanupBranch] = stream.tee();
-    activeStreams.set(conversationId, clientBranch);
+    const reader = stream.getReader();
+    const entry: StreamEntry = {
+      id: streamId,
+      chunks: [],
+      subscribers: new Set(),
+      reader,
+      active: true,
+    };
+    activeStreams.set(conversationId, entry);
 
-    // Auto-remove when the stream ends or errors (both branches finish)
-    cleanupBranch
-      .pipeTo(new WritableStream())
-      .then(() => {
-        if (activeStreams.get(conversationId) === clientBranch) activeStreams.delete(conversationId);
-      })
-      .catch(() => {
-        if (activeStreams.get(conversationId) === clientBranch) activeStreams.delete(conversationId);
-      });
+    void (async () => {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (!value) continue;
+          entry.chunks.push(value);
+          for (const subscriber of entry.subscribers) {
+            try { subscriber.enqueue(value); }
+            catch { entry.subscribers.delete(subscriber); }
+          }
+        }
+        entry.active = false;
+        closeSubscribers(entry);
+      } catch (error) {
+        entry.active = false;
+        errorSubscribers(entry, error);
+      } finally {
+        reader.releaseLock();
+        entry.cleanupTimer = setTimeout(() => {
+          if (activeStreams.get(conversationId) === entry) activeStreams.delete(conversationId);
+        }, COMPLETED_REPLAY_TTL_MS);
+        // A retained replay should not keep a CLI/test process alive.
+        (entry.cleanupTimer as ReturnType<typeof setTimeout> & { unref?: () => void }).unref?.();
+      }
+    })();
+
+    return streamId;
   },
 
+  /** Return a fresh replay + live subscription for each caller. */
   get(conversationId: number): ReadableStream<string> | null {
-    return activeStreams.get(conversationId) ?? null;
+    const entry = activeStreams.get(conversationId);
+    if (!entry) return null;
+
+    let controllerRef: Subscriber | null = null;
+    return new ReadableStream<string>({
+      start(controller) {
+        controllerRef = controller;
+        for (const chunk of entry.chunks) controller.enqueue(chunk);
+        if (entry.active) entry.subscribers.add(controller);
+        else controller.close();
+      },
+      cancel() {
+        if (controllerRef) entry.subscribers.delete(controllerRef);
+      },
+    });
   },
 
-  remove(conversationId: number) {
+  remove(conversationId: number, reason = "Generation stopped") {
+    const entry = activeStreams.get(conversationId);
+    if (!entry) return;
     activeStreams.delete(conversationId);
+    if (entry.cleanupTimer) clearTimeout(entry.cleanupTimer);
+    void entry.reader.cancel(reason).catch(() => undefined);
+    closeSubscribers(entry);
   },
 
   has(conversationId: number): boolean {
-    return activeStreams.has(conversationId);
+    return activeStreams.get(conversationId)?.active === true;
+  },
+
+  id(conversationId: number): string | null {
+    return activeStreams.get(conversationId)?.id ?? null;
+  },
+
+  activeConversationIds(): number[] {
+    return [...activeStreams.entries()]
+      .filter(([, entry]) => entry.active)
+      .map(([conversationId]) => conversationId);
   },
 };

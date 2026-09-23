@@ -339,6 +339,24 @@ export const messages = sqliteTable(
   (t) => [unique().on(t.conversationId, t.uiId)],
 );
 
+/** Durable ownership/lifecycle for ordinary interactive chat generations. */
+export const chatGenerationRuns = sqliteTable("chat_generation_runs", {
+  id: text("id").primaryKey(),
+  conversationId: integer("conversation_id")
+    .notNull()
+    .references(() => conversations.id, { onDelete: "cascade" }),
+  assistantMessageId: text("assistant_message_id").notNull(),
+  status: text("status", {
+    enum: ["running", "continuing", "completed", "failed", "stopped", "needs_attention"],
+  }).notNull().default("running"),
+  continuationCount: integer("continuation_count").notNull().default(0),
+  maxContinuations: integer("max_continuations").notNull().default(3),
+  error: text("error"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  completedAt: text("completed_at"),
+});
+
 export const questionSubmissions = sqliteTable(
   "question_submissions",
   {

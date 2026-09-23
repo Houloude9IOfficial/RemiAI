@@ -53,7 +53,6 @@ import {
 import { cn } from "@/lib/utils";
 import {
   errorToDisplayMessage,
-  decodeStreamError,
 } from "@/lib/chat/error-payload";
 import { primeClientLocation, userContextHeaders } from "@/lib/chat/user-context";
 import { TEMPORARY_CHAT_RETENTION_DAYS } from "@/lib/chat/temporary-chat-constants";
@@ -61,15 +60,6 @@ import { TEMPORARY_CHAT_RETENTION_DAYS } from "@/lib/chat/temporary-chat-constan
 // If the conversation fetch takes longer than this, abort it and surface an
 // error instead of leaving the user staring at an endless loading skeleton.
 const FETCH_TIMEOUT_MS = 12_000;
-
-// When a run is cut short by the step/token limit (finishReason "length") or
-// a dangling stop, the server marks the error `shouldResume`. Instead of
-// forcing a manual "Continue" click every time, the page silently resumes
-// the run up to this many times per user message so the AI genuinely keeps
-// working until the task is done. If it still cannot finish after this many
-// automatic resumes (a genuinely stuck/looping run), the error banner shows
-// so the user can decide.
-const MAX_AUTO_CONTINUES_PER_MESSAGE = 3;
 
 // ── Session-file auto-present helpers ───────────────────────────────
 // The AI is instructed to present files it creates (session_present_file /
@@ -405,7 +395,6 @@ export default function ConversationPage({
           conversationId={conversationId}
           initialConversation={data.conversation}
           initialMessages={data.messages}
-          isReconnecting={hasActiveStream}
           onConversationChanged={() => {
             queryClient.invalidateQueries({ queryKey: ["conversations"] });
             queryClient.invalidateQueries({ queryKey: ["sidebar-conversations"] });
@@ -422,13 +411,11 @@ function ConversationChat({
   conversationId,
   initialConversation,
   initialMessages,
-  isReconnecting,
   onConversationChanged,
 }: {
   conversationId: number;
   initialConversation: Awaited<ReturnType<typeof conversationsApi.get>>["conversation"];
   initialMessages: Awaited<ReturnType<typeof conversationsApi.get>>["messages"];
-  isReconnecting?: boolean;
   onConversationChanged: () => void;
 }) {
   const [mode, setMode] = useState<ChatMode>(
@@ -497,7 +484,7 @@ function ConversationChat({
   // open the wrong panel. Cleared when the user sends the next message.
   const canvasWinsRef = useRef(false);
   const pendingCanvasPresentRef = useRef<CanvasPresentDetail | null>(null);
-  const { activeStreams, startStream, endStream } = useStreamingContext();
+  const { startStream, endStream } = useStreamingContext();
 
   const openCanvasPanel = useCallback((detail: CanvasPresentDetail) => {
     if (canvasDismissedRef.current) return;
@@ -613,25 +600,10 @@ function ConversationChat({
       });
   }, [memoryEnabled, conversationId, queryClient]);
 
-  // ── Resume (reconnection) ──────────────────────────────────────
-  // `resume` must be captured once on mount and never change at runtime.
-  // If it's tied to the live `activeStreams` set, calling `startStream`
-  // (e.g. from `handleAiStart`) can flip resume to `true` mid-session,
-  // which triggers a second `resumeStream()` → `makeRequest()` call.
-  // Two concurrent `makeRequest()` calls share the same `this.activeResponse`
-  // field on the `AbstractChat` instance. Whichever finishes first sets it
-  // to `undefined` in its `finally` block, causing the other to crash with:
-  //   "can't access property 'state', this.activeResponse is undefined"
-  const [resume] = useState(() => isReconnecting);
+  // Reconnection is driven by the server stream-ID poll below. Keeping the AI
+  // SDK's mount-time `resume` disabled lets us clear a persisted partial
+  // assistant before replay and prevents duplicate text on late joins.
   const messagesRef = useRef(initialMessages);
-  // Automatic-resume budget for step-limited runs. The server ends these runs
-  // with a `shouldResume` error instead of completing them; the page silently
-  // resumes (like the Continue button) so a long canvas/build keeps going to
-  // completion without the user clicking. Decremented per automatic resume and
-  // refilled whenever the user sends a new message / regenerates — a genuinely
-  // stuck run (one that keeps hitting the limit with no progress) falls back
-  // to the visible error banner after the budget is spent.
-  const autoContinueBudgetRef = useRef(MAX_AUTO_CONTINUES_PER_MESSAGE);
   // Keep the composer reactive even when a failed request does not cause the
   // SDK to publish the new user message back through `messages`.
   const [pendingUserTurn, setPendingUserTurn] = useState(false);
@@ -656,7 +628,7 @@ function ConversationChat({
   } = useChat({
     id: String(conversationId),
     messages: initialMessages,
-    resume,
+    resume: false,
     transport: new DefaultChatTransport({
       api: "/api/chat",
       body: { conversationId },
@@ -719,12 +691,6 @@ function ConversationChat({
   const questionStatusRef = useRef(status);
   useEffect(() => { questionStatusRef.current = status; }, [status]);
   const stoppedQuestionRunRef = useRef<string | null>(null);
-  const reconnectingQuestionRunRef = useRef(false);
-  const seenQuestionRunsRef = useRef(new Set<string>());
-  useEffect(() => {
-    const last = messages.at(-1);
-    if (status === "streaming" && last?.role === "assistant") seenQuestionRunsRef.current.add(last.id);
-  }, [messages, status]);
   const displayMessages = useMemo(() => {
     const known = new Set(messages.map((message) => message.id));
     return [...messages, ...questionAnswerMessages.filter((message) => !known.has(message.id))];
@@ -743,34 +709,16 @@ function ConversationChat({
         const response = await fetch(`/api/chat/${conversationId}/question-answers`);
         if (!response.ok || disposed) return;
         const state = await response.json() as {
-          resolvedIds: string[]; answerMessages: UIMessage[]; activeAssistantId: string | null; initialAssistantMessage: UIMessage | null; mode: string | null; hasAutomaticPending: boolean;
+          resolvedIds: string[]; answerMessages: UIMessage[]; activeAssistantId: string | null; mode: string | null; hasAutomaticPending: boolean;
         };
         if (disposed) return;
         if (state.mode === "goal") setMode((previous) => previous === "plan" ? "goal" : previous);
         setResolvedQuestionIds((previous) => previous.join("\0") === state.resolvedIds.join("\0") ? previous : state.resolvedIds);
         setQuestionAnswerMessages((previous) => previous.map((m) => m.id).join("\0") === state.answerMessages.map((m) => m.id).join("\0") ? previous : state.answerMessages);
         if (streamIsBusy()) return;
-        if (state.activeAssistantId && stoppedQuestionRunRef.current !== "*" && !seenQuestionRunsRef.current.has(state.activeAssistantId) && !reconnectingQuestionRunRef.current) {
-          // A server-owned follow-up may start after the original finish chunk.
-          // Reconnect rather than issuing another generation request.
-          const streamState = await fetch(`/api/chat/${conversationId}/stream/status`).then((r) => r.json());
-          if (disposed || !streamState.active || streamIsBusy()) return;
-          reconnectingQuestionRunRef.current = true;
-          seenQuestionRunsRef.current.add(state.activeAssistantId);
-          const current = messagesRef.current;
-          const activeIndex = current.findIndex((message) => message.id === state.activeAssistantId);
-          if (activeIndex >= 0) {
-            // The reconnect stream replays this run from the start. Retain only
-            // the pre-run seed so saved partial text isn't duplicated.
-            setMessages([...current.slice(0, activeIndex), ...(state.initialAssistantMessage ? [state.initialAssistantMessage] : [])]);
-          } else {
-            const known = new Set(current.map((message) => message.id));
-            setMessages([...current, ...state.answerMessages.filter((message) => !known.has(message.id))]);
-          }
-          try { await resumeStream(); } catch {
-            seenQuestionRunsRef.current.delete(state.activeAssistantId);
-          } finally { reconnectingQuestionRunRef.current = false; }
-        } else if (!state.activeAssistantId && state.resolvedIds.length && !idleSynced) {
+        // General stream-ID reconnection below owns every active run. This
+        // poll only synchronizes durable question-answer messages once idle.
+        if (!state.activeAssistantId && state.resolvedIds.length && !idleSynced) {
           const transcript = await fetch(`/api/chat/${conversationId}/question-answers?transcript=1`).then((r) => r.ok ? r.json() : null);
           if (disposed || streamIsBusy() || transcript?.activeAssistantId) return;
           if (transcript?.messages) {
@@ -788,7 +736,7 @@ function ConversationChat({
     void poll();
     const timer = setInterval(() => void poll(), 1000);
     return () => { disposed = true; clearInterval(timer); };
-  }, [conversationId, status, resolvedQuestionIds.length, resumeStream, setMessages]);
+  }, [conversationId, status, resolvedQuestionIds.length, setMessages]);
 
   const handleQuestionSubmit = useCallback(async (submission: QuestionAnswerSubmission) => {
     const response = await fetch(`/api/chat/${conversationId}/question-answers`, {
@@ -803,7 +751,9 @@ function ConversationChat({
 
   const handleStop = useCallback(() => {
     stoppedQuestionRunRef.current = "*";
-    void fetch(`/api/chat/${conversationId}/question-answers`, { method: "DELETE" }).catch(() => {
+    // In resumable mode, aborting the browser fetch only detaches this viewer.
+    // Explicit Stop has its own server action which cancels the producer.
+    void fetch(`/api/chat/${conversationId}/stop`, { method: "POST" }).catch(() => {
       toast.error("Could not stop the server response. Try again.");
     });
     void stop();
@@ -817,6 +767,74 @@ function ConversationChat({
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+
+  // Discover server-owned streams even when this tab did not start them.
+  // This covers switching chats, opening a second tab/device, and automatic
+  // server continuations. Each stream ID is attached at most once; the
+  // registry replays from the beginning and then fans out live chunks.
+  const attachedStreamIdRef = useRef<string | null>(null);
+  const reconnectInFlightRef = useRef(false);
+  useEffect(() => {
+    let disposed = false;
+    const poll = async () => {
+      if (disposed || reconnectInFlightRef.current) return;
+      try {
+        const response = await fetch(`/api/chat/${conversationId}/stream/status`, {
+          cache: "no-store",
+        });
+        if (!response.ok || disposed) return;
+        const state = await response.json() as {
+          active?: boolean;
+          streamId?: string | null;
+          assistantMessageId?: string | null;
+        };
+        if (!state.active || !state.streamId) return;
+
+        // The foreground request is already consuming this stream. Remember
+        // its ID so the idle poll does not replay it after onFinish.
+        if (questionStatusRef.current === "submitted" || questionStatusRef.current === "streaming") {
+          attachedStreamIdRef.current = state.streamId;
+          return;
+        }
+        if (attachedStreamIdRef.current === state.streamId) return;
+
+        attachedStreamIdRef.current = state.streamId;
+        reconnectInFlightRef.current = true;
+        clearChatError();
+        startStream(conversationId);
+        try {
+          if (state.assistantMessageId) {
+            const current = messagesRef.current;
+            const activeIndex = current.findIndex(
+              (message) => message.id === state.assistantMessageId,
+            );
+            if (activeIndex >= 0) {
+              // The registry replays this assistant from its start. Retain the
+              // preceding transcript and replace the saved partial with an
+              // empty seed so text/reasoning/tool chunks cannot duplicate.
+              setMessages([
+                ...current.slice(0, activeIndex),
+                { id: state.assistantMessageId, role: "assistant", parts: [] },
+              ]);
+            }
+          }
+          await resumeStream();
+        } catch {
+          // A disconnect is not a generation failure. Allow a later poll to
+          // reattach, and suppress the SDK's transient transport error card.
+          attachedStreamIdRef.current = null;
+          clearChatError();
+        } finally {
+          reconnectInFlightRef.current = false;
+        }
+      } catch {
+        // Offline/transition states are retried without changing chat UI.
+      }
+    };
+    void poll();
+    const timer = setInterval(() => void poll(), 1_000);
+    return () => { disposed = true; clearInterval(timer); };
+  }, [conversationId, resumeStream, startStream, clearChatError, setMessages]);
 
   useEffect(() => {
     if (status === "submitted" || status === "streaming") {
@@ -832,10 +850,8 @@ function ConversationChat({
       return;
     }
 
-    if (!resume) {
-      endStream(conversationId);
-    }
-  }, [status, conversationId, resume, startStream, endStream]);
+    endStream(conversationId);
+  }, [status, conversationId, startStream, endStream]);
 
   const {
     error: handlerError,
@@ -846,46 +862,13 @@ function ConversationChat({
     onRetryable,
   } = useErrorHandler({ showToast: false });
 
-  // Sync AI SDK error to our handler — but silently auto-continue runs the
-  // server cut short by the step/token limit (finishReason "length" / dangling
-  // stop). Those end with a `step_limit` + `shouldResume` payload; resuming is
-  // safe and deterministic (it re-runs generation from the accumulated
-  // messages), so do it automatically up to the per-message budget instead of
-  // forcing a manual Continue click on every truncation.
-  //
-  // The resume runs through the SAME retryable the Continue button uses
-  // (registered below via onRetryable), so it keeps every safeguard: it
-  // re-checks whether the server stream is still live, and only then re-sends
-  // the accumulated messages. Deferred with setTimeout(0) so the onRetryable
-  // registration effect has re-registered with the CURRENT error before
-  // retry() reads it. The SDK error is left in place on purpose — the retryable
-  // clears it itself once the continuation request actually starts.
+  // Server-owned continuation handles step/output limits even with no browser
+  // mounted. A terminal error here means the server exhausted that budget or
+  // encountered a genuine failure, so only then surface the error card.
   useEffect(() => {
     if (!error) return;
-    const rawMessage =
-      typeof error === "string"
-        ? error
-        : error instanceof Error
-          ? error.message
-          : "";
-    const decoded = decodeStreamError(rawMessage);
-    const mapped = errorToDisplayMessage(error);
-    const canAutoResume =
-      mapped.shouldResume === true &&
-      decoded?.category === "step_limit" &&
-      autoContinueBudgetRef.current > 0;
-
-    if (!canAutoResume) {
-      handleError(error);
-      return;
-    }
-
-    autoContinueBudgetRef.current -= 1;
-    const timer = setTimeout(() => {
-      void retry().catch(() => {});
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [error, handleError, retry]);
+    handleError(error);
+  }, [error, handleError]);
 
   // Register the retryable action — continue the interrupted run first.
   useEffect(() => {
@@ -1000,9 +983,6 @@ function ConversationChat({
       sendGuardRef.current = true;
       clearError();
       clearChatError();
-      // A fresh user message gets a fresh auto-continue budget — the previous
-      // turn's silent resumes must not leak into the new request.
-      autoContinueBudgetRef.current = MAX_AUTO_CONTINUES_PER_MESSAGE;
       setPendingUserTurn(true);
       // Keep the UI and persisted conversation in sync with the server's
       // automatic Plan → Goal transition when the user answers planning
@@ -1028,7 +1008,6 @@ function ConversationChat({
     stoppedQuestionRunRef.current = null;
     clearError();
     clearChatError();
-    autoContinueBudgetRef.current = MAX_AUTO_CONTINUES_PER_MESSAGE;
     setPendingUserTurn(true);
     canvasWinsRef.current = false;
     const lastUserMessage = [...messagesRef.current]
@@ -1059,8 +1038,6 @@ function ConversationChat({
       setIsRegenerating(true);
       clearError();
       clearChatError();
-      // A fresh request gets a fresh auto-continue budget.
-      autoContinueBudgetRef.current = MAX_AUTO_CONTINUES_PER_MESSAGE;
       canvasWinsRef.current = false;
       try {
         // The SDK replaces this user message locally and submits it with the
@@ -1085,7 +1062,6 @@ function ConversationChat({
       setIsRegenerating(true);
       clearError();
       clearChatError();
-      autoContinueBudgetRef.current = MAX_AUTO_CONTINUES_PER_MESSAGE;
       try {
         const res = await fetch(`/api/chat/${conversationId}/messages`, {
           method: "DELETE",

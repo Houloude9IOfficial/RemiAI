@@ -409,6 +409,26 @@ function repairSchemaCompatibility(): void {
       CREATE INDEX "automation_runs_status_next_retry_at_idx" ON "automation_runs" ("status", "next_retry_at");
     `);
   }
+
+  if (!tableExists("chat_generation_runs")) {
+    sqlite.exec(`
+      CREATE TABLE "chat_generation_runs" (
+        "id" TEXT PRIMARY KEY NOT NULL,
+        "conversation_id" INTEGER NOT NULL,
+        "assistant_message_id" TEXT NOT NULL,
+        "status" TEXT NOT NULL DEFAULT 'running',
+        "continuation_count" INTEGER NOT NULL DEFAULT 0,
+        "max_continuations" INTEGER NOT NULL DEFAULT 3,
+        "error" TEXT,
+        "created_at" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updated_at" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "completed_at" TEXT,
+        FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE CASCADE
+      );
+      CREATE INDEX "chat_generation_runs_conversation_status_idx"
+        ON "chat_generation_runs" ("conversation_id", "status");
+    `);
+  }
   if (!tableExists("automation_run_events")) {
     sqlite.exec(`
       CREATE TABLE "automation_run_events" (
@@ -560,6 +580,14 @@ async function initializeAppInternal(): Promise<void> {
     import("@/lib/runs/automation")
       .then(({ recoverStaleAutomationRuns }) => recoverStaleAutomationRuns())
       .catch((err) => console.error("[runs] Failed to recover stale runs:", err));
+  }, 0);
+
+  // Interactive chat generations are also durable. Reconstruct them from the
+  // persisted transcript and continue after an app/server restart.
+  setTimeout(() => {
+    import("@/lib/chat/generation-runs")
+      .then(({ recoverChatGenerationRuns }) => recoverChatGenerationRuns())
+      .catch((err) => console.error("[chat] Failed to recover active generations:", err));
   }, 0);
 
   // Delete temporary chats that outlived their retention period (30 days of

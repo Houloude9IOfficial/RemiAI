@@ -457,7 +457,7 @@ ${timeContext}
   return createUIMessageStreamResponse({
     stream: responseBranch,
     consumeSseStream: ({ stream }) => {
-      streamRegistry.register(conversationId, stream);
+      streamRegistry.register(conversationId, stream, generationId);
     },
   });
 }

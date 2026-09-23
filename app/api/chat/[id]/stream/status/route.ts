@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { streamRegistry } from "@/lib/chat/stream-registry";
+import { questionRuns } from "@/lib/chat/question-delivery";
+import { activeDurableRun } from "@/lib/chat/generation-runs";
 
 /**
  * Reports whether a conversation currently has a live server-side stream.
@@ -16,5 +18,13 @@ export async function GET(
 ) {
   const { id } = await params;
   const conversationId = Number(id);
-  return NextResponse.json({ active: streamRegistry.has(conversationId) });
+  const durable = await activeDurableRun(conversationId);
+  return NextResponse.json({
+    active: streamRegistry.has(conversationId) || Boolean(durable),
+    streamId: streamRegistry.id(conversationId),
+    assistantMessageId:
+      questionRuns.get(conversationId)?.assistantId ??
+      durable?.assistantMessageId ??
+      null,
+  });
 }
