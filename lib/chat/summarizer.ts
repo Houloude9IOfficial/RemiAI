@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { conversations, messages as messagesTable, providers } from "@/db/schema";
 import { resolveLanguageModel } from "@/lib/providers/resolve-model";
 import { createRunTrace } from "@/lib/observability/run-trace";
+import { searchEvidenceSummary } from "@/lib/chat/history-optimizer";
 
 /**
  * Rolling conversation summarizer.
@@ -49,6 +50,8 @@ Produce a compact summary in plain text (no markdown headers, no bullets if avoi
 - Facts about the user (name, job, tech stack, constraints).
 - Files created/modified and where they live (paths matter).
 - Tools used and notable results (e.g. "read package.json: Next.js 15 app").
+- For web searches, preserve only the relevant conclusion and the small set of
+  sources that support it; never reproduce a raw result list or snippets.
 - Open questions, pending tasks, or unfinished work.
 - Any commitments made ("I'll check X later").
 
@@ -70,18 +73,31 @@ function messageToText(row: { role: string; parts: unknown[] }): string {
       const inv = (part.toolInvocation ?? {}) as Record<string, unknown>;
       const toolName = typeof inv.toolName === "string" ? inv.toolName : "?";
       chunks.push(`[tool:${toolName}(${safeSnippet(inv.args)})]`);
+      if (isSearchTool(toolName)) {
+        const evidence = searchEvidenceSummary(inv.output);
+        if (evidence) chunks.push(`[search evidence: ${evidence}]`);
+      }
     } else if (
       typeof part.type === "string" &&
       part.type.startsWith("tool-") &&
       part.type !== "tool-invocation" &&
       part.toolCallId !== undefined
     ) {
-      chunks.push(`[tool:${part.type.slice(5)}(${safeSnippet(part.input)})]`);
+      const toolName = part.type.slice(5);
+      chunks.push(`[tool:${toolName}(${safeSnippet(part.input)})]`);
+      if (isSearchTool(toolName)) {
+        const evidence = searchEvidenceSummary(part.output);
+        if (evidence) chunks.push(`[search evidence: ${evidence}]`);
+      }
     }
   }
 
   const text = chunks.join(" ");
   return `${row.role === "user" ? "User" : "Assistant"}: ${text}`;
+}
+
+function isSearchTool(toolName: string): boolean {
+  return ["web_search", "news_search", "news_top_headlines"].includes(toolName);
 }
 
 /** Recursively drop file-content/code payloads so they never reach the model. */
