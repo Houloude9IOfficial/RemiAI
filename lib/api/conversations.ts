@@ -3,6 +3,7 @@ import type { QueryClient } from "@tanstack/react-query";
 
 export type Conversation = {
   id: number;
+  projectId: number | null;
   title: string;
   providerId: number | null;
   modelId: string | null;
@@ -78,9 +79,10 @@ export const conversationsApi = {
   list: (): Promise<Conversation[]> =>
     fetch("/api/conversations").then((res) => unwrap<Conversation[]>(res)),
 
-  listPage: ({ cursor, limit = 20 }: { cursor?: string; limit?: number } = {}): Promise<ConversationPage> => {
+  listPage: ({ cursor, limit = 20, unlinked = false }: { cursor?: string; limit?: number; unlinked?: boolean } = {}): Promise<ConversationPage> => {
     const params = new URLSearchParams({ limit: String(limit) });
     if (cursor) params.set("cursor", cursor);
+    if (unlinked) params.set("unlinked", "1");
     return fetch(`/api/conversations?${params}`).then((res) => unwrap<ConversationPage>(res));
   },
 
@@ -89,6 +91,7 @@ export const conversationsApi = {
     modelId?: string | null;
     isTemporary?: boolean;
     memoryEnabled?: boolean;
+    projectId?: number | null;
   }): Promise<Conversation> => {
     const conversation = await fetch("/api/conversations", {
       method: "POST",
@@ -136,6 +139,7 @@ export const conversationsApi = {
       requestMode: "sandboxed" | "full";
       isTemporary: boolean;
       memoryEnabled: boolean;
+      projectId: number | null;
     }>,
   ): Promise<Conversation> =>
     fetch(`/api/conversations/${id}`, {

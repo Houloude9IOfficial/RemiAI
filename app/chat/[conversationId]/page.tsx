@@ -22,6 +22,7 @@ import { AutomationRunHistory } from "@/components/chat/AutomationRunHistory";
 import { ExportDialog } from "@/components/chat/ExportDialog";
 import { MobileChatHeader } from "@/components/chat/MobileChatHeader";
 import { ChatHeader } from "@/components/chat/ChatHeader";
+import { ProjectControl } from "@/components/chat/ProjectControl";
 import {
   SessionFilesPanel,
   ResizableSessionFilesPanel,
@@ -398,6 +399,9 @@ export default function ConversationPage({
           onConversationChanged={() => {
             queryClient.invalidateQueries({ queryKey: ["conversations"] });
             queryClient.invalidateQueries({ queryKey: ["sidebar-conversations"] });
+            queryClient.invalidateQueries({ queryKey: ["project-chats"] });
+            queryClient.invalidateQueries({ queryKey: ["projects"] });
+            queryClient.invalidateQueries({ queryKey: ["conversation", conversationId] });
           }}
         />
       )}
@@ -1285,7 +1289,7 @@ function ConversationChat({
       {/* ── Mobile Header ── */}
       <MobileChatHeader
         title={initialConversation.title}
-        actions={filesToggle}
+        actions={<><ProjectControl conversationId={conversationId} initialProjectId={initialConversation.projectId} />{filesToggle}</>}
       />
 
       {/* ── Desktop Header (redesigned: model status + live usage meter) ── */}
@@ -1305,6 +1309,7 @@ function ConversationChat({
         onMemoryChange={setMemoryEnabled}
         actions={
           <>
+            <ProjectControl conversationId={conversationId} initialProjectId={initialConversation.projectId} />
             {messages.length > 0 && (
               <ExportDialog messages={messages} title={initialConversation.title} />
             )}

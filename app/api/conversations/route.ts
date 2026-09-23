@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { and, desc, eq, lt, or } from "drizzle-orm";
+import { and, desc, eq, isNull, lt, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { conversations, providers } from "@/db/schema";
+import { conversations, providers, projects } from "@/db/schema";
 import { jsonError } from "@/lib/validation/api";
 import { DEMO_PROVIDER_MODEL, ensureDemoProvider } from "@/lib/demo-provider";
 import { isDemoMode } from "@/lib/demo-policy";
@@ -12,11 +12,13 @@ const createSchema = z.object({
   modelId: z.string().optional().nullable(),
   isTemporary: z.boolean().optional(),
   memoryEnabled: z.boolean().optional(),
+  projectId: z.number().int().positive().nullable().optional(),
 });
 
 const pageSchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).default(20),
   cursor: z.string().optional(),
+  unlinked: z.enum(["1"]).optional(),
 });
 
 type ConversationCursor = { updatedAt: string; id: number };
@@ -57,12 +59,15 @@ export async function GET(req: Request) {
   const rows = await db
     .select()
     .from(conversations)
-    .where(cursor
-      ? or(
-          lt(conversations.updatedAt, cursor.updatedAt),
-          and(eq(conversations.updatedAt, cursor.updatedAt), lt(conversations.id, cursor.id)),
-        )
-      : undefined)
+    .where(and(
+      parsed.data.unlinked ? isNull(conversations.projectId) : undefined,
+      cursor
+        ? or(
+            lt(conversations.updatedAt, cursor.updatedAt),
+            and(eq(conversations.updatedAt, cursor.updatedAt), lt(conversations.id, cursor.id)),
+          )
+        : undefined,
+    ))
     .orderBy(desc(conversations.updatedAt), desc(conversations.id))
     .limit(parsed.data.limit + 1);
 
@@ -85,6 +90,10 @@ export async function POST(req: Request) {
   }
 
   const demoProvider = isDemoMode() ? ensureDemoProvider() : null;
+  if (body.projectId != null) {
+    const project = await db.select({ id: projects.id }).from(projects).where(eq(projects.id, body.projectId)).get();
+    if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 });
+  }
   // The browser remembers its last model locally. A provider can be deleted
   // between sessions, leaving that cached numeric id dangling; never pass it
   // straight into the foreign-key column. A new chat without a usable model is
@@ -116,6 +125,7 @@ export async function POST(req: Request) {
       // independent — the user can flip either one from the chat menu).
       isTemporary: body.isTemporary ?? false,
       memoryEnabled: body.memoryEnabled ?? true,
+      projectId: body.projectId ?? null,
       // Carry the unified Access tier into new chats so the user's choice is
       // remembered between conversations.
       bashMode: previousConversation?.bashMode ?? "sandboxed",

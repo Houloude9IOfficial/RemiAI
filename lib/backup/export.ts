@@ -5,7 +5,7 @@ import { Readable } from "node:stream";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { backupHistory } from "@/db/schema";
-import { UPLOAD_DIR, AVATAR_DIR, SESSION_FILES_DIR, SKILLS_DIR } from "@/lib/paths";
+import { UPLOAD_DIR, AVATAR_DIR, SESSION_FILES_DIR, PROJECT_FILES_DIR, SKILLS_DIR } from "@/lib/paths";
 import { createBackupStage, publishBackupStage } from "./download";
 import { encryptBackupStream } from "./crypto";
 import { getAllTables } from "./schema";
@@ -58,6 +58,7 @@ export interface ExportResult {
     uploads: number;
     avatars: number;
     sessionFiles: number;
+    projectFiles: number;
     skills: number;
   };
 }
@@ -101,9 +102,9 @@ export async function exportBackup(
   // ── Collect files ──────────────────────────────────────────────────────
   const roots = [
     ["uploads", UPLOAD_DIR], ["avatars", AVATAR_DIR],
-    ["sessionFiles", SESSION_FILES_DIR], ["skills", SKILLS_DIR],
+    ["sessionFiles", SESSION_FILES_DIR], ["projectFiles", PROJECT_FILES_DIR], ["skills", SKILLS_DIR],
   ] as const;
-  const fileCounts = { uploads: 0, avatars: 0, sessionFiles: 0, skills: 0 };
+  const fileCounts = { uploads: 0, avatars: 0, sessionFiles: 0, projectFiles: 0, skills: 0 };
 
   // ── Build payload ──────────────────────────────────────────────────────
   const payload = {
@@ -143,7 +144,6 @@ export async function exportBackup(
         }
       };
       for await (const file of walk(directory)) {
-        const size = (await fsp.stat(file.fullPath)).size;
         fileCounts[root]++;
         if (!firstFile) yield Buffer.from(",");
         firstFile = false;
@@ -181,7 +181,7 @@ export async function exportBackup(
         skillCount: fileCounts.skills,
         appVersion: APP_VERSION,
       },
-      stats: { tables: tableStats, uploads: fileCounts.uploads, avatars: fileCounts.avatars, sessionFiles: fileCounts.sessionFiles, skills: fileCounts.skills },
+      stats: { tables: tableStats, uploads: fileCounts.uploads, avatars: fileCounts.avatars, sessionFiles: fileCounts.sessionFiles, projectFiles: fileCounts.projectFiles, skills: fileCounts.skills },
     };
   } catch (err) {
     await fsp.unlink(stage.temporaryPath).catch(() => undefined);

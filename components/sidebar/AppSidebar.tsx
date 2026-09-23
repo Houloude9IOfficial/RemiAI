@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { PanelLeftClose, PanelLeftOpen, Pen, Settings2 } from "lucide-react";
+import { Folder, PanelLeftClose, PanelLeftOpen, Pen, Settings2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useNewChat } from "@/lib/hooks/use-new-chat";
 import { ConversationList } from "./ConversationList";
+import { ProjectsSection } from "./ProjectsSection";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { SidebarProfile } from "./SidebarProfile";
 import { AboutModal } from "./AboutModal";
@@ -89,6 +90,7 @@ function DesktopSidebar() {
             <Pen className="h-4 w-4" />
           </Button>
           <SidebarExploreMenu collapsed />
+          <Link href="/projects" title="Projects" aria-label="Projects" className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-sidebar-accent"><Folder className="h-4 w-4" /></Link>
           <SidebarSearchButton collapsed />
           {!demo && <SettingsLink collapsed />}
           <div className="mt-auto flex flex-col items-center gap-2 border-t border-sidebar-border pt-3">
@@ -113,6 +115,7 @@ function DesktopSidebar() {
           </div>
 
           <div className="custom-scrollbar flex-1 overflow-x-hidden overflow-y-auto px-2 pb-1 text-sm text-sidebar-foreground/80">
+            <ProjectsSection />
             <ConversationList />
           </div>
 

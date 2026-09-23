@@ -74,6 +74,11 @@ interface ToolGroup {
  * the savings — multi-word phrases and tool-specific terms are preferred.
  */
 export const CONDITIONAL_GROUPS: Record<string, ToolGroup> = {
+  projects: {
+    label: "projects",
+    tools: ["project_list", "project_create", "project_update", "project_delete", "project_reorder", "project_chats", "project_link_chat", "project_file_list", "project_file_read", "project_file_read_media", "project_file_write", "project_file_delete"],
+    keywords: ["project", "projects", "shared notes", "shared file", "link this chat", "move this chat", "pin this", "organize my chats"],
+  },
   fs_write: {
     label: "filesystem-write",
     tools: [

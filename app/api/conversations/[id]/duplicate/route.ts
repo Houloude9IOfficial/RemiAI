@@ -34,6 +34,7 @@ export async function POST(
       modelId: original.modelId,
       isTemporary: original.isTemporary ?? false,
       memoryEnabled: original.memoryEnabled ?? true,
+      projectId: original.projectId,
     })
     .returning()
     .get();

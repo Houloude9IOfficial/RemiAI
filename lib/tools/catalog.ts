@@ -25,6 +25,16 @@ export interface ToolDefinition {
 }
 
 export const TOOL_CATALOG: ToolDefinition[] = [
+  {
+    id: "projects",
+    name: "Projects",
+    description: "Manage projects, linked chats, shared notes, and shared project files from a linked chat.",
+    toolNames: ["project_list", "project_create", "project_update", "project_delete", "project_reorder", "project_chats", "project_link_chat", "project_file_list", "project_file_read", "project_file_read_media", "project_file_write", "project_file_delete"],
+    category: "builtin",
+    subgroup: "Context & Profile",
+    togglable: false,
+    requiresApiKey: false,
+  },
   // ── Filesystem tools (builtin, always on, not togglable) ──
   {
     id: "filesystem",

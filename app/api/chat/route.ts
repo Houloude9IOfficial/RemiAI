@@ -111,6 +111,8 @@ import { buildTodoTools } from "@/lib/tools/todo";
 import { buildFileIndexTools } from "@/lib/tools/file-index";
 import { buildSessionFileTools } from "@/lib/session-files/tools";
 import { buildProfileTools } from "@/lib/tools/profile";
+import { buildProjectTools } from "@/lib/projects/tools";
+import { buildProjectContext } from "@/lib/projects/context";
 import { buildRoutinesTools } from "@/lib/tools/routines";
 import { buildScheduleTool } from "@/lib/tools/schedule";
 import { buildToolHelpTool, buildListAvailableToolsTool } from "@/lib/tools/tool-help";
@@ -687,6 +689,9 @@ async function runChatRequest(req: Request, questionRun: QuestionRun) {
   // fully isolated (memory-disabled) chats just like ChatGPT temp chats ignore
   // plugins.
   const skillsToolSet = isDemoMode() ? {} : memoryEnabled ? buildSkillsToolSet() : {};
+  const projectToolSet = !isDemoMode() && memoryEnabled && conversation.projectId
+    ? buildProjectTools(conversationId)
+    : {};
 
   // In plan mode, filter out write tools — AI can only read/plan, not modify files
   const writeBlocklist = [
@@ -702,6 +707,8 @@ async function runChatRequest(req: Request, questionRun: QuestionRun) {
     "session_file_delete",
     "canvas_create",
     "canvas_add_file",
+    "project_create", "project_update", "project_delete", "project_reorder",
+    "project_link_chat", "project_file_write", "project_file_delete",
   ];
   // Keep write tools registered for the whole request so switch_mode can
   // enable them immediately on the next agentic step. Their execution guard
@@ -729,6 +736,7 @@ async function runChatRequest(req: Request, questionRun: QuestionRun) {
   const effectiveFsToolSet = isDemoMode() ? {} : guardPlanWriteTools(fsToolSet);
   const effectiveSessionFileToolSet = guardPlanWriteTools(sessionFileToolSet);
   const effectiveCanvasToolSet = guardPlanWriteTools(canvasToolSet);
+  const effectiveProjectToolSet = guardPlanWriteTools(projectToolSet);
 
   // Build mode-specific system prompt instructions
   const planModePrompt =
@@ -816,6 +824,7 @@ Definition of done:
     ...effectiveSessionFileToolSet,
     ...effectiveCanvasToolSet,
     ...skillsToolSet,
+    ...effectiveProjectToolSet,
   };
 
   // list_available_tools should only advertise tools that are ACTUALLY
@@ -1057,6 +1066,9 @@ Definition of done:
   // Prompt only compact, query-matched memory leads. Full recall remains an
   // explicit search_memories tool call, and isolated chats never retrieve.
   const memoryHints = !instantMode && memoryEnabled ? await retrieveFuzzyMemoryHints(lastUserText) : [];
+  const projectContext = memoryEnabled
+    ? await buildProjectContext(conversation.projectId, lastUserText)
+    : "";
   const memoryTip = buildMemoryHintPromptBlock(memoryHints);
 
   // ── Intent-based dynamic tool loading ─────────────────────────────
@@ -1270,15 +1282,15 @@ Definition of done:
   const canvasSection = !instantMode && activeToolGroups.has("canvas") ? CANVAS_SECTION : "";
 
   const dynamicSystemPromptBase = instantMode
-    ? ""
-    : systemTip + profileTip + memoryTip + fileChangeTip + summarySection +
+    ? projectContext
+    : systemTip + profileTip + memoryTip + projectContext + fileChangeTip + summarySection +
       planModePrompt + goalModePrompt + buildModePrompt + canvasSection + _remiCardsSection + existingCardSection + (Object.keys(_remiCardToolSet).length ? REMI_CARD_PRESENTATION_RULES + REMI_CARD_SCOPE_RULES : "") + activeSkillsSection +
       taggedSkillsSection + qualityPolicyPrompt;
   const liveModeNote = () =>
     `\n\n## AUTHORITATIVE LIVE MODE\nThe active mode for this run is **${mode}**. This live mode overrides any earlier mode wording in the conversation. After a successful switch_mode call, immediately follow the new mode's rules and use its available tools.`;
 
   const dynamicSystemPrompt = instantMode
-    ? ""
+    ? projectContext
     : dynamicSystemPromptBase + liveModeNote() + toolAvailabilityNote;
 
   const fullSystemPrompt = staticSystemPrompt + dynamicSystemPrompt;

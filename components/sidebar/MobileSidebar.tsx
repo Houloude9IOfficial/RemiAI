@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useNewChat } from "@/lib/hooks/use-new-chat";
 import { ConversationList } from "./ConversationList";
+import { ProjectsSection } from "./ProjectsSection";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { AboutModal } from "./AboutModal";
 import { UpdateChecker } from "./UpdateChecker";
@@ -104,6 +105,7 @@ export function MobileSidebar() {
             onRefresh={() => queryClient.invalidateQueries({ queryKey: ["sidebar-conversations"] })}
             className="min-h-0 flex-1 overflow-x-hidden px-2 py-1 text-sm text-sidebar-foreground/80"
           >
+            <ProjectsSection />
             <ConversationList />
           </PullToRefresh>
 

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { asc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db, initializeApp } from "@/db";
-import { conversations, messages } from "@/db/schema";
+import { conversations, messages, projects } from "@/db/schema";
 import { jsonError } from "@/lib/validation/api";
 import { toUIMessage } from "@/lib/chat/persist";
 import { deleteConversationUploads } from "@/lib/chat/cleanup";
@@ -18,6 +18,7 @@ const updateSchema = z.object({
   requestMode: z.enum(["sandboxed", "full"]).optional(),
   isTemporary: z.boolean().optional(),
   memoryEnabled: z.boolean().optional(),
+  projectId: z.number().int().positive().nullable().optional(),
 });
 
 export async function GET(
@@ -56,6 +57,11 @@ export async function PATCH(
     body = updateSchema.parse(await req.json());
   } catch (err) {
     return jsonError(err);
+  }
+
+  if (body.projectId != null) {
+    const project = await db.select({ id: projects.id }).from(projects).where(eq(projects.id, body.projectId)).get();
+    if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 
   const row = await db

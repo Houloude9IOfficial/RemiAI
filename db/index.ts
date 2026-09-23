@@ -237,8 +237,33 @@ export function ensureHeartbeatColumns(): void {
  */
 function repairSchemaCompatibility(): void {
   ensureHeartbeatColumns();
+  if (tableExists("projects")) {
+    const columns = tableColumns("projects");
+    if (!columns.has("brief")) {
+      sqlite.exec('ALTER TABLE "projects" ADD COLUMN "brief" TEXT NOT NULL DEFAULT \'\'');
+      if (columns.has("description")) {
+        sqlite.exec('UPDATE "projects" SET "brief" = "description" WHERE "description" <> \'\'');
+      }
+    }
+    if (!columns.has("instructions")) {
+      sqlite.exec('ALTER TABLE "projects" ADD COLUMN "instructions" TEXT NOT NULL DEFAULT \'\'');
+    }
+    if (!columns.has("notes")) {
+      sqlite.exec('ALTER TABLE "projects" ADD COLUMN "notes" TEXT NOT NULL DEFAULT \'\'');
+    }
+    if (!columns.has("pinned")) {
+      sqlite.exec('ALTER TABLE "projects" ADD COLUMN "pinned" INTEGER NOT NULL DEFAULT 0');
+    }
+    if (!columns.has("sort_order")) {
+      sqlite.exec('ALTER TABLE "projects" ADD COLUMN "sort_order" INTEGER NOT NULL DEFAULT 0');
+    }
+  }
   if (tableExists("conversations")) {
     const columns = tableColumns("conversations");
+    if (!columns.has("project_id")) {
+      sqlite.exec('ALTER TABLE "conversations" ADD COLUMN "project_id" INTEGER REFERENCES "projects"("id") ON DELETE SET NULL');
+    }
+    sqlite.exec('CREATE INDEX IF NOT EXISTS "conversations_project_id_idx" ON "conversations" ("project_id")');
     if (!columns.has("quality_policy")) {
       sqlite.exec(
         'ALTER TABLE "conversations" ADD COLUMN "quality_policy" TEXT NOT NULL DEFAULT \'balanced\'',

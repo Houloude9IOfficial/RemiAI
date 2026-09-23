@@ -269,7 +269,7 @@ export function ConversationList() {
       // Let the current scroll settle before appending another page. Without a
       // short pause, an observer can repeatedly fire while layout is changing.
       if (pageParam) await new Promise((resolve) => setTimeout(resolve, 1_000));
-      return conversationsApi.listPage({ cursor: pageParam, limit: pageParam ? 20 : 40 });
+      return conversationsApi.listPage({ cursor: pageParam, limit: pageParam ? 20 : 40, unlinked: true });
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
@@ -293,10 +293,11 @@ export function ConversationList() {
   const activeStreams = useActiveStreams();
   const filteredConversations = conversations.filter(
     (c) =>
+      c.projectId == null && (
       c.totalInputTokens > 0 ||
       c.totalOutputTokens > 0 ||
       pathname === `/chat/${c.id}` ||
-      activeStreams.has(c.id),
+      activeStreams.has(c.id)),
   );
 
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -526,9 +527,7 @@ export function ConversationList() {
 
   if (filteredConversations.length === 0) {
     return (
-      <p className="px-2 py-1 text-xs text-muted-foreground/70">
-        No conversations yet
-      </p>
+      <div><div className="px-2 py-1 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70">Recents</div><p className="px-2 py-1 text-xs text-muted-foreground/70">No recent chats</p></div>
     );
   }
 
@@ -583,7 +582,7 @@ export function ConversationList() {
           </>
         ) : (
           <>
-            <span className="text-[11px] text-muted-foreground/55">Conversations</span>
+            <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70">Recents</span>
             <button
               type="button"
               onClick={() => setSelectMode(true)}

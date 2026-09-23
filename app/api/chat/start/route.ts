@@ -26,6 +26,7 @@ import { buildMemoryPromptBlock, retrieveRelevantMemories } from "@/lib/chat/mem
 import { getTimeDetails } from "@/lib/time";
 import { createRunTrace } from "@/lib/observability/run-trace";
 import { isDemoMode, filterDemoTools } from "@/lib/demo-policy";
+import { buildProjectContext } from "@/lib/projects/context";
 
 export async function POST(req: Request) {
   await initializeApp();
@@ -164,6 +165,7 @@ export async function POST(req: Request) {
   // greet without any saved context, and the no-memory prompt variant below
   // removes the memory guidance too.
   const memoryEnabled = conversation.memoryEnabled !== false;
+  const projectContext = memoryEnabled ? await buildProjectContext(conversation.projectId, "") : "";
   const relevantMemories = memoryEnabled ? await retrieveRelevantMemories("") : [];
   const memoryContext = buildMemoryPromptBlock(relevantMemories as any).replace("\n\n## Saved memories", "\n\n## Saved memories about the user");
 
@@ -239,7 +241,7 @@ ${timeContext}
   let finalResponseText = "";
 
   const fullSystemPrompt =
-    (memoryEnabled ? SYSTEM_PROMPT : SYSTEM_PROMPT_NO_MEMORY) + startPrompt;
+    (memoryEnabled ? SYSTEM_PROMPT : SYSTEM_PROMPT_NO_MEMORY) + projectContext + startPrompt;
   trace.metric("promptChars", fullSystemPrompt.length);
   trace.metric("activeToolCount", Object.keys(tools).length);
   trace.metric("activeToolNames", Object.keys(tools));
