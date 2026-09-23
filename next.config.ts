@@ -14,6 +14,8 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/**": [
       "./db/migrations/**",
+      // The License settings page reads the LICENSE file from disk at runtime.
+      "./LICENSE",
       // The Browser Automation tool imports `playwright` (traced), but its
       // CLI entry (cli.js) is not imported by the app — the Docker image
       // uses it to install Chromium + system deps for the exact same

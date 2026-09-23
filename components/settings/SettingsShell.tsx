@@ -9,6 +9,7 @@ import {
   Gauge,
   ListTodo,
   MessageSquareText,
+  ScrollText,
   Settings2,
   Shield,
   UserRound,
@@ -52,6 +53,7 @@ const groups = [
     ],
   },
   { label: "Usage", href: "/settings/usage", icon: Gauge },
+  { label: "License", href: "/settings/license", icon: ScrollText },
 ];
 
 export function SettingsShell({ children }: { children: React.ReactNode }) {

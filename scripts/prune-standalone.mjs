@@ -39,6 +39,7 @@ const keep = new Set([
   ".next",
   "public",
   "db", // only db/migrations survives the db-level prune below
+  "LICENSE", // read from disk at runtime by the License settings page
   ".env",
   ".env.production",
 ]);
