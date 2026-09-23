@@ -976,7 +976,12 @@ function ConversationChat({
         keepalive: unloadSafe,
       }).catch(() => undefined);
     };
-    const syncDocumentVisibility = () => sendVisibility(document.visibilityState === "visible");
+    const syncDocumentVisibility = () => {
+      const visible = document.visibilityState === "visible";
+      // Firefox may suspend a normal fetch immediately after a tab is hidden.
+      // A beacon has a chance to leave the process during that transition.
+      sendVisibility(visible, !visible);
+    };
     syncDocumentVisibility();
     document.addEventListener("visibilitychange", syncDocumentVisibility);
     const leave = () => sendVisibility(false, true);

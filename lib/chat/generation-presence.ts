@@ -60,12 +60,35 @@ export function completionNotificationPreview(input: {
   title: string;
   responseText: string;
 }) {
+  const lines = input.responseText.replace(/\r\n?/g, "\n").split("\n");
+  const headingIndex = lines.findIndex((line) => /^\s{0,3}#{1,6}\s+\S/.test(line));
+  const heading = headingIndex < 0 ? "" : plainNotificationText(lines[headingIndex]);
+  if (headingIndex >= 0) lines.splice(headingIndex, 1);
   return {
     conversationId: input.conversationId,
-    title: input.title,
-    body: input.responseText.slice(0, 100),
+    title: heading || input.title,
+    body: plainNotificationText(lines.join("\n")).slice(0, 100),
     url: `/chat/${input.conversationId}`,
   };
+}
+
+/** Turn a Markdown response into a compact native-notification preview. */
+function plainNotificationText(markdown: string): string {
+  return markdown
+    // Retain useful labels, not URLs or formatting syntax.
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/<https?:\/\/[^>]+>/g, "")
+    .replace(/```[\s\S]*?```/g, (block) => block.replace(/^```[^\n]*\n?|```$/g, ""))
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(/^\s{0,3}(?:[-*+] |\d+[.)] )/gm, "")
+    .replace(/^\s{0,3}>\s?/gm, "")
+    .replace(/^\s*(?:\|?\s*:?-{3,}:?\s*)+\|?\s*$/gm, "")
+    .replace(/[~*_]/g, "")
+    .replace(/<[^>]*>/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /**
@@ -77,22 +100,23 @@ export async function completeGenerationPresence(input: {
   conversationId: number;
   generationId: string;
   responseText: string;
-}): Promise<void> {
+}): Promise<"not-active" | "visible" | "missing-conversation" | "sent"> {
   const active = presence.active.get(input.conversationId);
-  if (!active || active.id !== input.generationId) return;
+  if (!active || active.id !== input.generationId) return "not-active";
   presence.active.delete(input.conversationId);
-  if (!active.backgrounded) return;
+  if (!active.backgrounded) return "visible";
 
   const conversation = await db
     .select({ title: conversations.title })
     .from(conversations)
     .where(eq(conversations.id, input.conversationId))
     .get();
-  if (!conversation) return;
+  if (!conversation) return "missing-conversation";
 
   publishUserNotification(completionNotificationPreview({
     conversationId: input.conversationId,
     title: conversation.title,
     responseText: input.responseText,
   }));
+  return "sent";
 }

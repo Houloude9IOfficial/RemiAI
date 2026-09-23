@@ -1017,7 +1017,7 @@ function UserMessageBubble({
                 <Play className="h-3.5 w-3.5" />
               </button>
             )}
-            {hasText && (
+            {/* {hasText && (
               <button
                 type="button"
                 onClick={() => setIsCollapsed((prev) => !prev)}
@@ -1031,7 +1031,7 @@ function UserMessageBubble({
                   <ChevronUp className="h-3.5 w-3.5" />
                 )}
               </button>
-            )}
+            )} */}
             {hasText && <CopyButton text={cleanText} ariaLabel="Copy message" />}
             {onEdit && (
               <button

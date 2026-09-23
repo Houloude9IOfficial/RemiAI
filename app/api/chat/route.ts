@@ -2050,11 +2050,19 @@ Definition of done:
       cleanupSucceeded = state === "completed";
     } finally {
       if (cleanupSucceeded) {
-        await completeGenerationPresence({
-          conversationId,
-          generationId: questionRun.id,
-          responseText: finalResponseText,
-        }).catch((error) => console.warn("[chat] Completion notification failed:", error));
+        try {
+          const notificationState = await completeGenerationPresence({
+            conversationId,
+            generationId: questionRun.id,
+            responseText: finalResponseText,
+          });
+          trace.event("completion_notification", { state: notificationState });
+        } catch (error) {
+          trace.event("completion_notification_failed", {
+            category: error instanceof Error ? error.name : "UnknownError",
+          });
+          console.warn("[chat] Completion notification failed:", error);
+        }
       } else {
         abandonGenerationPresence(conversationId, questionRun.id);
       }

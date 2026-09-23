@@ -387,7 +387,13 @@ ${timeContext}
         trace.recordState(state, { finishReason: finalFinishReason });
         trace.finish(state, { finishReason: finalFinishReason });
         if (state === "completed") {
-          await completeGenerationPresence({ conversationId, generationId, responseText: finalResponseText });
+          try {
+            const notificationState = await completeGenerationPresence({ conversationId, generationId, responseText: finalResponseText });
+            trace.event("completion_notification", { state: notificationState });
+          } catch (error) {
+            trace.event("completion_notification_failed", { category: error instanceof Error ? error.name : "UnknownError" });
+            console.warn("[chat-start] Completion notification failed:", error);
+          }
         } else {
           abandonGenerationPresence(conversationId, generationId);
         }
@@ -434,7 +440,13 @@ ${timeContext}
       trace.recordState(state, { finishReason: finalFinishReason });
       trace.finish(state, { finishReason: finalFinishReason });
       if (state === "completed") {
-        await completeGenerationPresence({ conversationId, generationId, responseText: finalResponseText });
+        try {
+          const notificationState = await completeGenerationPresence({ conversationId, generationId, responseText: finalResponseText });
+          trace.event("completion_notification", { state: notificationState });
+        } catch (error) {
+          trace.event("completion_notification_failed", { category: error instanceof Error ? error.name : "UnknownError" });
+          console.warn("[chat-start] Completion notification failed:", error);
+        }
       } else {
         abandonGenerationPresence(conversationId, generationId);
       }
