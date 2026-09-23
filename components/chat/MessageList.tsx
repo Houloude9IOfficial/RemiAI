@@ -30,7 +30,8 @@ export function MessageList({
   onContinue?: () => void;
   conversationId?: number;
 }) {
-  const waitingMessageRef = useRef<HTMLDivElement>(null);
+  const lastUserMessageRef = useRef<HTMLDivElement>(null);
+  const didInitialScrollRef = useRef(false);
   const { data: preferences } = useQuery({
     queryKey: ["preferences"],
     queryFn: preferencesApi.get,
@@ -87,7 +88,31 @@ export function MessageList({
   useEffect(() => {
     if (!isWaiting) return;
     const frame = requestAnimationFrame(() => {
-      waitingMessageRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      lastUserMessageRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [isWaiting, lastUserIndex]);
+
+  // Opening a conversation should land on the latest exchange, not on the top
+  // of a long transcript (scrollTop 0) and not pinned to the very bottom: the
+  // newest user message settles near the top of the viewport — it is
+  // right-aligned, so it reads as top-right — and its answer occupies the rest
+  // of the screen below it (bottom-left). Runs once per mount (MessageList is
+  // keyed by conversation) and instantly, so opening a chat never animates or
+  // jumps after paint.
+  useEffect(() => {
+    if (didInitialScrollRef.current) return;
+    // A render that is already waiting is the send path's job (effect above).
+    // Mark it handled so completing that run cannot later yank the user back.
+    if (isWaiting) {
+      didInitialScrollRef.current = true;
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      const el = lastUserMessageRef.current;
+      if (!el || didInitialScrollRef.current) return;
+      didInitialScrollRef.current = true;
+      el.scrollIntoView({ block: "start", inline: "nearest" });
     });
     return () => cancelAnimationFrame(frame);
   }, [isWaiting, lastUserIndex]);
@@ -115,8 +140,10 @@ export function MessageList({
               return (
                 <div
                   key={message.id}
-                  ref={idx === lastUserIndex && isWaiting ? waitingMessageRef : undefined}
-                  className="animate-fade-in"
+                  ref={idx === lastUserIndex ? lastUserMessageRef : undefined}
+                  // scroll-mt keeps a little breathing room above the anchored
+                  // message so it never sits flush against the header.
+                  className="animate-fade-in scroll-mt-6"
                 >
                   <MessageBubble
                     message={message}
