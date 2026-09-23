@@ -101,6 +101,9 @@ export function ChatHeader({
 
       {/* Right — personalization, skills chip, live usage meter, page actions */}
       <div className="flex shrink-0 items-center gap-2">
+        {totalTokens / Math.max(contextWindow, 1) >= 0.75 && (
+          <div className={cn("h-2 w-2 rounded-full", totalTokens / Math.max(contextWindow, 1) >= 0.9 ? "bg-status-warning" : "bg-primary")} title={`Context usage: ${formatCompact(totalTokens)} / ${formatCompact(contextWindow)}`} />
+        )}
         {!demo && onTemporaryChange && onMemoryChange && (
           <ChatPersonalizationMenu
             isTemporary={isTemporary ?? false}
@@ -108,9 +111,6 @@ export function ChatHeader({
             onTemporaryChange={onTemporaryChange}
             onMemoryChange={onMemoryChange}
           />
-        )}
-        {totalTokens / Math.max(contextWindow, 1) >= 0.75 && (
-          <div className={cn("h-2 w-2 rounded-full", totalTokens / Math.max(contextWindow, 1) >= 0.9 ? "bg-status-warning" : "bg-primary")} title={`Context usage: ${formatCompact(totalTokens)} / ${formatCompact(contextWindow)}`} />
         )}
         <div className="flex items-center gap-1">{actions}</div>
       </div>
