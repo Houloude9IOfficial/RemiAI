@@ -958,6 +958,36 @@ function ConversationChat({
 
   const [isAiStarting, setIsAiStarting] = useState(false);
 
+  // Generation belongs to the server, not this page. Keep the server informed
+  // about whether this conversation can be seen so it can notify the user
+  // once a background response has been safely persisted.
+  useEffect(() => {
+    const sendVisibility = (visible: boolean, unloadSafe = false) => {
+      const url = `/api/chat/${conversationId}/generation-presence`;
+      const body = JSON.stringify({ visible });
+      if (unloadSafe && navigator.sendBeacon) {
+        navigator.sendBeacon(url, new Blob([body], { type: "application/json" }));
+        return;
+      }
+      void fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+        keepalive: unloadSafe,
+      }).catch(() => undefined);
+    };
+    const syncDocumentVisibility = () => sendVisibility(document.visibilityState === "visible");
+    syncDocumentVisibility();
+    document.addEventListener("visibilitychange", syncDocumentVisibility);
+    const leave = () => sendVisibility(false, true);
+    window.addEventListener("pagehide", leave);
+    return () => {
+      document.removeEventListener("visibilitychange", syncDocumentVisibility);
+      window.removeEventListener("pagehide", leave);
+      leave();
+    };
+  }, [conversationId]);
+
   const handleSend = useCallback(
     (text: string) => {
       if (sendGuardRef.current || status === "submitted" || status === "streaming") return;

@@ -84,17 +84,29 @@ export const conversationsApi = {
     return fetch(`/api/conversations?${params}`).then((res) => unwrap<ConversationPage>(res));
   },
 
-  create: (input?: {
+  create: async (input?: {
     providerId?: number | null;
     modelId?: string | null;
     isTemporary?: boolean;
     memoryEnabled?: boolean;
-  }): Promise<Conversation> =>
-    fetch("/api/conversations", {
+  }): Promise<Conversation> => {
+    const conversation = await fetch("/api/conversations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input ?? {}),
-    }).then((res) => unwrap<Conversation>(res)),
+    }).then((res) => unwrap<Conversation>(res));
+    // Do not keep retrying a provider that was removed in another tab or from
+    // Settings. The server safely created this chat with no model; clear the
+    // now-invalid browser preference so the next New chat is clean too.
+    if (
+      typeof window !== "undefined" &&
+      input?.providerId != null &&
+      conversation.providerId !== input.providerId
+    ) {
+      window.localStorage.removeItem("lastModel");
+    }
+    return conversation;
+  },
 
   get: (
     id: number,

@@ -16,6 +16,11 @@ import { webFetchTool } from "@/lib/tools/web-fetch";
 import { queryRecentChanges } from "@/lib/fs/file-index";
 import { periodicallyPersistMessages } from "@/lib/chat/persist-interval";
 import { streamRegistry } from "@/lib/chat/stream-registry";
+import {
+  abandonGenerationPresence,
+  beginGenerationPresence,
+  completeGenerationPresence,
+} from "@/lib/chat/generation-presence";
 import { estimateTokenCount } from "@/lib/utils";
 import { buildMemoryPromptBlock, retrieveRelevantMemories } from "@/lib/chat/memories";
 import { getTimeDetails } from "@/lib/time";
@@ -30,6 +35,7 @@ export async function POST(req: Request) {
   const { conversationId } = (await req.json()) as {
     conversationId: number;
   };
+  const generationId = crypto.randomUUID();
 
   trace.metric("conversationId", conversationId);
   const conversationLookupStartedAt = performance.now();
@@ -72,6 +78,11 @@ export async function POST(req: Request) {
     provider,
     conversation.modelId,
     normalizeQualityPolicy(conversation.qualityPolicy),
+  );
+  beginGenerationPresence(
+    conversationId,
+    generationId,
+    req.headers.get("x-chat-visible") !== "false",
   );
 
   // ── No tools at all — all context is pre-gathered and injected ──
@@ -225,6 +236,7 @@ ${timeContext}
   let providerFailed = false;
   let aborted = false;
   let finalFinishReason: string | undefined;
+  let finalResponseText = "";
 
   const fullSystemPrompt =
     (memoryEnabled ? SYSTEM_PROMPT : SYSTEM_PROMPT_NO_MEMORY) + startPrompt;
@@ -307,6 +319,7 @@ ${timeContext}
     },
     onFinish: async ({ text: outputText, usage, finishReason }) => {
       finalFinishReason = finishReason;
+      finalResponseText = outputText ?? "";
       trace.metric("finishReason", finishReason);
       // Derive a meaningful title from the AI's greeting
       const title = outputText
@@ -373,6 +386,11 @@ ${timeContext}
         const state = aborted ? "cancelled" : providerFailed ? "failed" : "completed";
         trace.recordState(state, { finishReason: finalFinishReason });
         trace.finish(state, { finishReason: finalFinishReason });
+        if (state === "completed") {
+          await completeGenerationPresence({ conversationId, generationId, responseText: finalResponseText });
+        } else {
+          abandonGenerationPresence(conversationId, generationId);
+        }
         return;
       }
       // onFinish wasn't able to apply tokens — try as a fallback
@@ -415,6 +433,11 @@ ${timeContext}
       const state = aborted ? "cancelled" : providerFailed ? "failed" : "completed";
       trace.recordState(state, { finishReason: finalFinishReason });
       trace.finish(state, { finishReason: finalFinishReason });
+      if (state === "completed") {
+        await completeGenerationPresence({ conversationId, generationId, responseText: finalResponseText });
+      } else {
+        abandonGenerationPresence(conversationId, generationId);
+      }
     },
     trace,
   );

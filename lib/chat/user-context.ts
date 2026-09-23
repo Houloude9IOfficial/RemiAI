@@ -79,6 +79,7 @@ export function userContextHeaders(): Record<string, string> {
   const headers: Record<string, string> = {
     "x-user-timezone": getClientTimeZone(),
     "x-user-locale": getClientLocale(),
+    "x-chat-visible": typeof document === "undefined" || document.visibilityState === "visible" ? "true" : "false",
   };
   if (cachedLocation) {
     headers["x-user-latitude"] = String(cachedLocation.latitude);

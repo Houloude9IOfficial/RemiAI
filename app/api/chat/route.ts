@@ -15,6 +15,11 @@ import { continuePendingQuestionAnswers } from "@/lib/chat/question-continuation
 import { isQuestionsOutput } from "@/lib/chat/questions";
 import { persistUIMessage } from "@/lib/chat/persist";
 import { streamRegistry } from "@/lib/chat/stream-registry";
+import {
+  abandonGenerationPresence,
+  beginGenerationPresence,
+  completeGenerationPresence,
+} from "@/lib/chat/generation-presence";
 import { periodicallyPersistMessages } from "@/lib/chat/persist-interval";
 import { asc, eq, sql } from "drizzle-orm";
 import { db, initializeApp } from "@/db";
@@ -287,11 +292,20 @@ export async function POST(req: Request) {
   if (questionContinuation && !pendingQuestionSubmissions(db, conversationId, true).length) return new NextResponse(null, { status: 204 });
   const run = startQuestionRun(conversationId);
   if (!run) return NextResponse.json({ error: "A response is already running" }, { status: 409 });
+  beginGenerationPresence(
+    conversationId,
+    run.id,
+    req.headers.get("x-chat-visible") !== "false",
+  );
   try {
     const response = await runChatRequest(req, run);
-    if (!response.ok) finishQuestionRun(db, conversationId, run, false);
+    if (!response.ok) {
+      abandonGenerationPresence(conversationId, run.id);
+      finishQuestionRun(db, conversationId, run, false);
+    }
     return response;
   } catch (error) {
+    abandonGenerationPresence(conversationId, run.id);
     finishQuestionRun(db, conversationId, run, false);
     throw error;
   }
@@ -1328,6 +1342,7 @@ Definition of done:
   let tokensApplied = false;
   let aborted = false;
   let finalFinishReason: string | undefined;
+  let finalResponseText = "";
   let finalStepCount = 0;
 
   // Capture a normalized error payload from streamText's onError callback so
@@ -1612,6 +1627,7 @@ Definition of done:
           .map((step) => step.text ?? "")
           .filter(Boolean)
           .join("\n") || outputText || "";
+      finalResponseText = runText;
       const hasToolCalls = Array.isArray(toolCalls) && toolCalls.length > 0;
       if (researchRequested && runText.trim() && !capturedErrorPayload) {
         void recordCitedClaims({
@@ -2033,6 +2049,15 @@ Definition of done:
       });
       cleanupSucceeded = state === "completed";
     } finally {
+      if (cleanupSucceeded) {
+        await completeGenerationPresence({
+          conversationId,
+          generationId: questionRun.id,
+          responseText: finalResponseText,
+        }).catch((error) => console.warn("[chat] Completion notification failed:", error));
+      } else {
+        abandonGenerationPresence(conversationId, questionRun.id);
+      }
       finishQuestionRun(db, conversationId, questionRun, cleanupSucceeded);
       if (cleanupSucceeded) continuePendingQuestionAnswers(db, req.url, req.headers, conversationId);
     }

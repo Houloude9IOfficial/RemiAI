@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { and, desc, eq, lt, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { conversations } from "@/db/schema";
+import { conversations, providers } from "@/db/schema";
 import { jsonError } from "@/lib/validation/api";
 import { DEMO_PROVIDER_MODEL, ensureDemoProvider } from "@/lib/demo-provider";
 import { isDemoMode } from "@/lib/demo-policy";
@@ -85,6 +85,18 @@ export async function POST(req: Request) {
   }
 
   const demoProvider = isDemoMode() ? ensureDemoProvider() : null;
+  // The browser remembers its last model locally. A provider can be deleted
+  // between sessions, leaving that cached numeric id dangling; never pass it
+  // straight into the foreign-key column. A new chat without a usable model is
+  // still useful (the composer asks the user to choose one) and is preferable
+  // to making the entire New chat action fail with SQLite's raw FK error.
+  const requestedProvider = !demoProvider && body.providerId !== undefined && body.providerId !== null
+    ? await db
+      .select({ id: providers.id })
+      .from(providers)
+      .where(eq(providers.id, body.providerId))
+      .get()
+    : null;
   const previousConversation = await db
     .select({ bashMode: conversations.bashMode })
     .from(conversations)
@@ -94,8 +106,12 @@ export async function POST(req: Request) {
   const row = await db
     .insert(conversations)
     .values({
-      providerId: demoProvider?.id ?? body.providerId ?? null,
-      modelId: demoProvider ? DEMO_PROVIDER_MODEL ?? null : body.modelId ?? null,
+      providerId: demoProvider?.id ?? requestedProvider?.id ?? null,
+      modelId: demoProvider
+        ? DEMO_PROVIDER_MODEL ?? null
+        : requestedProvider
+          ? body.modelId ?? null
+          : null,
       // Temporary chats default to memory ENABLED (the two toggles are fully
       // independent — the user can flip either one from the chat menu).
       isTemporary: body.isTemporary ?? false,
