@@ -952,6 +952,8 @@ export function ChatInput({
         const commandWord =
           level.kind === "tools"
             ? "tool"
+            : level.kind === "projects"
+              ? "project"
             : level.kind === "skills"
               ? "skill"
               : "mcp";
@@ -1193,6 +1195,7 @@ export function ChatInput({
         />
 
         <FilePickerDialog
+          key={fileDialogOpen ? "open" : "closed"}
           open={fileDialogOpen}
           onOpenChange={setFileDialogOpen}
           onSelect={handleFileSelect}

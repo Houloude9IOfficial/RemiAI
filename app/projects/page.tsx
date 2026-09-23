@@ -277,7 +277,7 @@ export default function ProjectsPage() {
                 <div className="min-w-0">
                   {/* <p className="text-xs font-medium uppercase tracking-[0.12em] text-primary">Project workspace</p> */}
                   <h2 className="mt-1 truncate text-2xl font-semibold tracking-tight">{selected.name}</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">{chats.length} {chats.length === 1 ? "chat" : "chats"} · {files.filter((file) => file.isFile).length} shared {files.filter((file) => file.isFile).length === 1 ? "file" : "files"}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{chats.length} {chats.length === 1 ? "chat" : "chats"} · {files.filter((file) => file.isFile).length} {files.filter((file) => file.isFile).length === 1 ? "file" : "files"}</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <Button variant="outline" onClick={() => { setSelectedId(selected.id); void run(() => projectsApi.update(selected.id, { pinned: !selected.pinned }), selected.pinned ? "Unpinned" : "Pinned"); }}>

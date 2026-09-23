@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
+import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -30,11 +31,13 @@ import {
   Clock,
   Timer,
   MoreHorizontal,
+  ChevronRight,
 } from "lucide-react";
 import { conversationsApi, type Conversation } from "@/lib/api/conversations";
 import { ConversationTitle } from "@/components/sidebar/ConversationTitle";
 import { toast } from "sonner";
 import { useActiveStreams } from "@/lib/chat/streaming-context";
+import { useSidebarPreference } from "./useSidebarPreference";
 
 function getConversationGroup(updatedAt: string): "Today" | "Yesterday" | "Previous 7 days" | "Older" {
   const updated = new Date(normalizeDate(updatedAt)).getTime();
@@ -251,6 +254,8 @@ function StatRow({
 }
 
 export function ConversationList() {
+  const [sectionValue, setSectionValue] = useSidebarPreference("remiai:sidebar-recents-open", "open");
+  const sectionOpen = sectionValue === "open";
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -509,32 +514,69 @@ export function ConversationList() {
     return () => document.removeEventListener("keydown", handler);
   }, [contextMenuId]);
 
+  const sectionHeader = (
+    <div className="flex items-center gap-1 px-1.5 pb-0">
+      <button
+        type="button"
+        onClick={() => setSectionValue(sectionOpen ? "closed" : "open")}
+        aria-expanded={sectionOpen}
+        aria-controls="sidebar-recents-list"
+        className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground transition-colors hover:text-sidebar-foreground"
+      >
+        <ChevronRight className={`h-3.5 w-3.5 transition-transform duration-200 ${sectionOpen ? "rotate-90" : ""}`} />
+        Recents
+      </button>
+      {!selectMode && filteredConversations.length > 0 && (
+        <button
+          type="button"
+          onClick={() => {
+            setSectionValue("open");
+            setSelectMode(true);
+          }}
+          className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
+          title="Select conversations"
+          aria-label="Select conversations"
+        >
+          <CheckSquare className="h-4 w-4" />
+        </button>
+      )}
+    </div>
+  );
+
   if (isLoading) {
-    return <p className="px-2 py-2 text-xs text-muted-foreground/70">Loading conversations…</p>;
+    return <section>{sectionHeader}{sectionOpen && <p className="px-3 py-2 text-xs text-muted-foreground/70">Loading conversations…</p>}</section>;
   }
 
   if (isError && conversations.length === 0) {
     return (
-      <button
+      <section>{sectionHeader}{sectionOpen && <button
         type="button"
         onClick={() => refetch()}
-        className="px-2 py-2 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+        className="px-3 py-2 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
       >
         Could not load conversations. Retry
-      </button>
+      </button>}</section>
     );
   }
 
   if (filteredConversations.length === 0) {
-    return (
-      <div><div className="px-2 py-1 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70">Recents</div><p className="px-2 py-1 text-xs text-muted-foreground/70">No recent chats</p></div>
-    );
+    return <section>{sectionHeader}{sectionOpen && <p className="px-3 py-2 text-xs text-muted-foreground/70">No recent chats</p>}</section>;
   }
 
   return (
-    <>
+    <section>
+      {sectionHeader}
+      <AnimatePresence initial={false}>
+      {sectionOpen && <motion.div
+        id="sidebar-recents-list"
+        initial={{ height: 0, opacity: 0 }}
+        animate={{ height: "auto", opacity: 1 }}
+        exit={{ height: 0, opacity: 0 }}
+        transition={{ duration: 0.22, ease: "easeInOut" }}
+        className="overflow-hidden"
+      >
       {/* Batch selection header */}
-      <div className="flex items-center justify-between px-2 py-1">
+      {selectMode && <div className="flex items-center justify-between px-2 py-2">
         {selectMode ? (
           <>
             <div className="flex items-center gap-2">
@@ -580,30 +622,17 @@ export function ConversationList() {
               </button>
             </div>
           </>
-        ) : (
-          <>
-            <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70">Recents</span>
-            <button
-              type="button"
-              onClick={() => setSelectMode(true)}
-              className="rounded-md p-1 text-muted-foreground/55 hover:bg-muted hover:text-muted-foreground transition-colors"
-              title="Select conversations"
-              aria-label="Select conversations"
-            >
-              <CheckSquare className="h-3.5 w-3.5" />
-            </button>
-          </>
-        )}
-      </div>
+        ) : null}
+      </div>}
 
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-2">
         {(["Today", "Yesterday", "Previous 7 days", "Older"] as const).map((groupName) => {
           const groupItems = grouped[groupName];
           if (groupItems.length === 0) return null;
 
           return (
-            <div key={groupName} className="flex flex-col gap-0.5">
-              <div className="px-2 pb-0.5 pt-2 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground/45 first:pt-0">
+            <div key={groupName} className="flex flex-col gap-1">
+              <div className="px-3 pb-1 pt-2 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground/55 first:pt-0">
                 {groupName}
               </div>
 
@@ -628,7 +657,7 @@ export function ConversationList() {
                     /* ---- Inline rename input ---- */
                     <div
                       className={cn(
-                        "group/conversation flex w-full items-center justify-start rounded-md px-2 py-1.5 text-sm text-left",
+                        "group/conversation flex w-full items-center justify-start rounded-lg px-3 py-2 text-sm text-left",
                         isActive
                           ? "bg-sidebar-accent text-sidebar-foreground"
                           : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground",
@@ -672,7 +701,7 @@ export function ConversationList() {
                     /* ---- Select mode: whole row toggles selection ---- */
                     <div
                       className={cn(
-                        "group/conversation flex w-full items-center justify-start rounded-md px-2 py-1.5 text-sm text-left cursor-pointer",
+                        "group/conversation flex w-full items-center justify-start rounded-lg px-3 py-2 text-sm text-left cursor-pointer",
                         isSelected && "bg-primary/10",
                       )}
                       onClick={() => toggleSelect(conversation.id)}
@@ -694,10 +723,10 @@ export function ConversationList() {
                     </div>
                   ) : (
                     /* ---- Normal view: the whole row is the link ---- */
-                    <div className={cn("group/conversation relative flex w-full items-center rounded-md text-sm text-left", isActive ? "bg-sidebar-accent text-sidebar-foreground" : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground")}>
+                    <div className={cn("group/conversation relative flex w-full items-center rounded-lg text-sm text-left transition-colors", isActive ? "bg-sidebar-accent text-sidebar-foreground" : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground")}>
                     <Link
                       href={`/chat/${conversation.id}`}
-                      className="flex min-w-0 flex-1 items-center px-2 py-1.5"
+                      className="flex min-w-0 flex-1 items-center px-3 py-2"
                       onMouseEnter={() => prefetchConversation(conversation.id)}
                       onFocus={() => prefetchConversation(conversation.id)}
                     >
@@ -775,6 +804,8 @@ export function ConversationList() {
           </button>
         )}
       </div>
+      </motion.div>}
+      </AnimatePresence>
 
       {/* Single delete confirmation dialog */}
       <Dialog
@@ -884,6 +915,6 @@ export function ConversationList() {
           />
         );
       })()}
-    </>
+    </section>
   );
 }

@@ -4,7 +4,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { projectsApi } from "@/lib/api/projects";
 import { conversationsApi } from "@/lib/api/conversations";
-import { dispatchChatInputPrefill } from "@/lib/chat-input-registry";
 
 export function ProjectControl({ conversationId, initialProjectId }: { conversationId: number; initialProjectId: number | null }) {
   const queryClient = useQueryClient();
@@ -15,5 +14,5 @@ export function ProjectControl({ conversationId, initialProjectId }: { conversat
     const next = event.target.value ? Number(event.target.value) : null;
     try { await conversationsApi.update(conversationId, { projectId: next }); queryClient.invalidateQueries({ queryKey: ["projects"] }); queryClient.invalidateQueries({ queryKey: ["project-chats"] }); queryClient.invalidateQueries({ queryKey: ["sidebar-conversations"] }); queryClient.invalidateQueries({ queryKey: ["conversation", conversationId] }); toast.success(next ? "Chat linked to project" : "Chat unlinked"); }
     catch (error) { toast.error(String(error)); }
-  }} className="max-w-30 rounded-md border border-border bg-background px-1 py-1 text-xs text-foreground"><option value="">No project</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select><select aria-label="Reference project in message" title="Insert a project reference into your message" value="" onChange={(event) => { if (!event.target.value) return; dispatchChatInputPrefill(`[project:${event.target.value}]`); event.target.value = ""; }} className="h-8 w-10 rounded-md border border-border bg-background px-1 text-xs text-foreground"><option value="">@</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></div>;
+  }} className="max-w-30 rounded-md border border-border bg-background px-1 py-1 text-xs text-foreground"><option value="">No project</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></div>;
 }

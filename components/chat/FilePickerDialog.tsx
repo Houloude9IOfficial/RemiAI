@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { directoriesApi, type BrowseEntry } from "@/lib/api/directories";
+import { projectsApi } from "@/lib/api/projects";
+import { formatProjectFileReference } from "@/lib/projects/references";
 import { formatFileDisplay } from "./FileMention";
 import {
   Dialog,
@@ -32,12 +34,18 @@ interface FilePickerDialogProps {
   onSelect: (displayText: string) => void;
 }
 
+type PickerEntry = BrowseEntry & {
+  source: "directory" | "project";
+  isRoot: boolean;
+};
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 export function FilePickerDialog({ open, onOpenChange, onSelect }: FilePickerDialogProps) {
   const [expandedRoot, setExpandedRoot] = useState<number | null>(null);
+  const [expandedProject, setExpandedProject] = useState<number | null>(null);
   // Relative path inside the expanded root ("" = root level). Lets the user
   // drill into subdirectories as deep as they need to.
   const [currentPath, setCurrentPath] = useState("");
@@ -52,12 +60,22 @@ export function FilePickerDialog({ open, onOpenChange, onSelect }: FilePickerDia
     queryFn: () => directoriesApi.browse(),
     enabled: open,
   });
+  const { data: projects = [], isLoading: projectsLoading } = useQuery({
+    queryKey: ["projects"],
+    queryFn: projectsApi.list,
+    enabled: open,
+  });
 
   // Fetch files for the current root + subdirectory
   const { data: filesData, isLoading: filesLoading } = useQuery({
     queryKey: ["directories", "browse", "root", expandedRoot, currentPath],
     queryFn: () => directoriesApi.browse(expandedRoot!, currentPath || undefined, 2),
     enabled: open && expandedRoot !== null,
+  });
+  const { data: projectFiles = [], isLoading: projectFilesLoading } = useQuery({
+    queryKey: ["project-files", expandedProject],
+    queryFn: () => projectsApi.files(expandedProject!),
+    enabled: open && expandedProject !== null,
   });
 
   // Reset when opening
@@ -66,6 +84,7 @@ export function FilePickerDialog({ open, onOpenChange, onSelect }: FilePickerDia
       onOpenChange(nextOpen);
       if (nextOpen) {
         setExpandedRoot(null);
+        setExpandedProject(null);
         setCurrentPath("");
         setSearchQuery("");
         setSelectedIndex(0);
@@ -79,6 +98,15 @@ export function FilePickerDialog({ open, onOpenChange, onSelect }: FilePickerDia
   // Navigate into a directory (or jump to a breadcrumb level)
   const navigateTo = useCallback((rootId: number, path: string) => {
     setExpandedRoot(rootId);
+    setExpandedProject(null);
+    setCurrentPath(path);
+    setSearchQuery("");
+    setSelectedIndex(0);
+  }, []);
+
+  const navigateToProject = useCallback((projectId: number, path: string) => {
+    setExpandedProject(projectId);
+    setExpandedRoot(null);
     setCurrentPath(path);
     setSearchQuery("");
     setSelectedIndex(0);
@@ -86,7 +114,7 @@ export function FilePickerDialog({ open, onOpenChange, onSelect }: FilePickerDia
 
   // Go up one level: subdirectory → parent → root list
   const goUpOneLevel = useCallback(() => {
-    if (expandedRoot === null) return;
+    if (expandedRoot === null && expandedProject === null) return;
     setSearchQuery("");
     setSelectedIndex(0);
     if (currentPath) {
@@ -95,8 +123,9 @@ export function FilePickerDialog({ open, onOpenChange, onSelect }: FilePickerDia
       setCurrentPath(segments.join("/"));
     } else {
       setExpandedRoot(null);
+      setExpandedProject(null);
     }
-  }, [expandedRoot, currentPath]);
+  }, [expandedRoot, expandedProject, currentPath]);
 
   // Path segments for the breadcrumb
   const pathSegments = useMemo(
@@ -104,24 +133,48 @@ export function FilePickerDialog({ open, onOpenChange, onSelect }: FilePickerDia
     [currentPath],
   );
 
-  const rootLabel =
-    rootsData?.roots.find((r) => r.rootId === expandedRoot)?.rootLabel ?? "Directory";
+  const rootLabel = expandedProject !== null
+    ? projects.find((project) => project.id === expandedProject)?.name ?? "Project files"
+    : rootsData?.roots.find((r) => r.rootId === expandedRoot)?.rootLabel ?? "Directory";
 
   // Build entries
   const entries = useMemo(() => {
-    const items: { type: "root" | "file"; entry: BrowseEntry }[] = [];
+    const items: PickerEntry[] = [];
 
-    if (expandedRoot === null) {
-      // Show roots
-      if (!rootsData) return items;
-      for (const root of rootsData.roots) {
-        items.push({ type: "root", entry: root });
+    if (expandedRoot === null && expandedProject === null) {
+      for (const root of rootsData?.roots ?? []) {
+        items.push({ ...root, source: "directory", isRoot: true });
       }
-    } else {
-      // Show files in expanded root
-      if (!filesData?.entries) return items;
-      for (const file of filesData.entries) {
-        items.push({ type: "file", entry: file });
+      for (const project of projects) {
+        items.push({
+          name: project.name,
+          relativePath: "",
+          isDirectory: true,
+          rootId: project.id,
+          rootLabel: project.name,
+          source: "project",
+          isRoot: true,
+        });
+      }
+    } else if (expandedRoot !== null) {
+      for (const file of filesData?.entries ?? []) {
+        items.push({ ...file, source: "directory", isRoot: false });
+      }
+    } else if (expandedProject !== null) {
+      const prefix = currentPath ? `${currentPath}/` : "";
+      for (const file of projectFiles) {
+        if (!file.path.startsWith(prefix)) continue;
+        const remainder = file.path.slice(prefix.length);
+        if (!remainder || remainder.includes("/")) continue;
+        items.push({
+          name: file.name,
+          relativePath: file.path,
+          isDirectory: file.isDirectory,
+          rootId: expandedProject,
+          rootLabel,
+          source: "project",
+          isRoot: false,
+        });
       }
     }
 
@@ -130,14 +183,14 @@ export function FilePickerDialog({ open, onOpenChange, onSelect }: FilePickerDia
       const q = searchQuery.toLowerCase();
       return items.filter(
         (item) =>
-          item.entry.name.toLowerCase().includes(q) ||
-          item.entry.relativePath.toLowerCase().includes(q) ||
-          item.entry.rootLabel.toLowerCase().includes(q),
+          item.name.toLowerCase().includes(q) ||
+          item.relativePath.toLowerCase().includes(q) ||
+          item.rootLabel.toLowerCase().includes(q),
       );
     }
 
-    return items.slice(0, 20); // Show more in dialog than in dropdown
-  }, [rootsData, filesData, expandedRoot, searchQuery]);
+    return items.slice(0, 100);
+  }, [rootsData, projects, filesData, projectFiles, expandedRoot, expandedProject, currentPath, rootLabel, searchQuery]);
 
   // Keep the selection inside the visible list (entries shrink on refetch/filter)
   const activeIndex = Math.min(selectedIndex, Math.max(entries.length - 1, 0));
@@ -151,19 +204,18 @@ export function FilePickerDialog({ open, onOpenChange, onSelect }: FilePickerDia
   }, [activeIndex]);
 
   const handleSelect = useCallback(
-    (item: (typeof entries)[number]) => {
-      const entry = item.entry;
-
-      // Any directory → navigate into it (roots land on their top level)
+    (entry: PickerEntry) => {
       if (entry.isDirectory) {
-        navigateTo(entry.rootId, item.type === "root" ? "" : entry.relativePath);
+        if (entry.source === "project") navigateToProject(entry.rootId, entry.isRoot ? "" : entry.relativePath);
+        else navigateTo(entry.rootId, entry.isRoot ? "" : entry.relativePath);
         return;
       }
 
-      // File → insert marker
-      onSelect(formatFileDisplay(entry) + " ");
+      onSelect(entry.source === "project"
+        ? `📄 ${entry.rootLabel}/${entry.relativePath} ${formatProjectFileReference({ projectId: entry.rootId, kind: "file", path: entry.relativePath })} `
+        : formatFileDisplay(entry) + " ");
     },
-    [onSelect, navigateTo],
+    [onSelect, navigateTo, navigateToProject],
   );
 
   const handleKeyDown = useCallback(
@@ -185,7 +237,7 @@ export function FilePickerDialog({ open, onOpenChange, onSelect }: FilePickerDia
           break;
         case "Escape":
           e.preventDefault();
-          if (expandedRoot !== null) {
+          if (expandedRoot !== null || expandedProject !== null) {
             goUpOneLevel();
           } else {
             handleOpenChange(false);
@@ -195,11 +247,9 @@ export function FilePickerDialog({ open, onOpenChange, onSelect }: FilePickerDia
           e.preventDefault();
           {
             const item = entries[activeIndex];
-            if (item?.entry.isDirectory) {
-              navigateTo(
-                item.entry.rootId,
-                item.type === "root" ? "" : item.entry.relativePath,
-              );
+            if (item?.isDirectory) {
+              if (item.source === "project") navigateToProject(item.rootId, item.isRoot ? "" : item.relativePath);
+              else navigateTo(item.rootId, item.isRoot ? "" : item.relativePath);
             }
           }
           break;
@@ -209,10 +259,12 @@ export function FilePickerDialog({ open, onOpenChange, onSelect }: FilePickerDia
           break;
       }
     },
-    [entries, activeIndex, handleSelect, expandedRoot, handleOpenChange, navigateTo, goUpOneLevel],
+    [entries, activeIndex, handleSelect, expandedRoot, expandedProject, handleOpenChange, navigateTo, navigateToProject, goUpOneLevel],
   );
 
-  const showLoading = rootsLoading || (expandedRoot !== null && filesLoading);
+  const showLoading = (expandedRoot === null && expandedProject === null && (rootsLoading || projectsLoading))
+    || (expandedRoot !== null && filesLoading)
+    || (expandedProject !== null && projectFilesLoading);
   const empty = !showLoading && entries.length === 0;
 
   return (
@@ -220,7 +272,7 @@ export function FilePickerDialog({ open, onOpenChange, onSelect }: FilePickerDia
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
-            {expandedRoot !== null ? (
+            {expandedRoot !== null || expandedProject !== null ? (
               <button
                 type="button"
                 onClick={goUpOneLevel}
@@ -230,23 +282,23 @@ export function FilePickerDialog({ open, onOpenChange, onSelect }: FilePickerDia
                 {currentPath ? "Back" : "Back to directories"}
               </button>
             ) : (
-              "Browse files"
+              "Browse server files"
             )}
           </DialogTitle>
           <DialogDescription>
-            Select a file or directory to reference. The AI will access it from your configured directories.
+            Reference a server folder, file, or a project&apos;s shared files.
           </DialogDescription>
         </DialogHeader>
 
         {/* Breadcrumb */}
-        {expandedRoot !== null && (
+        {(expandedRoot !== null || expandedProject !== null) && (
           <nav
             aria-label="Current directory"
             className="flex flex-wrap items-center gap-1 rounded-lg bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground/80"
           >
             <button
               type="button"
-              onClick={() => navigateTo(expandedRoot, "")}
+              onClick={() => expandedProject !== null ? navigateToProject(expandedProject, "") : navigateTo(expandedRoot!, "")}
               className="max-w-[140px] truncate rounded px-1 py-0.5 font-medium text-foreground/70 transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40"
             >
               {rootLabel}
@@ -256,7 +308,9 @@ export function FilePickerDialog({ open, onOpenChange, onSelect }: FilePickerDia
                 <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/30" />
                 <button
                   type="button"
-                  onClick={() => navigateTo(expandedRoot, pathSegments.slice(0, idx + 1).join("/"))}
+                  onClick={() => expandedProject !== null
+                    ? navigateToProject(expandedProject, pathSegments.slice(0, idx + 1).join("/"))
+                    : navigateTo(expandedRoot!, pathSegments.slice(0, idx + 1).join("/"))}
                   className={cn(
                     "max-w-[140px] truncate rounded px-1 py-0.5 transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40",
                     idx === pathSegments.length - 1
@@ -303,26 +357,26 @@ export function FilePickerDialog({ open, onOpenChange, onSelect }: FilePickerDia
             <div className="px-3 py-10 text-center text-sm text-muted-foreground/50">
               {searchQuery.trim()
                 ? `No files matching "${searchQuery}"`
-                : expandedRoot !== null
+                : expandedRoot !== null || expandedProject !== null
                   ? "This directory is empty"
-                  : "No directories configured. Add one in Settings > Directories."}
+                  : "No server directories or projects available."}
             </div>
           )}
 
           {!showLoading &&
             entries.map((item, idx) => {
-              const entry = item.entry;
+              const entry = item;
               const isSelected = idx === activeIndex;
-              const isRoot = item.type === "root";
+              const isRoot = item.isRoot;
 
               return (
                 <div
-                  key={`${item.type}-${entry.rootId}-${entry.relativePath}`}
+                  key={`${item.source}-${entry.rootId}-${entry.relativePath}`}
                   role="button"
                   tabIndex={0}
                   aria-label={
                     isRoot
-                      ? `Browse directory ${entry.rootLabel}`
+                      ? `Browse ${entry.source === "project" ? "project files for" : "directory"} ${entry.rootLabel}`
                       : entry.isDirectory
                         ? `Open folder ${entry.name}`
                         : `Select file ${entry.name}`
@@ -355,6 +409,9 @@ export function FilePickerDialog({ open, onOpenChange, onSelect }: FilePickerDia
                   <span className="flex-1 truncate font-medium">
                     {isRoot ? entry.rootLabel : entry.name}
                   </span>
+                  {isRoot && entry.source === "project" && (
+                    <span className="shrink-0 text-[11px] text-muted-foreground/60">Project files</span>
+                  )}
 
                   {/* Path hint */}
                   {!isRoot && entry.relativePath && (
@@ -366,18 +423,24 @@ export function FilePickerDialog({ open, onOpenChange, onSelect }: FilePickerDia
                   {/* Actions */}
                   <span className="flex shrink-0 items-center gap-0.5">
                     {/* Nested folder: attach the folder itself (revealed on hover) */}
-                    {!isRoot && entry.isDirectory && (
+                    {(entry.source === "project" || !isRoot) && entry.isDirectory && (
                       <button
                         type="button"
-                        title="Attach this folder"
-                        aria-label={`Attach folder ${entry.name}`}
+                        title={isRoot ? "Attach all project files" : "Attach this folder"}
+                        aria-label={isRoot ? `Attach all files from project ${entry.rootLabel}` : `Attach folder ${entry.name}`}
                         className={cn(
                           "rounded-md p-1 text-muted-foreground/40 opacity-0 transition-all group-hover:opacity-100 hover:text-primary focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40",
-                          isSelected && "opacity-100",
+                          (isSelected || isRoot) && "opacity-100",
                         )}
                         onClick={(e) => {
                           e.stopPropagation();
-                          onSelect(formatFileDisplay(entry) + " ");
+                          onSelect(entry.source === "project"
+                            ? `📁 ${entry.rootLabel}${isRoot ? " files" : `/${entry.relativePath}`} ${formatProjectFileReference({
+                                projectId: entry.rootId,
+                                kind: isRoot ? "root" : "folder",
+                                path: isRoot ? null : entry.relativePath,
+                              })} `
+                            : formatFileDisplay(entry) + " ");
                         }}
                       >
                         <Plus className="h-3.5 w-3.5" />

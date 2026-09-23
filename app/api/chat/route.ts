@@ -113,6 +113,7 @@ import { buildSessionFileTools } from "@/lib/session-files/tools";
 import { buildProfileTools } from "@/lib/tools/profile";
 import { buildProjectTools } from "@/lib/projects/tools";
 import { buildProjectContext } from "@/lib/projects/context";
+import { buildProjectAttachmentContext, buildProjectAttachmentTools } from "@/lib/projects/attachments";
 import { buildRoutinesTools } from "@/lib/tools/routines";
 import { buildScheduleTool } from "@/lib/tools/schedule";
 import { buildToolHelpTool, buildListAvailableToolsTool } from "@/lib/tools/tool-help";
@@ -456,6 +457,15 @@ async function runChatRequest(req: Request, questionRun: QuestionRun) {
     trigger,
     messageId,
   });
+  const lastUserText =
+    [...uiMessages]
+      .reverse()
+      .find((m) => m.role === "user")
+      ?.parts.filter(
+        (p): p is { type: "text"; text: string } => p.type === "text",
+      )
+      .map((p) => p.text)
+      .join(" ") ?? "";
   trace.dbQuery("conversation_reconstruction", reconstructionStartedAt, {
     messageCount: uiMessages.length,
   });
@@ -692,6 +702,7 @@ async function runChatRequest(req: Request, questionRun: QuestionRun) {
   const projectToolSet = !isDemoMode() && memoryEnabled && conversation.projectId
     ? buildProjectTools(conversationId)
     : {};
+  const projectAttachmentToolSet = buildProjectAttachmentTools(lastUserText);
 
   // In plan mode, filter out write tools — AI can only read/plan, not modify files
   const writeBlocklist = [
@@ -825,6 +836,7 @@ Definition of done:
     ...effectiveCanvasToolSet,
     ...skillsToolSet,
     ...effectiveProjectToolSet,
+    ...projectAttachmentToolSet,
   };
 
   // list_available_tools should only advertise tools that are ACTUALLY
@@ -968,15 +980,6 @@ Definition of done:
   // budget (relevance + recency scoring, deduped). Irrelevant memories are
   // still reachable via search_memories / get_recent_memories tools, so this
   // only trims what the model sees — never what it can recall on demand.
-  const lastUserText =
-    [...uiMessages]
-      .reverse()
-      .find((m) => m.role === "user")
-      ?.parts.filter(
-        (p): p is { type: "text"; text: string } => p.type === "text",
-      )
-      .map((p) => p.text)
-      .join(" ") ?? "";
   const qualityStrategy = chooseQualityStrategy(
     instantMode ? "minimal" : normalizeQualityPolicy(conversation.qualityPolicy),
     estimateTaskComplexity(lastUserText, mode),
@@ -1069,6 +1072,7 @@ Definition of done:
   const projectContext = memoryEnabled
     ? await buildProjectContext(conversation.projectId, lastUserText)
     : "";
+  const projectAttachmentContext = await buildProjectAttachmentContext(lastUserText);
   const memoryTip = buildMemoryHintPromptBlock(memoryHints);
 
   // ── Intent-based dynamic tool loading ─────────────────────────────
@@ -1282,15 +1286,15 @@ Definition of done:
   const canvasSection = !instantMode && activeToolGroups.has("canvas") ? CANVAS_SECTION : "";
 
   const dynamicSystemPromptBase = instantMode
-    ? projectContext
-    : systemTip + profileTip + memoryTip + projectContext + fileChangeTip + summarySection +
+    ? projectContext + projectAttachmentContext
+    : systemTip + profileTip + memoryTip + projectContext + projectAttachmentContext + fileChangeTip + summarySection +
       planModePrompt + goalModePrompt + buildModePrompt + canvasSection + _remiCardsSection + existingCardSection + (Object.keys(_remiCardToolSet).length ? REMI_CARD_PRESENTATION_RULES + REMI_CARD_SCOPE_RULES : "") + activeSkillsSection +
       taggedSkillsSection + qualityPolicyPrompt;
   const liveModeNote = () =>
     `\n\n## AUTHORITATIVE LIVE MODE\nThe active mode for this run is **${mode}**. This live mode overrides any earlier mode wording in the conversation. After a successful switch_mode call, immediately follow the new mode's rules and use its available tools.`;
 
   const dynamicSystemPrompt = instantMode
-    ? projectContext
+    ? projectContext + projectAttachmentContext
     : dynamicSystemPromptBase + liveModeNote() + toolAvailabilityNote;
 
   const fullSystemPrompt = staticSystemPrompt + dynamicSystemPrompt;

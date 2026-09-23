@@ -20,6 +20,8 @@ try {
   const fileRoutes = await import("@/app/api/projects/[id]/files/route");
   const { getSessionDir } = await import("@/lib/session-files/storage");
   const { buildProjectContext } = await import("@/lib/projects/context");
+  const { buildProjectAttachmentContext, buildProjectAttachmentTools } = await import("@/lib/projects/attachments");
+  const { formatProjectFileReference, parseProjectFileReferences } = await import("@/lib/projects/references");
   const { buildProjectTools } = await import("@/lib/projects/tools");
   const { readProjectFile, writeProjectFile } = await import("@/lib/projects/storage");
   const { PROJECT_FILES_DIR } = await import("@/lib/paths");
@@ -56,7 +58,18 @@ try {
   assert.match(await buildProjectContext(project.id, ""), /Mars mission/);
   assert.match(await buildProjectContext(project.id, ""), /Launch in 2030/);
   assert.match(await buildProjectContext(null, `[project:${project.id}]`), /Shared draft|brief.md/);
+  const crossProjectContext = await buildProjectContext(secondProject.id, `[project:${project.id}]`);
+  assert.match(crossProjectContext, /Orion/);
+  assert.match(crossProjectContext, /Mars mission/);
   assert.equal(await buildProjectContext(null, "No project"), "");
+  const fileReference = formatProjectFileReference({ projectId: project.id, kind: "file", path: "brief.md" });
+  const folderReference = formatProjectFileReference({ projectId: project.id, kind: "root", path: null });
+  assert.deepEqual(buildProjectAttachmentTools("No attachments"), {});
+  assert.deepEqual(parseProjectFileReferences(fileReference), [{ projectId: project.id, kind: "file", path: "brief.md" }]);
+  assert.match(await buildProjectAttachmentContext(folderReference), /Shared draft/);
+  const attachmentTools = buildProjectAttachmentTools(fileReference) as Record<string, { execute: (input: Record<string, unknown>) => Promise<unknown> }>;
+  assert.deepEqual(await attachmentTools.project_attachment_read.execute({ projectId: project.id, path: "brief.md" }), { content: "Shared draft", truncated: false });
+  await assert.rejects(() => attachmentTools.project_attachment_read.execute({ projectId: secondProject.id, path: "brief.md" }), /not attached/);
 
   await fs.mkdir(getSessionDir(chat.id), { recursive: true });
   await fs.writeFile(path.join(getSessionDir(chat.id), "chat-only.txt"), "Keep me");

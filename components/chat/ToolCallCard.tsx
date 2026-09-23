@@ -1276,33 +1276,62 @@ function truncateToolValue(value: unknown, limit = TOOL_VALUE_LIMIT): string {
 }
 
 function JsonBlock({ data }: { data: unknown }) {
-  if (data === undefined || data === null || data === "") {
+  return <StructuredValue value={data} depth={0} />;
+}
+
+function StructuredValue({ value, depth }: { value: unknown; depth: number }) {
+  if (value === undefined || value === null || value === "") {
     return <span className="text-xs italic text-muted-foreground">empty</span>;
   }
 
-  if (typeof data !== "object" || Array.isArray(data)) {
-    const value = truncateToolValue(data);
+  if (typeof value !== "object") {
+    const displayValue = truncateToolValue(value);
     return (
-      <p className="max-w-full break-words text-[11px] leading-relaxed text-foreground/80" title={String(data)}>
-        {value}
-      </p>
+      <span className="max-w-full break-words text-[11px] leading-relaxed text-foreground/80" title={String(value)}>
+        {displayValue}
+      </span>
     );
   }
 
-  const entries = Object.entries(data as Record<string, unknown>);
+  if (depth >= 4) {
+    return <span className="text-[11px] text-muted-foreground">{truncateToolValue(value)}</span>;
+  }
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) return <span className="text-[11px] text-muted-foreground">Empty array</span>;
+    const visibleItems = value.slice(0, TOOL_VISIBLE_KEYS);
+    return (
+      <div className="min-w-0 space-y-1.5 text-[11px]">
+        <div className="text-muted-foreground">{value.length} item{value.length === 1 ? "" : "s"}</div>
+        <ol className="min-w-0 space-y-1.5">
+          {visibleItems.map((item, index) => (
+            <li key={index} className="min-w-0 rounded-md border border-border/35 bg-muted/15 px-2 py-1.5">
+              <StructuredValue value={item} depth={depth + 1} />
+            </li>
+          ))}
+        </ol>
+        {value.length > visibleItems.length && (
+          <div className="text-[10px] text-muted-foreground">+{value.length - visibleItems.length} more items</div>
+        )}
+      </div>
+    );
+  }
+
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (entries.length === 0) {
+    return <span className="text-[11px] text-muted-foreground">Empty object</span>;
+  }
   const visibleEntries = entries.slice(0, TOOL_VISIBLE_KEYS);
   const hiddenCount = Math.max(0, entries.length - visibleEntries.length);
 
   return (
     <dl className="min-w-0 divide-y divide-border/25 text-[11px]">
-      {visibleEntries.map(([key, value]) => {
-        const fullValue = truncateToolValue(value, Number.MAX_SAFE_INTEGER);
-        const displayValue = truncateToolValue(value);
+      {visibleEntries.map(([key, item]) => {
         const displayKey = key.length > TOOL_KEY_LIMIT ? `${key.slice(0, TOOL_KEY_LIMIT - 1)}…` : key;
         return (
           <div key={key} className="grid min-w-0 grid-cols-[minmax(5rem,34%)_minmax(0,1fr)] gap-2 py-1.5 first:pt-0 last:pb-0">
             <dt className="min-w-0 truncate font-medium text-muted-foreground" title={key}>{displayKey}</dt>
-            <dd className="min-w-0 break-words text-foreground/80" title={fullValue}>{displayValue || "—"}</dd>
+            <dd className="min-w-0 break-words text-foreground/80"><StructuredValue value={item} depth={depth + 1} /></dd>
           </div>
         );
       })}

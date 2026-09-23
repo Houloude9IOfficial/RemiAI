@@ -32,6 +32,7 @@ import { cn } from "@/lib/utils";
 import { mcpServersApi, type McpServer } from "@/lib/api/mcp-servers";
 import { skillsApi, type SkillDTO } from "@/lib/api/skills";
 import { toolsApi } from "@/lib/api/tools";
+import { projectsApi, type Project } from "@/lib/api/projects";
 import type { ChatMode } from "./ChatInput";
 
 // ---------------------------------------------------------------------------
@@ -48,6 +49,7 @@ export type SlashLevel =
   | { kind: "mcp-servers" }
   | { kind: "mcp-tools"; server: McpServer }
   | { kind: "tools" }
+  | { kind: "projects" }
   | { kind: "skills" };
 
 export interface SlashCommandMenuProps {
@@ -86,6 +88,7 @@ export interface SlashCommandMenuHandle {
 type CommandId =
   | "mcp"
   | "tool"
+  | "project"
   | "skill"
   | "file"
   | "canvas"
@@ -129,6 +132,13 @@ const COMMANDS: Array<{
     label: "Tool",
     description: "Tag a tool the AI should use for this request",
     icon: Wrench,
+  },
+  {
+    id: "project",
+    trigger: "project",
+    label: "Project reference",
+    description: "Reference a project's context for this message",
+    icon: FolderOpen,
   },
   {
     id: "skill",
@@ -304,6 +314,7 @@ type MenuItem =
   | { type: "mcp-all"; server: McpServer }
   | { type: "mcp-tool"; server: McpServer; tool: string }
   | { type: "tool"; tool: string; group: string; description: string; enabled: boolean }
+  | { type: "project"; project: Project }
   | { type: "skill"; skill: SkillDTO };
 
 interface ListState {
@@ -369,6 +380,12 @@ export const SlashCommandMenu = forwardRef<
     queryKey: ["tool-configs"],
     queryFn: toolsApi.list,
     enabled: open && level?.kind === "tools",
+  });
+
+  const { data: projects = [], isLoading: projectsLoading } = useQuery({
+    queryKey: ["projects"],
+    queryFn: projectsApi.list,
+    enabled: open && level?.kind === "projects",
   });
 
   // Installed skills — for the `/skill` picker (only ACTIVE/enabled ones are
@@ -481,6 +498,21 @@ export const SlashCommandMenu = forwardRef<
       };
     }
 
+    if (level.kind === "projects") {
+      return {
+        items: projects
+          .filter((project) => !q || project.name.toLowerCase().includes(q))
+          .map((project) => ({ type: "project" as const, project })),
+        title: "Reference a project",
+        placeholder: projectsLoading
+          ? "Loading projects…"
+          : projects.length === 0
+            ? "No projects yet — create one from Projects"
+            : `No project matches “${query}”`,
+        loading: projectsLoading,
+      };
+    }
+
     // tools — pick a built-in/integration tool to tag
     const items = catalogTools
       .filter(
@@ -504,7 +536,7 @@ export const SlashCommandMenu = forwardRef<
         ? "No tools available"
         : `No tool matches “${query}”`,
     };
-  }, [level, q, query, servers, serversLoading, mcpTest, catalogTools, skillRows, skillsLoading]);
+  }, [level, q, query, servers, serversLoading, mcpTest, catalogTools, skillRows, skillsLoading, projects, projectsLoading]);
 
   const { items, title, placeholder, loading } = list;
 
@@ -538,6 +570,10 @@ export const SlashCommandMenu = forwardRef<
         }
         if (item.command.id === "skill") {
           onNavigate({ kind: "skills" });
+          return;
+        }
+        if (item.command.id === "project") {
+          onNavigate({ kind: "projects" });
           return;
         }
         if (
@@ -585,6 +621,9 @@ export const SlashCommandMenu = forwardRef<
         return;
       case "skill":
         onInsert(`@skill ${item.skill.name}@${item.skill.repoSource} `);
+        return;
+      case "project":
+        onInsert(`@project ${item.project.name} [project:${item.project.id}] `);
         return;
     }
   };
@@ -765,6 +804,8 @@ function keyFor(item: MenuItem): string {
       return `tool-${item.tool}`;
     case "skill":
       return `skill-${item.skill.name}@${item.skill.repoSource}`;
+    case "project":
+      return `project-${item.project.id}`;
   }
 }
 
@@ -791,6 +832,8 @@ function IconFor({
       return <Wrench className={className} />;
     case "skill":
       return <BookOpen className={className} />;
+    case "project":
+      return <FolderOpen className={className} />;
   }
 }
 
@@ -808,6 +851,8 @@ function TitleFor(item: MenuItem): string {
       return item.tool;
     case "skill":
       return item.skill.name;
+    case "project":
+      return item.project.name;
   }
 }
 
@@ -829,5 +874,7 @@ function SubtitleFor(item: MenuItem): string {
       return item.skill.repoName
         ? `from ${item.skill.repoName} — ${item.skill.description}`
         : item.skill.description;
+    case "project":
+      return item.project.brief || `Project #${item.project.id}`;
   }
 }
