@@ -115,7 +115,15 @@ export function ProjectsSection() {
   return (
     <section className={open ? "mb-5" : "mb-2"}>
       <div className="group flex items-center gap-1 px-1 pb-1.5">
-        <span className="flex min-h-9 min-w-0 flex-1 items-center px-2 py-1.5 text-sm font-medium text-muted-foreground">Projects</span>
+        <button
+          type="button"
+          onClick={() => setSectionValue(open ? "closed" : "open")}
+          aria-expanded={open}
+          aria-controls={listId}
+          className="flex min-h-9 min-w-0 flex-1 items-center rounded-lg px-2 py-1.5 text-left text-sm font-medium text-muted-foreground transition-colors hover:text-sidebar-foreground"
+        >
+          Projects
+        </button>
         <Link href="/projects" aria-label="Manage projects" title="Manage projects" className="invisible rounded-lg p-1.5 text-muted-foreground/70 opacity-0 transition-[opacity,visibility,color,background-color] hover:bg-sidebar-accent hover:text-foreground group-hover:visible group-hover:opacity-100 focus-visible:visible focus-visible:opacity-100">
           <Pen className="h-3.5 w-3.5" />
         </Link>
@@ -124,7 +132,7 @@ export function ProjectsSection() {
           onClick={() => setSectionValue(open ? "closed" : "open")}
           aria-expanded={open}
           aria-controls={listId}
-          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          className="invisible inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground/70 opacity-0 transition-[opacity,visibility,color,background-color] hover:bg-sidebar-accent hover:text-sidebar-foreground group-hover:visible group-hover:opacity-100 focus-visible:visible focus-visible:opacity-100"
           title={open ? "Collapse projects" : "Expand projects"}
           aria-label={open ? "Collapse projects" : "Expand projects"}
         >

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { Pen, Settings2, X } from "lucide-react";
+import { Files, Pen, Settings2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useNewChat } from "@/lib/hooks/use-new-chat";
@@ -96,6 +96,14 @@ export function MobileSidebar() {
             <Pen className="h-4 w-4" />
             New chat
           </Button>
+          <Link
+            href="/files"
+            onClick={onClose}
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-sidebar-foreground/72 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          >
+            <Files className="h-4 w-4 shrink-0" />
+            Library
+          </Link>
           <SidebarExploreMenu onNavigate={onClose} />
           <SidebarSearchButton onOpen={onClose} />
         </div>

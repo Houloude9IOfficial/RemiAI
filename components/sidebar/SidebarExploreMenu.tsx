@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Compass, Files, Gamepad2, Radio, Search } from "lucide-react";
+import { Compass, Gamepad2, Radio, Search } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,7 +15,6 @@ import { useShortcuts } from "./shortcuts-context";
 
 const destinations = [
   { href: "/talk", label: "Talk", icon: Radio },
-  { href: "/files", label: "Library", icon: Files },
   { href: "/games", label: "Games", icon: Gamepad2 },
 ];
 

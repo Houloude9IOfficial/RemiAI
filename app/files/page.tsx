@@ -1,14 +1,14 @@
-import { FileManagerPage } from "@/components/files/FileManagerPage";
+import { LibraryPage } from "@/components/files/LibraryPage";
 
 export const metadata = {
   title: "Files — RemiAI",
-  description: "Manage the files each chat's AI has access to.",
+  description: "Browse every file created or uploaded across your chats.",
 };
 
 export default function FilesPage() {
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <FileManagerPage />
+      <LibraryPage />
     </div>
   );
 }

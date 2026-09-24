@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Folder, PanelLeftClose, PanelLeftOpen, Pen, Settings2 } from "lucide-react";
+import { Files, Folder, PanelLeftClose, PanelLeftOpen, Pen, Settings2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useNewChat } from "@/lib/hooks/use-new-chat";
@@ -89,6 +89,7 @@ function DesktopSidebar() {
           >
             <Pen className="h-4 w-4" />
           </Button>
+          <Link href="/files" title="Library" aria-label="Library" className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-sidebar-accent"><Files className="h-4 w-4" /></Link>
           <SidebarExploreMenu collapsed />
           <Link href="/projects" title="Projects" aria-label="Projects" className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-sidebar-accent"><Folder className="h-4 w-4" /></Link>
           <SidebarSearchButton collapsed />
@@ -110,6 +111,13 @@ function DesktopSidebar() {
               <Pen className="new-chat-icon h-4 w-4" />
               <span>New chat</span>
             </button>
+            <Link
+              href="/files"
+              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-sidebar-foreground/72 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+            >
+              <Files className="h-4 w-4 shrink-0" />
+              Library
+            </Link>
             <SidebarExploreMenu />
             <SidebarSearchButton />
           </div>

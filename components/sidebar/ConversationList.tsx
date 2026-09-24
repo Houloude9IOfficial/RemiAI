@@ -533,7 +533,15 @@ export function ConversationList() {
 
   const sectionHeader = (
     <div className="group flex items-center gap-1 px-1 pb-1.5">
-      <span className="flex min-h-9 min-w-0 flex-1 items-center px-2 py-1.5 text-sm font-medium text-muted-foreground">Recents</span>
+      <button
+        type="button"
+        onClick={() => setSectionValue(sectionOpen ? "closed" : "open")}
+        aria-expanded={sectionOpen}
+        aria-controls={listId}
+        className="flex min-h-9 min-w-0 flex-1 items-center rounded-lg px-2 py-1.5 text-left text-sm font-medium text-muted-foreground transition-colors hover:text-sidebar-foreground"
+      >
+        Recents
+      </button>
       {sectionOpen && !selectMode && filteredConversations.length > 0 && (
         <button
           type="button"
@@ -541,7 +549,7 @@ export function ConversationList() {
             setSectionValue("open");
             setSelectMode(true);
           }}
-          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-foreground"
+          className="invisible inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground/70 opacity-0 transition-[opacity,visibility,color,background-color] hover:bg-sidebar-accent hover:text-foreground group-hover:visible group-hover:opacity-100 focus-visible:visible focus-visible:opacity-100"
           title="Select conversations"
           aria-label="Select conversations"
         >
@@ -563,7 +571,7 @@ export function ConversationList() {
         onClick={() => setSectionValue(sectionOpen ? "closed" : "open")}
         aria-expanded={sectionOpen}
         aria-controls={listId}
-        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+        className="invisible inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground/70 opacity-0 transition-[opacity,visibility,color,background-color] hover:bg-sidebar-accent hover:text-sidebar-foreground group-hover:visible group-hover:opacity-100 focus-visible:visible focus-visible:opacity-100"
         title={sectionOpen ? "Collapse recents" : "Expand recents"}
         aria-label={sectionOpen ? "Collapse recents" : "Expand recents"}
       >
