@@ -29,12 +29,17 @@ export function beginGenerationPresence(
   generationId: string,
   initiallyVisible = true,
 ): void {
-  if (!presence.visibility.has(conversationId)) {
-    presence.visibility.set(conversationId, initiallyVisible);
-  }
+  // This request's visibility is more current than a value retained from a
+  // previous visit to the chat. In particular, a user can return to a chat
+  // and start a response before the page's visibility effect has completed
+  // its POST; retaining that old `false` incorrectly treats the new response
+  // as backgrounded and sends a completion notification while it is watched.
+  // Server-initiated continuations deliberately pass `false`, so they retain
+  // their background-notification behavior.
+  presence.visibility.set(conversationId, initiallyVisible);
   presence.active.set(conversationId, {
     id: generationId,
-    backgrounded: presence.visibility.get(conversationId) === false,
+    backgrounded: !initiallyVisible,
   });
 }
 
