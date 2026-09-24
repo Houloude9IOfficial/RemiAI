@@ -657,7 +657,7 @@ export function ConversationList() {
                     /* ---- Inline rename input ---- */
                     <div
                       className={cn(
-                        "group/conversation flex w-full items-center justify-start rounded-lg px-3 py-2 text-sm text-left",
+                        "group/conversation flex min-h-10 w-full items-center justify-start rounded-lg px-3 py-2.5 text-sm text-left",
                         isActive
                           ? "bg-sidebar-accent text-sidebar-foreground"
                           : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground",
@@ -701,7 +701,7 @@ export function ConversationList() {
                     /* ---- Select mode: whole row toggles selection ---- */
                     <div
                       className={cn(
-                        "group/conversation flex w-full items-center justify-start rounded-lg px-3 py-2 text-sm text-left cursor-pointer",
+                        "group/conversation flex min-h-10 w-full items-center justify-start rounded-lg px-3 py-2.5 text-sm text-left cursor-pointer",
                         isSelected && "bg-primary/10",
                       )}
                       onClick={() => toggleSelect(conversation.id)}
@@ -723,10 +723,10 @@ export function ConversationList() {
                     </div>
                   ) : (
                     /* ---- Normal view: the whole row is the link ---- */
-                    <div className={cn("group/conversation relative flex w-full items-center rounded-lg text-sm text-left transition-colors", isActive ? "bg-sidebar-accent text-sidebar-foreground" : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground")}>
+                    <div className={cn("group/conversation relative flex min-h-10 w-full items-center rounded-lg text-sm text-left transition-colors", isActive ? "bg-sidebar-accent text-sidebar-foreground" : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground")}>
                     <Link
                       href={`/chat/${conversation.id}`}
-                      className="flex min-w-0 flex-1 items-center px-3 py-2"
+                      className="flex min-w-0 flex-1 items-center px-3 py-2.5"
                       onMouseEnter={() => prefetchConversation(conversation.id)}
                       onFocus={() => prefetchConversation(conversation.id)}
                     >

@@ -1322,7 +1322,7 @@ export function ChatInput({
                   }
                   title={
                     mode === "instant"
-                      ? "Instant mode — fast, concise answers with web search when needed"
+                      ? "Instant mode — fast and concise answers"
                       : mode === "goal"
                       ? "Goal mode — works until the task is complete"
                       : mode === "build"
@@ -1461,7 +1461,7 @@ export function ChatInput({
                           Instant
                         </span>
                         <span className="block text-[10px] leading-3.5 font-normal text-muted-foreground">
-                          Fast, concise answers with quick web search
+                          Fast and concise answers
                         </span>
                       </span>
                     </DropdownMenuCheckboxItem>

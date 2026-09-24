@@ -46,7 +46,7 @@ function ProjectRow({ project, expanded, onToggle }: { project: Project; expande
                 <Link
                   key={chat.id}
                   href={`/chat/${chat.id}`}
-                  className={`block truncate rounded-lg px-3 py-2 text-sm transition-colors ${pathname === `/chat/${chat.id}` ? "bg-sidebar-accent text-sidebar-foreground" : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground"}`}
+                  className={`block min-h-10 truncate rounded-lg px-3 py-2.5 text-sm transition-colors ${pathname === `/chat/${chat.id}` ? "bg-sidebar-accent text-sidebar-foreground" : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground"}`}
                   title={chat.title}
                 >
                   {chat.title}

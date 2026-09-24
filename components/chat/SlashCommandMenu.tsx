@@ -291,7 +291,7 @@ const COMMANDS: Array<{
     id: "instant",
     trigger: "instant",
     label: "Instant mode",
-    description: "Fast, concise answers with quick web search when needed",
+    description: "Fast and concise answers",
     icon: Zap,
   },
 ];

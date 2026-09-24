@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -112,6 +112,7 @@ const textAreaClass = "min-h-24 resize-y rounded-xl border-border/70 bg-backgrou
 export default function ProjectsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const uploadInputRef = useRef<HTMLInputElement>(null);
   const { data: projects = [], isLoading } = useQuery({ queryKey: ["projects"], queryFn: projectsApi.list });
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const selected = projects.find((project) => project.id === selectedId) ?? projects[0];
@@ -241,7 +242,7 @@ export default function ProjectsPage() {
   };
 
   return (
-    <div className="h-full overflow-y-auto bg-gradient-to-b from-primary/[0.035] via-background to-background">
+    <div className="min-h-0 flex-1 overflow-y-auto bg-gradient-to-b from-primary/[0.035] via-background to-background">
       <div className="mx-auto w-full max-w-7xl px-4 py-7 md:px-8 md:py-10">
         <header className="mb-8">
           {/* <div className="mb-3 flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary"><FolderOpen className="size-5" /></div> */}
@@ -254,7 +255,7 @@ export default function ProjectsPage() {
             <form onSubmit={(event) => { event.preventDefault(); void create(); }} className="space-y-2 p-1">
               <label htmlFor="new-project-name" className="text-xs font-semibold text-muted-foreground">New project</label>
               <div className="flex gap-2">
-                <Input id="new-project-name" className={fieldClass} maxLength={120} placeholder="Give it a name" value={newName} onChange={(event) => setNewName(event.target.value)} />
+                <Input id="new-project-name" className={fieldClass} maxLength={120} placeholder="Enter a name" value={newName} onChange={(event) => setNewName(event.target.value)} />
                 <Button type="submit" size="icon-lg" disabled={!newName.trim() || creating} aria-label="Create project">
                   {creating ? <LoaderCircle className="size-4 animate-spin" /> : <Plus className="size-4" />}
                 </Button>
@@ -268,7 +269,7 @@ export default function ProjectsPage() {
                 </DndContext>
               ) : <p className="px-2 py-5 text-sm text-muted-foreground">Create your first project to get started.</p>}
             </div>
-            {projects.length > 1 && <p className="px-2 pt-4 text-xs text-muted-foreground">Drag the handle to change the order.</p>}
+            {/* {projects.length > 1 && <p className="px-2 pt-4 text-xs text-muted-foreground">Drag the handle to change the order.</p>} */}
           </aside>
 
           {selected ? (
@@ -327,11 +328,11 @@ export default function ProjectsPage() {
                   <div><h3 className="text-lg font-semibold">Shared files</h3><p className="mt-1 text-sm text-muted-foreground">Available to every chat in this project.</p></div>
                   <Button variant="outline" onClick={() => { setFilePath(""); setFileContent(""); setEditingFile((current) => !current); }}><FilePlus2 className="size-4" />{editingFile ? "Close editor" : "New text file"}</Button>
                 </div>
-                <label htmlFor="project-upload" className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-border bg-muted/20 px-4 py-4 transition-colors hover:border-primary/40 hover:bg-primary/5">
+                <button type="button" disabled={uploading} onClick={() => uploadInputRef.current?.click()} className="flex w-full cursor-pointer items-center gap-3 rounded-xl border border-dashed border-border bg-muted/20 px-4 py-4 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 disabled:cursor-wait disabled:opacity-60">
                   <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Upload className="size-4" /></span>
                   <span className="min-w-0"><span className="block text-sm font-medium">{uploading ? "Uploading…" : "Choose a file to upload"}</span><span className="block text-xs text-muted-foreground">Share documents, notes, or images with this project</span></span>
-                </label>
-                <input id="project-upload" type="file" className="sr-only" disabled={uploading} onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadFile(file); event.target.value = ""; }} />
+                </button>
+                <input ref={uploadInputRef} type="file" className="hidden" tabIndex={-1} disabled={uploading} onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadFile(file); event.target.value = ""; }} />
                 {files.filter((file) => file.isFile).length > 0 && (
                   <div className="mt-4 divide-y rounded-xl border">
                     {files.filter((file) => file.isFile).map((file) => (
