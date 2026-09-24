@@ -29,7 +29,7 @@ function SettingsLink({ collapsed = false }: { collapsed?: boolean }) {
       aria-label="Settings"
       className={cn(
         "flex items-center rounded-lg text-sidebar-foreground/72 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground",
-        collapsed ? "h-8 w-8 justify-center" : "gap-2 px-2.5 py-2 text-sm",
+        collapsed ? "h-9 w-9 justify-center rounded-xl" : "gap-2 px-2.5 py-2 text-sm",
       )}
     >
       <Settings2 className="h-4 w-4 shrink-0" />
@@ -55,9 +55,14 @@ function DesktopSidebar() {
       initial={false}
       animate={{ width: isDesktopSidebarCollapsed ? 56 : 248 }}
       transition={{ duration: 0.2, ease: "easeOut" }}
-      className="hidden h-full shrink-0 flex-col overflow-hidden border-r border-sidebar-border surface-1 md:flex"
+      className={cn(
+        "hidden shrink-0 flex-col overflow-hidden border-r border-sidebar-border surface-1 md:flex",
+        isDesktopSidebarCollapsed
+          ? "my-2 h-[calc(100%-1rem)] rounded-3xl border border-sidebar-border/80 shadow-[var(--shadow-floating)]"
+          : "h-full",
+      )}
     >
-      <div className={cn("flex items-center py-2.5", isDesktopSidebarCollapsed ? "justify-center px-2" : "justify-between px-3")}>
+      <div className={cn("flex items-center", isDesktopSidebarCollapsed ? "h-12 justify-center px-2" : "justify-between px-3 py-2.5")}>
         {!isDesktopSidebarCollapsed && (
           <div className="px-1" aria-label="RemiAI">
             <img src="/RemiAI.png" alt="RemiAI" className="block h-6 w-auto dark:hidden" />
@@ -67,7 +72,7 @@ function DesktopSidebar() {
         <Button
           size="icon"
           variant="ghost"
-          className="h-7 w-7 cursor-pointer"
+          className={cn("cursor-pointer", isDesktopSidebarCollapsed ? "h-9 w-9 rounded-xl" : "h-7 w-7")}
           onClick={toggleDesktopSidebar}
           title={isDesktopSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           aria-label={isDesktopSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -77,11 +82,11 @@ function DesktopSidebar() {
       </div>
 
       {isDesktopSidebarCollapsed ? (
-        <div className="flex flex-1 flex-col items-center gap-1.5 px-2 pt-2">
+        <div className="flex flex-1 flex-col items-center gap-2 px-1.5 pt-1.5">
           <Button
             size="icon"
             variant="ghost"
-            className="h-8 w-8 cursor-pointer"
+            className="h-9 w-9 cursor-pointer rounded-xl bg-sidebar-accent/65 hover:bg-sidebar-accent"
             disabled={newChatMutation.isPending}
             onClick={() => newChatMutation.mutate()}
             title="New chat"
@@ -89,12 +94,16 @@ function DesktopSidebar() {
           >
             <Pen className="h-4 w-4" />
           </Button>
-          <Link href="/files" title="Library" aria-label="Library" className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-sidebar-accent"><Files className="h-4 w-4" /></Link>
-          <SidebarExploreMenu collapsed />
-          <Link href="/projects" title="Projects" aria-label="Projects" className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-sidebar-accent"><Folder className="h-4 w-4" /></Link>
-          <SidebarSearchButton collapsed />
+          <Link href="/files" title="Library" aria-label="Library" className="flex h-9 w-9 items-center justify-center rounded-xl text-sidebar-foreground/72 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"><Files className="h-4 w-4" /></Link>
+          <div className="[&_button]:h-9 [&_button]:w-9 [&_button]:rounded-xl">
+            <SidebarExploreMenu collapsed />
+          </div>
+          <Link href="/projects" title="Projects" aria-label="Projects" className="flex h-9 w-9 items-center justify-center rounded-xl text-sidebar-foreground/72 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"><Folder className="h-4 w-4" /></Link>
+          <div className="[&_button]:h-9 [&_button]:w-9 [&_button]:rounded-xl">
+            <SidebarSearchButton collapsed />
+          </div>
           {!demo && <SettingsLink collapsed />}
-          <div className="mt-auto flex flex-col items-center gap-2 border-t border-sidebar-border pt-3">
+          <div className="mt-auto flex w-full flex-col items-center gap-2 border-t border-sidebar-border/70 pt-3">
             <UpdateChecker />
             <SidebarProfile collapsed />
           </div>
