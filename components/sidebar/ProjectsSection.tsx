@@ -5,8 +5,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { ChevronRight, Folder, Plus } from "lucide-react";
+import { ChevronRight, Folder, Pen, Plus, SquarePen } from "lucide-react";
 import { projectsApi, type Project } from "@/lib/api/projects";
+import { useNewChat } from "@/lib/hooks/use-new-chat";
 import { useSidebarPreference } from "./useSidebarPreference";
 
 const chatRow = "block min-h-9 truncate rounded-lg px-2.5 py-1.5 text-sm transition-colors";
@@ -18,6 +19,7 @@ function ProjectRow({ project, expanded, onToggle }: { project: Project; expande
   const chatsId = useId();
   const reduceMotion = useReducedMotion();
   const [visibleCount, setVisibleCount] = useState(3);
+  const newChatMutation = useNewChat(undefined, { projectId: project.id });
   const { data: chats = [], isLoading } = useQuery({
     queryKey: ["project-chats", project.id],
     queryFn: () => projectsApi.chats(project.id),
@@ -26,17 +28,39 @@ function ProjectRow({ project, expanded, onToggle }: { project: Project; expande
 
   return (
     <div className="space-y-1">
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={expanded}
-        aria-controls={chatsId}
-        className="flex min-h-9 w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-sm text-sidebar-foreground/85 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
-      >
-        <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <span className="min-w-0 flex-1 truncate">{project.name}</span>
-        <ChevronRight className={`h-3.5 w-3.5 shrink-0 text-muted-foreground/70 transition-transform duration-200 ${expanded ? "rotate-90" : ""}`} />
-      </button>
+      <div className="flex min-h-9 items-center gap-1 rounded-lg px-2.5 py-1.5 text-sm text-sidebar-foreground/85 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          aria-controls={chatsId}
+          className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+        >
+          <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 flex-1 truncate">{project.name}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => newChatMutation.mutate()}
+          disabled={newChatMutation.isPending}
+          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+          title={`New chat in ${project.name}`}
+          aria-label={`New chat in ${project.name}`}
+        >
+          <SquarePen className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          aria-controls={chatsId}
+          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-foreground"
+          title={expanded ? `Collapse ${project.name}` : `Expand ${project.name}`}
+          aria-label={expanded ? `Collapse ${project.name}` : `Expand ${project.name}`}
+        >
+          <ChevronRight className={`h-3.5 w-3.5 transition-transform duration-200 ${expanded ? "rotate-90" : ""}`} />
+        </button>
+      </div>
       <AnimatePresence initial={false}>
         {expanded && (
           <motion.div
@@ -91,19 +115,21 @@ export function ProjectsSection() {
   return (
     <section className="mb-5">
       <div className="flex items-center gap-1 px-1 pb-1.5">
+        <span className="flex min-h-9 min-w-0 flex-1 items-center px-2 py-1.5 text-sm font-medium text-muted-foreground">Projects</span>
+        <Link href="/projects" aria-label="Manage projects" title="Manage projects" className="rounded-lg p-1.5 text-muted-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-foreground">
+          <Pen className="h-3.5 w-3.5" />
+        </Link>
         <button
           type="button"
           onClick={() => setSectionValue(open ? "closed" : "open")}
           aria-expanded={open}
           aria-controls={listId}
-          className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm font-medium text-muted-foreground transition-colors hover:text-sidebar-foreground"
+          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          title={open ? "Collapse projects" : "Expand projects"}
+          aria-label={open ? "Collapse projects" : "Expand projects"}
         >
-          <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground/70 transition-transform duration-200 ${open ? "rotate-90" : ""}`} />
-          Projects
+          <ChevronRight className={`h-3.5 w-3.5 transition-transform duration-200 ${open ? "rotate-90" : ""}`} />
         </button>
-        <Link href="/projects" aria-label="Manage projects" title="Manage projects" className="rounded-lg p-1.5 text-muted-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-foreground">
-          <Plus className="h-3.5 w-3.5" />
-        </Link>
       </div>
       <AnimatePresence initial={false}>
         {open && (

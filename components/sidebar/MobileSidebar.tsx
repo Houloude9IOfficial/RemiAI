@@ -91,7 +91,7 @@ export function MobileSidebar() {
             type="button"
             onClick={() => newChatMutation.mutate()}
             disabled={newChatMutation.isPending}
-            className="h-auto w-full justify-start gap-2 rounded-xl bg-sidebar-accent/55 px-3 py-2 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent"
+            className="h-auto min-h-9 w-full justify-start gap-2 rounded-xl bg-sidebar-accent/55 px-3 py-2 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent"
           >
             <Pen className="h-4 w-4" />
             New chat

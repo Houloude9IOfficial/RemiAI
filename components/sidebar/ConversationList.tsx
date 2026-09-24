@@ -531,16 +531,7 @@ export function ConversationList() {
 
   const sectionHeader = (
     <div className="flex items-center gap-1 px-1 pb-1.5">
-      <button
-        type="button"
-        onClick={() => setSectionValue(sectionOpen ? "closed" : "open")}
-        aria-expanded={sectionOpen}
-        aria-controls={listId}
-        className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm font-medium text-muted-foreground transition-colors hover:text-sidebar-foreground"
-      >
-        <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground/70 transition-transform duration-200 ${sectionOpen ? "rotate-90" : ""}`} />
-        Recents
-      </button>
+      <span className="flex min-h-9 min-w-0 flex-1 items-center px-2 py-1.5 text-sm font-medium text-muted-foreground">Recents</span>
       {sectionOpen && !selectMode && filteredConversations.length > 0 && (
         <button
           type="button"
@@ -548,13 +539,24 @@ export function ConversationList() {
             setSectionValue("open");
             setSelectMode(true);
           }}
-          className="rounded-lg p-1.5 text-muted-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-foreground"
+          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-foreground"
           title="Select conversations"
           aria-label="Select conversations"
         >
           <CheckSquare className="h-3.5 w-3.5" />
         </button>
       )}
+      <button
+        type="button"
+        onClick={() => setSectionValue(sectionOpen ? "closed" : "open")}
+        aria-expanded={sectionOpen}
+        aria-controls={listId}
+        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+        title={sectionOpen ? "Collapse recents" : "Expand recents"}
+        aria-label={sectionOpen ? "Collapse recents" : "Expand recents"}
+      >
+        <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground/70 transition-transform duration-200 ${sectionOpen ? "rotate-90" : ""}`} />
+      </button>
     </div>
   );
 

@@ -105,7 +105,7 @@ function DesktopSidebar() {
               type="button"
               onClick={() => newChatMutation.mutate()}
               disabled={newChatMutation.isPending}
-              className="group flex w-full cursor-pointer items-center gap-2 rounded-xl bg-sidebar-accent/55 px-3 py-2 text-left text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent disabled:pointer-events-none disabled:opacity-50"
+              className="group flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-xl bg-sidebar-accent/55 px-3 py-2 text-left text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent disabled:pointer-events-none disabled:opacity-50"
             >
               <Pen className="new-chat-icon h-4 w-4" />
               <span>New chat</span>
