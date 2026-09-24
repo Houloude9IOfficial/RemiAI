@@ -37,6 +37,7 @@ import { conversationsApi, type Conversation } from "@/lib/api/conversations";
 import { ConversationTitle } from "@/components/sidebar/ConversationTitle";
 import { toast } from "sonner";
 import { useActiveStreams } from "@/lib/chat/streaming-context";
+import { useNewChat } from "@/lib/hooks/use-new-chat";
 import { useSidebarPreference } from "./useSidebarPreference";
 
 function formatNumber(n: number): string {
@@ -242,6 +243,7 @@ function StatRow({
 }
 
 export function ConversationList() {
+  const newChatMutation = useNewChat();
   const listId = useId();
   const reduceMotion = useReducedMotion();
   const [sectionValue, setSectionValue] = useSidebarPreference("remiai:sidebar-recents-open", "open");
@@ -530,7 +532,7 @@ export function ConversationList() {
   }, [contextMenuId]);
 
   const sectionHeader = (
-    <div className="flex items-center gap-1 px-1 pb-1.5">
+    <div className="group flex items-center gap-1 px-1 pb-1.5">
       <span className="flex min-h-9 min-w-0 flex-1 items-center px-2 py-1.5 text-sm font-medium text-muted-foreground">Recents</span>
       {sectionOpen && !selectMode && filteredConversations.length > 0 && (
         <button
@@ -546,6 +548,16 @@ export function ConversationList() {
           <CheckSquare className="h-3.5 w-3.5" />
         </button>
       )}
+      <button
+        type="button"
+        onClick={() => newChatMutation.mutate()}
+        disabled={newChatMutation.isPending}
+        className="invisible inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground/70 opacity-0 transition-[opacity,visibility,color,background-color] hover:bg-sidebar-accent hover:text-foreground group-hover:visible group-hover:opacity-100 focus-visible:visible focus-visible:opacity-100 disabled:pointer-events-none disabled:opacity-50"
+        title="New chat"
+        aria-label="New chat"
+      >
+        <PenLine className="h-3.5 w-3.5" />
+      </button>
       <button
         type="button"
         onClick={() => setSectionValue(sectionOpen ? "closed" : "open")}

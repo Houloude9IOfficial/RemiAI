@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { ChevronRight, Folder, Pen, Plus, SquarePen } from "lucide-react";
+import { ChevronRight, Folder, Pen, SquarePen } from "lucide-react";
 import { projectsApi, type Project } from "@/lib/api/projects";
 import { useNewChat } from "@/lib/hooks/use-new-chat";
 import { useSidebarPreference } from "./useSidebarPreference";
@@ -28,7 +28,7 @@ function ProjectRow({ project, expanded, onToggle }: { project: Project; expande
 
   return (
     <div className="space-y-1">
-      <div className="flex min-h-9 items-center gap-1 rounded-lg px-2.5 py-1.5 text-sm text-sidebar-foreground/85 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground">
+      <div className="group flex min-h-9 items-center gap-1 rounded-lg px-2.5 py-1.5 text-sm text-sidebar-foreground/85 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground">
         <button
           type="button"
           onClick={onToggle}
@@ -43,7 +43,7 @@ function ProjectRow({ project, expanded, onToggle }: { project: Project; expande
           type="button"
           onClick={() => newChatMutation.mutate()}
           disabled={newChatMutation.isPending}
-          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+          className="invisible inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 opacity-0 transition-[opacity,visibility,color,background-color] hover:bg-sidebar-accent hover:text-foreground group-hover:visible group-hover:opacity-100 focus-visible:visible focus-visible:opacity-100 disabled:pointer-events-none disabled:opacity-50"
           title={`New chat in ${project.name}`}
           aria-label={`New chat in ${project.name}`}
         >
@@ -113,10 +113,10 @@ export function ProjectsSection() {
     : expandedValue === "none" ? undefined : Number(expandedValue);
 
   return (
-    <section className="mb-5">
-      <div className="flex items-center gap-1 px-1 pb-1.5">
+    <section className={open ? "mb-5" : "mb-2"}>
+      <div className="group flex items-center gap-1 px-1 pb-1.5">
         <span className="flex min-h-9 min-w-0 flex-1 items-center px-2 py-1.5 text-sm font-medium text-muted-foreground">Projects</span>
-        <Link href="/projects" aria-label="Manage projects" title="Manage projects" className="rounded-lg p-1.5 text-muted-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-foreground">
+        <Link href="/projects" aria-label="Manage projects" title="Manage projects" className="invisible rounded-lg p-1.5 text-muted-foreground/70 opacity-0 transition-[opacity,visibility,color,background-color] hover:bg-sidebar-accent hover:text-foreground group-hover:visible group-hover:opacity-100 focus-visible:visible focus-visible:opacity-100">
           <Pen className="h-3.5 w-3.5" />
         </Link>
         <button
