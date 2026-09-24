@@ -1,22 +1,23 @@
 "use client";
 
+import { useId, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ChevronRight, Folder, Plus } from "lucide-react";
 import { projectsApi, type Project } from "@/lib/api/projects";
 import { useSidebarPreference } from "./useSidebarPreference";
 
-const reveal = {
-  initial: { height: 0, opacity: 0 },
-  animate: { height: "auto", opacity: 1 },
-  exit: { height: 0, opacity: 0 },
-  transition: { duration: 0.22, ease: "easeInOut" as const },
-};
+const chatRow = "block min-h-9 truncate rounded-lg px-2.5 py-1.5 text-sm transition-colors";
+const activeChat = "bg-sidebar-accent text-sidebar-foreground";
+const inactiveChat = "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground";
 
 function ProjectRow({ project, expanded, onToggle }: { project: Project; expanded: boolean; onToggle: () => void }) {
   const pathname = usePathname();
+  const chatsId = useId();
+  const reduceMotion = useReducedMotion();
+  const [visibleCount, setVisibleCount] = useState(3);
   const { data: chats = [], isLoading } = useQuery({
     queryKey: ["project-chats", project.id],
     queryFn: () => projectsApi.chats(project.id),
@@ -24,34 +25,50 @@ function ProjectRow({ project, expanded, onToggle }: { project: Project; expande
   });
 
   return (
-    <div>
+    <div className="space-y-1">
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={expanded}
-        aria-controls={`sidebar-project-${project.id}-chats`}
-        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm text-sidebar-foreground/85 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+        aria-controls={chatsId}
+        className="flex min-h-9 w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-sm text-sidebar-foreground/85 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
       >
         <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
         <span className="min-w-0 flex-1 truncate">{project.name}</span>
-        <ChevronRight className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${expanded ? "rotate-90" : ""}`} />
+        <ChevronRight className={`h-3.5 w-3.5 shrink-0 text-muted-foreground/70 transition-transform duration-200 ${expanded ? "rotate-90" : ""}`} />
       </button>
       <AnimatePresence initial={false}>
         {expanded && (
-          <motion.div id={`sidebar-project-${project.id}-chats`} {...reveal} className="overflow-hidden">
-            <div className="ml-5 border-l border-sidebar-border/70 py-1 pl-3">
-              {isLoading && <p className="px-3 py-2 text-xs text-muted-foreground">Loading chats…</p>}
-              {!isLoading && chats.length === 0 && <p className="px-3 py-2 text-xs text-muted-foreground">No chats yet</p>}
-              {chats.map((chat) => (
+          <motion.div
+            id={chatsId}
+            initial={reduceMotion ? false : { height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={reduceMotion ? undefined : { height: 0, opacity: 0 }}
+            transition={{ duration: reduceMotion ? 0 : 0.2, ease: "easeInOut" }}
+            className="overflow-hidden"
+          >
+            <div className="ml-5 space-y-1 border-l border-sidebar-border/60 py-1 pl-2">
+              {isLoading && <p className="px-2.5 py-1.5 text-xs text-muted-foreground">Loading chats…</p>}
+              {!isLoading && chats.length === 0 && <p className="px-2.5 py-1.5 text-xs text-muted-foreground">No chats yet</p>}
+              {chats.slice(0, visibleCount).map((chat) => (
                 <Link
                   key={chat.id}
                   href={`/chat/${chat.id}`}
-                  className={`block min-h-10 truncate rounded-lg px-3 py-2.5 text-sm transition-colors ${pathname === `/chat/${chat.id}` ? "bg-sidebar-accent text-sidebar-foreground" : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground"}`}
+                  className={`${chatRow} ${pathname === `/chat/${chat.id}` ? activeChat : inactiveChat}`}
                   title={chat.title}
                 >
                   {chat.title}
                 </Link>
               ))}
+              {chats.length > visibleCount && (
+                <button
+                  type="button"
+                  onClick={() => setVisibleCount((count) => count + 5)}
+                  className="ml-1 inline-flex min-h-8 items-center rounded-md px-2 py-1 text-left text-xs text-muted-foreground/70 transition-colors hover:text-sidebar-foreground focus-visible:outline-2 focus-visible:outline-primary"
+                >
+                  Show more
+                </button>
+              )}
             </div>
           </motion.div>
         )}
@@ -61,6 +78,8 @@ function ProjectRow({ project, expanded, onToggle }: { project: Project; expande
 }
 
 export function ProjectsSection() {
+  const listId = useId();
+  const reduceMotion = useReducedMotion();
   const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: projectsApi.list });
   const [sectionValue, setSectionValue] = useSidebarPreference("remiai:sidebar-projects-open", "open");
   const [expandedValue, setExpandedValue] = useSidebarPreference("remiai:sidebar-expanded-project", "default");
@@ -71,25 +90,32 @@ export function ProjectsSection() {
 
   return (
     <section className="mb-5">
-      <div className="flex items-center gap-1 px-1.5 pb-0">
+      <div className="flex items-center gap-1 px-1 pb-1.5">
         <button
           type="button"
           onClick={() => setSectionValue(open ? "closed" : "open")}
           aria-expanded={open}
-          aria-controls="sidebar-projects-list"
-          className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground transition-colors hover:text-sidebar-foreground"
+          aria-controls={listId}
+          className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm font-medium text-muted-foreground transition-colors hover:text-sidebar-foreground"
         >
-          <ChevronRight className={`h-3.5 w-3.5 transition-transform duration-200 ${open ? "rotate-90" : ""}`} />
+          <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground/70 transition-transform duration-200 ${open ? "rotate-90" : ""}`} />
           Projects
         </button>
-        <Link href="/projects" aria-label="Manage projects" title="Manage projects" className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground">
-          <Plus className="h-4 w-4" />
+        <Link href="/projects" aria-label="Manage projects" title="Manage projects" className="rounded-lg p-1.5 text-muted-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-foreground">
+          <Plus className="h-3.5 w-3.5" />
         </Link>
       </div>
       <AnimatePresence initial={false}>
         {open && (
-          <motion.div id="sidebar-projects-list" {...reveal} className="overflow-hidden">
-            <div className="space-y-1">
+          <motion.div
+            id={listId}
+            initial={reduceMotion ? false : { height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={reduceMotion ? undefined : { height: 0, opacity: 0 }}
+            transition={{ duration: reduceMotion ? 0 : 0.2, ease: "easeInOut" }}
+            className="overflow-hidden"
+          >
+            <div className="space-y-1.5">
               {projects.map((project) => (
                 <ProjectRow
                   key={project.id}
