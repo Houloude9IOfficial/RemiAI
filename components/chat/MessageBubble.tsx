@@ -2,7 +2,7 @@
 
 import type { UIMessage } from "ai";
 import { isTextUIPart, isToolUIPart, isReasoningUIPart, getToolName } from "ai";
-import { Component, useEffect, useId, useRef, useState } from "react";
+import { Component, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { Copy, Check, Play, RefreshCw, Pencil, X, ChevronDown, ChevronUp } from "lucide-react";
 import { ToolCallGroup, FileChangeDigest, extractFileChanges } from "./ToolCallGroup";
@@ -46,6 +46,13 @@ import { Button } from "@/components/ui/button";
 import { isRemiCardOutput, remiCardPartIdentity } from "@/lib/chat/card-identity";
 import { extractSearchTrace, isSearchTraceToolPart } from "@/lib/chat/search-trace";
 import { getStreamDisplayCharsPerSecond } from "@/lib/chat/stream-display-rate";
+import {
+  formatRequestCompletionTime,
+  formatRequestDuration,
+  localDateKey,
+  messageRequestTiming,
+  type RequestTiming,
+} from "@/lib/chat/request-duration";
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -297,6 +304,47 @@ function MessageActionsRow({
     >
       {children}
     </div>
+  );
+}
+
+const localDaySubscribers = new Set<() => void>();
+let localDayTimer: ReturnType<typeof setInterval> | null = null;
+
+function subscribeToLocalDay(callback: () => void) {
+  localDaySubscribers.add(callback);
+  if (localDayTimer === null) {
+    localDayTimer = setInterval(() => {
+      for (const subscriber of localDaySubscribers) subscriber();
+    }, 60_000);
+  }
+  return () => {
+    localDaySubscribers.delete(callback);
+    if (localDaySubscribers.size === 0 && localDayTimer !== null) {
+      clearInterval(localDayTimer);
+      localDayTimer = null;
+    }
+  };
+}
+
+function RequestTimingLabel({ timing }: { timing: RequestTiming }) {
+  // Use the browser's local day after hydration so a server timezone cannot
+  // render a different "today" label. The shared timer updates open chats
+  // when their local calendar day changes.
+  const todayKey = useSyncExternalStore(
+    subscribeToLocalDay,
+    () => localDateKey(new Date()),
+    () => null,
+  );
+  const duration = formatRequestDuration(timing.durationMs);
+  const completedTime = timing.completedAt && todayKey
+    ? formatRequestCompletionTime(timing.completedAt, todayKey)
+    : null;
+  const label = `Total request time: ${duration}${completedTime ? ` · Completed ${completedTime}` : ""}`;
+
+  return (
+    <span className="ml-1 text-[11px] text-muted-foreground/70 tabular-nums" title={label} aria-label={label}>
+      · {duration}{completedTime && <> · {completedTime}</>}
+    </span>
   );
 }
 
@@ -1126,6 +1174,7 @@ export function MessageBubble({
     .filter(isTextUIPart)
     .map((p) => p.text)
     .join("\n\n");
+  const requestTiming = messageRequestTiming(message.parts);
 
   // The AI can call suggest_followups multiple times per response — only the
   // LAST completed set is shown so duplicate followup cards never stack.
@@ -1346,6 +1395,7 @@ export function MessageBubble({
                 onRegenerate={onRegenerate}
               />
             )}
+            {requestTiming && <RequestTimingLabel timing={requestTiming} />}
           </MessageActionsRow>
         )}
       </div>

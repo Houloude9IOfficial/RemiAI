@@ -30,6 +30,7 @@ import {
   failGenerationPresence,
 } from "@/lib/chat/generation-presence";
 import { periodicallyPersistMessages } from "@/lib/chat/persist-interval";
+import { REQUEST_DURATION_PART } from "@/lib/chat/request-duration";
 import { asc, eq, sql } from "drizzle-orm";
 import { db, initializeApp } from "@/db";
 import {
@@ -297,18 +298,22 @@ const chatRequestSchema = z.object({
 });
 
 export async function POST(req: Request) {
+  const requestStartedAtMs = Date.now();
   await initializeApp();
   let body: unknown;
   try { body = await req.clone().json(); } catch { return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 }); }
   const parsed = chatRequestSchema.safeParse(body);
   if (!parsed.success) return jsonError(parsed.error);
   const { conversationId, questionContinuation } = parsed.data;
+  let runStartedAtMs = requestStartedAtMs;
   if (parsed.data.generationRunId) {
-    const durable = await db.select({ status: chatGenerationRuns.status })
+    const durable = await db.select({ status: chatGenerationRuns.status, createdAt: chatGenerationRuns.createdAt })
       .from(chatGenerationRuns)
       .where(eq(chatGenerationRuns.id, parsed.data.generationRunId))
       .get();
     if (durable?.status === "stopped") return new NextResponse(null, { status: 204 });
+    const originalStart = durable ? Date.parse(durable.createdAt) : NaN;
+    if (Number.isFinite(originalStart)) runStartedAtMs = originalStart;
   }
   if (questionRuns.has(conversationId)) return NextResponse.json({ error: "A response is already running" }, { status: 409 });
   if (questionContinuation && !pendingQuestionSubmissions(db, conversationId, true).length) return new NextResponse(null, { status: 204 });
@@ -330,7 +335,7 @@ export async function POST(req: Request) {
     req.headers.get("x-chat-visible") !== "false",
   );
   try {
-    const response = await runChatRequest(req, run);
+    const response = await runChatRequest(req, run, runStartedAtMs);
     if (!response.ok) {
       abandonGenerationPresence(conversationId, run.id);
       finishQuestionRun(db, conversationId, run, false);
@@ -353,7 +358,7 @@ export async function POST(req: Request) {
   }
 }
 
-async function runChatRequest(req: Request, questionRun: QuestionRun) {
+async function runChatRequest(req: Request, questionRun: QuestionRun, runStartedAtMs: number) {
   await initializeApp();
   const trace = createRunTrace({ kind: "chat" });
   trace.metric("retryBudget", 3);
@@ -1971,8 +1976,28 @@ Definition of done:
     },
   });
 
+  // Add the elapsed time before teeing so both the live UI and the persisted
+  // assistant message receive the same completed request duration.
+  const timedMessageStream = uiMessageStream.pipeThrough(
+    new TransformStream<UIMessageChunk, UIMessageChunk>({
+      transform(chunk, controller) {
+        if (chunk.type === "finish") {
+          const completedAt = new Date();
+          controller.enqueue({
+            type: REQUEST_DURATION_PART,
+            data: {
+              durationMs: Math.max(0, completedAt.getTime() - runStartedAtMs),
+              completedAt: completedAt.toISOString(),
+            },
+          } as UIMessageChunk);
+        }
+        controller.enqueue(chunk);
+      },
+    }),
+  );
+
   // Tee the stream: [persistBranch, responseBranch]
-  const [persistBranch, responseBranch] = uiMessageStream.tee();
+  const [persistBranch, responseBranch] = timedMessageStream.tee();
 
   // Pipe the response branch through a transform that injects a structured
   // error payload for user-friendly frontend messaging.

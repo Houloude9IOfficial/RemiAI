@@ -23,6 +23,7 @@ export async function beginDurableGeneration(input: {
     id: input.id,
     conversationId: input.conversationId,
     assistantMessageId: input.assistantMessageId,
+    createdAt: now,
     status: "running",
     continuationCount: input.continuationCount,
     maxContinuations: MAX_SERVER_CONTINUATIONS,
