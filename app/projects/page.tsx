@@ -243,10 +243,10 @@ export default function ProjectsPage() {
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto bg-gradient-to-b from-primary/[0.035] via-background to-background">
-      <div className="mx-auto w-full max-w-7xl px-4 py-7 md:px-8 md:py-10">
-        <header className="mb-8">
+      <div className="mx-auto w-full max-w-7xl px-4 py-5 md:px-8 md:py-10">
+        <header className="mb-5 md:mb-8">
           {/* <div className="mb-3 flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary"><FolderOpen className="size-5" /></div> */}
-          <h1 className="text-3xl font-semibold tracking-tight">Projects</h1>
+          <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Projects</h1>
           <p className="mt-1 text-sm text-muted-foreground">A home for your chats, shared files, and the context your AI remembers.</p>
         </header>
 
@@ -261,7 +261,7 @@ export default function ProjectsPage() {
                 </Button>
               </div>
             </form>
-            <div className="mt-3 border-t pt-2">
+            <div className="mt-3 max-h-56 overflow-y-auto border-t pt-2 lg:max-h-none lg:overflow-visible">
               {isLoading ? <p className="px-2 py-4 text-sm text-muted-foreground">Loading projects…</p> : projects.length ? (
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(event) => void reorder(event)}>
                   <ProjectGroup title="Pinned" items={projects.filter((project) => project.pinned)} selectedId={selected?.id} onSelect={(id) => { setSelectedId(id); setEditingFile(false); setFilePath(""); setFileContent(""); }} />
@@ -274,7 +274,7 @@ export default function ProjectsPage() {
 
           {selected ? (
             <main className="min-w-0 space-y-5">
-              <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border/70 bg-card/80 p-5 shadow-sm md:p-6">
+              <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border/70 bg-card/80 p-4 shadow-sm md:p-6">
                 <div className="min-w-0">
                   {/* <p className="text-xs font-medium uppercase tracking-[0.12em] text-primary">Project workspace</p> */}
                   <h2 className="mt-1 truncate text-2xl font-semibold tracking-tight">{selected.name}</h2>
@@ -289,7 +289,7 @@ export default function ProjectsPage() {
                 </div>
               </div>
 
-              <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-sm md:p-6">
+              <section className="rounded-2xl border border-border/70 bg-card/80 p-4 shadow-sm md:p-6">
                 <div className="mb-6">
                   <h3 className="text-lg font-semibold">Project context</h3>
                   <p className="mt-1 text-sm text-muted-foreground">This information helps the AI work consistently across chats in this project.</p>

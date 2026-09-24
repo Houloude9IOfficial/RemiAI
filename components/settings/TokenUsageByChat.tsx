@@ -4,7 +4,6 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { MessageSquare } from "lucide-react";
 
 type ChatTokenUsage = {
   id: number;
@@ -76,8 +75,26 @@ export function TokenUsageByChat({ chatUsage }: TokenUsageByChatProps) {
       <CardHeader>
         <CardTitle>Top Chats by Token Usage</CardTitle>
       </CardHeader>
-      <CardContent className="overflow-x-auto">
-        <div className="min-w-150">
+      <CardContent>
+        <div className="space-y-3 md:hidden">
+          {chatUsage.map((chat, index) => (
+            <div key={chat.id} className="min-w-0 rounded-lg border border-border/70 p-3">
+              <div className="flex min-w-0 items-start gap-2">
+                <Badge variant="secondary" className="shrink-0">{index + 1}</Badge>
+                <Link href={`/chat/${chat.id}`} className="min-w-0 flex-1 break-words text-sm font-medium hover:underline">{chat.title}</Link>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <TokenBadge tokens={chat.inputTokens} type="input" />
+                <TokenBadge tokens={chat.outputTokens} type="output" />
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/60 pt-2 text-xs">
+                <span className="font-semibold">{formatNumber(chat.totalTokens)} total</span>
+                <span className="text-muted-foreground">{formatDate(chat.updatedAt)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="hidden min-w-0 md:block">
           <Table>
             <TableHeader>
               <TableRow>

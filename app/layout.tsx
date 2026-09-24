@@ -164,7 +164,7 @@ export default function RootLayout({
                     aria-hidden="true"
                     className="shell-canvas pointer-events-none absolute inset-0"
                   />
-                  <div className="relative flex h-full w-full overflow-hidden rounded-none bg-background md:rounded-2xl md:border md:border-border/70 md:shadow-floating">
+                  <div className="relative flex h-full w-full overflow-hidden rounded-none bg-background md:zoom-[0.95] md:rounded-2xl md:border md:border-border/70 md:shadow-floating">
                     <AppSidebar />
                     <MobileSidebar />
                     <main className="flex min-w-0 flex-1 flex-col overflow-y-auto overflow-x-clip">
