@@ -21,6 +21,7 @@ import {
   FolderOpen,
   Check,
   Brain,
+  ClipboardList,
   Timer,
   Zap,
   type LucideIcon,
@@ -178,7 +179,7 @@ const MAX_PASTE_TEXT_CHARS = 10_000;
  */
 const CODE_CHIP_KEY = "remi-code-per-session";
 
-export type ChatMode = "chat" | "instant" | "goal" | "plan" | "build";
+export type ChatMode = "chat" | "instant" | "goal" | "plan" | "build" | "work";
 
 function qualityPolicyLabel(policy: QualityPolicy): string {
   const normalized = normalizeQualityPolicy(policy);
@@ -1309,6 +1310,8 @@ export function ChatInput({
                       ? Sparkles
                       : mode === "build"
                         ? Hammer
+                        : mode === "work"
+                          ? ClipboardList
                         : ListChecks
                   }
                   label={
@@ -1318,6 +1321,8 @@ export function ChatInput({
                       ? "Goal mode"
                       : mode === "build"
                         ? "Build mode"
+                        : mode === "work"
+                          ? "Work mode"
                         : "Plan mode"
                   }
                   title={
@@ -1327,6 +1332,8 @@ export function ChatInput({
                       ? "Goal mode — works until the task is complete"
                       : mode === "build"
                         ? "Build mode — changes files and runs checks"
+                        : mode === "work"
+                          ? "Work mode — guided planning, approval, and delivery"
                         : "Plan mode — plans without writing files"
                   }
                   disabled={disabled || isStreaming}
@@ -1445,7 +1452,7 @@ export function ChatInput({
                     <DropdownMenuSeparator className="my-1" />
                     <DropdownMenuGroup>
                     <DropdownMenuLabel className="px-2 pb-0.5 pt-0.5 text-[9px] font-semibold tracking-[0.08em] text-muted-foreground/75 uppercase">
-                      Work mode
+                      Modes
                     </DropdownMenuLabel>
                     <DropdownMenuCheckboxItem
                       checked={mode === "instant"}
@@ -1466,9 +1473,9 @@ export function ChatInput({
                       </span>
                     </DropdownMenuCheckboxItem>
                     <DropdownMenuCheckboxItem
-                        checked={mode === "build"}
+                        checked={mode === "work"}
                         onCheckedChange={(checked) => {
-                          onModeChange(checked ? "build" : "chat");
+                          onModeChange(checked ? "work" : "chat");
                           setDropdownOpen(false);
                         }}
                         className="min-h-9 gap-2 rounded-lg px-2 py-1 data-[checked]:bg-primary/10 data-[checked]:text-foreground"
@@ -1476,17 +1483,17 @@ export function ChatInput({
                         <Hammer className="h-4 w-4" />
                         <span>
                           <span className="block text-[12px] font-medium">
-                            Build
+                          Work
                           </span>
                           <span className="block text-[10px] leading-3.5 font-normal text-muted-foreground">
-                            Change files and verify work
+                          Guided plan, approval, build, and test
                           </span>
                         </span>
                       </DropdownMenuCheckboxItem>
                       <DropdownMenuCheckboxItem
                         checked={mode === "goal"}
                         onCheckedChange={(checked) => {
-                          onModeChange(checked ? "goal" : "chat");
+                          onModeChange?.(checked ? "goal" : "chat");
                           setDropdownOpen(false);
                         }}
                         className="min-h-9 gap-2 rounded-lg px-2 py-1 data-[checked]:bg-primary/10 data-[checked]:text-foreground"
@@ -1504,7 +1511,7 @@ export function ChatInput({
                       <DropdownMenuCheckboxItem
                         checked={mode === "plan"}
                         onCheckedChange={(checked) => {
-                          onModeChange(checked ? "plan" : "chat");
+                          onModeChange?.(checked ? "plan" : "chat");
                           setDropdownOpen(false);
                         }}
                         className="min-h-9 gap-2 rounded-lg px-2 py-1 data-[checked]:bg-primary/10 data-[checked]:text-foreground"

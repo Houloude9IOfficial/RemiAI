@@ -478,7 +478,7 @@ export const javaScriptExecTool = {
   },
 };
 
-function sandboxCommandIsSafe(command: string): boolean {
+export function sandboxCommandIsSafe(command: string): boolean {
   // This is a deliberate guardrail rather than an OS security boundary. It
   // rejects the path forms that can leave the selected project tree while the
   // process itself is pinned to that tree as its cwd.
@@ -499,7 +499,7 @@ const SHELL_CANDIDATES = ["bash", "sh"];
  * keeps working in minimal environments; only when no shell exists at all
  * returns a clear error instead of the raw "Cannot run: spawn bash ENOENT".
  */
-async function runShellCommand(
+export async function runShellCommand(
   command: string,
   opts: { cwd: string; timeoutMs: number; start: number },
 ): Promise<SandboxResult> {

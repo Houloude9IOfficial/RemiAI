@@ -39,6 +39,10 @@ const database = drizzle(sqlite, { schema });
 migrate(database, { migrationsFolder: path.resolve("db/migrations") });
 // Migrations must remain safe to re-run at subsequent application starts.
 migrate(database, { migrationsFolder: path.resolve("db/migrations") });
+// Migration 0054 deliberately keeps the historical conversations migration
+// immutable and relies on the startup compatibility repair for this additive
+// column. This isolated in-memory migration test does not boot that repair.
+sqlite.exec("ALTER TABLE conversations ADD COLUMN project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL");
 function fixture() {
   const conversationId = database.insert(schema.conversations).values({ title: "Questions" }).returning().get().id;
   database.insert(schema.messages).values({ conversationId, uiId: `question-${conversationId}`, role: "assistant", parts: questionMessage(`question-${conversationId}`, `call-${conversationId}`).parts, orderIndex: 0 }).run();

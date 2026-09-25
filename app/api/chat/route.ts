@@ -32,7 +32,7 @@ import {
 import { periodicallyPersistMessages } from "@/lib/chat/persist-interval";
 import { REQUEST_DURATION_PART } from "@/lib/chat/request-duration";
 import { asc, eq, sql } from "drizzle-orm";
-import { db, initializeApp } from "@/db";
+import { db, getRuntimeDb, initializeApp } from "@/db";
 import {
   conversations,
   providers,
@@ -118,6 +118,11 @@ import { buildProjectAttachmentContext, buildProjectAttachmentTools } from "@/li
 import { buildRoutinesTools } from "@/lib/tools/routines";
 import { buildScheduleTool } from "@/lib/tools/schedule";
 import { buildToolHelpTool, buildListAvailableToolsTool } from "@/lib/tools/tool-help";
+import { buildWorkPlanTool } from "@/lib/work/tools";
+import { finishWorkRun, getActiveWorkRun, workTargetAllowsPath, workTargetLabel } from "@/lib/work/runs";
+import { buildWorkExecutionTools, stopWorkServer } from "@/lib/work/execution";
+import { buildWorkBrowserTools, closeWorkBrowser } from "@/lib/work/browser";
+import { slugify } from "@/lib/canvas/storage";
 import { buildModeTool } from "@/lib/tools/mode";
 import { shouldPromotePlanToGoal } from "@/lib/chat/mode-transition";
 import {
@@ -416,6 +421,7 @@ async function runChatRequest(req: Request, questionRun: QuestionRun, runStarted
 
   // Read mode from the conversation in the database
   let mode = conversation.mode ?? "chat";
+  const activeWorkRun = mode === "work" ? await getActiveWorkRun(conversationId) : undefined;
   const setLiveMode = (nextMode: "chat" | "instant" | "plan" | "goal" | "build") => {
     mode = nextMode;
   };
@@ -646,6 +652,7 @@ async function runChatRequest(req: Request, questionRun: QuestionRun, runStarted
     ...createVisualToolSet,
     ...buildToolHelpTool(),
     ...buildListAvailableToolsTool(),
+    ...(activeWorkRun?.phase === "planning" ? { submit_work_plan: buildWorkPlanTool(conversationId, activeWorkRun.id) } : {}),
   };
 
   // Agent spawner tools with chaining support. Spawned sub-agents bundle
@@ -741,8 +748,27 @@ async function runChatRequest(req: Request, questionRun: QuestionRun, runStarted
         return [name, {
           ...tool,
           execute: async (args: Record<string, unknown>) => {
-            if (mode === "plan") {
-              return "Plan mode is read-only. Call switch_mode with mode goal before using this write tool.";
+            if (mode === "plan" || (mode === "work" && activeWorkRun?.phase !== "building" && activeWorkRun?.phase !== "testing")) {
+              return "This Work run is planning or awaiting approval, so target writes are blocked.";
+            }
+            if (mode === "work" && activeWorkRun) {
+              if (activeWorkRun.targetType === "directory") {
+                // Permitted-root file tools retain their normal audit trail,
+                // but a Work run may only mutate its selected root/subtree.
+                if (!workTargetAllowsPath(activeWorkRun, args.rootId, args.relativePath ?? args.sourceRelativePath ?? args.destRelativePath)) {
+                  return "This Work run may only change files inside its selected writable target directory.";
+                }
+              } else if (name === "canvas_create") {
+                if (slugify(String(args.name ?? "")) !== slugify(activeWorkRun.canvasName ?? "canvas")) {
+                  return "This Work run may only create the Canvas selected in its intake.";
+                }
+              } else if (name.startsWith("canvas_") && String(args.slug ?? "") !== slugify(activeWorkRun.canvasName ?? "canvas")) {
+                return "This Work run may only operate on its selected Canvas.";
+              } else if (name.startsWith("session_file_")) {
+                const allowedPrefix = `canvas/${slugify(activeWorkRun.canvasName ?? "canvas")}/`;
+                const candidate = String(args.relativePath ?? args.path ?? "").replace(/\\/g, "/").replace(/^\/+/, "");
+                if (!candidate.startsWith(allowedPrefix)) return "This Work run may only write inside its selected Canvas folder.";
+              }
             }
             return (execute as (input: Record<string, unknown>) => unknown)(args);
           },
@@ -753,6 +779,40 @@ async function runChatRequest(req: Request, questionRun: QuestionRun, runStarted
   const effectiveSessionFileToolSet = guardPlanWriteTools(sessionFileToolSet);
   const effectiveCanvasToolSet = guardPlanWriteTools(canvasToolSet);
   const effectiveProjectToolSet = guardPlanWriteTools(projectToolSet);
+  // A command shell has too many ways to mutate a project for a reliable
+  // planning allow-list. Work planning therefore uses filesystem inspection
+  // and research only; the target-scoped terminal is enabled after approval.
+  const effectiveExecutionToolSet = Object.fromEntries(
+    Object.entries(executionToolSet).map(([name, rawTool]) => {
+      const tool = rawTool as Record<string, unknown>;
+      const execute = tool?.execute;
+      if (typeof execute !== "function") return [name, rawTool];
+      return [name, {
+        ...tool,
+        execute: async (args: Record<string, unknown>) => {
+          if (mode === "work") {
+            if (activeWorkRun?.phase !== "building" && activeWorkRun?.phase !== "testing") {
+              return { stderr: "Work planning blocks terminal execution until the saved plan is explicitly approved.", exitCode: -1 };
+            }
+            return { stderr: "Work runs use the target-scoped work_terminal and work_server_* tools, not the general execution tools.", exitCode: -1 };
+          }
+          return (execute as (input: Record<string, unknown>) => unknown)(args);
+        },
+      }];
+    }),
+  );
+  const workExecutionToolSet = activeWorkRun && ["building", "testing"].includes(activeWorkRun.phase)
+    ? buildWorkExecutionTools(conversationId, activeWorkRun.id)
+    : {};
+  const workBrowserToolSet = activeWorkRun && ["building", "testing"].includes(activeWorkRun.phase)
+    ? buildWorkBrowserTools(conversationId, activeWorkRun.id)
+    : {};
+  const effectivePlaywrightToolSet = mode === "work"
+    ? Object.fromEntries(Object.entries(playwrightToolSet).map(([name, tool]) => [name, {
+        ...(tool as Record<string, unknown>),
+        execute: async () => ({ error: "Work runs use the local-only work_browser_* tools so preview navigation cannot escape the selected target." }),
+      }]))
+    : playwrightToolSet;
 
   // Build mode-specific system prompt instructions
   const planModePrompt =
@@ -764,7 +824,7 @@ async function runChatRequest(req: Request, questionRun: QuestionRun, runStarted
 You are currently in **Plan mode**. This means:
 - You CAN read files, list directories, search files, browse the web, and gather information.
 - You CAN use \`todos_init\` to create a step-by-step plan.
-- You CAN use \`ask_questions\` to gather information from the user.
+- Prefer \`ask_questions\` whenever a decision, preference, or missing detail would materially change the plan. It presents a faster interactive UI; do not list multiple-choice questions in plain chat text when this tool is available.
 - You CANNOT write, create, delete, or rename any files or directories.
 - Your goal is to help the user plan their project by asking clarifying questions, researching options, and creating a detailed todo plan.
 - Focus on understanding the user's requirements, exploring their codebase, and proposing a clear implementation plan.
@@ -816,6 +876,9 @@ Definition of done:
 3. The final response lists changed files, checks run, and any remaining failure or uncertainty.
 4. Never claim the task is complete or verified when a relevant check failed, timed out, or was not run.`
       : "";
+  const workModePrompt = activeWorkRun
+    ? `\n\n## GUIDED WORK — ${activeWorkRun.phase}\nGoal: ${activeWorkRun.goal}\nTarget: ${workTargetLabel(activeWorkRun)}\nSuccess criteria: ${activeWorkRun.successCriteria || "Not specified."}\nKeep the user oriented with clear, externally visible progress updates before and after meaningful inspection, planning, editing, and testing steps. Summarize observations, decisions, and the next action; do not reveal private hidden reasoning. When a user decision or missing detail is needed, prefer the \`ask_questions\` tool over plain-text questions so they receive the interactive question UI.\n${activeWorkRun.phase === "planning" ? "Inspect, research, and ask focused questions only. Never write target files, create a Canvas, mutate via terminal, or start a server. Once requirements are clear, call submit_work_plan and wait for explicit approval." : activeWorkRun.phase === "awaiting_approval" ? "The plan awaits explicit user approval. Do not modify files or start a server." : "The approved plan is active. Work only inside the chosen target and report actual verification evidence."}`
+    : mode === "work" ? "\n\n## GUIDED WORK\nNo active intake exists. Ask the user to complete the Work intake form." : "";
 
   // Merge all tool sets (last writer wins on name collision). Typed as a
   // loose record so the list_available_tools rebuild below can replace the
@@ -826,8 +889,10 @@ Definition of done:
     ...contextToolSet,
     ...memoryToolSet,
     ...sourceAwareIntegrationToolSet,
-    ...executionToolSet,
-    ...playwrightToolSet,
+    ...effectiveExecutionToolSet,
+    ...workExecutionToolSet,
+    ...workBrowserToolSet,
+    ...effectivePlaywrightToolSet,
     ...documentToolSet,
     ...mediaToolSet,
     ...builtinToolSet,
@@ -1293,7 +1358,7 @@ Definition of done:
   const dynamicSystemPromptBase = instantMode
     ? projectContext + projectAttachmentContext
     : systemTip + profileTip + memoryTip + projectContext + projectAttachmentContext + fileChangeTip + summarySection +
-      planModePrompt + goalModePrompt + buildModePrompt + canvasSection + _remiCardsSection + existingCardSection + (Object.keys(_remiCardToolSet).length ? REMI_CARD_PRESENTATION_RULES + REMI_CARD_SCOPE_RULES : "") + activeSkillsSection +
+      planModePrompt + goalModePrompt + buildModePrompt + workModePrompt + canvasSection + _remiCardsSection + existingCardSection + (Object.keys(_remiCardToolSet).length ? REMI_CARD_PRESENTATION_RULES + REMI_CARD_SCOPE_RULES : "") + activeSkillsSection +
       taggedSkillsSection + qualityPolicyPrompt;
   const liveModeNote = () =>
     `\n\n## AUTHORITATIVE LIVE MODE\nThe active mode for this run is **${mode}**. This live mode overrides any earlier mode wording in the conversation. After a successful switch_mode call, immediately follow the new mode's rules and use its available tools.`;
@@ -1830,6 +1895,23 @@ Definition of done:
         } catch (error) {
           console.warn("[build] Failed to finalize build run:", error);
         }
+      }
+
+      // Work Overview uses the same inspectable file/check extraction as
+      // legacy Build history. A failed/incomplete run remains visible instead
+      // of being silently marked successful.
+      if (mode === "work" && activeWorkRun && ["building", "testing"].includes(activeWorkRun.phase)) {
+        const workParts = buildPartsFromSteps(steps ?? []);
+        const changedFiles = summarizeChangedFiles(workParts);
+        const checks = checksFromSteps(steps ?? []);
+        const failed = aborted || Boolean(capturedErrorPayload) || checks.length === 0 || checks.some((check) => check.status !== "passed");
+        const phase = failed ? "needs_attention" : "completed";
+        const overview = `${phase === "completed" ? "Completed" : "Needs attention"}: ${changedFiles.length} file${changedFiles.length === 1 ? "" : "s"} changed; ${checks.length ? `${checks.filter((check) => check.status === "passed").length}/${checks.length} checks passed` : "no execution checks recorded"}.`;
+        await finishWorkRun({ conversationId, runId: activeWorkRun.id, phase, changedFiles, checks, overview });
+        // Work servers are response-owned. A continuation creates a fresh,
+        // explicitly requested preview instead of leaving a daemon behind.
+        stopWorkServer(activeWorkRun.id);
+        await closeWorkBrowser(activeWorkRun.id);
       }
 
       try {

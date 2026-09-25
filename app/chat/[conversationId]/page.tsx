@@ -18,6 +18,7 @@ import {
 import { ChatSkeleton } from "@/components/chat/ChatSkeleton";
 import { TodoProgressBar } from "@/components/chat/TodoProgressBar";
 import { BuildRunHistory } from "@/components/chat/BuildRunHistory";
+import { WorkOverview } from "@/components/chat/WorkOverview";
 import { AutomationRunHistory } from "@/components/chat/AutomationRunHistory";
 import { ExportDialog } from "@/components/chat/ExportDialog";
 import { MobileChatHeader } from "@/components/chat/MobileChatHeader";
@@ -1337,9 +1338,15 @@ function ConversationChat({
         </div>
       )}
 
+      {/* Keep Work/status content and the desktop file panel in one shared
+          flex row. The panel then spans the full workspace beneath the chat
+          header instead of being limited to the leftover message area. */}
+      <div className="flex min-h-0 flex-1">
+      <div className="flex min-w-0 flex-1 flex-col">
       {/* ── Todo progress ── */}
       <TodoProgressBar conversationId={conversationId} mode={mode} />
       {mode === "build" && <BuildRunHistory conversationId={conversationId} />}
+      {mode === "work" && <WorkOverview conversationId={conversationId} onClose={() => handleModeChange("chat")} onBeginPlanning={(intake) => handleSend(`Start the guided Work planning phase now.\n\nGoal: ${intake.goal}\nTarget: ${intake.targetLabel}\nSuccess criteria: ${intake.successCriteria || "Not specified"}\nTechnical brief: ${intake.technicalBrief || "Not specified"}\n\nFirst inspect the relevant target and report visible progress as you work. Ask only focused questions if necessary, then submit the complete Work plan for approval.`)} onBeginBuild={(run, source) => { window.setTimeout(() => { handleSend(source === "repair" ? `Continue the guided Work repair pass for “${run.goal}”. Review the current implementation and the previous verification outcome, fix what is needed, rerun relevant checks, and visibly report each repair and test result. Stop only when verified or when focused user input is required.` : `The Work plan is approved. Start the guided Work build now for “${run.goal}”. Work only in the approved target, make the implementation changes, and keep visible progress updates flowing through inspection, writing, and testing. Run relevant checks, report their actual results, and do not stop until this Work turn reaches a verified outcome or needs focused user input.`); }, 500); }} />}
       <AutomationRunHistory conversationId={conversationId} />
 
       {/* ── Messages + Session files panel ── */}
@@ -1466,25 +1473,6 @@ function ConversationChat({
           )}
         </div>
 
-        {/* Desktop — inline right-side panel (user-resizable width). The canvas
-            and session-files panels share this slot; they never stack. */}
-        <AnimatePresence>
-          {canvasOpen && (
-            <ResizableCanvasPanel
-              conversationId={conversationId}
-              onClose={closeCanvasPanel}
-              focusSlug={canvasFocusSlug}
-            />
-          )}
-          {!canvasOpen && panelOpen && (
-            <ResizableSessionFilesPanel
-              conversationId={conversationId}
-              onClose={closePanel}
-              focusPath={panelFocusPath}
-            />
-          )}
-        </AnimatePresence>
-
         {/* Mobile — full-height drawer over the chat */}
         <AnimatePresence>
           {canvasOpen && (
@@ -1544,6 +1532,27 @@ function ConversationChat({
           )}
         </AnimatePresence>
       </div>
+      </div>
+
+      {/* Desktop — full-height inline side panel. It shares the workspace row
+          with the complete chat column, so long Work cards cannot crop it. */}
+      <AnimatePresence>
+        {canvasOpen && (
+          <ResizableCanvasPanel
+            conversationId={conversationId}
+            onClose={closeCanvasPanel}
+            focusSlug={canvasFocusSlug}
+          />
+        )}
+        {!canvasOpen && panelOpen && (
+          <ResizableSessionFilesPanel
+            conversationId={conversationId}
+            onClose={closePanel}
+            focusPath={panelFocusPath}
+          />
+        )}
+      </AnimatePresence>
+    </div>
     </div>
   );
 }

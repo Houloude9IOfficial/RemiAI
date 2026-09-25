@@ -1,0 +1,21 @@
+CREATE TABLE `work_runs` (
+  `id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+  `conversation_id` integer NOT NULL REFERENCES `conversations`(`id`) ON DELETE cascade,
+  `goal` text NOT NULL,
+  `target_type` text NOT NULL,
+  `directory_id` integer REFERENCES `directories`(`id`) ON DELETE set null,
+  `target_path` text DEFAULT '' NOT NULL,
+  `canvas_name` text,
+  `success_criteria` text DEFAULT '' NOT NULL,
+  `technical_brief` text DEFAULT '{}' NOT NULL,
+  `phase` text DEFAULT 'planning' NOT NULL,
+  `plan_path` text,
+  `plan_revision` integer DEFAULT 0 NOT NULL,
+  `changed_files` text DEFAULT '[]' NOT NULL,
+  `checks` text DEFAULT '[]' NOT NULL,
+  `overview` text DEFAULT '' NOT NULL,
+  `created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+  `updated_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+  `approved_at` text,
+  `completed_at` text
+);

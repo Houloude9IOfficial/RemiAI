@@ -89,6 +89,22 @@ const sqlite = openDatabase();
 
 const db = drizzle(sqlite, { schema });
 
+/**
+ * Return a Drizzle facade built with the schema module currently loaded by
+ * the route. This matters during Next development hot reloads: the long-lived
+ * `db` singleton may predate a newly added table while a freshly compiled
+ * route already imports that table. Production starts from one coherent
+ * schema, but this keeps new migrations usable without restarting dev.
+ */
+export function getRuntimeDb() {
+  return drizzle(sqlite, { schema });
+}
+
+/** Raw connection for narrowly-scoped compatibility paths during dev HMR. */
+export function getRuntimeSqlite() {
+  return sqlite;
+}
+
 let initializationPromise: Promise<void> | null = null;
 
 type TableInfoRow = { name: string };
