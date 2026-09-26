@@ -38,5 +38,8 @@ jobs:
           tags: |
             ghcr.io/houloude9iofficial/remiai:${{ github.event.release.tag_name }}
             ghcr.io/houloude9iofficial/remiai:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # A registry cache is shared across release tags. The GitHub Actions
+          # cache is scoped to a workflow ref, so each release tag otherwise
+          # starts cold and spends several minutes exporting a large cache.
+          cache-from: type=registry,ref=ghcr.io/houloude9iofficial/remiai:buildcache
+          cache-to: type=registry,ref=ghcr.io/houloude9iofficial/remiai:buildcache,mode=max

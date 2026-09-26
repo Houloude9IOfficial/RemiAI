@@ -4,11 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { Pen, Settings2, X } from "lucide-react";
+import { Files, Pen, Settings2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useNewChat } from "@/lib/hooks/use-new-chat";
 import { ConversationList } from "./ConversationList";
+import { ProjectsSection } from "./ProjectsSection";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { AboutModal } from "./AboutModal";
 import { UpdateChecker } from "./UpdateChecker";
@@ -90,11 +91,19 @@ export function MobileSidebar() {
             type="button"
             onClick={() => newChatMutation.mutate()}
             disabled={newChatMutation.isPending}
-            className="h-auto w-full justify-start gap-2 rounded-xl bg-sidebar-accent/55 px-3 py-2 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent"
+            className="h-auto min-h-9 w-full justify-start gap-2 rounded-xl bg-sidebar-accent/55 px-3 py-2 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent"
           >
             <Pen className="h-4 w-4" />
             New chat
           </Button>
+          <Link
+            href="/files"
+            onClick={onClose}
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-sidebar-foreground/72 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          >
+            <Files className="h-4 w-4 shrink-0" />
+            Library
+          </Link>
           <SidebarExploreMenu onNavigate={onClose} />
           <SidebarSearchButton onOpen={onClose} />
         </div>
@@ -104,6 +113,7 @@ export function MobileSidebar() {
             onRefresh={() => queryClient.invalidateQueries({ queryKey: ["sidebar-conversations"] })}
             className="min-h-0 flex-1 overflow-x-hidden px-2 py-1 text-sm text-sidebar-foreground/80"
           >
+            <ProjectsSection />
             <ConversationList />
           </PullToRefresh>
 

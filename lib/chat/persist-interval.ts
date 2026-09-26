@@ -16,6 +16,7 @@ import type { UIMessage, UIMessageChunk } from "ai";
 import type { RunTrace } from "@/lib/observability/run-trace";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "@/db/schema";
+import { REQUEST_DURATION_PART } from "./request-duration";
 
 
 const PERSIST_INTERVAL_MS = 2000;
@@ -130,6 +131,10 @@ export async function periodicallyPersistMessages(
     const type = chunk.type as string;
 
     switch (type) {
+      case REQUEST_DURATION_PART:
+        parts.push({ type: REQUEST_DURATION_PART, data: chunk.data } as UIMessage["parts"][number]);
+        break;
+
       case "start":
         messageId = (chunk.messageId as string) || messageId;
         if (!parts.length) {

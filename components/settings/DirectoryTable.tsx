@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
-import { Eye, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { directoriesApi } from "@/lib/api/directories";
 import { toast } from "sonner";
@@ -52,6 +52,37 @@ export function DirectoryTable() {
   }
 
   return (
+    <>
+    <div className="space-y-3 md:hidden">
+      {directories.map((dir) => (
+        <div key={dir.id} className="min-w-0 rounded-xl border border-border/70 bg-card p-4">
+          <div className="flex items-start gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="break-words text-sm font-medium">{dir.label}</p>
+              <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{dir.path}</p>
+            </div>
+            <Button size="icon" variant="ghost" className="shrink-0 text-muted-foreground hover:text-destructive" aria-label={`Remove ${dir.label}`} onClick={() => deleteMutation.mutate(dir.id)}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="mt-4 grid grid-cols-3 gap-2 border-t border-border/60 pt-3">
+            <div className="flex flex-col items-center gap-2 text-xs text-muted-foreground">
+              Read
+              <Switch aria-label={`Read ${dir.label}`} checked={dir.canRead} onCheckedChange={(canRead) => updateMutation.mutate({ id: dir.id, canRead })} />
+            </div>
+            <div className="flex flex-col items-center gap-2 text-xs text-muted-foreground">
+              Write
+              <Switch aria-label={`Write ${dir.label}`} checked={dir.canWrite} onCheckedChange={(canWrite) => updateMutation.mutate({ id: dir.id, canWrite })} />
+            </div>
+            <div className="flex flex-col items-center gap-2 text-xs text-muted-foreground">
+              Watch
+              <Switch aria-label={`Watch ${dir.label}`} checked={dir.watchEnabled} disabled={!dir.canRead} onCheckedChange={(watchEnabled) => updateMutation.mutate({ id: dir.id, watchEnabled })} />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+    <div className="hidden md:block">
     <Table>
       <TableHeader>
         <TableRow>
@@ -105,6 +136,7 @@ export function DirectoryTable() {
                 size="icon"
                 variant="ghost"
                 className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                aria-label={`Remove ${dir.label}`}
                 onClick={() => deleteMutation.mutate(dir.id)}
               >
                 <Trash2 className="h-4 w-4" />
@@ -114,5 +146,7 @@ export function DirectoryTable() {
         ))}
       </TableBody>
     </Table>
+    </div>
+    </>
   );
 }

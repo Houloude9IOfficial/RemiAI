@@ -26,6 +26,16 @@ export type SessionFilesOverviewEntry = {
   totalSize: number;
 };
 
+export type LibraryFileEntry = {
+  conversationId: number;
+  conversationTitle: string;
+  path: string;
+  name: string;
+  size: number;
+  mtime: string;
+  url: string;
+};
+
 export type ConversationArtifact = {
   id: number;
   conversationId: number;
@@ -165,6 +175,9 @@ async function unwrap<T>(res: Response): Promise<T> {
 }
 
 export const sessionFilesApi = {
+  library: (): Promise<{ files: LibraryFileEntry[] }> =>
+    fetch("/api/library").then((res) => unwrap<{ files: LibraryFileEntry[] }>(res)),
+
   artifacts: (
     conversationId: number,
   ): Promise<{ conversationId: number; artifacts: ConversationArtifact[] }> =>

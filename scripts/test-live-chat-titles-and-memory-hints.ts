@@ -22,6 +22,7 @@ import {
 
 const conversation = (id: number, title: string): Conversation => ({
   id,
+  projectId: null,
   title,
   providerId: 1,
   modelId: "test",

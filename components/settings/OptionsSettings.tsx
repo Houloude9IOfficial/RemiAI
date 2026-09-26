@@ -83,30 +83,6 @@ export function OptionsSettings() {
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-sm">
-            <MessageSquareText className="h-4 w-4 text-primary" />
-            Messages
-          </CardTitle>
-          <CardDescription className="text-xs">
-            Reduce visual noise in conversations without removing message
-            controls.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="border-t pt-4">
-          <OptionRow
-            title="Collapse long user messages"
-            description="Fold long prompts by default. You can still expand any message when needed."
-            checked={preferences?.collapseLongUserMessages ?? true}
-            disabled={disabled}
-            onCheckedChange={(collapseLongUserMessages) =>
-              updateMutation.mutate({ collapseLongUserMessages })
-            }
-          />
-        </CardContent>
-      </Card>
-
       <RemiApiOptions
         preferences={preferences}
         disabled={disabled}
@@ -134,6 +110,30 @@ export function OptionsSettings() {
             disabled={disabled}
             onCheckedChange={(expandReasoningWhileWorking) =>
               updateMutation.mutate({ expandReasoningWhileWorking })
+            }
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <MessageSquareText className="h-4 w-4 text-primary" />
+            Messages
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Reduce visual noise in conversations without removing message
+            controls.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="border-t pt-4">
+          <OptionRow
+            title="Collapse long user messages"
+            description="Fold long prompts by default. You can still expand any message when needed."
+            checked={preferences?.collapseLongUserMessages ?? true}
+            disabled={disabled}
+            onCheckedChange={(collapseLongUserMessages) =>
+              updateMutation.mutate({ collapseLongUserMessages })
             }
           />
         </CardContent>

@@ -89,6 +89,22 @@ const sqlite = openDatabase();
 
 const db = drizzle(sqlite, { schema });
 
+/**
+ * Return a Drizzle facade built with the schema module currently loaded by
+ * the route. This matters during Next development hot reloads: the long-lived
+ * `db` singleton may predate a newly added table while a freshly compiled
+ * route already imports that table. Production starts from one coherent
+ * schema, but this keeps new migrations usable without restarting dev.
+ */
+export function getRuntimeDb() {
+  return drizzle(sqlite, { schema });
+}
+
+/** Raw connection for narrowly-scoped compatibility paths during dev HMR. */
+export function getRuntimeSqlite() {
+  return sqlite;
+}
+
 let initializationPromise: Promise<void> | null = null;
 
 type TableInfoRow = { name: string };
@@ -237,8 +253,33 @@ export function ensureHeartbeatColumns(): void {
  */
 function repairSchemaCompatibility(): void {
   ensureHeartbeatColumns();
+  if (tableExists("projects")) {
+    const columns = tableColumns("projects");
+    if (!columns.has("brief")) {
+      sqlite.exec('ALTER TABLE "projects" ADD COLUMN "brief" TEXT NOT NULL DEFAULT \'\'');
+      if (columns.has("description")) {
+        sqlite.exec('UPDATE "projects" SET "brief" = "description" WHERE "description" <> \'\'');
+      }
+    }
+    if (!columns.has("instructions")) {
+      sqlite.exec('ALTER TABLE "projects" ADD COLUMN "instructions" TEXT NOT NULL DEFAULT \'\'');
+    }
+    if (!columns.has("notes")) {
+      sqlite.exec('ALTER TABLE "projects" ADD COLUMN "notes" TEXT NOT NULL DEFAULT \'\'');
+    }
+    if (!columns.has("pinned")) {
+      sqlite.exec('ALTER TABLE "projects" ADD COLUMN "pinned" INTEGER NOT NULL DEFAULT 0');
+    }
+    if (!columns.has("sort_order")) {
+      sqlite.exec('ALTER TABLE "projects" ADD COLUMN "sort_order" INTEGER NOT NULL DEFAULT 0');
+    }
+  }
   if (tableExists("conversations")) {
     const columns = tableColumns("conversations");
+    if (!columns.has("project_id")) {
+      sqlite.exec('ALTER TABLE "conversations" ADD COLUMN "project_id" INTEGER REFERENCES "projects"("id") ON DELETE SET NULL');
+    }
+    sqlite.exec('CREATE INDEX IF NOT EXISTS "conversations_project_id_idx" ON "conversations" ("project_id")');
     if (!columns.has("quality_policy")) {
       sqlite.exec(
         'ALTER TABLE "conversations" ADD COLUMN "quality_policy" TEXT NOT NULL DEFAULT \'balanced\'',
@@ -409,6 +450,26 @@ function repairSchemaCompatibility(): void {
       CREATE INDEX "automation_runs_status_next_retry_at_idx" ON "automation_runs" ("status", "next_retry_at");
     `);
   }
+
+  if (!tableExists("chat_generation_runs")) {
+    sqlite.exec(`
+      CREATE TABLE "chat_generation_runs" (
+        "id" TEXT PRIMARY KEY NOT NULL,
+        "conversation_id" INTEGER NOT NULL,
+        "assistant_message_id" TEXT NOT NULL,
+        "status" TEXT NOT NULL DEFAULT 'running',
+        "continuation_count" INTEGER NOT NULL DEFAULT 0,
+        "max_continuations" INTEGER NOT NULL DEFAULT 3,
+        "error" TEXT,
+        "created_at" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updated_at" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "completed_at" TEXT,
+        FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE CASCADE
+      );
+      CREATE INDEX "chat_generation_runs_conversation_status_idx"
+        ON "chat_generation_runs" ("conversation_id", "status");
+    `);
+  }
   if (!tableExists("automation_run_events")) {
     sqlite.exec(`
       CREATE TABLE "automation_run_events" (
@@ -560,6 +621,14 @@ async function initializeAppInternal(): Promise<void> {
     import("@/lib/runs/automation")
       .then(({ recoverStaleAutomationRuns }) => recoverStaleAutomationRuns())
       .catch((err) => console.error("[runs] Failed to recover stale runs:", err));
+  }, 0);
+
+  // Interactive chat generations are also durable. Reconstruct them from the
+  // persisted transcript and continue after an app/server restart.
+  setTimeout(() => {
+    import("@/lib/chat/generation-runs")
+      .then(({ recoverChatGenerationRuns }) => recoverChatGenerationRuns())
+      .catch((err) => console.error("[chat] Failed to recover active generations:", err));
   }, 0);
 
   // Delete temporary chats that outlived their retention period (30 days of

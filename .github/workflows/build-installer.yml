@@ -11,8 +11,8 @@
 #   Linux  — AppImage + DEB + RPM
 #
 # All installers are written to ./release/ and attached to a draft GitHub
-# Release when running from a tag. macOS installers are currently unsigned
-# and unnotarized, so the release notes warn users about Gatekeeper.
+# Release when running from a tag. macOS installers are ad-hoc signed but
+# unnotarized, so the release notes explain Gatekeeper approval.
 #
 # ──────────────────────────────────────────────────────────────────────────
 
@@ -81,38 +81,12 @@ jobs:
       - name: Build macOS installer
         run: npx electron-builder --mac --${{ matrix.arch }} --publish never
         env:
-          # CI artifacts are intentionally unsigned until a Developer ID and
-          # notarization credentials are configured for a public release.
+          # The builder config explicitly selects ad-hoc signing. Never pick
+          # up an unrelated certificate from a runner's keychain.
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-          # Enabled after joining the Apple Developer Program, then
-          # removing CSC_IDENTITY_AUTO_DISCOVERY above.
-          # CSC_LINK: ${{ secrets.CSC_LINK }}
-          # CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          # APPLE_ID: ${{ secrets.APPLE_ID }}
-          # APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
-      # Show exactly what electron-builder generated.
-      # This makes future build/output problems much easier to diagnose.
-      - name: Verify macOS build output
-        run: |
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "macOS build output:"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-          if [ -d "release" ]; then
-            find release -maxdepth 2 -type f -print
-          else
-            echo "ERROR: release/ directory does not exist."
-            exit 1
-          fi
-
-          echo ""
-          echo "Installer files:"
-          find release -maxdepth 1 -type f \( \
-            -name "*.dmg" -o \
-            -name "*.zip" \
-          \) -print
+      - name: Verify macOS installer and create checksums
+        run: bash scripts/verify-macos-installer.sh "${{ matrix.arch }}" "$(node -p 'require("./package.json").version')"
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
@@ -121,6 +95,7 @@ jobs:
           path: |
             release/*.dmg
             release/*.zip
+            release/*.sha256
           if-no-files-found: error
 
       - name: Upload macOS installers to GitHub Release
@@ -130,12 +105,19 @@ jobs:
           files: |
             release/*.dmg
             release/*.zip
+            release/*.sha256
           draft: true
           prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') }}
           body: |
             ## macOS installation notice
 
-            The macOS installers in this release are currently **unsigned and not notarized by Apple**. macOS Gatekeeper may show a warning or prevent the app from opening normally. Only bypass that warning if you downloaded the installer directly from this official release and trust it.
+            These macOS installers use an ad-hoc signature and are **not notarized by Apple**. macOS will require app-specific approval before opening RemiAI.
+
+            1. Download the DMG for your Mac: `arm64` for Apple Silicon or `x64` for Intel. Download its matching `.dmg.sha256` file too.
+            2. In Terminal, go to the folder containing both files and run `shasum -a 256 -c RemiAI-<version>-mac-<arch>.dmg.sha256`, substituting the release version and your architecture. It should report `OK`. If the checksum differs, delete the download and get a fresh copy from this release; do not open the mismatched file. ZIP downloads have their own `.zip.sha256` files.
+            3. Open the DMG and drag RemiAI to Applications. Try opening RemiAI once. If macOS blocks it, open **System Settings → Privacy & Security**, scroll to **Security**, and click **Open Anyway** for RemiAI, then confirm **Open**. Apple shows this option for a limited time after an opening attempt.
+
+            If macOS still says the app is damaged after checksum verification and app-specific approval, report the macOS version, selected architecture, and exact alert in an issue. Do not disable Gatekeeper system-wide.
 
   # ────────────────────────────────────────────────────────────────────────
   # Windows — x64

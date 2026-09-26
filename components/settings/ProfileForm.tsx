@@ -345,7 +345,7 @@ export function ProfileForm() {
       </div>
 
       {/* Profile Picture Card */}
-      <Card>
+      {/* <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-sm font-medium">
             <Camera className="h-4 w-4 text-primary" />
@@ -411,7 +411,7 @@ export function ProfileForm() {
             </div>
           </div>
         </CardContent>
-      </Card>
+      </Card> */}
 
       {/* Personal Details Card */}
       <Card>
@@ -425,6 +425,66 @@ export function ProfileForm() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
+          <div className="flex items-center gap-5">
+            <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-full bg-muted ring-2 ring-border">
+              {form.avatarUrl ? (
+                <img
+                  src={form.avatarUrl}
+                  alt="Profile"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+                  <User className="h-8 w-8" />
+                </div>
+              )}
+              {avatarUploading && (
+                <div className="absolute inset-0 flex items-center justify-center rounded-full bg-background/60">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="preferredName">
+                Profile Picture
+              </Label>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  disabled={avatarUploading}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Camera className="h-3.5 w-3.5" />
+                  {form.avatarUrl ? "Change" : "Upload"}
+                </Button>
+                {form.avatarUrl && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1.5 text-destructive hover:text-destructive"
+                    onClick={handleRemoveAvatar}
+                    disabled={avatarUploading}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Remove
+                  </Button>
+                )}
+              </div>
+              <p className="text-[11px] text-muted-foreground/60">
+                JPEG, PNG, WebP, or AVIF. Max 5 MB.
+              </p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/avif"
+                className="hidden"
+                onChange={handleAvatarUpload}
+              />
+            </div>
+          </div>
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             {/* Preferred Name */}
             <div className="space-y-2">

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { useState, useCallback, useEffect, useId, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -30,23 +31,14 @@ import {
   Clock,
   Timer,
   MoreHorizontal,
+  ChevronRight,
 } from "lucide-react";
 import { conversationsApi, type Conversation } from "@/lib/api/conversations";
 import { ConversationTitle } from "@/components/sidebar/ConversationTitle";
 import { toast } from "sonner";
 import { useActiveStreams } from "@/lib/chat/streaming-context";
-
-function getConversationGroup(updatedAt: string): "Today" | "Yesterday" | "Previous 7 days" | "Older" {
-  const updated = new Date(normalizeDate(updatedAt)).getTime();
-  const nowDate = new Date();
-  const startOfToday = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate()).getTime();
-  const startOfYesterday = startOfToday - 24 * 60 * 60 * 1000;
-  const sevenDaysAgo = startOfToday - 7 * 24 * 60 * 60 * 1000;
-  if (updated >= startOfToday) return "Today";
-  if (updated >= startOfYesterday) return "Yesterday";
-  if (updated >= sevenDaysAgo) return "Previous 7 days";
-  return "Older";
-}
+import { useNewChat } from "@/lib/hooks/use-new-chat";
+import { useSidebarPreference } from "./useSidebarPreference";
 
 function formatNumber(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -251,6 +243,11 @@ function StatRow({
 }
 
 export function ConversationList() {
+  const newChatMutation = useNewChat();
+  const listId = useId();
+  const reduceMotion = useReducedMotion();
+  const [sectionValue, setSectionValue] = useSidebarPreference("remiai:sidebar-recents-open", "open");
+  const sectionOpen = sectionValue === "open";
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -265,12 +262,8 @@ export function ConversationList() {
     refetch,
   } = useInfiniteQuery({
     queryKey: ["sidebar-conversations"],
-    queryFn: async ({ pageParam }) => {
-      // Let the current scroll settle before appending another page. Without a
-      // short pause, an observer can repeatedly fire while layout is changing.
-      if (pageParam) await new Promise((resolve) => setTimeout(resolve, 1_000));
-      return conversationsApi.listPage({ cursor: pageParam, limit: pageParam ? 20 : 40 });
-    },
+    queryFn: ({ pageParam }) =>
+      conversationsApi.listPage({ cursor: pageParam, limit: pageParam ? 20 : 40, unlinked: true }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
@@ -293,60 +286,90 @@ export function ConversationList() {
   const activeStreams = useActiveStreams();
   const filteredConversations = conversations.filter(
     (c) =>
+      c.projectId == null && (
       c.totalInputTokens > 0 ||
       c.totalOutputTokens > 0 ||
       pathname === `/chat/${c.id}` ||
-      activeStreams.has(c.id),
+      activeStreams.has(c.id)),
   );
 
   const loadMoreRef = useRef<HTMLDivElement>(null);
-  const [hasScrolledConversationList, setHasScrolledConversationList] = useState(false);
-
-  useEffect(() => {
-    const markScrolled = () => setHasScrolledConversationList(true);
-    // Scroll events do not bubble, but capture sees the actual desktop or
-    // mobile scrolling element even when it is supplied by a wrapper.
-    document.addEventListener("scroll", markScrolled, { capture: true, passive: true });
-    return () => document.removeEventListener("scroll", markScrolled, true);
-  }, []);
 
   useEffect(() => {
     const target = loadMoreRef.current;
-    if (!target || !hasScrolledConversationList || !hasNextPage || isFetchingNextPage) return;
+    if (!sectionOpen || !target || !hasNextPage || isFetchingNextPage || isError) return;
     let scrollRoot: Element | null = target.parentElement;
     while (scrollRoot && scrollRoot !== document.body) {
       const overflowY = window.getComputedStyle(scrollRoot).overflowY;
       if (overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay") break;
       scrollRoot = scrollRoot.parentElement;
     }
+    const root = scrollRoot === document.body ? null : scrollRoot as HTMLElement | null;
+    const scrollTarget = root ?? window;
+    const readyAt = performance.now() + 120;
+    let userScrolled = false;
+    let pendingLoad: number | null = null;
+    let requested = false;
+
+    const nearEnd = () => {
+      const targetRect = target.getBoundingClientRect();
+      const top = root?.getBoundingClientRect().top ?? 0;
+      const bottom = root?.getBoundingClientRect().bottom ?? window.innerHeight;
+      return targetRect.top <= bottom + 24 && targetRect.bottom >= top;
+    };
+    const needsFill = () => root
+      ? root.scrollHeight <= root.clientHeight + 1
+      : document.documentElement.scrollHeight <= window.innerHeight + 1;
+    const scheduleLoad = () => {
+      if (requested || pendingLoad !== null || !nearEnd() || (!userScrolled && !needsFill())) return;
+      pendingLoad = window.setTimeout(() => {
+        pendingLoad = null;
+        if (!nearEnd()) return;
+        requested = true;
+        void fetchNextPage();
+      }, 250);
+    };
+    const markScroll = () => {
+      if (performance.now() < readyAt) return;
+      userScrolled = true;
+      scheduleLoad();
+    };
+    const markGesture = () => {
+      userScrolled = true;
+      scheduleLoad();
+    };
+    const onKeyDown = (event: Event) => {
+      if (["ArrowDown", "PageDown", "End", " "].includes((event as KeyboardEvent).key)) markGesture();
+    };
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting) fetchNextPage();
+        if (entry.isIntersecting) scheduleLoad();
+        else if (pendingLoad !== null) {
+          window.clearTimeout(pendingLoad);
+          pendingLoad = null;
+        }
       },
-      { root: scrollRoot === document.body ? null : scrollRoot, rootMargin: "96px" },
+      { root, rootMargin: "0px 0px 24px 0px" },
     );
     observer.observe(target);
-    return () => observer.disconnect();
-  }, [fetchNextPage, hasNextPage, hasScrolledConversationList, isFetchingNextPage]);
+    scrollTarget.addEventListener("scroll", markScroll, { passive: true });
+    scrollTarget.addEventListener("wheel", markGesture, { passive: true });
+    scrollTarget.addEventListener("touchmove", markGesture, { passive: true });
+    scrollTarget.addEventListener("keydown", onKeyDown);
+    return () => {
+      observer.disconnect();
+      scrollTarget.removeEventListener("scroll", markScroll);
+      scrollTarget.removeEventListener("wheel", markGesture);
+      scrollTarget.removeEventListener("touchmove", markGesture);
+      scrollTarget.removeEventListener("keydown", onKeyDown);
+      if (pendingLoad !== null) window.clearTimeout(pendingLoad);
+    };
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage, isError, sectionOpen]);
 
   const refreshConversationLists = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["conversations"] });
     queryClient.invalidateQueries({ queryKey: ["sidebar-conversations"] });
   }, [queryClient]);
-
-  const grouped = filteredConversations.reduce(
-    (acc, conversation) => {
-      const group = getConversationGroup(conversation.updatedAt);
-      acc[group].push(conversation);
-      return acc;
-    },
-    {
-      Today: [] as Conversation[],
-      Yesterday: [] as Conversation[],
-      "Previous 7 days": [] as Conversation[],
-      Older: [] as Conversation[],
-    },
-  );
 
   // Rename state
   const [renamingId, setRenamingId] = useState<number | null>(null);
@@ -508,34 +531,89 @@ export function ConversationList() {
     return () => document.removeEventListener("keydown", handler);
   }, [contextMenuId]);
 
+  const sectionHeader = (
+    <div className="group flex items-center gap-1 px-1 pb-1.5">
+      <button
+        type="button"
+        onClick={() => setSectionValue(sectionOpen ? "closed" : "open")}
+        aria-expanded={sectionOpen}
+        aria-controls={listId}
+        className="flex min-h-9 min-w-0 flex-1 items-center rounded-lg px-2 py-1.5 text-left text-sm font-medium text-muted-foreground transition-colors hover:text-sidebar-foreground"
+      >
+        Recents
+      </button>
+      {sectionOpen && !selectMode && filteredConversations.length > 0 && (
+        <button
+          type="button"
+          onClick={() => {
+            setSectionValue("open");
+            setSelectMode(true);
+          }}
+          className="invisible inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground/70 opacity-0 transition-[opacity,visibility,color,background-color] hover:bg-sidebar-accent hover:text-foreground group-hover:visible group-hover:opacity-100 focus-visible:visible focus-visible:opacity-100"
+          title="Select conversations"
+          aria-label="Select conversations"
+        >
+          <CheckSquare className="h-3.5 w-3.5" />
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={() => newChatMutation.mutate()}
+        disabled={newChatMutation.isPending}
+        className="invisible inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground/70 opacity-0 transition-[opacity,visibility,color,background-color] hover:bg-sidebar-accent hover:text-foreground group-hover:visible group-hover:opacity-100 focus-visible:visible focus-visible:opacity-100 disabled:pointer-events-none disabled:opacity-50"
+        title="New chat"
+        aria-label="New chat"
+      >
+        <PenLine className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={() => setSectionValue(sectionOpen ? "closed" : "open")}
+        aria-expanded={sectionOpen}
+        aria-controls={listId}
+        className="invisible inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground/70 opacity-0 transition-[opacity,visibility,color,background-color] hover:bg-sidebar-accent hover:text-sidebar-foreground group-hover:visible group-hover:opacity-100 focus-visible:visible focus-visible:opacity-100"
+        title={sectionOpen ? "Collapse recents" : "Expand recents"}
+        aria-label={sectionOpen ? "Collapse recents" : "Expand recents"}
+      >
+        <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground/70 transition-transform duration-200 ${sectionOpen ? "rotate-90" : ""}`} />
+      </button>
+    </div>
+  );
+
   if (isLoading) {
-    return <p className="px-2 py-2 text-xs text-muted-foreground/70">Loading conversations…</p>;
+    return <section>{sectionHeader}{sectionOpen && <p className="px-3 py-2 text-xs text-muted-foreground/70">Loading conversations…</p>}</section>;
   }
 
   if (isError && conversations.length === 0) {
     return (
-      <button
+      <section>{sectionHeader}{sectionOpen && <button
         type="button"
         onClick={() => refetch()}
-        className="px-2 py-2 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+        className="px-3 py-2 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
       >
         Could not load conversations. Retry
-      </button>
+      </button>}</section>
     );
   }
 
-  if (filteredConversations.length === 0) {
-    return (
-      <p className="px-2 py-1 text-xs text-muted-foreground/70">
-        No conversations yet
-      </p>
-    );
+  if (filteredConversations.length === 0 && !hasNextPage) {
+    return <section>{sectionHeader}{sectionOpen && <p className="px-3 py-2 text-xs text-muted-foreground/70">No recent chats</p>}</section>;
   }
 
   return (
-    <>
+    <section>
+      {sectionHeader}
+      <AnimatePresence initial={false}>
+      {sectionOpen && <motion.div
+        id={listId}
+        initial={reduceMotion ? false : { height: 0, opacity: 0 }}
+        animate={{ height: "auto", opacity: 1 }}
+        exit={reduceMotion ? undefined : { height: 0, opacity: 0 }}
+        transition={{ duration: reduceMotion ? 0 : 0.2, ease: "easeInOut" }}
+        className="overflow-hidden [overflow-anchor:none]"
+      >
       {/* Batch selection header */}
-      <div className="flex items-center justify-between px-2 py-1">
+      {selectMode && <div className="flex items-center justify-between px-2 py-2">
         {selectMode ? (
           <>
             <div className="flex items-center gap-2">
@@ -581,34 +659,11 @@ export function ConversationList() {
               </button>
             </div>
           </>
-        ) : (
-          <>
-            <span className="text-[11px] text-muted-foreground/55">Conversations</span>
-            <button
-              type="button"
-              onClick={() => setSelectMode(true)}
-              className="rounded-md p-1 text-muted-foreground/55 hover:bg-muted hover:text-muted-foreground transition-colors"
-              title="Select conversations"
-              aria-label="Select conversations"
-            >
-              <CheckSquare className="h-3.5 w-3.5" />
-            </button>
-          </>
-        )}
-      </div>
+        ) : null}
+      </div>}
 
       <div className="flex flex-col gap-1">
-        {(["Today", "Yesterday", "Previous 7 days", "Older"] as const).map((groupName) => {
-          const groupItems = grouped[groupName];
-          if (groupItems.length === 0) return null;
-
-          return (
-            <div key={groupName} className="flex flex-col gap-0.5">
-              <div className="px-2 pb-0.5 pt-2 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground/45 first:pt-0">
-                {groupName}
-              </div>
-
-              {groupItems.map((conversation) => {
+        {filteredConversations.map((conversation) => {
           const isActive = pathname === `/chat/${conversation.id}`;
           const isSelected = selectedIds.has(conversation.id);
           const isStreaming = activeStreams.has(conversation.id);
@@ -629,7 +684,7 @@ export function ConversationList() {
                     /* ---- Inline rename input ---- */
                     <div
                       className={cn(
-                        "group/conversation flex w-full items-center justify-start rounded-md px-2 py-1.5 text-sm text-left",
+                        "group/conversation flex min-h-9 w-full items-center justify-start rounded-lg px-2.5 py-1.5 text-sm text-left",
                         isActive
                           ? "bg-sidebar-accent text-sidebar-foreground"
                           : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground",
@@ -673,7 +728,7 @@ export function ConversationList() {
                     /* ---- Select mode: whole row toggles selection ---- */
                     <div
                       className={cn(
-                        "group/conversation flex w-full items-center justify-start rounded-md px-2 py-1.5 text-sm text-left cursor-pointer",
+                        "group/conversation flex min-h-9 w-full items-center justify-start rounded-lg px-2.5 py-1.5 text-sm text-left cursor-pointer",
                         isSelected && "bg-primary/10",
                       )}
                       onClick={() => toggleSelect(conversation.id)}
@@ -695,10 +750,10 @@ export function ConversationList() {
                     </div>
                   ) : (
                     /* ---- Normal view: the whole row is the link ---- */
-                    <div className={cn("group/conversation relative flex w-full items-center rounded-md text-sm text-left", isActive ? "bg-sidebar-accent text-sidebar-foreground" : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground")}>
+                    <div className={cn("group/conversation relative flex min-h-9 w-full items-center rounded-lg text-sm text-left transition-colors", isActive ? "bg-sidebar-accent text-sidebar-foreground" : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground")}>
                     <Link
                       href={`/chat/${conversation.id}`}
-                      className="flex min-w-0 flex-1 items-center px-2 py-1.5"
+                      className="flex min-w-0 flex-1 items-center px-2.5 py-1.5"
                       onMouseEnter={() => prefetchConversation(conversation.id)}
                       onFocus={() => prefetchConversation(conversation.id)}
                     >
@@ -758,9 +813,6 @@ export function ConversationList() {
                   )}
             </div>
           );
-              })}
-            </div>
-          );
         })}
       </div>
 
@@ -776,6 +828,8 @@ export function ConversationList() {
           </button>
         )}
       </div>
+      </motion.div>}
+      </AnimatePresence>
 
       {/* Single delete confirmation dialog */}
       <Dialog
@@ -885,6 +939,6 @@ export function ConversationList() {
           />
         );
       })()}
-    </>
+    </section>
   );
 }

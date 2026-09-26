@@ -22,7 +22,7 @@ function bareToolName(value: unknown): string {
 }
 
 function isVerificationTool(name: string): boolean {
-  return name === "bash_execute" || name === "python_exec" || name === "js_exec";
+  return name === "bash_execute" || name === "python_exec" || name === "js_exec" || name === "work_terminal" || name === "work_browser_screenshot";
 }
 
 function displayCommand(name: string, input: Record<string, unknown> | null): string {
@@ -71,10 +71,13 @@ export function summarizeBuildChecks(parts: unknown[]): BuildVerificationCheck[]
       state === "approval-responded";
     if (!isComplete) continue;
 
+    const isBrowserEvidence = name === "work_browser_screenshot";
     const timedOut = output?.timedOut === true;
     const exitCode = output?.exitCode;
     const hasExitCode = typeof exitCode === "number";
-    const status: BuildVerificationStatus = isError || timedOut
+    const status: BuildVerificationStatus = isBrowserEvidence
+      ? isError || typeof output?.path !== "string" ? "failed" : "passed"
+      : isError || timedOut
       ? "failed"
       : hasExitCode
         ? exitCode === 0
@@ -82,7 +85,9 @@ export function summarizeBuildChecks(parts: unknown[]): BuildVerificationCheck[]
           : "failed"
         : "incomplete";
 
-    const detail = isError
+    const detail = isBrowserEvidence
+      ? typeof output?.path === "string" ? `Screenshot saved: ${output.path}` : "Screenshot was not saved"
+      : isError
       ? "Tool execution failed"
       : timedOut
         ? "Timed out"
@@ -96,7 +101,7 @@ export function summarizeBuildChecks(parts: unknown[]): BuildVerificationCheck[]
       command,
       status,
       detail,
-      ...(isPreviewCommand(command) ? { kind: "preview" as const } : {}),
+      ...(isBrowserEvidence || isPreviewCommand(command) ? { kind: "preview" as const } : {}),
     });
   }
 

@@ -29,7 +29,7 @@ export interface BackupManifest {
   exportedAt: string;
   /** App version from package.json at export time. */
   appVersion: string;
-  /** Whether uploaded files, session files, and avatars are included. */
+  /** Whether uploaded files, session files, project files, and avatars are included. */
   includesFiles: boolean;
 }
 
@@ -70,6 +70,8 @@ export interface BackupFiles {
    * backed up here.
    */
   sessionFiles: Record<string, string>;
+  /** Map of `project-files/{projectId}/{path}` → base64 content. */
+  projectFiles?: Record<string, string>;
   /** Map of `skills/{repo-slug}/{skill}/…` → base64 content. */
   skills: Record<string, string>;
 }
@@ -86,6 +88,7 @@ export interface RestoreResult {
     uploads: number;
     avatars: number;
     sessionFiles: number;
+    projectFiles: number;
     skills: number;
   };
   exportedAt: string;

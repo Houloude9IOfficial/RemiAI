@@ -8,8 +8,11 @@ export type QuestionDatabase = BetterSQLite3Database<typeof schema>;
 type Database = QuestionDatabase;
 export interface QuestionRun {
   id: string;
+  generationRunId: string;
   assistantId: string;
   controller: AbortController;
+  /** Number of server-owned follow-up turns already used for this user run. */
+  continuationCount: number;
   initialAssistantMessage?: UIMessage;
   questions: Map<string, QuestionsData>;
 }
@@ -17,9 +20,20 @@ export interface QuestionRun {
 const globalRuns = globalThis as typeof globalThis & { remiQuestionRuns?: Map<number, QuestionRun> };
 export const questionRuns = globalRuns.remiQuestionRuns ??= new Map<number, QuestionRun>();
 
-export function startQuestionRun(conversationId: number): QuestionRun | null {
+export function startQuestionRun(
+  conversationId: number,
+  continuationCount = 0,
+  generationRunId?: string,
+): QuestionRun | null {
   if (questionRuns.has(conversationId)) return null;
-  const run: QuestionRun = { id: crypto.randomUUID(), assistantId: crypto.randomUUID(), controller: new AbortController(), questions: new Map() };
+  const run: QuestionRun = {
+    id: crypto.randomUUID(),
+    generationRunId: generationRunId ?? crypto.randomUUID(),
+    assistantId: crypto.randomUUID(),
+    controller: new AbortController(),
+    continuationCount,
+    questions: new Map(),
+  };
   questionRuns.set(conversationId, run);
   return run;
 }

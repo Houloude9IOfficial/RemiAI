@@ -17,6 +17,13 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import { eq } from "drizzle-orm";
 import * as schema from "../db/schema";
 import { periodicallyPersistMessages } from "../lib/chat/persist-interval";
+import {
+  formatRequestCompletionTime,
+  formatRequestDuration,
+  localDateKey,
+  messageRequestTiming,
+  REQUEST_DURATION_PART,
+} from "../lib/chat/request-duration";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -285,6 +292,36 @@ async function main() {
     const text = parts.filter((p) => p.type === "text").map((p) => p.text).join("");
     assert.ok(text.includes("complete"), "continuation text must merge into the same row");
     assert.ok(parts.some(toolPart("web_fetch")), "continuation tools must be present");
+  });
+
+  await okAsync("persists total request time and formats it after reload", async () => {
+    const db = makeDb();
+    const completedAt = new Date(2026, 8, 24, 16, 56).toISOString();
+    await periodicallyPersistMessages(
+      6,
+      [{ id: "u1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+      streamFrom([
+        { type: "start", messageId: "msg-6" },
+        { type: "text-start", id: "t1" },
+        { type: "text-delta", id: "t1", delta: "Hello" },
+        { type: "text-end", id: "t1" },
+        { type: REQUEST_DURATION_PART, data: { durationMs: 4_330_000, completedAt } },
+        { type: "finish", finishReason: "stop" },
+      ]),
+      undefined,
+      undefined,
+      db,
+    );
+
+    const parts = await persistedMessage(db, 6, "msg-6") as UIMessage["parts"];
+    assert.deepEqual(messageRequestTiming(parts), { durationMs: 4_330_000, completedAt });
+    assert.equal(formatRequestDuration(31_000), "31s");
+    assert.equal(formatRequestDuration(83_000), "1m 23s");
+    assert.equal(formatRequestDuration(4_330_000), "1h 12m 10s");
+    assert.equal(formatRequestCompletionTime(completedAt, localDateKey(new Date(2026, 8, 24))), "4:56 PM");
+    assert.equal(formatRequestCompletionTime(completedAt, localDateKey(new Date(2026, 8, 25))), "Thursday 4:56 PM");
+    const wednesday = new Date(2026, 8, 23, 21, 10).toISOString();
+    assert.equal(formatRequestCompletionTime(wednesday, localDateKey(new Date(2026, 8, 24))), "Wednesday 9:10 PM");
   });
 
   console.log(`\n✅ All ${passed} persistence tests passed.`);

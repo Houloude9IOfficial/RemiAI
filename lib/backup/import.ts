@@ -1,10 +1,9 @@
 import fsp from "node:fs/promises";
-import fs from "node:fs";
 import crypto from "node:crypto";
 import path from "node:path";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
-import { UPLOAD_DIR, AVATAR_DIR, SESSION_FILES_DIR, SKILLS_DIR, DATA_DIR } from "@/lib/paths";
+import { UPLOAD_DIR, AVATAR_DIR, SESSION_FILES_DIR, PROJECT_FILES_DIR, SKILLS_DIR, DATA_DIR } from "@/lib/paths";
 import { decryptBackup, decryptBackupStreamFile, isStreamBackup } from "./crypto";
 import { getAllTables } from "./schema";
 import {
@@ -68,12 +67,14 @@ function migrateV1Payload(
     uploads: {},
     avatars: {},
     sessionFiles: {},
+    projectFiles: {},
     skills: {},
   }) as BackupFiles;
   const files: BackupFiles = {
     uploads: typeof rawFiles.uploads === "object" ? (rawFiles.uploads as Record<string, string>) : {},
     avatars: typeof rawFiles.avatars === "object" ? (rawFiles.avatars as Record<string, string>) : {},
     sessionFiles: typeof rawFiles.sessionFiles === "object" ? (rawFiles.sessionFiles as Record<string, string>) : {},
+    projectFiles: typeof rawFiles.projectFiles === "object" ? (rawFiles.projectFiles as Record<string, string>) : {},
     skills: typeof rawFiles.skills === "object" ? (rawFiles.skills as Record<string, string>) : {},
   };
 
@@ -146,7 +147,7 @@ function validatePayload(payload: unknown): {
   } else if (p.version >= 2) {
     // ── v2+ — use as-is (snake_case keys matching actual table names) ──
     tables = {} as Record<string, Record<string, unknown>[]>;
-    files = { uploads: {}, avatars: {}, sessionFiles: {}, skills: {} };
+    files = { uploads: {}, avatars: {}, sessionFiles: {}, projectFiles: {}, skills: {} };
 
     for (const [key, value] of Object.entries(data)) {
       if (key === "files") {
@@ -155,6 +156,7 @@ function validatePayload(payload: unknown): {
           uploads: typeof f.uploads === "object" ? (f.uploads as Record<string, string>) : {},
           avatars: typeof f.avatars === "object" ? (f.avatars as Record<string, string>) : {},
           sessionFiles: typeof f.sessionFiles === "object" ? (f.sessionFiles as Record<string, string>) : {},
+          projectFiles: typeof f.projectFiles === "object" ? (f.projectFiles as Record<string, string>) : {},
           skills: typeof f.skills === "object" ? (f.skills as Record<string, string>) : {},
         };
       } else if (Array.isArray(value)) {
@@ -218,6 +220,7 @@ const OPTIONAL_FOREIGN_KEYS: Array<{
   { table: "routine_logs", column: "automation_run_id", parentTable: "automation_runs" },
   { table: "scheduled_tasks", column: "automation_run_id", parentTable: "automation_runs" },
   { table: "webhook_events", column: "automation_run_id", parentTable: "automation_runs" },
+  { table: "conversations", column: "project_id", parentTable: "projects" },
 ];
 
 function rowIdSet(rows: Record<string, unknown>[] | undefined): Set<string> {
@@ -370,11 +373,13 @@ async function restoreFiles(data: BackupFiles): Promise<{
   uploads: number;
   avatars: number;
   sessionFiles: number;
+  projectFiles: number;
   skills: number;
 }> {
   let uploads = 0;
   let avatars = 0;
   let sessionFiles = 0;
+  let projectFiles = 0;
   let skills = 0;
 
   await fsp.mkdir(UPLOAD_DIR, { recursive: true });
@@ -403,6 +408,24 @@ async function restoreFiles(data: BackupFiles): Promise<{
     sessionFiles++;
   }
 
+  const projectFileEntries = Object.entries(data.projectFiles ?? {}).map(([relPath, base64]) => {
+    const normalized = relPath.replace(/\\/g, "/");
+    const parts = normalized.split("/");
+    if (!/^[1-9]\d*$/.test(parts[0] ?? "") || parts.length < 2 || parts.some((part) => !part || part === "." || part === "..")) {
+      throw new Error(`Invalid project file path in backup: ${relPath}`);
+    }
+    const fullPath = path.resolve(PROJECT_FILES_DIR, normalized);
+    if (!fullPath.startsWith(path.resolve(PROJECT_FILES_DIR) + path.sep)) throw new Error("Invalid project file path in backup");
+    return { fullPath, base64 };
+  });
+  await fsp.rm(PROJECT_FILES_DIR, { recursive: true, force: true });
+  await fsp.mkdir(PROJECT_FILES_DIR, { recursive: true });
+  for (const { fullPath, base64 } of projectFileEntries) {
+    await fsp.mkdir(path.dirname(fullPath), { recursive: true });
+    await fsp.writeFile(fullPath, Buffer.from(base64, "base64"));
+    projectFiles++;
+  }
+
   // Installed skills (source.json + skill folders) — restored with their
   // folder structure preserved.
   await fsp.mkdir(SKILLS_DIR, { recursive: true });
@@ -413,7 +436,7 @@ async function restoreFiles(data: BackupFiles): Promise<{
     skills++;
   }
 
-  return { uploads, avatars, sessionFiles, skills };
+  return { uploads, avatars, sessionFiles, projectFiles, skills };
 }
 
 // ---------------------------------------------------------------------------
@@ -473,6 +496,7 @@ export async function importBackupPlaintext(plaintext: string): Promise<RestoreR
     "mcp_servers",
     "memories",
     "user_preferences",
+    "projects",
     "conversations",
     "automation_runs",
     "automation_run_events",
@@ -570,7 +594,7 @@ export async function importBackupPlaintext(plaintext: string): Promise<RestoreR
   // ── Restore files ──────────────────────────────────────────────────────
   const fileStats = payload.includesFiles
     ? await restoreFiles(payload.files)
-    : { uploads: 0, avatars: 0, sessionFiles: 0, skills: 0 };
+    : { uploads: 0, avatars: 0, sessionFiles: 0, projectFiles: 0, skills: 0 };
 
   revokeAllSessions();
 

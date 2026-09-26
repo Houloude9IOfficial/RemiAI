@@ -13,11 +13,12 @@ import { conversationsApi } from "@/lib/api/conversations";
  * `onSuccess` callback runs after navigation (e.g. closing the mobile drawer).
  *
  * Pass `opts: { temporary: true }` for a hook that always starts temporary
- * chats (used by the sidebar's "Temporary chat" button).
+ * chats (used by the sidebar's "Temporary chat" button), or `projectId` to
+ * create the chat within a project.
  */
 export function useNewChat(
   onSuccess?: () => void,
-  opts?: { temporary?: boolean },
+  opts?: { temporary?: boolean; projectId?: number },
 ) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -40,20 +41,30 @@ export function useNewChat(
       return conversationsApi.create({
         ...(providerId && modelId ? { providerId, modelId } : {}),
         isTemporary: opts?.temporary === true,
+        ...(opts?.projectId !== undefined ? { projectId: opts.projectId } : {}),
       });
     },
     onSuccess: (conversation) => {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
       queryClient.invalidateQueries({ queryKey: ["sidebar-conversations"] });
+      if (opts?.projectId !== undefined) {
+        queryClient.invalidateQueries({ queryKey: ["project-chats", opts.projectId] });
+      }
       router.push(`/chat/${conversation.id}`);
       onSuccess?.();
     },
     onError: () => {
       // Fallback: create a new chat without provider/model and navigate there.
       // The page will gracefully handle the empty state.
-      conversationsApi.create().then((conversation) => {
+      conversationsApi.create({
+        isTemporary: opts?.temporary === true,
+        ...(opts?.projectId !== undefined ? { projectId: opts.projectId } : {}),
+      }).then((conversation) => {
         queryClient.invalidateQueries({ queryKey: ["conversations"] });
         queryClient.invalidateQueries({ queryKey: ["sidebar-conversations"] });
+        if (opts?.projectId !== undefined) {
+          queryClient.invalidateQueries({ queryKey: ["project-chats", opts.projectId] });
+        }
         router.push(`/chat/${conversation.id}`);
         onSuccess?.();
       });

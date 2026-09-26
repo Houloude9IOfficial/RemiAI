@@ -125,14 +125,29 @@ export const userPreferences = sqliteTable("user_preferences", {
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
+export const projects = sqliteTable("projects", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  brief: text("brief").notNull().default(""),
+  instructions: text("instructions").notNull().default(""),
+  notes: text("notes").notNull().default(""),
+  pinned: integer("pinned", { mode: "boolean" }).notNull().default(false),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const conversations = sqliteTable("conversations", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  projectId: integer("project_id").references(() => projects.id, { onDelete: "set null" }),
   title: text("title").notNull().default("New chat"),
   providerId: integer("provider_id").references(() => providers.id, {
     onDelete: "set null",
   }),
   modelId: text("model_id"),
-  mode: text("mode", { enum: ["chat", "instant", "goal", "plan", "build"] }).notNull().default("chat"),
+  // `goal`, `plan`, and `build` are retained for existing conversations. New
+  // guided work uses `work`, whose durable lifecycle lives in work_runs.
+  mode: text("mode", { enum: ["chat", "instant", "goal", "plan", "build", "work"] }).notNull().default("chat"),
   qualityPolicy: text("quality_policy", {
     enum: ["minimal", "low", "medium", "high"],
   })
@@ -220,6 +235,29 @@ export const buildRuns = sqliteTable(
     completedAt: text("completed_at"),
   },
 );
+
+/** Durable intake, approval, and evidence record for Guided Work mode. */
+export const workRuns = sqliteTable("work_runs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  conversationId: integer("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+  goal: text("goal").notNull(),
+  targetType: text("target_type", { enum: ["directory", "canvas"] }).notNull(),
+  directoryId: integer("directory_id").references(() => directories.id, { onDelete: "set null" }),
+  targetPath: text("target_path").notNull().default(""),
+  canvasName: text("canvas_name"),
+  successCriteria: text("success_criteria").notNull().default(""),
+  technicalBrief: text("technical_brief", { mode: "json" }).$type<Record<string, string>>().notNull().default({}),
+  phase: text("phase", { enum: ["planning", "awaiting_approval", "building", "testing", "completed", "needs_attention", "cancelled"] }).notNull().default("planning"),
+  planPath: text("plan_path"),
+  planRevision: integer("plan_revision").notNull().default(0),
+  changedFiles: text("changed_files", { mode: "json" }).$type<Array<Record<string, unknown>>>().notNull().default([]),
+  checks: text("checks", { mode: "json" }).$type<Array<Record<string, unknown>>>().notNull().default([]),
+  overview: text("overview").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  approvedAt: text("approved_at"),
+  completedAt: text("completed_at"),
+});
 
 export const artifacts = sqliteTable(
   "artifacts",
@@ -338,6 +376,24 @@ export const messages = sqliteTable(
   },
   (t) => [unique().on(t.conversationId, t.uiId)],
 );
+
+/** Durable ownership/lifecycle for ordinary interactive chat generations. */
+export const chatGenerationRuns = sqliteTable("chat_generation_runs", {
+  id: text("id").primaryKey(),
+  conversationId: integer("conversation_id")
+    .notNull()
+    .references(() => conversations.id, { onDelete: "cascade" }),
+  assistantMessageId: text("assistant_message_id").notNull(),
+  status: text("status", {
+    enum: ["running", "continuing", "completed", "failed", "stopped", "needs_attention"],
+  }).notNull().default("running"),
+  continuationCount: integer("continuation_count").notNull().default(0),
+  maxContinuations: integer("max_continuations").notNull().default(3),
+  error: text("error"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  completedAt: text("completed_at"),
+});
 
 export const questionSubmissions = sqliteTable(
   "question_submissions",

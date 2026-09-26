@@ -37,8 +37,136 @@ export const RECENT_OUTPUT_MAX_CHARS = 12_000;
 /** Outputs in older turns above this char count get a preview instead. */
 export const OLD_OUTPUT_MAX_CHARS = 300;
 
+/** Search evidence is compacted on the very next request, even when recent. */
+const SEARCH_RESULT_LIMIT = 5;
+const SEARCH_TITLE_MAX_CHARS = 180;
+const SEARCH_SNIPPET_MAX_CHARS = 320;
+
+/** Search tools whose result lists are useful for the current answer, but not verbatim history. */
+const SEARCH_TOOLS = new Set([
+  "web_search",
+  "news_search",
+  "news_top_headlines",
+]);
+
 /** Loose view of a persisted UI part (parts are a JSON round-trip anyway). */
 type LoosePart = Record<string, unknown> & { type: string };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function clipped(value: unknown, maxChars: number): string | undefined {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized.length > maxChars
+    ? `${normalized.slice(0, Math.max(1, maxChars - 1))}…`
+    : normalized;
+}
+
+function normalizeUrl(value: unknown): string {
+  if (typeof value !== "string" || !value.trim()) return "";
+  try {
+    const parsed = new URL(value);
+    parsed.hash = "";
+    const url = parsed.toString();
+    return url !== parsed.origin && url.endsWith("/") ? url.slice(0, -1) : url;
+  } catch {
+    return value.trim().replace(/\/+$/, "");
+  }
+}
+
+function citedUrls(parts: UIMessage["parts"]): Set<string> {
+  const urls = new Set<string>();
+  const urlPattern = /https?:\/\/[^\s)<>{}\]]+/g;
+  for (const part of parts) {
+    const raw = part as unknown as LoosePart;
+    if (raw.type !== "text" || typeof raw.text !== "string") continue;
+    for (const match of raw.text.matchAll(urlPattern)) {
+      const normalized = normalizeUrl(match[0].replace(/[.,;:!?]+$/, ""));
+      if (normalized) urls.add(normalized);
+    }
+  }
+  return urls;
+}
+
+/**
+ * Preserve the small amount of search evidence a follow-up can use without
+ * re-sending every provider snippet. The complete result remains in the
+ * persisted UI message; this shape exists only in the model payload.
+ */
+export function compactSearchToolOutput(output: unknown, cited: Set<string> = new Set()): unknown {
+  if (!isRecord(output)) return output;
+  const payload = isRecord(output.result) ? output.result : output;
+  const rawResults = Array.isArray(payload.results) ? payload.results : [];
+  const rawSources = Array.isArray(output.sources)
+    ? output.sources
+    : Array.isArray(payload.sources)
+      ? payload.sources
+      : [];
+
+  const candidates = rawResults.flatMap((raw, index) => {
+    if (!isRecord(raw)) return [];
+    const url = typeof raw.url === "string" ? raw.url :
+      typeof raw.pageUrl === "string" ? raw.pageUrl : "";
+    const normalizedUrl = normalizeUrl(url);
+    if (!normalizedUrl && !clipped(raw.title, SEARCH_TITLE_MAX_CHARS)) return [];
+    return [{
+      index,
+      cited: cited.has(normalizedUrl),
+      value: {
+        ...(clipped(raw.title, SEARCH_TITLE_MAX_CHARS) ? { title: clipped(raw.title, SEARCH_TITLE_MAX_CHARS) } : {}),
+        ...(url ? { url } : {}),
+        ...(clipped(raw.description, SEARCH_SNIPPET_MAX_CHARS) ? { description: clipped(raw.description, SEARCH_SNIPPET_MAX_CHARS) } : {}),
+        ...(clipped(raw.source, 100) ? { source: clipped(raw.source, 100) } : {}),
+        ...(clipped(raw.age, 80) ? { age: clipped(raw.age, 80) } : {}),
+      },
+    }];
+  });
+  const selected = candidates
+    .sort((a, b) => Number(b.cited) - Number(a.cited) || a.index - b.index)
+    .slice(0, SEARCH_RESULT_LIMIT);
+  const selectedUrls = new Set(selected.map((item) => normalizeUrl(item.value.url)).filter(Boolean));
+  const selectedSources = rawSources.flatMap((raw) => {
+    if (!isRecord(raw)) return [];
+    const url = typeof raw.url === "string" ? raw.url : "";
+    const normalizedUrl = normalizeUrl(url);
+    if (!url || (selectedUrls.size > 0 && !selectedUrls.has(normalizedUrl) && !cited.has(normalizedUrl))) return [];
+    return [{
+      ...(typeof raw.id === "number" ? { id: raw.id } : {}),
+      url,
+      ...(clipped(raw.title, SEARCH_TITLE_MAX_CHARS) ? { title: clipped(raw.title, SEARCH_TITLE_MAX_CHARS) } : {}),
+      ...(clipped(raw.status, 40) ? { status: clipped(raw.status, 40) } : {}),
+    }];
+  }).slice(0, SEARCH_RESULT_LIMIT);
+
+  return {
+    ...(typeof payload.type === "string" ? { type: payload.type } : {}),
+    ...(clipped(payload.query, 500) ? { query: clipped(payload.query, 500) } : {}),
+    ...(clipped(payload.category, 40) ? { category: clipped(payload.category, 40) } : {}),
+    ...(clipped(payload.provider, 80) ? { provider: clipped(payload.provider, 80) } : {}),
+    ...(typeof payload.count === "number" ? { count: payload.count } : {}),
+    results: selected.map((item) => item.value),
+    ...(selectedSources.length > 0 ? { sources: selectedSources } : {}),
+    _compacted: true,
+    _note: "Search results compacted for conversation context. The assistant's answer contains the relevant synthesis; rerun the search or open a source for full results.",
+  };
+}
+
+/** A compact, plain-text search trace suitable for the rolling summary input. */
+export function searchEvidenceSummary(output: unknown): string {
+  const compacted = compactSearchToolOutput(output);
+  if (!isRecord(compacted)) return "";
+  const query = typeof compacted.query === "string" ? compacted.query : "search";
+  const results = Array.isArray(compacted.results) ? compacted.results : [];
+  const labels = results.flatMap((raw) => {
+    if (!isRecord(raw)) return [];
+    const title = typeof raw.title === "string" ? raw.title : "untitled source";
+    const url = typeof raw.url === "string" ? raw.url : "";
+    return [`${title}${url ? ` (${url})` : ""}`];
+  });
+  return `${query}: ${labels.join("; ")}`.slice(0, 1_800);
+}
 
 /** Tool inputs whose `content`/`code` payloads bloat every re-send. */
 const HEAVY_INPUT_TOOLS = new Set([
@@ -178,6 +306,9 @@ export function optimizeMessageParts(
   isRecent: boolean,
 ): UIMessage["parts"] {
   const out: UIMessage["parts"] = [];
+  // Search results and the assistant's synthesis are persisted in the same
+  // completed assistant message. Prefer sources the answer actually cited.
+  const messageCitedUrls = citedUrls(parts);
 
   for (const rawPart of parts) {
     const part = rawPart as unknown as LoosePart;
@@ -198,11 +329,13 @@ export function optimizeMessageParts(
         compacted.input = compactToolInput(toolName, part.input);
       }
       if (part.output !== undefined) {
-        compacted.output = compactToolOutput(
-          toolName,
-          part.output,
-          isRecent ? RECENT_OUTPUT_MAX_CHARS : OLD_OUTPUT_MAX_CHARS,
-        );
+        compacted.output = SEARCH_TOOLS.has(toolName)
+          ? compactSearchToolOutput(part.output, messageCitedUrls)
+          : compactToolOutput(
+              toolName,
+              part.output,
+              isRecent ? RECENT_OUTPUT_MAX_CHARS : OLD_OUTPUT_MAX_CHARS,
+            );
       }
       out.push(compacted as never);
       continue;
@@ -219,11 +352,13 @@ export function optimizeMessageParts(
           args: inv.args !== undefined ? compactToolInput(toolName, inv.args) : inv.args,
           output:
             inv.output !== undefined
-              ? compactToolOutput(
-                  toolName,
-                  inv.output,
-                  isRecent ? RECENT_OUTPUT_MAX_CHARS : OLD_OUTPUT_MAX_CHARS,
-                )
+              ? SEARCH_TOOLS.has(toolName)
+                ? compactSearchToolOutput(inv.output, messageCitedUrls)
+                : compactToolOutput(
+                    toolName,
+                    inv.output,
+                    isRecent ? RECENT_OUTPUT_MAX_CHARS : OLD_OUTPUT_MAX_CHARS,
+                  )
               : inv.output,
         },
       };

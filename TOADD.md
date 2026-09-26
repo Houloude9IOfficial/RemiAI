@@ -333,3 +333,11 @@ the ai users bash to write/edit/delete files, but it should use bash for command
 <!-- Add a darker blue accent color for the app. -->
 
 <!-- prefer the AI to use trusted sources, such as official documentation, wikipedia, and other reputable sources, and to avoid using untrusted sources, such as random blogs or forums. -->
+
+<!-- after searches the context window gets bloated even after a long time from the search, and it should be optimized to not bloat the context window with too many search results, and also allow the AI to summarize the search results and only keep the relevant information in the context window. -->
+
+<!-- add projects and allow AI to manage them, and allow the user to create, edit, delete, and organize projects. Allow chats to be associated with projects, and allow the AI to manage them. Allow the user to view all projects and their associated chats in a project management page. Keep chats just referenced optionally to projects and in project management to view all files for each chat by name and create new chat based on project context and info and on reference of project, inject memory/context of project. -->
+
+<!-- when user leaves while response is being generated, the AI should continue generating the response in the background and save it, so that when the user comes back, they can see the full response. Also the system should send a notification to the user when the response is ready, and allow the user to view the response in the chat. with notification being title the same as the chat title, and the notification body being the first 100 characters of the response, and allow the user to click on the notification to open the chat and view the full response. -->
+
+<!-- MacOS app fails to launch saying it's damaged and can't be opened. -->

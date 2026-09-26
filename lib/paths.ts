@@ -29,6 +29,9 @@ export const UPLOAD_DIR = path.join(DATA_DIR, "uploads");
 /** Per-conversation sandbox for session files. */
 export const SESSION_FILES_DIR = path.join(DATA_DIR, "session-files");
 
+/** Shared files owned by projects. */
+export const PROJECT_FILES_DIR = path.join(DATA_DIR, "project-files");
+
 /** User profile avatars. */
 export const AVATAR_DIR = path.join(DATA_DIR, "avatars");
 

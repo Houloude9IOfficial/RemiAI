@@ -33,22 +33,22 @@ const games = [
 export default function GamesPage() {
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="mx-auto max-w-4xl px-6 py-10">
+      <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 sm:py-10">
         {/* Header */}
-        <div className="mb-10">
+        <div className="mb-7 sm:mb-10">
           <div className="flex items-center gap-3 mb-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/20">
               <Gamepad2 className="h-5 w-5 text-purple-600 dark:text-purple-400" />
             </div>
             <h1 className="text-2xl font-bold">Games</h1>
           </div>
-          <p className="text-muted-foreground ml-[3.25rem]">
+          <p className="text-muted-foreground sm:ml-[3.25rem]">
             Challenge the AI in classic strategy games.
           </p>
         </div>
 
         {/* Game cards grid */}
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2 sm:gap-5">
           {games.map((game) => {
             return (
               <Link key={game.href} href={game.href} className="group block">
@@ -84,7 +84,7 @@ export default function GamesPage() {
                   </CardHeader>
 
                   <CardContent>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                       <Badge variant="secondary" className="text-[11px]">
                         {game.difficulty}
                       </Badge>
@@ -102,4 +102,3 @@ export default function GamesPage() {
     </div>
   );
 }
-

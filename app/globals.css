@@ -334,15 +334,19 @@
   }
 }
 
-/* Custom scrollbar (thin, subtle, works in both light/dark) */
+/*
+ * App-wide scrollbar: kept visually absent until the scroll region is
+ * intentionally hovered or focused. Using theme tokens rather than fixed
+ * grays lets it remain equally quiet in every color theme.
+ */
 .custom-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: rgba(128, 128, 128, 0.3) transparent;
+  scrollbar-color: transparent transparent;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 4px;
+  height: 4px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
@@ -350,12 +354,33 @@
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background-color: rgba(128, 128, 128, 0.3);
+  background-color: transparent;
   border-radius: 9999px;
+  transition: background-color 150ms ease;
+}
+
+.custom-scrollbar:hover,
+.custom-scrollbar:focus-within {
+  scrollbar-color: color-mix(in oklch, var(--muted-foreground) 38%, transparent) transparent;
+}
+
+.custom-scrollbar:hover::-webkit-scrollbar-thumb,
+.custom-scrollbar:focus-within::-webkit-scrollbar-thumb {
+  background-color: color-mix(in oklch, var(--muted-foreground) 38%, transparent);
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(128, 128, 128, 0.5);
+  background-color: color-mix(in oklch, var(--muted-foreground) 58%, transparent);
+}
+
+/* Keeps compact menus scrollable without exposing a scrollbar. */
+.scrollbar-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
 }
 
 /* ------------------------------------------------------------------ */

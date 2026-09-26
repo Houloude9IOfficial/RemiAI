@@ -3,6 +3,7 @@ import type { QueryClient } from "@tanstack/react-query";
 
 export type Conversation = {
   id: number;
+  projectId: number | null;
   title: string;
   providerId: number | null;
   modelId: string | null;
@@ -78,23 +79,37 @@ export const conversationsApi = {
   list: (): Promise<Conversation[]> =>
     fetch("/api/conversations").then((res) => unwrap<Conversation[]>(res)),
 
-  listPage: ({ cursor, limit = 20 }: { cursor?: string; limit?: number } = {}): Promise<ConversationPage> => {
+  listPage: ({ cursor, limit = 20, unlinked = false }: { cursor?: string; limit?: number; unlinked?: boolean } = {}): Promise<ConversationPage> => {
     const params = new URLSearchParams({ limit: String(limit) });
     if (cursor) params.set("cursor", cursor);
+    if (unlinked) params.set("unlinked", "1");
     return fetch(`/api/conversations?${params}`).then((res) => unwrap<ConversationPage>(res));
   },
 
-  create: (input?: {
+  create: async (input?: {
     providerId?: number | null;
     modelId?: string | null;
     isTemporary?: boolean;
     memoryEnabled?: boolean;
-  }): Promise<Conversation> =>
-    fetch("/api/conversations", {
+    projectId?: number | null;
+  }): Promise<Conversation> => {
+    const conversation = await fetch("/api/conversations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input ?? {}),
-    }).then((res) => unwrap<Conversation>(res)),
+    }).then((res) => unwrap<Conversation>(res));
+    // Do not keep retrying a provider that was removed in another tab or from
+    // Settings. The server safely created this chat with no model; clear the
+    // now-invalid browser preference so the next New chat is clean too.
+    if (
+      typeof window !== "undefined" &&
+      input?.providerId != null &&
+      conversation.providerId !== input.providerId
+    ) {
+      window.localStorage.removeItem("lastModel");
+    }
+    return conversation;
+  },
 
   get: (
     id: number,
@@ -124,6 +139,7 @@ export const conversationsApi = {
       requestMode: "sandboxed" | "full";
       isTemporary: boolean;
       memoryEnabled: boolean;
+      projectId: number | null;
     }>,
   ): Promise<Conversation> =>
     fetch(`/api/conversations/${id}`, {

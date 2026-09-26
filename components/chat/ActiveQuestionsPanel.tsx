@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Check,
@@ -44,7 +44,16 @@ export function ActiveQuestionsPanel({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const submissionId = useRef<string | null>(null);
   const submitGuard = useRef(false);
+  const questionContentRef = useRef<HTMLDivElement>(null);
   const onLast = index >= questions.length - 1;
+
+  useEffect(() => {
+    if (questions[index]?.type !== "free_text") return;
+    const frame = window.requestAnimationFrame(() => {
+      questionContentRef.current?.querySelector<HTMLTextAreaElement>("textarea")?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [index, questions]);
 
   const isAnswered = useCallback(
     (q: QuestionsQuestion) => {
@@ -71,8 +80,13 @@ export function ActiveQuestionsPanel({
     (questionId: string, option: string) => {
       setAnswers((prev) => ({ ...prev, [questionId]: option }));
       setSkipped((prev) => ({ ...prev, [questionId]: false }));
+      // A single-select answer is complete by definition. Move on promptly so
+      // quick preference questions feel like a lightweight wizard.
+      if (index < questions.length - 1) {
+        window.setTimeout(() => setIndex((current) => Math.min(questions.length - 1, current + 1)), 140);
+      }
     },
-    [],
+    [index, questions.length],
   );
 
   const toggleOption = useCallback((questionId: string, option: string) => {
@@ -140,6 +154,12 @@ export function ActiveQuestionsPanel({
     else setIndex((i) => i + 1);
   };
   const canProceed = onLast ? allResolved : isAnswered(questions[index]) || skipped[questions[index].id];
+  const handleKeyboardShortcut = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Enter" || (!event.metaKey && !event.ctrlKey) || !canProceed) return;
+    event.preventDefault();
+    if (onLast) void handleSubmit();
+    else setIndex((current) => Math.min(questions.length - 1, current + 1));
+  };
 
   if (submitted) {
     return (
@@ -177,7 +197,7 @@ export function ActiveQuestionsPanel({
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 pb-2 md:px-6">
-      <div className="overflow-hidden rounded-3xl border border-border/70 bg-surface-1" aria-busy={isBusy}>
+      <div className="overflow-hidden rounded-3xl border border-border/70 bg-surface-1" aria-busy={isBusy} onKeyDownCapture={handleKeyboardShortcut}>
         <fieldset disabled={isBusy} className="min-w-0">
         {/* ── Header ── */}
         <div className="flex items-center gap-2.5 px-4 pt-3 pb-1.5">
@@ -200,7 +220,7 @@ export function ActiveQuestionsPanel({
         </div>
 
         {/* ── Current question (one at a time) ── */}
-        <div className="px-4 py-2">
+        <div ref={questionContentRef} className="px-4 py-2">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={index}
@@ -221,6 +241,7 @@ export function ActiveQuestionsPanel({
                 onToggle={toggleOption}
                 onCustomChange={handleCustomChange}
               />
+              {(questions[index]?.type === "single_select" || questions[index]?.type === "free_text") && <p className="mt-2 text-xs text-muted-foreground">{questions[index]?.type === "single_select" ? "Choose an option to continue." : "Use ⌘/Ctrl + Enter to continue."}</p>}
               {skipped[questions[index]?.id] && <p className="mt-2 text-xs text-muted-foreground">Skipped</p>}
             </motion.div>
           </AnimatePresence>

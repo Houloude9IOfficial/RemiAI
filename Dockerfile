@@ -47,6 +47,8 @@ COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
 COPY --from=build /app/public ./public
 COPY --from=build /app/db/migrations ./db/migrations
+# Read from disk at runtime by the License settings page.
+COPY --from=build /app/LICENSE ./LICENSE
 
 # Chromium for the Browser Automation tool (installed in the build stage
 # with the same playwright version the app uses).

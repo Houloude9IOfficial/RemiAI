@@ -6,5 +6,7 @@ assert.match(RESEARCH_SECTION, /Wikipedia for orientation.*verify important fact
 assert.match(RESEARCH_SECTION, /academic, government, institutional, and reputable editorial sources/i);
 assert.match(RESEARCH_SECTION, /lower-confidence sources only when trusted coverage is unavailable/i);
 assert.match(RESEARCH_SECTION, /never rely on one alone for an important claim/i);
+assert.match(RESEARCH_SECTION, /concise synthesis.*relevant to the user's question/i);
+assert.match(RESEARCH_SECTION, /do not dump the raw result list/i);
 
 console.log("\n✅ Research prompt source-quality policy test passed.");

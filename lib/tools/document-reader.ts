@@ -80,6 +80,26 @@ async function extractText(
   }
 }
 
+/** Read a document already resolved and authorized by its caller. */
+export async function readDocumentFromPath(filePath: string, filename: string) {
+  const stats = await fs.stat(filePath);
+  if (!stats.isFile()) throw new Error("Document not found");
+  if (stats.size > MAX_FILE_SIZE) throw new Error("Document exceeds the 50 MB limit");
+  const ext = path.extname(filePath).toLowerCase();
+  if (!(SUPPORTED_EXTENSIONS as readonly string[]).includes(ext)) {
+    throw new Error(`Unsupported document type "${ext}"`);
+  }
+  const { text, format } = await extractText(filePath, ext);
+  return {
+    filename,
+    format,
+    size: stats.size,
+    text: text.slice(0, 100_000),
+    characters: text.length,
+    truncated: text.length > 100_000,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Tool definition
 // ---------------------------------------------------------------------------
