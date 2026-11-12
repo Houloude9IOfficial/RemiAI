@@ -341,3 +341,7 @@ the ai users bash to write/edit/delete files, but it should use bash for command
 <!-- when user leaves while response is being generated, the AI should continue generating the response in the background and save it, so that when the user comes back, they can see the full response. Also the system should send a notification to the user when the response is ready, and allow the user to view the response in the chat. with notification being title the same as the chat title, and the notification body being the first 100 characters of the response, and allow the user to click on the notification to open the chat and view the full response. -->
 
 <!-- MacOS app fails to launch saying it's damaged and can't be opened. -->
+
+<!-- remove auto release changelog replace for macos notiraztion warning -->
+
+allow in desktop app, to use an api for accessing a remote deployment instead of local deployment, and allow to switch between local and remote deployment in the app settings. (Requires app restart to apply changes.)
