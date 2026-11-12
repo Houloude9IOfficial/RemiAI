@@ -16,7 +16,8 @@ async function main() {
   source.enqueue("data: first\n\n");
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  const first = streamRegistry.get(conversationId)!.getReader();
+  assert.equal(streamRegistry.get(conversationId, "previous-stream"), null);
+  const first = streamRegistry.get(conversationId, "test-stream")!.getReader();
   const second = streamRegistry.get(conversationId)!.getReader();
   assert.equal((await first.read()).value, "data: first\n\n");
   assert.equal((await second.read()).value, "data: first\n\n");

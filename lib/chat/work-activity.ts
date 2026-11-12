@@ -52,3 +52,14 @@ export function workReplayPrefix(parts: UIMessage["parts"], streamId: string) {
   if (replayIndex >= 0) return parts.slice(0, replayIndex);
   return latestWorkActivity(parts) ? parts : [];
 }
+
+/** Seed the SDK's last assistant explicitly so a fresh replay cannot inherit a different reply. */
+export function prepareWorkReplay(messages: UIMessage[], assistantId: string, streamId: string): UIMessage[] {
+  const index = messages.findIndex((message) => message.id === assistantId && message.role === "assistant");
+  if (index < 0) return [...messages, { id: assistantId, role: "assistant", parts: [] }];
+  const assistant = messages[index];
+  return [
+    ...messages.slice(0, index),
+    { ...assistant, parts: workReplayPrefix(assistant.parts, streamId) },
+  ];
+}

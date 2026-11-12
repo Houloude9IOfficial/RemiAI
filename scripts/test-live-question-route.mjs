@@ -1,5 +1,5 @@
 // Exercises the actual chat handlers against a local OpenAI-compatible mock.
-// All storage is isolated; startup services stay off in this test process.
+// Startup and all storage run in an isolated test process.
 // Run: node scripts/test-live-question-route.mjs
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
@@ -13,7 +13,7 @@ if (!process.argv.includes("--isolated-child")) {
   const directory = await mkdtemp(path.join(tmpdir(), "remi-live-questions-"));
   try {
     const result = spawnSync(process.execPath, ["--import", "tsx", fileURLToPath(import.meta.url), "--isolated-child"], {
-      stdio: "inherit", env: { ...process.env, REMI_DATA_DIR: directory, NEXT_PHASE: "phase-production-build" },
+      stdio: "inherit", env: { ...process.env, REMI_DATA_DIR: directory, NEXT_PHASE: "" },
     });
     if (result.error) throw result.error;
     process.exitCode = result.status ?? 1;
@@ -21,8 +21,7 @@ if (!process.argv.includes("--isolated-child")) {
 } else {
   const { db, initializeApp } = await import("../db/index.ts");
   const schema = await import("../db/schema.ts");
-  const { migrate } = await import("drizzle-orm/better-sqlite3/migrator");
-  migrate(db, { migrationsFolder: path.resolve("db/migrations") });
+  const { eq } = await import("drizzle-orm");
   await initializeApp();
   const chat = await import("../app/api/chat/route.ts");
   const answersApi = await import("../app/api/chat/[id]/question-answers/route.ts");
@@ -32,11 +31,19 @@ if (!process.argv.includes("--isolated-child")) {
     const until = Date.now() + 12000;
     while (!predicate()) { if (Date.now() > until) throw new Error("Integration timed out"); await sleep(10); }
   }
+  // Let startup's deferred recovery inspect the empty fixture before
+  // registering live test generations.
+  await sleep(100);
   let phase = "live";
   let call = 0;
   let finalGate;
   const requests = [];
   const mock = createServer(async (req, res) => {
+    if (req.method !== "POST") {
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({ data: [] }));
+      return;
+    }
     let text = ""; for await (const chunk of req) text += chunk;
     const body = JSON.parse(text); requests.push(body); const number = ++call;
     res.writeHead(200, { "content-type": "text/event-stream" });
@@ -83,6 +90,7 @@ if (!process.argv.includes("--isolated-child")) {
     assert.equal(call, 2);
     assert.equal((JSON.stringify(requests[1].messages).match(/Immediate answer/g) || []).length, 1);
     assert.equal(delivery.pendingQuestionSubmissions(db, live.id).length, 0);
+    assert.equal(db.select().from(schema.conversations).where(eq(schema.conversations.id, live.id)).get().mode, "plan");
     console.log("✓ actual chat route receives answers during a tool execution without interruption");
 
     phase = "late"; call = 0; requests.length = 0;
@@ -94,6 +102,12 @@ if (!process.argv.includes("--isolated-child")) {
     await waitUntil(() => call === 3 && !delivery.questionRuns.has(late.id));
     assert.match(JSON.stringify(requests[2].messages), /Immediate answer/);
     assert.equal(delivery.pendingQuestionSubmissions(db, late.id).length, 0);
+    assert.equal(db.select().from(schema.conversations).where(eq(schema.conversations.id, late.id)).get().mode, "plan");
+    const history = db.select().from(schema.messages).where(eq(schema.messages.conversationId, late.id)).all()
+      .sort((left, right) => left.orderIndex - right.orderIndex);
+    assert.deepEqual(history.map((message) => message.role), ["user", "assistant", "user", "assistant"]);
+    assert.match(JSON.stringify(history[3].parts), /Answers received/);
+    assert.doesNotMatch(JSON.stringify(history[3].parts), /Current response|Live setup/);
     console.log("✓ actual late-answer submission starts and persists one automatic follow-up");
 
     phase = "stop"; call = 0; requests.length = 0;

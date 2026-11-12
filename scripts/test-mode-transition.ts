@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import type { UIMessage } from "ai";
 import {
   messageContainsQuestions,
-  shouldPromotePlanToGoal,
   isChatMode,
 } from "../lib/chat/mode-transition";
 import {
@@ -42,38 +41,8 @@ const legacyQuestionMessage = {
   ],
 } as unknown as UIMessage;
 
-const answerMessage = {
-  id: "user-1",
-  role: "user",
-  parts: [{ type: "text", text: "Use Next.js and SQLite." }],
-} as UIMessage;
-
 assert.equal(messageContainsQuestions(questionMessage), true);
 assert.equal(messageContainsQuestions(legacyQuestionMessage), true);
-assert.equal(
-  shouldPromotePlanToGoal("plan", [questionMessage, answerMessage]),
-  true,
-);
-assert.equal(
-  shouldPromotePlanToGoal("goal", [questionMessage, answerMessage]),
-  false,
-);
-assert.equal(
-  shouldPromotePlanToGoal("instant", [questionMessage, answerMessage]),
-  false,
-);
-assert.equal(
-  shouldPromotePlanToGoal("plan", [legacyQuestionMessage, answerMessage]),
-  true,
-);
-assert.equal(
-  shouldPromotePlanToGoal("plan", [
-    { ...questionMessage, parts: [{ type: "text", text: "No questions" }] } as unknown as UIMessage,
-    answerMessage,
-  ]),
-  false,
-);
-
 assert.equal(isChatMode("instant"), true);
 assert.equal(isChatMode("turbo"), false);
 

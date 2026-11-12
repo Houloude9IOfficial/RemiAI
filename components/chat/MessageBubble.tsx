@@ -95,8 +95,11 @@ function useSmoothedStreamContent(
     }
   }, [content, sourceStreaming]);
 
+  // A background question reply can be replaced by a longer saved snapshot
+  // after the animation has already stopped. Restart the idle buffer then.
+  const settledContentLength = sourceStreaming ? 0 : content.length;
   useEffect(() => {
-    const initialContentLength = contentRef.current.length;
+    const initialContentLength = sourceStreaming ? contentRef.current.length : settledContentLength;
     if (!sourceStreaming && visibleLengthRef.current >= initialContentLength) return;
 
     const remainingCharacters = initialContentLength - visibleLengthRef.current;
@@ -130,7 +133,7 @@ function useSmoothedStreamContent(
     };
     frame = requestAnimationFrame(advance);
     return () => cancelAnimationFrame(frame);
-  }, [sourceStreaming, messageStreaming]);
+  }, [sourceStreaming, messageStreaming, settledContentLength]);
 
   const displayStreaming = sourceStreaming || visibleLength < content.length;
   return {
@@ -1239,6 +1242,9 @@ function VisualCardSegment({ part }: { part: UIMessage["parts"][number] }) {
   }
 
   const outputObj = output as Record<string, unknown>;
+  if (typeof outputObj.error === "string") {
+    return <p className="rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">{outputObj.error}</p>;
+  }
   if (outputObj.type !== "visual") {
     return (
       <div className="overflow-hidden rounded-xl border border-destructive/20 bg-destructive/[0.04] p-4 text-sm text-destructive">

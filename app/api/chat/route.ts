@@ -125,7 +125,6 @@ import { buildWorkExecutionTools, stopWorkServer } from "@/lib/work/execution";
 import { buildWorkBrowserTools, closeWorkBrowser } from "@/lib/work/browser";
 import { slugify } from "@/lib/canvas/storage";
 import { buildModeTool } from "@/lib/tools/mode";
-import { shouldPromotePlanToGoal } from "@/lib/chat/mode-transition";
 import {
   INSTANT_INSTRUCTIONS,
   INSTANT_MAX_OUTPUT_TOKENS,
@@ -515,14 +514,6 @@ async function runChatRequest(req: Request, questionRun: QuestionRun, runStarted
       })
       .where(eq(conversations.id, conversationId));
     if (shouldSetFallbackTitle) expectedAutoTitle = fallbackTitle;
-
-    const answeredPlanQuestions = shouldPromotePlanToGoal(mode, uiMessages);
-    if (answeredPlanQuestions) {
-      mode = "goal";
-      await db.update(conversations)
-        .set({ mode: "goal", updatedAt: new Date().toISOString() })
-        .where(eq(conversations.id, conversationId));
-    }
   }
 
   const promptAssemblyStartedAt = performance.now();
@@ -835,7 +826,7 @@ You are currently in **Plan mode**. This means:
 - Focus on understanding the user's requirements, exploring their codebase, and proposing a clear implementation plan.
 - Use \`todos_init\` at the start to lay out the steps you'll help them plan.
 - Stay in Plan mode while requirements are unclear or questions remain unanswered.
-- When the user has answered the planning questions and the requirements are clear, call \`switch_mode({ mode: "goal", reason: "..." })\` before continuing the work. The switch applies immediately to the current run, so continue with the newly available tools after it succeeds. Do not attempt build/write tools before switching.
+- Use clarification answers to finish and present the plan. Stay in Plan mode while awaiting approval. Switch to Goal or Build only when the user explicitly asks you to proceed with implementation.
 - If new ambiguity appears while working, call \`switch_mode({ mode: "plan", reason: "..." })\` and ask focused questions; the switch applies immediately and remains active for following turns.
 - Never claim to have changed modes without calling \`switch_mode\`.
 - Do NOT attempt to modify any files — you don't have permission to write in this mode.`
@@ -1583,10 +1574,6 @@ Definition of done:
       // forward, so newly accepted answers are inserted exactly once.
       const delivery = await prepareQuestionAnswerStep(db, conversationId, stepMessages, initialQuestionMessageIds);
       const liveMessages = delivery.messages;
-      if (delivery.deliveredCount && mode === "plan") {
-        mode = "goal";
-        await db.update(conversations).set({ mode: "goal" }).where(eq(conversations.id, conversationId));
-      }
 
       // Fast path: unless load_tool_groups ran in the previous step, the
       // active tool set cannot have changed — reuse the cached result so

@@ -36,9 +36,8 @@ import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { useErrorHandler } from "@/lib/hooks/use-error-handler";
 import { applyConversationTitleUpdate, conversationsApi } from "@/lib/api/conversations";
 import { useStreamingContext } from "@/lib/chat/streaming-context";
-import { isActiveWork, latestWorkActivity, workReplayPrefix, type WorkActivityPart } from "@/lib/chat/work-activity";
+import { isActiveWork, latestWorkActivity, prepareWorkReplay, type WorkActivityPart } from "@/lib/chat/work-activity";
 import { findActiveQuestions, type QuestionAnswerSubmission } from "@/lib/chat/questions";
-import { shouldPromotePlanToGoal } from "@/lib/chat/mode-transition";
 import { useSidebar } from "@/components/sidebar/SidebarContext";
 import {
   SESSION_FILES_PRESENT_EVENT,
@@ -677,6 +676,9 @@ function ConversationChat({
       // the database and merges this delta in (deduping by message id). The
       // small bounded tail is a safety net so a message that failed to reach
       // the server on a previous attempt is not lost.
+      prepareReconnectToStreamRequest: ({ api, id, body }) => ({
+        api: `${api}/${id}/stream${typeof body?.streamId === "string" ? `?streamId=${encodeURIComponent(body.streamId)}` : ""}`,
+      }),
       prepareSendMessagesRequest: async ({ messages, body, trigger, messageId }) => ({
         body: {
           ...body,
@@ -764,9 +766,9 @@ function ConversationChat({
         if (streamIsBusy()) return;
         // General stream-ID reconnection below owns every active run. This
         // poll only synchronizes durable question-answer messages once idle.
-        if (!state.activeAssistantId && state.resolvedIds.length && !idleSynced) {
+        if (!state.activeAssistantId && !state.hasAutomaticPending && state.resolvedIds.length && !idleSynced) {
           const transcript = await fetch(`/api/chat/${conversationId}/question-answers?transcript=1`).then((r) => r.ok ? r.json() : null);
-          if (disposed || streamIsBusy() || transcript?.activeAssistantId) return;
+          if (disposed || streamIsBusy() || !transcript?.messages || transcript.activeAssistantId || transcript.hasAutomaticPending) return;
           if (transcript?.messages) {
             const persisted = transcript.messages as UIMessage[];
             const known = new Set(persisted.map((message) => message.id));
@@ -821,6 +823,7 @@ function ConversationChat({
   // most once, and the registry replays from the beginning before fanning out
   // live chunks.
   const attachedStreamIdRef = useRef<string | null>(null);
+  const desiredStreamIdRef = useRef<string | null>(null);
   const reconnectInFlightRef = useRef(false);
   const reconnectAttemptsRef = useRef(0);
   const [reconnectNonce, setReconnectNonce] = useState(0);
@@ -828,39 +831,46 @@ function ConversationChat({
   const contextAssistantMessageId =
     streams.get(conversationId)?.assistantMessageId ?? null;
   useEffect(() => {
+    desiredStreamIdRef.current = contextStreamId;
     if (!contextStreamId || reconnectInFlightRef.current) return;
 
-    // The foreground request is already consuming this stream. Remember its
-    // ID so a late descriptor does not replay it after onFinish.
-    if (questionStatusRef.current === "submitted" || questionStatusRef.current === "streaming") {
+    const consuming = questionStatusRef.current === "submitted" || questionStatusRef.current === "streaming";
+    const target = messagesRef.current.find((message) => message.id === contextAssistantMessageId);
+    const attempt = target && latestWorkActivity(target.parts);
+    // A later question reply can be registered while the foreground reader
+    // is still finishing. Only acknowledge the descriptor we actually read.
+    if (attempt?.id === contextStreamId && (consuming || !isActiveWork(attempt.data.status))) {
       attachedStreamIdRef.current = contextStreamId;
       reconnectAttemptsRef.current = 0;
       return;
     }
+    if (consuming) return;
     if (attachedStreamIdRef.current === contextStreamId) return;
 
     attachedStreamIdRef.current = contextStreamId;
     reconnectInFlightRef.current = true;
     clearChatError();
-    startStream(conversationId);
     void (async () => {
       try {
         if (contextAssistantMessageId) {
-          const current = messagesRef.current;
-          const activeIndex = current.findIndex(
-            (message) => message.id === contextAssistantMessageId,
-          );
-          if (activeIndex >= 0) {
-            // Replay replaces this attempt's saved prefix. Parts from earlier
-            // attempts of the same message remain available during recovery.
-            const assistant = current[activeIndex];
-            setMessages([
-              ...current.slice(0, activeIndex),
-              { ...assistant, parts: workReplayPrefix(assistant.parts, contextStreamId) },
-            ]);
+          let current = messagesRef.current;
+          if (!target) {
+            // An automatic reply starts after the saved user answers. They
+            // may still be displayed optimistically outside the SDK list.
+            const saved = await conversationsApi.get(conversationId, { timeoutMs: FETCH_TIMEOUT_MS }).catch(() => null);
+            if (questionStatusRef.current === "submitted" || questionStatusRef.current === "streaming") {
+              attachedStreamIdRef.current = null;
+              return;
+            }
+            if (saved) current = saved.messages;
+            else {
+              const known = new Set(current.map((message) => message.id));
+              current = [...current, ...questionAnswerMessages.filter((message) => !known.has(message.id))];
+            }
           }
+          setMessages(prepareWorkReplay(current, contextAssistantMessageId, contextStreamId));
         }
-        await resumeStream();
+        await resumeStream({ body: { streamId: contextStreamId } });
         reconnectAttemptsRef.current = 0;
       } catch {
         // A disconnect is not a generation failure: suppress the SDK's
@@ -874,15 +884,19 @@ function ConversationChat({
         }
       } finally {
         reconnectInFlightRef.current = false;
+        if (desiredStreamIdRef.current && desiredStreamIdRef.current !== contextStreamId) {
+          setReconnectNonce((value) => value + 1);
+        }
       }
     })();
   }, [
     contextStreamId,
     contextAssistantMessageId,
+    questionAnswerMessages,
+    status,
     reconnectNonce,
     conversationId,
     resumeStream,
-    startStream,
     clearChatError,
     setMessages,
   ]);
@@ -1035,20 +1049,12 @@ function ConversationChat({
       clearError();
       clearChatError();
       setPendingUserTurn(true);
-      // Keep the UI and persisted conversation in sync with the server's
-      // automatic Plan → Goal transition when the user answers planning
-      // questions. This must happen before the request starts so the client
-      // does not keep filtering the response as Plan mode.
-      if (shouldPromotePlanToGoal(mode, messagesRef.current)) {
-        setMode("goal");
-        void conversationsApi.update(conversationId, { mode: "goal" }).catch(() => {});
-      }
       // A fresh request starts a fresh present — the previous request's canvas
       // no longer claims the panel slot.
       canvasWinsRef.current = false;
       sendMessage({ text });
     },
-    [clearError, clearChatError, conversationId, mode, sendMessage, status],
+    [clearError, clearChatError, sendMessage, status],
   );
 
   // A user message can survive locally even when its assistant request never

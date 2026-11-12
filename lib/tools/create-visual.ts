@@ -1,21 +1,8 @@
 import { z } from "zod";
-import { truncateToolResult } from "@/lib/utils";
+import { normalizeVisualSvg } from "@/lib/chat/visual-svg";
 import { db } from "@/db";
 import { toolConfigs } from "@/db/schema";
 import { eq } from "drizzle-orm";
-
-// ---------------------------------------------------------------------------
-// SVG wrapper — minimal, transparent-friendly shell
-// ---------------------------------------------------------------------------
-
-function wrapSvg(svgContent: string): string {
-  // If it's already a full <svg> document, use as-is
-  if (/<svg[\s>]/i.test(svgContent.trim())) {
-    return svgContent;
-  }
-  // Otherwise wrap in a minimal SVG container
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="100%" height="100%">${svgContent}</svg>`;
-}
 
 // ---------------------------------------------------------------------------
 // HTML wrapper — sandboxed document shell with transparent bg
@@ -57,15 +44,6 @@ function wrapHtml(htmlContent: string): string {
 ${htmlContent}
 </body>
 </html>`;
-}
-
-// ---------------------------------------------------------------------------
-// Content type detection helper
-// ---------------------------------------------------------------------------
-
-function detectAndWrap(type: "svg" | "html", content: string): string {
-  if (type === "svg") return wrapSvg(content);
-  return wrapHtml(content);
 }
 
 // ---------------------------------------------------------------------------
@@ -137,7 +115,10 @@ export const createVisualTool = {
     };
   }) => {
     // Wrap content in appropriate document shell
-    const finalContent = detectAndWrap(type, content);
+    const finalContent = type === "svg" ? normalizeVisualSvg(content) : wrapHtml(content);
+    if (finalContent === null) {
+      return { error: "The SVG markup is incomplete or invalid. Retry with a complete, well-formed <svg> document." };
+    }
 
     const result = {
       type: "visual" as const,
@@ -151,7 +132,9 @@ export const createVisualTool = {
       note: "Visual rendered with transparent background. Use get_tool_help({ topic: 'create-visual' }) for design guidelines.",
     };
 
-    return truncateToolResult(result);
+    // Content is already bounded by the tool schema. Truncating XML or HTML
+    // here would break the artifact that the chat renders and persists.
+    return result;
   },
 };
 

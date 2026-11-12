@@ -39,17 +39,6 @@ export function messageContainsQuestions(message: UIMessage | undefined): boolea
   });
 }
 
-/** A user answer immediately after an ask_questions assistant message. */
-export function shouldPromotePlanToGoal(
-  mode: string | undefined,
-  messages: UIMessage[],
-): boolean {
-  if (mode !== "plan" || messages.length < 2) return false;
-  const last = messages[messages.length - 1];
-  const previous = messages[messages.length - 2];
-  return last?.role === "user" && messageContainsQuestions(previous);
-}
-
 export function isChatMode(value: unknown): value is ChatMode {
   return value === "chat" || value === "instant" || value === "goal" || value === "plan" || value === "build";
 }

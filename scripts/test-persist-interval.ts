@@ -29,6 +29,7 @@ import {
   isWorkSummary,
   latestWorkActivity,
   workReplayPrefix,
+  prepareWorkReplay,
   WORK_ACTIVITY_PART,
   WORK_SUMMARY_METADATA,
 } from "../lib/chat/work-activity";
@@ -380,6 +381,17 @@ async function main() {
     assert.equal(latestWorkActivity(final)?.data.status, "cancelled");
     assert.equal(latestWorkActivity(final)?.data.endedAt, 8_000);
     assert.ok(final.some((part) => part.type === "text" && part.text === "Partial result"));
+  });
+
+  await okAsync("seeds a fresh question reply after the saved answers", async () => {
+    const history: UIMessage[] = [
+      { id: "questions", role: "assistant", parts: [{ type: "text", text: "Please answer." }] },
+      { id: "answers", role: "user", parts: [{ type: "text", text: "My answers." }] },
+    ];
+    assert.deepEqual(prepareWorkReplay(history, "reply", "new-stream"), [
+      ...history, { id: "reply", role: "assistant", parts: [] },
+    ]);
+    assert.deepEqual(prepareWorkReplay(history.slice(0, 1), "reply", "new-stream").at(-1)?.parts, []);
   });
 
   console.log(`\n✅ All ${passed} persistence tests passed.`);
