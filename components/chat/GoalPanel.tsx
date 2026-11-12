@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion, useIsPresent, useReducedMotion } from "framer-motion";
 import { Check, Circle, CircleAlert, CircleDashed, Minus, X } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 import type { TodosResponse } from "@/app/api/todos/route";
 
 export function useGoalTasks(conversationId: number) {
@@ -36,7 +37,13 @@ function GoalChecklist({ data }: { data: TodosResponse }) {
           const { Icon, label } = taskStates[status as keyof typeof taskStates] ?? taskStates.pending;
           return (
             <li key={id} className="flex min-w-0 items-start gap-2.5 text-sm">
-              <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <Icon
+                className={cn(
+                  "mt-0.5 size-4 shrink-0 text-muted-foreground",
+                  status === "in_progress" && "motion-safe:animate-[spin_4s_linear_infinite]",
+                )}
+                aria-hidden="true"
+              />
               <div className="min-w-0 break-words">
                 <span className="sr-only">{label}. </span>
                 <span className={status === "completed" || status === "skipped" ? "text-muted-foreground" : undefined}>{task}</span>

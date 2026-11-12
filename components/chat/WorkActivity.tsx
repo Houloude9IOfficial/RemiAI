@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { formatRequestDuration } from "@/lib/chat/request-duration";
 import { isActiveWork, isWorkActivityPart, isWorkSummary, type WorkActivityPart, type WorkActivityState } from "@/lib/chat/work-activity";
 import { describeToolActivity } from "./ToolActivity";
+import { ToolActivityRow } from "./ToolActivityRow";
 import { AnimatedDisclosure } from "./AnimatedDisclosure";
 import { extractSearchTrace } from "@/lib/chat/search-trace";
 
@@ -78,7 +79,9 @@ export function WorkActivity({
   const followTail = useRef(true);
   const savedScrollTop = useRef(0);
   const [localStart] = useState(Date.now);
-  const status = activity?.status ?? (streaming ? "running" : "completed");
+  // A saved in-flight marker can outlive its stream after a disconnect.
+  const recordedStatus = activity?.status ?? (streaming ? "running" : "completed");
+  const status = !streaming && isActiveWork(recordedStatus) ? "interrupted" : recordedStatus;
   const active = isActiveWork(status);
   const startedAt = activity?.startedAt ?? localStart;
   const durationMs = activity
@@ -93,7 +96,7 @@ export function WorkActivity({
     const seenTools = new Set<string>();
     let previousAttempt: WorkActivityPart | undefined;
 
-    type SearchGroup = { id: string; results: Set<string>; completed: number; failed: number; denied: number; interrupted: number; pending: boolean };
+    type SearchGroup = { rows: ReactNode[]; id: string; results: Set<string>; completed: number; failed: number; denied: number; interrupted: number; pending: boolean };
     const timeline: (ReactNode | SearchGroup)[] = [];
     let searchGroup: SearchGroup | undefined;
     for (const [index, part] of parts.entries()) {
@@ -114,11 +117,13 @@ export function WorkActivity({
         seenTools.add(part.toolCallId);
         const runningAttempt = active && index > activeAttemptIndex;
         const { Icon, label, name, failed, denied, running } = describeToolActivity(part, runningAttempt);
+        const row = <ToolActivityRow key={`tool-${part.toolCallId}`} Icon={Icon} label={label} part={part} />;
         if (name === "web_search") {
           if (!searchGroup) {
-            searchGroup = { id: part.toolCallId, results: new Set(), completed: 0, failed: 0, denied: 0, interrupted: 0, pending: false };
+            searchGroup = { rows: [], id: part.toolCallId, results: new Set(), completed: 0, failed: 0, denied: 0, interrupted: 0, pending: false };
             timeline.push(searchGroup);
           }
+          searchGroup.rows.push(row);
           if (failed) searchGroup.failed++;
           else if (denied) searchGroup.denied++;
           else {
@@ -130,12 +135,7 @@ export function WorkActivity({
           continue;
         }
         searchGroup = undefined;
-        timeline.push(
-          <div key={`tool-${part.toolCallId}`} className="flex items-start gap-2">
-            <Icon className="mt-1 size-3.5 shrink-0" aria-hidden="true" />
-            <span>{label}</span>
-          </div>,
-        );
+        timeline.push(row);
       }
     }
     return timeline.map((entry) => {
@@ -147,10 +147,9 @@ export function WorkActivity({
       const outcome = [failed && `${failed} failed`, denied && `${denied} denied`, interrupted && `${interrupted} interrupted`]
         .filter(Boolean).join(" · ");
       return (
-        <div key={`search-${id}`} className="flex items-start gap-2">
-          <Search className="mt-1 size-3.5 shrink-0" aria-hidden="true" />
-          <span>{label}{outcome && ` · ${outcome}`}</span>
-        </div>
+        <ToolActivityRow key={`search-${id}`} Icon={Search} label={outcome ? `${label} · ${outcome}` : label}>
+          {entry.rows}
+        </ToolActivityRow>
       );
     });
   }, [parts, active]);
@@ -225,7 +224,7 @@ export function WorkActivity({
           <div ref={content} className="space-y-2 py-2.5 pr-2 text-sm leading-relaxed text-muted-foreground">
             {entries}
             {status === "continuing" && <p>{outcomeLabels.continuing}</p>}
-            {phase === "unsuccessful" && <p>{activity?.message || outcomeLabels[status]}</p>}
+            {phase === "unsuccessful" && <p>{(status === recordedStatus && activity?.message) || outcomeLabels[status]}</p>}
             {status === "completed" && entries.length === 0 && <p>{outcomeLabels.completed}</p>}
           </div>
         </div>

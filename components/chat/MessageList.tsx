@@ -6,7 +6,6 @@ import type { UIMessage } from "ai";
 import { MessageBubble } from "./MessageBubble";
 import { ChatMessageProvider } from "./ChatMessageContext";
 import { PendingWorkActivity } from "./WorkActivity";
-import { latestWorkActivity } from "@/lib/chat/work-activity";
 import { preferencesApi } from "@/lib/api/preferences";
 
 // ── Component ────────────────────────────────────────────────────────
@@ -80,9 +79,13 @@ export function MessageList({
     lastMessage?.role === "user" ||
     (lastMessage?.role === "assistant" && !lastAssistantHasOutput);
   const lastUserIndex = deduped.findLastIndex((message) => message.role === "user");
-  const assistantOwnsActivity = lastMessage?.role === "assistant" &&
-    (status === "streaming" || lastMessage.id === activeAssistantId) &&
-    Boolean(latestWorkActivity(lastMessage.parts) || lastAssistantHasOutput);
+  // A reconnect can seed an empty assistant before replaying any parts.
+  // Give that bubble the timer as soon as it exists.
+  const activityOwnerId = activeAssistantId
+    ?? (status === "streaming" && lastMessage?.role === "assistant" ? lastMessage.id : null);
+  const assistantOwnsActivity = deduped.some(
+    (message) => message.role === "assistant" && message.id === activityOwnerId,
+  );
   const isWaiting = (status === "submitted" || status === "streaming" || activeAssistantId != null) &&
     !assistantOwnsActivity;
   const shouldAnchor = status === "submitted" && !assistantOwnsActivity && !activeAssistantId;
@@ -154,12 +157,7 @@ export function MessageList({
                     message={message}
                     collapseLongUserMessages={collapseLongUserMessages}
                     expandReasoningWhileWorking={expandReasoningWhileWorking}
-                    isStreaming={
-                      message.role === "assistant" && (
-                        (idx === deduped.length - 1 && status === "streaming") ||
-                        message.id === activeAssistantId
-                      )
-                    }
+                    isStreaming={message.role === "assistant" && message.id === activityOwnerId}
                     onRegenerate={onRegenerate}
                     onEdit={canSend ? onEdit : undefined}
                     onContinue={

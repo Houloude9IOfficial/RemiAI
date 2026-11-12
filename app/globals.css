@@ -1180,3 +1180,7 @@
     transform: translateX(400%);
   }
 }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
