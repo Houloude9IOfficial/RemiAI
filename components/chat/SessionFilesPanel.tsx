@@ -49,15 +49,17 @@ import { MarkdownRenderer } from "./MarkdownRenderer";
 
 // ── Panel component ────────────────────────────────────────────────────────
 
+export type SessionFileFocus = { path: string };
+
 export function SessionFilesPanel({
   conversationId,
   onClose,
-  focusPath,
+  focus,
 }: {
   conversationId: number;
   onClose: () => void;
   /** When set, the panel opens straight to this file in the viewer (from session_present_file). */
-  focusPath?: string | null;
+  focus?: SessionFileFocus | null;
 }) {
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<SessionFileEntry | null>(null);
@@ -73,21 +75,18 @@ export function SessionFilesPanel({
     staleTime: 10_000,
   });
 
-  // Auto-open a presented file in the viewer. Uses the React-recommended
-  // "adjust state when a prop changes" pattern (setState during render,
-  // guarded by a previous-value comparison) instead of an effect, so a
-  // refetch of `data` (upload, delete, refresh, AI writing another file)
-  // doesn't re-select the presented file and override a file the user
-  // manually clicked in the tree — each focusPath fires exactly once.
-  const [handledFocus, setHandledFocus] = useState<string | null>(null);
-  if (focusPath && focusPath !== handledFocus && data) {
-    const target = data.files.find((f) => f.path === focusPath && f.isFile);
-    if (target) {
-      setHandledFocus(focusPath);
-      setSelected(target);
-      setConfirmDelete(null);
-    }
+  const [handledFocus, setHandledFocus] = useState<SessionFileFocus | null>(null);
+  const [missingPath, setMissingPath] = useState<string | null>(null);
+  if (focus && focus !== handledFocus && data && !isFetching) {
+    const target = data.files.find((file) => file.path === focus.path && file.isFile);
+    setHandledFocus(focus);
+    setSelected(target ?? null);
+    setMissingPath(target ? null : focus.path);
+    setConfirmDelete(null);
   }
+
+  const unavailable = missingPath ??
+    (selected && data && !data.files.some((file) => file.path === selected.path && file.isFile) ? selected.path : null);
 
   const tree = useMemo(
     () => buildTree(data?.files ?? []),
@@ -285,7 +284,16 @@ export function SessionFilesPanel({
 
       {/* ── Body ── */}
       <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
-        {selected ? (
+        {unavailable ? (
+          <div className="flex flex-col items-start gap-2 p-4 text-sm">
+            <button type="button" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => { setSelected(null); setMissingPath(null); }}>
+              <ArrowLeft className="size-3.5" aria-hidden="true" /> Back to file list
+            </button>
+            <p role="status">File unavailable</p>
+            <p className="break-all text-xs text-muted-foreground">{unavailable}</p>
+          </div>
+        ) : selected ? (
           <FileViewer
             conversationId={conversationId}
             entry={selected}
@@ -365,11 +373,11 @@ function clampPanelWidth(value: number) {
 export function ResizableSessionFilesPanel({
   conversationId,
   onClose,
-  focusPath,
+  focus,
 }: {
   conversationId: number;
   onClose: () => void;
-  focusPath?: string | null;
+  focus?: SessionFileFocus | null;
 }) {
   // This wrapper only mounts client-side (the panel renders when `panelOpen`
   // is true), so it's safe to read localStorage directly in the initializer —
@@ -470,7 +478,7 @@ export function ResizableSessionFilesPanel({
       <SessionFilesPanel
         conversationId={conversationId}
         onClose={onClose}
-        focusPath={focusPath}
+        focus={focus}
       />
     </motion.div>
   );
@@ -748,10 +756,12 @@ function FileViewer({
             </p>
             <a
               href={sessionFilesApi.rawUrl(conversationId, entry.path, true)}
+              target="_blank"
+              rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium transition-all hover:bg-muted active:scale-[0.97]"
             >
               <Download className="h-3.5 w-3.5" />
-              Download file
+              Open externally
             </a>
           </div>
         ) : isMarkdown && data ? (

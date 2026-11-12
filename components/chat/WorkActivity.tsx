@@ -2,11 +2,13 @@
 
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { isToolUIPart, type UIMessage } from "ai";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatRequestDuration } from "@/lib/chat/request-duration";
 import { isActiveWork, isWorkActivityPart, isWorkSummary, type WorkActivityPart, type WorkActivityState } from "@/lib/chat/work-activity";
 import { describeToolActivity } from "./ToolActivity";
+import { AnimatedDisclosure } from "./AnimatedDisclosure";
+import { extractSearchTrace } from "@/lib/chat/search-trace";
 
 const MIN_HISTORY_DURATION_MS = 2_000;
 
@@ -70,9 +72,11 @@ export function WorkActivity({
   legacyDurationMs?: number;
 }) {
   const contentId = useId();
+  const trigger = useRef<HTMLButtonElement>(null);
   const viewport = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const followTail = useRef(true);
+  const savedScrollTop = useRef(0);
   const [localStart] = useState(Date.now);
   const status = activity?.status ?? (streaming ? "running" : "completed");
   const active = isActiveWork(status);
@@ -89,9 +93,12 @@ export function WorkActivity({
     const seenTools = new Set<string>();
     let previousAttempt: WorkActivityPart | undefined;
 
-    const timeline: ReactNode[] = [];
+    type SearchGroup = { id: string; results: Set<string>; completed: number; failed: number; denied: number; interrupted: number; pending: boolean };
+    const timeline: (ReactNode | SearchGroup)[] = [];
+    let searchGroup: SearchGroup | undefined;
     for (const [index, part] of parts.entries()) {
       if (isWorkActivityPart(part)) {
+        searchGroup = undefined;
         const previous = previousAttempt?.data;
         previousAttempt = part;
         // The lifecycle part occupies the beginning of its attempt. Render
@@ -105,7 +112,24 @@ export function WorkActivity({
         timeline.push(<p key={`summary-${index}`} className="whitespace-pre-wrap break-words">{part.text}</p>);
       } else if (isToolUIPart(part) && !seenTools.has(part.toolCallId)) {
         seenTools.add(part.toolCallId);
-        const { Icon, label } = describeToolActivity(part, active && index > activeAttemptIndex);
+        const runningAttempt = active && index > activeAttemptIndex;
+        const { Icon, label, name, failed, denied, running } = describeToolActivity(part, runningAttempt);
+        if (name === "web_search") {
+          if (!searchGroup) {
+            searchGroup = { id: part.toolCallId, results: new Set(), completed: 0, failed: 0, denied: 0, interrupted: 0, pending: false };
+            timeline.push(searchGroup);
+          }
+          if (failed) searchGroup.failed++;
+          else if (denied) searchGroup.denied++;
+          else {
+            for (const result of extractSearchTrace([part])) searchGroup.results.add(result.key);
+            if (!running) searchGroup.completed++;
+            else if (runningAttempt) searchGroup.pending = true;
+            else searchGroup.interrupted++;
+          }
+          continue;
+        }
+        searchGroup = undefined;
         timeline.push(
           <div key={`tool-${part.toolCallId}`} className="flex items-start gap-2">
             <Icon className="mt-1 size-3.5 shrink-0" aria-hidden="true" />
@@ -114,7 +138,21 @@ export function WorkActivity({
         );
       }
     }
-    return timeline;
+    return timeline.map((entry) => {
+      if (!entry || typeof entry !== "object" || !("results" in entry)) return entry;
+      const { id, results, completed, pending, failed, denied, interrupted } = entry;
+      const label = results.size || completed
+        ? `Searched web · ${results.size} ${results.size === 1 ? "result" : "results"}`
+        : pending ? "Searching web…" : "Web search";
+      const outcome = [failed && `${failed} failed`, denied && `${denied} denied`, interrupted && `${interrupted} interrupted`]
+        .filter(Boolean).join(" · ");
+      return (
+        <div key={`search-${id}`} className="flex items-start gap-2">
+          <Search className="mt-1 size-3.5 shrink-0" aria-hidden="true" />
+          <span>{label}{outcome && ` · ${outcome}`}</span>
+        </div>
+      );
+    });
   }, [parts, active]);
 
   const hasHistory = entries.length > 0 || phase === "unsuccessful" ||
@@ -124,7 +162,13 @@ export function WorkActivity({
   useLayoutEffect(() => {
     const scroll = viewport.current;
     const inner = content.current;
-    if (!expanded || !active || !scroll || !inner) return;
+    if (!expanded) {
+      if (scroll?.contains(document.activeElement)) trigger.current?.focus({ preventScroll: true });
+      return;
+    }
+    if (!scroll || !inner) return;
+    if (!followTail.current) scroll.scrollTop = savedScrollTop.current;
+    if (!active) return;
     const follow = () => {
       if (followTail.current) scroll.scrollTop = scroll.scrollHeight;
     };
@@ -152,6 +196,7 @@ export function WorkActivity({
       <div className="border-b border-border/70 pb-1">
         {hasHistory ? (
           <button
+            ref={trigger}
             type="button"
             onClick={() => setManual({ phase, open: !expanded })}
             aria-expanded={expanded}
@@ -165,26 +210,26 @@ export function WorkActivity({
           <div className={headerClass}>{header}</div>
         )}
       </div>
-      <div
-        id={contentId}
-        hidden={!expanded}
-        ref={viewport}
-        tabIndex={expanded ? 0 : undefined}
-        onScroll={(event) => {
-          const { scrollHeight, scrollTop, clientHeight } = event.currentTarget;
-          followTail.current = scrollHeight - scrollTop - clientHeight <= 12;
-        }}
-        className="max-h-56 overflow-y-auto overscroll-contain sm:max-h-72"
-      >
-        {expanded && (
+      <AnimatedDisclosure id={contentId} open={expanded}>
+        <div
+          ref={viewport}
+          tabIndex={expanded ? 0 : undefined}
+          onScroll={(event) => {
+            const { scrollHeight, scrollTop, clientHeight } = event.currentTarget;
+            if (!expanded) return;
+            savedScrollTop.current = scrollTop;
+            followTail.current = scrollHeight - scrollTop - clientHeight <= 12;
+          }}
+          className="max-h-56 overflow-y-auto overscroll-contain sm:max-h-72"
+        >
           <div ref={content} className="space-y-2 py-2.5 pr-2 text-sm leading-relaxed text-muted-foreground">
             {entries}
             {status === "continuing" && <p>{outcomeLabels.continuing}</p>}
             {phase === "unsuccessful" && <p>{activity?.message || outcomeLabels[status]}</p>}
             {status === "completed" && entries.length === 0 && <p>{outcomeLabels.completed}</p>}
           </div>
-        )}
-      </div>
+        </div>
+      </AnimatedDisclosure>
     </section>
   );
 }

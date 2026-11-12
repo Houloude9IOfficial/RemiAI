@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { motion, AnimatePresence } from "framer-motion";
-import { Files, Menu, Plus, Timer } from "lucide-react";
+import { ClipboardList, Files, Menu, Plus, Timer } from "lucide-react";
 import { MessageList } from "@/components/chat/MessageList";
 import { EmptyChatState } from "@/components/chat/EmptyChatState";
 import { ActiveQuestionsPanel } from "@/components/chat/ActiveQuestionsPanel";
@@ -16,7 +16,7 @@ import {
   type QualityPolicy,
 } from "@/lib/chat/quality-policy";
 import { ChatSkeleton } from "@/components/chat/ChatSkeleton";
-import { TodoProgressBar } from "@/components/chat/TodoProgressBar";
+import { GoalPanel, useGoalTasks } from "@/components/chat/GoalPanel";
 import { BuildRunHistory } from "@/components/chat/BuildRunHistory";
 import { WorkOverview } from "@/components/chat/WorkOverview";
 import { AutomationRunHistory } from "@/components/chat/AutomationRunHistory";
@@ -27,10 +27,12 @@ import { ProjectControl } from "@/components/chat/ProjectControl";
 import {
   SessionFilesPanel,
   ResizableSessionFilesPanel,
+  type SessionFileFocus,
 } from "@/components/chat/SessionFilesPanel";
 import { ErrorCard } from "@/components/ui/error-card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { useErrorHandler } from "@/lib/hooks/use-error-handler";
 import { applyConversationTitleUpdate, conversationsApi } from "@/lib/api/conversations";
 import { useStreamingContext } from "@/lib/chat/streaming-context";
@@ -475,7 +477,15 @@ function ConversationChat({
   const [panelOpen, setPanelOpen] = useState(false);
   // When the AI presents a single file (session_present_file), the panel
   // opens straight to that file in the viewer.
-  const [panelFocusPath, setPanelFocusPath] = useState<string | null>(null);
+  const [panelFocus, setPanelFocus] = useState<SessionFileFocus | null>(null);
+  const [goalOpen, setGoalOpen] = useState(false);
+  const goalTasks = useGoalTasks(conversationId);
+  const goalDesktop = useMediaQuery("(min-width: 1024px)");
+  const filesDesktop = useMediaQuery("(min-width: 768px)");
+  const goalSeen = useRef(false);
+  const desktopGoalTrigger = useRef<HTMLButtonElement>(null);
+  const mobileGoalTrigger = useRef<HTMLButtonElement>(null);
+  const goalStorageKey = `remiai:goal-opened:${conversationId}`;
   // Canvas panel — an interactive web-project preview+editor that shares the
   // same right-side slot as session files (they don't stack on narrow screens).
   const [canvasOpen, setCanvasOpen] = useState(false);
@@ -497,8 +507,9 @@ function ConversationChat({
     canvasWinsRef.current = true;
     setCanvasFocusSlug(detail.slug ?? null);
     setCanvasOpen(true);
+    setGoalOpen(false);
     setPanelOpen(false);
-    setPanelFocusPath(null);
+    setPanelFocus(null);
     if (detail.slug) dispatchCanvasOpened(detail.slug);
   }, []);
 
@@ -506,12 +517,16 @@ function ConversationChat({
   // or session_present_file; for the single-file variant, focus that file.
   useEffect(() => {
     const handler = (event: Event) => {
-      // User dismissed the panel — don't force it open again.
-      if (filesDismissedRef.current) return;
-      // A canvas was presented in this request — it owns the panel slot.
-      if (canvasWinsRef.current) return;
       const detail = (event as CustomEvent<SessionFilesPresentDetail>).detail;
-      if (detail?.focusPath) setPanelFocusPath(detail.focusPath);
+      const manual = detail?.manualConversationId === conversationId;
+      if (detail?.manualConversationId != null && !manual) return;
+      if (!manual && (filesDismissedRef.current || canvasWinsRef.current)) return;
+      if (manual) {
+        filesDismissedRef.current = false;
+        void queryClient.invalidateQueries({ queryKey: ["session-files", conversationId] });
+      }
+      if (detail?.focusPath) setPanelFocus({ path: detail.focusPath });
+      setGoalOpen(false);
       setPanelOpen(true);
       // a canvas and session files share the slot — opening files closes canvas
       setCanvasOpen(false);
@@ -519,7 +534,7 @@ function ConversationChat({
     };
     window.addEventListener(SESSION_FILES_PRESENT_EVENT, handler);
     return () => window.removeEventListener(SESSION_FILES_PRESENT_EVENT, handler);
-  }, []);
+  }, [conversationId, queryClient]);
 
   // Queue AI canvas presentations until the assistant turn is finished. This
   // keeps the first canvas creation message visible while tools are still
@@ -1205,7 +1220,7 @@ function ConversationChat({
   const closePanel = useCallback(() => {
     filesDismissedRef.current = true;
     setPanelOpen(false);
-    setPanelFocusPath(null);
+    setPanelFocus(null);
     setCanvasOpen(false);
     setCanvasFocusSlug(null);
   }, []);
@@ -1253,12 +1268,56 @@ function ConversationChat({
     [],
   );
 
+  const hasUnfinishedGoals = Boolean(goalTasks && goalTasks.pending + goalTasks.inProgress > 0);
+  const rememberGoalOpened = useCallback(() => {
+    goalSeen.current = true;
+    try { window.sessionStorage.setItem(goalStorageKey, "1"); } catch { /* Storage may be unavailable. */ }
+  }, [goalStorageKey]);
+
+  useEffect(() => {
+    if (!goalDesktop || !hasUnfinishedGoals || goalOpen || panelOpen || canvasOpen || goalSeen.current) return;
+    try {
+      if (window.sessionStorage.getItem(goalStorageKey)) return;
+    } catch { /* Fall back to the current conversation mount. */ }
+    const frame = requestAnimationFrame(() => {
+      rememberGoalOpened();
+      setGoalOpen(true);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [goalDesktop, hasUnfinishedGoals, goalOpen, panelOpen, canvasOpen, goalStorageKey, rememberGoalOpened]);
+
+  const closeGoal = () => {
+    setGoalOpen(false);
+    if (goalDesktop) desktopGoalTrigger.current?.focus();
+  };
+
+  const goalToggle = (ref: typeof desktopGoalTrigger) => Boolean(goalTasks?.total) && (
+    <button
+      ref={ref}
+      type="button"
+      aria-expanded={goalOpen}
+      aria-label={`Goal, ${goalTasks?.completed} of ${goalTasks?.total} completed`}
+      className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring aria-expanded:bg-muted"
+      onClick={() => {
+        rememberGoalOpened();
+        if (goalOpen) { closeGoal(); return; }
+        if (panelOpen) closePanel();
+        if (canvasOpen) closeCanvasPanel();
+        setGoalOpen(true);
+      }}
+    >
+      <ClipboardList className="size-4" aria-hidden="true" />
+      Goal
+    </button>
+  );
+
   const filesToggle = (
     <button
       type="button"
       onClick={() => {
-        if (panelOpen) setPanelFocusPath(null);
+        if (panelOpen) setPanelFocus(null);
         setPanelOpen((o) => !o);
+        setGoalOpen(false);
         // canvas shares the slot — close it when toggling files
         if (canvasOpen) closeCanvasPanel();
       }}
@@ -1316,7 +1375,7 @@ function ConversationChat({
       {/* ── Mobile Header ── */}
       <MobileChatHeader
         title={initialConversation.title}
-        actions={<><ProjectControl conversationId={conversationId} initialProjectId={initialConversation.projectId} />{filesToggle}</>}
+        actions={<><ProjectControl conversationId={conversationId} initialProjectId={initialConversation.projectId} />{goalToggle(mobileGoalTrigger)}{filesToggle}</>}
       />
 
       {/* ── Desktop Header (redesigned: model status + live usage meter) ── */}
@@ -1340,6 +1399,7 @@ function ConversationChat({
             {messages.length > 0 && (
               <ExportDialog messages={messages} title={initialConversation.title} />
             )}
+            {goalToggle(desktopGoalTrigger)}
             {filesToggle}
           </>
         }
@@ -1369,8 +1429,6 @@ function ConversationChat({
           header instead of being limited to the leftover message area. */}
       <div className="flex min-h-0 flex-1">
       <div className="flex min-w-0 flex-1 flex-col">
-      {/* ── Todo progress ── */}
-      <TodoProgressBar conversationId={conversationId} mode={mode} />
       {mode === "build" && <BuildRunHistory conversationId={conversationId} />}
       {mode === "work" && <WorkOverview conversationId={conversationId} onClose={() => handleModeChange("chat")} onBeginPlanning={(intake) => handleSend(`Start the guided Work planning phase now.\n\nGoal: ${intake.goal}\nTarget: ${intake.targetLabel}\nSuccess criteria: ${intake.successCriteria || "Not specified"}\nTechnical brief: ${intake.technicalBrief || "Not specified"}\n\nFirst inspect the relevant target and report visible progress as you work. Ask only focused questions if necessary, then submit the complete Work plan for approval.`)} onBeginBuild={(run, source) => { window.setTimeout(() => { handleSend(source === "repair" ? `Continue the guided Work repair pass for “${run.goal}”. Review the current implementation and the previous verification outcome, fix what is needed, rerun relevant checks, and visibly report each repair and test result. Stop only when verified or when focused user input is required.` : `The Work plan is approved. Start the guided Work build now for “${run.goal}”. Work only in the approved target, make the implementation changes, and keep visible progress updates flowing through inspection, writing, and testing. Run relevant checks, report their actual results, and do not stop until this Work turn reaches a verified outcome or needs focused user input.`); }, 500); }} />}
       <AutomationRunHistory conversationId={conversationId} />
@@ -1502,7 +1560,7 @@ function ConversationChat({
 
         {/* Mobile — full-height drawer over the chat */}
         <AnimatePresence>
-          {canvasOpen && (
+          {!filesDesktop && canvasOpen && (
             <>
               <motion.div
                 initial={{ opacity: 0 }}
@@ -1530,16 +1588,13 @@ function ConversationChat({
               </motion.div>
             </>
           )}
-          {!canvasOpen && panelOpen && (
+          {!filesDesktop && !canvasOpen && panelOpen && (
             <>
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                onClick={() => {
-                  filesDismissedRef.current = true;
-                  setPanelOpen(false);
-                }}
+                onClick={closePanel}
                 className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm md:hidden"
               />
               <motion.div
@@ -1552,7 +1607,7 @@ function ConversationChat({
                 <SessionFilesPanel
                   conversationId={conversationId}
                   onClose={closePanel}
-                  focusPath={panelFocusPath}
+                  focus={panelFocus}
                 />
               </motion.div>
             </>
@@ -1561,21 +1616,25 @@ function ConversationChat({
       </div>
       </div>
 
+      <GoalPanel open={goalOpen && !panelOpen && !canvasOpen} desktop={goalDesktop} data={goalTasks}
+        onClose={closeGoal} returnFocus={() =>
+          desktopGoalTrigger.current?.getClientRects().length ? desktopGoalTrigger.current : mobileGoalTrigger.current
+        } />
       {/* Desktop — full-height inline side panel. It shares the workspace row
           with the complete chat column, so long Work cards cannot crop it. */}
       <AnimatePresence>
-        {canvasOpen && (
+        {filesDesktop && canvasOpen && (
           <ResizableCanvasPanel
             conversationId={conversationId}
             onClose={closeCanvasPanel}
             focusSlug={canvasFocusSlug}
           />
         )}
-        {!canvasOpen && panelOpen && (
+        {filesDesktop && !canvasOpen && panelOpen && (
           <ResizableSessionFilesPanel
             conversationId={conversationId}
             onClose={closePanel}
-            focusPath={panelFocusPath}
+            focus={panelFocus}
           />
         )}
       </AnimatePresence>

@@ -1,17 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronDown, Download } from "lucide-react";
+import { useId, useState } from "react";
+import { Download, FileDiff } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type SourceItem = {
-  id?: number;
-  url: string;
-  title?: string;
-  /** Position in the message's citation order — matches the inline chips. */
-  number?: number;
-  status?: "available" | "partial" | "failed";
-};
+import type { CitationRef } from "@/lib/chat/citations";
+import { AnimatedDisclosure } from "./AnimatedDisclosure";
+import { FileChangeDigest, type FileChangeSummary } from "./ToolActivity";
 
 /** Favicons previewed inside the collapsed chip. */
 const CHIP_FAVICON_COUNT = 3;
@@ -81,7 +76,7 @@ function FaviconStack({
   className,
   ringClassName,
 }: {
-  sources: SourceItem[];
+  sources: CitationRef[];
   className?: string;
   ringClassName?: string;
 }) {
@@ -89,7 +84,7 @@ function FaviconStack({
     <span className="flex items-center">
       {sources.slice(0, CHIP_FAVICON_COUNT).map((source, index) => (
         <SourceFavicon
-          key={`${source.id ?? source.url}-${index}`}
+          key={`${source.url}-${index}`}
           url={source.url}
           className={cn(className, index > 0 && "-ml-1.5", ringClassName)}
         />
@@ -98,111 +93,65 @@ function FaviconStack({
   );
 }
 
-export function SourceEvidenceCard({
-  data,
+export function ResponseDetails({
+  sources,
+  changes,
   conversationId,
 }: {
-  data: unknown;
+  sources: CitationRef[];
+  changes: FileChangeSummary[];
   conversationId?: number;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const id = useId();
+  const [open, setOpen] = useState<"sources" | "changes" | null>(null);
+  if (sources.length === 0 && changes.length === 0) return null;
 
-  if (!data || typeof data !== "object") return null;
-  const raw = data as Record<string, unknown>;
-  if (!Array.isArray(raw.sources)) return null;
-
-  const sources = raw.sources.filter(
-    (item): item is SourceItem =>
-      Boolean(item) &&
-      typeof item === "object" &&
-      typeof (item as Record<string, unknown>).url === "string",
-  );
-  if (sources.length === 0) return null;
-
-  // ── Collapsed: one compact chip — 3 rounded favicons + "Sources · N" ──
-  if (!expanded) {
-    return (
-      <button
-        type="button"
-        onClick={() => setExpanded(true)}
-        aria-label={`Show ${sources.length} research sources`}
-        className="inline-flex items-center gap-2 self-start rounded-full border border-border/50 bg-muted/[0.22] py-1 pr-3 pl-1.5 transition-colors hover:bg-muted/40"
-      >
-        <FaviconStack
-          sources={sources}
-          className="h-[18px] w-[18px]"
-          ringClassName="ring-2 ring-background"
-        />
-        <span className="text-xs font-medium text-foreground/85">Sources</span>
-        <span className="text-[11px] font-medium tabular-nums text-muted-foreground">
-          {sources.length}
-        </span>
-      </button>
-    );
-  }
-
-  // ── Expanded: pill rows (favicon + title), header collapses again ──
+  const chip = "inline-flex min-h-8 items-center gap-1.5 rounded-full border border-border/55 bg-muted/20 px-3 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring aria-expanded:bg-muted";
   return (
-    <section
-      aria-label="Research sources"
-      className="overflow-hidden rounded-xl border border-border/50 bg-muted/[0.22]"
-    >
-      <button
-        type="button"
-        onClick={() => setExpanded(false)}
-        aria-expanded
-        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-muted/40"
-      >
-        <FaviconStack
-          sources={sources}
-          className="h-4 w-4"
-          ringClassName="ring-2 ring-background"
-        />
-        <span className="text-xs font-medium text-foreground/85">Sources</span>
-        <span className="text-[11px] font-medium tabular-nums text-muted-foreground">
-          {sources.length}
-        </span>
-        <span className="ml-auto flex shrink-0 items-center gap-1">
-          {conversationId && (
-            <a
-              href={`/api/conversations/${conversationId}/research-report`}
-              download={`remi-research-${conversationId}.md`}
-              onClick={(e) => e.stopPropagation()}
-              className="inline-flex items-center rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              aria-label="Export research report"
-              title="Export Markdown report"
-            >
-              <Download className="h-3 w-3" aria-hidden="true" />
-            </a>
-          )}
-          <ChevronDown
-            className="h-3.5 w-3.5 rotate-180 text-muted-foreground"
-            aria-hidden="true"
-          />
-        </span>
-      </button>
-
-      <ul className="flex flex-col gap-1 border-t border-border/40 p-2">
-        {sources.map((source, index) => {
-          const title = source.title?.trim() || domainOf(source.url);
-          return (
-            <li key={`${source.id ?? source.url}-${index}`}>
-              <a
-                href={source.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2.5 rounded-full py-1.5 pr-3 pl-2 transition-colors"
-                title={source.url}
-              >
-                <SourceFavicon url={source.url} className="h-5 w-5" />
-                <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-primary/90">
-                  {title}
-                </span>
+    <div>
+      <div className="flex flex-wrap justify-center gap-2">
+        {sources.length > 0 && (
+          <button type="button" aria-expanded={open === "sources"} aria-controls={`${id}-sources`}
+            onClick={() => setOpen(open === "sources" ? null : "sources")} className={chip}>
+            <FaviconStack sources={sources} className="size-4" ringClassName="ring-2 ring-background" />
+            Sources <span className="tabular-nums">{sources.length}</span>
+          </button>
+        )}
+        {changes.length > 0 && (
+          <button type="button" aria-expanded={open === "changes"} aria-controls={`${id}-changes`}
+            onClick={() => setOpen(open === "changes" ? null : "changes")} className={chip}>
+            <FileDiff className="size-3.5" aria-hidden="true" />
+            Changes <span className="tabular-nums">{changes.length}</span>
+          </button>
+        )}
+      </div>
+      <AnimatedDisclosure id={`${id}-sources`} open={open === "sources" && sources.length > 0}>
+        <section aria-label="Research sources" className="mt-2 rounded-lg border border-border/50 text-sm">
+          {conversationId != null && (
+            <div className="flex justify-end border-b border-border/50 px-3 py-1.5">
+              <a href={`/api/conversations/${conversationId}/research-report`}
+                download={`remi-research-${conversationId}.md`}
+                className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+                <Download className="size-3.5" aria-hidden="true" /> Export research report
               </a>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
+            </div>
+          )}
+          <ul tabIndex={0} aria-label="Source list" className="max-h-[min(50dvh,20rem)] space-y-1 overflow-y-auto overscroll-contain p-2">
+            {sources.map((source) => (
+              <li key={source.url}>
+                <a href={source.url} target="_blank" rel="noopener noreferrer" title={source.url}
+                  className="flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-primary hover:bg-muted/60">
+                  <SourceFavicon url={source.url} className="size-4" />
+                  <span className="min-w-0 break-words">{source.title || domainOf(source.url)}</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      </AnimatedDisclosure>
+      <AnimatedDisclosure id={`${id}-changes`} open={open === "changes" && changes.length > 0}>
+        <FileChangeDigest changes={changes} />
+      </AnimatedDisclosure>
+    </div>
   );
 }

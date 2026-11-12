@@ -5,17 +5,16 @@ import { isTextUIPart, isToolUIPart, getToolName } from "ai";
 import { Component, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { Copy, Check, Play, RefreshCw, Pencil, X, ChevronDown, ChevronUp } from "lucide-react";
-import { FileChangeDigest, VerificationDigest, extractFileChanges } from "./ToolActivity";
+import { extractFileChanges } from "./ToolActivity";
 import { ToolCallCard } from "./ToolCallCard";
 import { WorkActivity } from "./WorkActivity";
 import { latestWorkActivity } from "@/lib/chat/work-activity";
-import { summarizeBuildChecks } from "@/lib/chat/build-verification";
 import { VisualCard } from "./VisualCard";
 import { RemiCard } from "./RemiCard";
 import { FollowupSuggestions } from "./FollowupSuggestions";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { ImagePreview } from "./ImagePreview";
-import { SourceEvidenceCard } from "./SourceEvidenceCard";
+import { ResponseDetails } from "./SourceEvidenceCard";
 import {
   collectMessageSources,
   stripTrailingSourcesSection,
@@ -153,6 +152,7 @@ class SafeMarkdown extends Component<
     content: string;
     isStreaming?: boolean;
     citations?: Map<string, CitationRef> | null;
+    conversationId?: number;
   },
   { hasError: boolean }
 > {
@@ -173,6 +173,7 @@ class SafeMarkdown extends Component<
         content={this.props.content}
         isStreaming={this.props.isStreaming}
         citations={this.props.citations}
+        conversationId={this.props.conversationId}
       />
     );
   }
@@ -487,12 +488,14 @@ function StreamingSafeMarkdown({
   isStreaming,
   messageStreaming,
   citations,
+  conversationId,
 }: {
   content: string;
   isStreaming?: boolean;
   /** True until the entire assistant message, including any tool steps, ends. */
   messageStreaming?: boolean;
   citations?: Map<string, CitationRef> | null;
+  conversationId?: number;
 }) {
   const display = useSmoothedStreamContent(
     content,
@@ -513,6 +516,7 @@ function StreamingSafeMarkdown({
         content={display.content}
         isStreaming={display.isStreaming}
         citations={citations}
+        conversationId={conversationId}
       />
     </div>
   );
@@ -1035,8 +1039,6 @@ export function MessageBubble({
     .join("\n\n");
   const requestTiming = messageRequestTiming(message.parts);
   const activity = latestWorkActivity(message.parts)?.data;
-  const toolParts = message.parts.filter(isToolUIPart);
-  const verificationChecks = summarizeBuildChecks(toolParts);
 
   // The AI can call suggest_followups multiple times per response — only the
   // LAST completed set is shown so duplicate followup cards never stack.
@@ -1073,20 +1075,9 @@ export function MessageBubble({
   const bodySegments = flowSegments.filter((s) => s.type !== "canvasPresent");
   const lastTextIndex = bodySegments.findLastIndex((segment) => segment.type === "text");
 
-  // Aggregate ALL file changes across the message's tool segments into one
-  // standalone card at the END of the message (like the canvas box), instead
-  // of a per-group box buried under each tool group. Dedupe by path, keeping
-  // the most recent state for each file.
-  const messageFileChanges = (() => {
-    const all = flowSegments
-      .filter((s): s is Extract<Segment, { type: "tool" }> => s.type === "tool")
-      .flatMap((s) =>
-        extractFileChanges(s.parts.filter(isToolUIPart)),
-      );
-    const byPath = new Map<string, (typeof all)[number]>();
-    for (const change of all) byPath.set(change.path, change);
-    return [...byPath.values()];
-  })();
+  const messageFileChanges = isStreaming ? [] : extractFileChanges(
+    flowSegments.flatMap((segment) => segment.type === "tool" ? segment.parts.filter(isToolUIPart) : []),
+  );
 
   return (
     <div className="group flex justify-start">
@@ -1123,6 +1114,7 @@ export function MessageBubble({
                   }
                   messageStreaming={isStreaming}
                   citations={!isStreaming ? messageSources.byUrl : null}
+                  conversationId={conversationId}
                 />
               </div>
             ) : segment.type === "visual" ? (
@@ -1151,8 +1143,6 @@ export function MessageBubble({
             )
           ))}
 
-          {!isStreaming && <VerificationDigest checks={verificationChecks} />}
-
           {/* Canvas cards — hoisted to the bottom of the message, next to the
               file digest, instead of interrupting the answer flow. */}
           {canvasSegments.map((segment, idx) => (
@@ -1162,26 +1152,8 @@ export function MessageBubble({
             />
           ))}
 
-          {/* Aggregated Sources card — the full numbered list behind the
-              inline citation chips. The model's own trailing Sources section
-              is stripped from the text above so this is the single list. */}
-          {!isStreaming && hasRetrievedSources && (
-            <SourceEvidenceCard
-              key="sources-card"
-              data={{ sources: messageSources.list }}
-              conversationId={conversationId}
-            />
-          )}
-
-          {/* File-change digest — ONE card at the end of the message (same
-              placement as the canvas box), covering every file touched across
-              all tool calls in this response. */}
-          {messageFileChanges.length > 0 && (
-            <FileChangeDigest
-              key="file-digest"
-              changes={messageFileChanges}
-              standalone
-            />
+          {!isStreaming && (
+            <ResponseDetails sources={messageSources.list} changes={messageFileChanges} conversationId={conversationId} />
           )}
 
           {/* Suggestions only appear once the ENTIRE response has finished

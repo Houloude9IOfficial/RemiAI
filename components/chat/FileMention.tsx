@@ -15,3 +15,24 @@ export function formatFileDisplay(entry: {
   const path = entry.relativePath || entry.rootLabel;
   return `${icon} ${path}`;
 }
+
+/** Recognize only file routes belonging to the current conversation. */
+export function sessionFileMentionPath(href: string, conversationId: number): string | null {
+  const prefix = `/api/chat/${conversationId}/session-files/`;
+  if (!href.startsWith(prefix)) return null;
+
+  const [route, query] = href.slice(prefix.length).split(/[?#]/, 2);
+  try {
+    const segments = route === "raw"
+      ? (new URLSearchParams(query).get("path") ?? "").split("/")
+      : route.split("/").map(decodeURIComponent);
+    if (segments.some((segment) =>
+      !segment || segment === "." || segment === ".." || /[/\\\u0000-\u001f\u007f]/.test(segment)
+    )) return null;
+    if (segments.length === 1 && ["download", "content", "raw"].includes(segments[0])) return null;
+    if (route.startsWith("canvas/") && route.split("/").length === 3 && route.endsWith("/download")) return null;
+    return segments.join("/");
+  } catch {
+    return null;
+  }
+}

@@ -1,9 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import type { ToolUIPart, DynamicToolUIPart } from "ai";
 import { getToolName } from "ai";
-import { extractSearchTrace } from "@/lib/chat/search-trace";
 import { cn } from "@/lib/utils";
 import {
   summarizeBuildCheckCounts,
@@ -57,10 +55,6 @@ function isPartRunning(part: AnyToolPart): boolean {
     s === "input-available" ||
     s === "approval-requested"
   );
-}
-
-function isPartComplete(part: AnyToolPart): boolean {
-  return ["output-available", "output-denied", "approval-responded"].includes(getState(part));
 }
 
 function isPartError(part: AnyToolPart): boolean {
@@ -363,27 +357,29 @@ function getToolLabel(toolName: string): ToolLabel {
   return Object.hasOwn(TOOL_LABELS, name) ? TOOL_LABELS[name] : FALLBACK_LABEL;
 }
 
+function toolFailed(part: AnyToolPart) {
+  const result = asRecord(getOutput(part));
+  return isPartError(part) || Boolean(result?.error) ||
+    result?.success === false || result?.ok === false || result?.timedOut === true ||
+    (typeof result?.exitCode === "number" && result.exitCode !== 0);
+}
+
 /** User-facing activity uses fixed labels and counts, with no tool payloads. */
 export function describeToolActivity(part: AnyToolPart, active: boolean) {
   const name = bareToolName(getToolName(part) ?? "");
   const { present, past, icon } = getToolLabel(name);
-  const output = getOutput(part);
-  const result = asRecord(output);
-  const failed = isPartError(part) || Boolean(result?.error) ||
-    result?.success === false || result?.ok === false || result?.timedOut === true ||
-    (typeof result?.exitCode === "number" && result.exitCode !== 0);
-  const running = isPartRunning(part) ||
-    ("preliminary" in part && part.preliminary === true && !failed);
+  const result = asRecord(getOutput(part));
+  const failed = toolFailed(part);
   const denied = getState(part) === "output-denied" ||
     ("approval" in part && part.approval?.approved === false);
-  const count = !running && !failed && !denied && name === "web_search"
-    ? extractSearchTrace([part]).length : 0;
+  const running = !failed && !denied && (isPartRunning(part) ||
+    ("preliminary" in part && part.preliminary === true));
   const label = result?.timedOut === true ? `${present} timed out`
     : failed ? `${present} failed`
     : denied ? `${present} was denied`
     : running ? active ? present : `${present} was interrupted`
-    : count ? `${past} · ${count} ${count === 1 ? "result" : "results"}` : past;
-  return { Icon: failed || denied ? AlertTriangle : icon ?? Wrench, label };
+    : past;
+  return { Icon: failed || denied ? AlertTriangle : icon ?? Wrench, label, name, failed, denied, running };
 }
 
 // ---------------------------------------------------------------------------
@@ -425,9 +421,9 @@ export function extractFileChanges(parts: AnyToolPart[]): FileChangeSummary[] {
   const changes: FileChangeSummary[] = [];
   const seen = new Set<string>();
 
-  for (const part of parts) {
-    if (!part || typeof part !== "object") continue;
-    if (!isPartComplete(part) && !isPartError(part)) continue;
+  for (let index = parts.length - 1; index >= 0; index--) {
+    const part = parts[index];
+    if (part.state !== "output-available" || part.preliminary || toolFailed(part)) continue;
 
     let name: string;
     try {
@@ -511,106 +507,55 @@ export function extractFileChanges(parts: AnyToolPart[]): FileChangeSummary[] {
     }
   }
 
-  return changes;
+  return changes.reverse();
 }
 
-const FILE_PREVIEW_LIMIT = 4;
-
-/**
- * File-change summary box. Rendered inline under a tool group by default, or
- * as a standalone canvas-style card (used at the end of a message).
- */
-export function FileChangeDigest({
-  changes,
-  standalone = false,
-}: {
-  changes: FileChangeSummary[];
-  standalone?: boolean;
-}) {
-  const [showAll, setShowAll] = useState(false);
-  if (changes.length === 0) return null;
-
-  const visible = showAll ? changes : changes.slice(0, FILE_PREVIEW_LIMIT);
-  const hidden = changes.length - visible.length;
-
+export function FileChangeDigest({ changes }: { changes: FileChangeSummary[] }) {
   return (
-    <div className={standalone ? "" : "px-2 pb-1.5"}>
-      <div
-        className={
-          standalone
-            ? "overflow-hidden rounded-xl bg-primary/[0.04] px-3.5 py-3"
-            : "mt-1 rounded-md border border-border/20 bg-surface-2/60 px-2.5 py-2"
-        }
-      >
-        <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">
-          {changes.length === 1
-            ? "1 change"
-            : `${changes.length} changes`}
-        </div>
-        <ul className="flex flex-col gap-1">
-          {visible.map((change) => {
-            const KindIcon =
-              change.kind === "create"
-                ? FilePlus2
-                : change.kind === "delete"
-                  ? FileMinus2
-                  : FileDiff;
-            return (
-              <li
-                key={`${change.kind}-${change.path}`}
-                className="flex items-center gap-2 text-[12px] leading-tight"
-              >
-                <KindIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
-                <span className="min-w-0 flex-1 truncate font-mono text-foreground/85">
-                  {shortPath(change.path)}
-                </span>
-                <span className="shrink-0 tabular-nums text-[11px]">
-                  {typeof change.linesAdded === "number" &&
-                    change.linesAdded > 0 && (
-                      <span className="text-status-success">
-                        +{change.linesAdded}
-                      </span>
-                    )}
-                  {typeof change.linesRemoved === "number" &&
-                    change.linesRemoved > 0 && (
-                      <span className="ml-1 text-status-danger">
-                        −{change.linesRemoved}
-                      </span>
-                    )}
-                  {change.linesAdded === undefined &&
-                    change.linesRemoved === undefined &&
-                    typeof change.bytes === "number" && (
-                      <span className="text-muted-foreground">
-                        {change.bytes < 1024
-                          ? `${change.bytes} B`
-                          : `${(change.bytes / 1024).toFixed(1)} KB`}
-                      </span>
-                    )}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-        {hidden > 0 && (
-          <button
-            type="button"
-            onClick={() => setShowAll(true)}
-            className="mt-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+    <ul tabIndex={0} aria-label="Changed files" className="mt-2 max-h-[min(50dvh,20rem)] space-y-2 overflow-y-auto overscroll-contain rounded-lg border border-border/50 p-3">
+      {changes.map((change) => {
+        const KindIcon =
+          change.kind === "create"
+            ? FilePlus2
+            : change.kind === "delete"
+              ? FileMinus2
+              : FileDiff;
+        return (
+          <li
+            key={`${change.kind}-${change.path}`}
+            className="flex items-center gap-2 text-[12px] leading-tight"
           >
-            Show {hidden} more {hidden === 1 ? "file" : "files"}
-          </button>
-        )}
-        {showAll && changes.length > FILE_PREVIEW_LIMIT && (
-          <button
-            type="button"
-            onClick={() => setShowAll(false)}
-            className="mt-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Show less
-          </button>
-        )}
-      </div>
-    </div>
+            <KindIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 flex-1 truncate font-mono text-foreground/85">
+              {shortPath(change.path)}
+            </span>
+            <span className="shrink-0 tabular-nums text-[11px]">
+              {typeof change.linesAdded === "number" &&
+                change.linesAdded > 0 && (
+                  <span className="text-status-success">
+                    +{change.linesAdded}
+                  </span>
+                )}
+              {typeof change.linesRemoved === "number" &&
+                change.linesRemoved > 0 && (
+                  <span className="ml-1 text-status-danger">
+                    −{change.linesRemoved}
+                  </span>
+                )}
+              {change.linesAdded === undefined &&
+                change.linesRemoved === undefined &&
+                typeof change.bytes === "number" && (
+                  <span className="text-muted-foreground">
+                    {change.bytes < 1024
+                      ? `${change.bytes} B`
+                      : `${(change.bytes / 1024).toFixed(1)} KB`}
+                  </span>
+                )}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
