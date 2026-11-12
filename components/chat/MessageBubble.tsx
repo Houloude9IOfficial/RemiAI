@@ -1,15 +1,17 @@
 "use client";
 
 import type { UIMessage } from "ai";
-import { isTextUIPart, isToolUIPart, isReasoningUIPart, getToolName } from "ai";
+import { isTextUIPart, isToolUIPart, getToolName } from "ai";
 import { Component, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { Copy, Check, Play, RefreshCw, Pencil, X, ChevronDown, ChevronUp } from "lucide-react";
-import { ToolCallGroup, FileChangeDigest, extractFileChanges } from "./ToolCallGroup";
-import { ActivityDisclosure } from "./ActivityDisclosure";
+import { FileChangeDigest, VerificationDigest, extractFileChanges } from "./ToolActivity";
+import { ToolCallCard } from "./ToolCallCard";
+import { WorkActivity } from "./WorkActivity";
+import { latestWorkActivity } from "@/lib/chat/work-activity";
+import { summarizeBuildChecks } from "@/lib/chat/build-verification";
 import { VisualCard } from "./VisualCard";
 import { RemiCard } from "./RemiCard";
-import { ReasoningBlock } from "./ReasoningBlock";
 import { FollowupSuggestions } from "./FollowupSuggestions";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { ImagePreview } from "./ImagePreview";
@@ -44,7 +46,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { isRemiCardOutput, remiCardPartIdentity } from "@/lib/chat/card-identity";
-import { extractSearchTrace, isSearchTraceToolPart } from "@/lib/chat/search-trace";
+import { isSearchTraceToolPart } from "@/lib/chat/search-trace";
 import { getStreamDisplayCharsPerSecond } from "@/lib/chat/stream-display-rate";
 import {
   formatRequestCompletionTime,
@@ -326,7 +328,7 @@ function subscribeToLocalDay(callback: () => void) {
   };
 }
 
-function RequestTimingLabel({ timing }: { timing: RequestTiming }) {
+function RequestTimingLabel({ timing, showDuration }: { timing: RequestTiming; showDuration: boolean }) {
   // Use the browser's local day after hydration so a server timezone cannot
   // render a different "today" label. The shared timer updates open chats
   // when their local calendar day changes.
@@ -339,11 +341,15 @@ function RequestTimingLabel({ timing }: { timing: RequestTiming }) {
   const completedTime = timing.completedAt && todayKey
     ? formatRequestCompletionTime(timing.completedAt, todayKey)
     : null;
-  const label = `Total request time: ${duration}${completedTime ? ` · Completed ${completedTime}` : ""}`;
+  const label = [
+    showDuration && `Total request time: ${duration}`,
+    completedTime && `Completed ${completedTime}`,
+  ].filter(Boolean).join(" · ");
+  if (!label) return null;
 
   return (
     <span className="ml-1 text-[11px] text-muted-foreground/70 tabular-nums" title={label} aria-label={label}>
-      · {duration}{completedTime && <> · {completedTime}</>}
+      {showDuration && <>· {duration}</>}{completedTime && <> · {completedTime}</>}
     </span>
   );
 }
@@ -519,7 +525,6 @@ function StreamingSafeMarkdown({
 
 type Segment =
   | { type: "text"; text: string }
-  | { type: "reasoning"; text: string; isStreaming: boolean }
   | { type: "tool"; parts: UIMessage["parts"] }
   | { type: "visual"; part: UIMessage["parts"][number] }
   | { type: "remiCard"; part: UIMessage["parts"][number] }
@@ -528,7 +533,7 @@ type Segment =
   | { type: "suggestions"; data: unknown }
   | { type: "sources"; data: unknown };
 
-/** Remi card tool names — promoted to inline RemiCard instead of a generic ToolCallGroup. */
+/** Tools that deliver an inline RemiCard. */
 const REMI_CARD_TOOL_NAMES = new Set([
   "weather_card",
   "timezone_card",
@@ -614,109 +619,6 @@ function dedupeRemiCardSegments(segments: Segment[]): Segment[] {
  * back-to-back row. Anything longer is treated as real content that must
  * render between the groups.
  */
-const SHORT_FILLER_MAX_CHARS = 150;
-const SHORT_FILLER_MAX_WORDS = 24;
-
-function isShortFiller(text: string): boolean {
-  const trimmed = text.trim();
-  if (trimmed.length === 0) return true;
-  const wordCount = trimmed.split(/\s+/).length;
-  return trimmed.length <= SHORT_FILLER_MAX_CHARS && wordCount <= SHORT_FILLER_MAX_WORDS;
-}
-
-/**
- * Second pass over the raw segments: tool groups separated ONLY by short
- * filler text (or by interleaved reasoning, which gets consolidated first)
- * are merged into a single group — the calls appear back-to-back as one
- * chained card. Text at the start or end of a message is always preserved;
- * only filler sitting *between* two tool groups is dropped.
- */
-function mergeInRowToolSegments(segments: Segment[]): Segment[] {
-  const merged: Segment[] = [];
-  let filler: Extract<Segment, { type: "text" }> | null = null;
-
-  for (const seg of segments) {
-    if (seg.type === "text") {
-      if (filler) {
-        // Consecutive text segments can't occur (first pass merges them),
-        // but be defensive rather than silently dropping content.
-        filler.text += seg.text;
-      } else {
-        filler = seg;
-      }
-      continue;
-    }
-
-    const last = merged[merged.length - 1];
-    if (filler) {
-      if (
-        last?.type === "tool" &&
-        seg.type === "tool" &&
-        isShortFiller(filler.text)
-      ) {
-        // Filler sits between two tool groups — absorb it and merge them.
-        last.parts.push(...seg.parts);
-      } else {
-        merged.push(filler);
-        merged.push(seg);
-      }
-      filler = null;
-    } else if (last?.type === "tool" && seg.type === "tool") {
-      // Adjacent tool groups — the reasoning that separated them was already
-      // consolidated into a single block above, so merge them into one chain.
-      last.parts.push(...seg.parts);
-    } else {
-      merged.push(seg);
-    }
-  }
-
-  if (filler) merged.push(filler);
-  return merged;
-}
-
-/**
- * Combine EVERY reasoning segment in a message into a single reasoning block.
- * Multi-step runs emit one reasoning part per step (interleaved with tools),
- * so without this pass a message shows 2+ stacked "Reasoning..." disclosures.
- * The merged block sits where the FIRST reasoning appeared; each step's
- * reasoning is separated by a blank paragraph. Streaming state is OR'd across
- * all steps, so the block stays open while any step is still reasoning.
- */
-function mergeReasoningSegments(segments: Segment[]): Segment[] {
-  const merged: Segment[] = [];
-  let combined: Extract<Segment, { type: "reasoning" }> | null = null;
-  let combinedInserted = false;
-
-  for (const seg of segments) {
-    if (seg.type === "reasoning") {
-      if (combined) {
-        combined.text += "\n\n" + seg.text;
-        combined.isStreaming = combined.isStreaming || seg.isStreaming;
-      } else {
-        combined = { type: "reasoning", text: seg.text, isStreaming: seg.isStreaming };
-      }
-      // Insert the merged block at the position of the FIRST reasoning
-      // segment; every later reasoning segment accumulates into it.
-      if (!combinedInserted) {
-        merged.push(combined);
-        combinedInserted = true;
-      }
-      continue;
-    }
-    merged.push(seg);
-  }
-  if (combined && !combinedInserted) merged.push(combined);
-  return merged;
-}
-
-/**
- * Walk through `parts` in order and produce interleaved segments.
- * Consecutive text parts are merged into one text segment.
- * Consecutive tool parts are merged into one tool segment, and tool groups
- * separated only by short filler text are merged as well (see
- * `mergeInRowToolSegments`).
- * All other part types (step-start, source, file) are skipped.
- */
 /**
  * True for session-file writes/edits that scaffold a canvas's files (paths
  * under canvas/{slug}/) during the creation request. On the first canvas
@@ -753,21 +655,7 @@ function buildSegments(parts: UIMessage["parts"]): Segment[] {
   const segments: Segment[] = [];
 
   for (const part of parts) {
-    if (isReasoningUIPart(part)) {
-      const reasoningText = part.text ?? "";
-      const last = segments[segments.length - 1];
-      const reasoningStreaming = part.state === "streaming";
-      if (last?.type === "reasoning") {
-        last.text += reasoningText;
-        last.isStreaming = last.isStreaming || reasoningStreaming;
-      } else {
-        segments.push({
-          type: "reasoning",
-          text: reasoningText,
-          isStreaming: reasoningStreaming,
-        });
-      }
-    } else if (isTextUIPart(part)) {
+    if (isTextUIPart(part)) {
       const last = segments[segments.length - 1];
       if (last?.type === "text") {
         // Append to ongoing text segment (streaming appends text-deltas)
@@ -782,8 +670,7 @@ function buildSegments(parts: UIMessage["parts"]): Segment[] {
         segments.push({ type: "text", text: part.text });
       }
     } else if (isToolUIPart(part)) {
-      // Detect suggest_followups output and promote to inline followup card
-      // instead of nesting inside a ToolCallGroup.
+      // Detect follow-up suggestions and sources for their dedicated cards.
       const partObj = part as Record<string, unknown>;
       const partState = partObj.state as string | undefined;
       const partOutput = partObj.output;
@@ -812,8 +699,7 @@ function buildSegments(parts: UIMessage["parts"]): Segment[] {
         continue;
       }
 
-      // Detect create_visual tool calls and promote them to inline visual cards
-      // instead of nesting them inside a ToolCallGroup.
+      // Keep user-facing tool results in the response body.
       const toolName = (() => {
         try {
           return getToolName(part);
@@ -880,17 +766,9 @@ function buildSegments(parts: UIMessage["parts"]): Segment[] {
   const lastCanvasIdx = dedupedCardSegments.findLastIndex(
     (s) => s.type === "canvasPresent",
   );
-  if (lastCanvasIdx >= 0) {
-    const deduped = dedupedCardSegments.filter(
-      (s, i) => s.type !== "canvasPresent" || i === lastCanvasIdx,
-    );
-    // Reasoning is consolidated into ONE block before the tool pass, so tool
-    // calls that only had per-step reasoning between them chain into a single
-    // grouped card instead of appearing as standalone entries.
-    return mergeInRowToolSegments(mergeReasoningSegments(deduped));
-  }
-
-  return mergeInRowToolSegments(mergeReasoningSegments(dedupedCardSegments));
+  return dedupedCardSegments.filter(
+    (segment, index) => segment.type !== "canvasPresent" || index === lastCanvasIdx,
+  );
 }
 
 const USER_MESSAGE_AUTO_COLLAPSE_CHAR_THRESHOLD = 450;
@@ -1149,25 +1027,6 @@ export function MessageBubble({
   const segments = buildSegments(message.parts);
   const hasAnyContent = segments.length > 0;
 
-  // True once the model has stopped thinking and started writing its final
-  // answer: a text part is actively streaming and no reasoning part is still
-  // streaming. The reasoning block collapses the moment this flips on.
-  const responseStreaming =
-    isStreaming &&
-    message.parts.some(
-      (part) => isTextUIPart(part) && part.state === "streaming",
-    ) &&
-    !message.parts.some(
-      (part) => isReasoningUIPart(part) && part.state === "streaming",
-    );
-
-  // Keep the chat quiet until the provider emits an actual reasoning, tool,
-  // or response part. This avoids flashing a generic state before real
-  // activity begins.
-  if (!hasAnyContent && isStreaming) {
-    return null;
-  }
-
   // Plain-text representation of the response (for the copy button): all
   // text parts joined, mirroring what the markdown renderer displays.
   const copyableText = message.parts
@@ -1175,6 +1034,9 @@ export function MessageBubble({
     .map((p) => p.text)
     .join("\n\n");
   const requestTiming = messageRequestTiming(message.parts);
+  const activity = latestWorkActivity(message.parts)?.data;
+  const toolParts = message.parts.filter(isToolUIPart);
+  const verificationChecks = summarizeBuildChecks(toolParts);
 
   // The AI can call suggest_followups multiple times per response — only the
   // LAST completed set is shown so duplicate followup cards never stack.
@@ -1191,46 +1053,17 @@ export function MessageBubble({
   // Sources card (per-tool "sources" segments are folded into it).
   const messageSources = collectMessageSources(message.parts);
   const hasRetrievedSources = messageSources.list.length > 0;
-  const searchTrace = extractSearchTrace(message.parts);
-  const hasSearchActivity = message.parts.some(isSearchTraceToolPart);
-
-  // Segments that render in the message body — suggestions and sources are
-  // hoisted out (suggestions to the bottom, sources into one card).
-  const renderableSegments = segments
-    .map((segment) =>
-      segment.type === "tool"
-        ? { ...segment, parts: segment.parts.filter((part) => !isSearchTraceToolPart(part)) }
-        : segment,
-    )
-    .filter((segment) => segment.type !== "tool" || segment.parts.length > 0)
-    .filter(
-      (s): s is Exclude<Segment, { type: "suggestions" } | { type: "sources" }> =>
-        s.type !== "suggestions" && s.type !== "sources",
-    );
-
-  // Claude-style activity: the LEADING reasoning + tool run collapses into a
-  // single quiet line at the top; everything after it (text, visuals, present
-  // cards, mid-message tools) keeps flowing inline as before.
-  const activityEnd = renderableSegments.findIndex(
-    (s) => s.type !== "reasoning" && s.type !== "tool",
+  const flowSegments = segments.filter(
+    (segment): segment is Exclude<Segment, { type: "suggestions" } | { type: "sources" }> => {
+      if (segment.type === "suggestions" || segment.type === "sources") return false;
+      if (isStreaming || !("part" in segment) || !isToolUIPart(segment.part)) return true;
+      // A cancelled run can leave a card tool without a result. Its activity
+      // row shows the interruption and the result slot stops loading.
+      return segment.part.state === "output-available" ||
+        segment.part.state === "output-error" ||
+        segment.part.state === "approval-responded";
+    },
   );
-  const leadingActivity =
-    activityEnd === -1 ? renderableSegments : renderableSegments.slice(0, activityEnd);
-  const flowSegments =
-    activityEnd === -1 ? [] : renderableSegments.slice(activityEnd);
-
-  const activityReasoning = leadingActivity
-    .filter((s): s is Segment & { type: "reasoning" } => s.type === "reasoning")
-    .at(-1);
-  const activityToolGroups = leadingActivity
-    .filter((s): s is Segment & { type: "tool" } => s.type === "tool")
-    .map((s) => ({
-      parts: s.parts as unknown as Parameters<typeof ToolCallGroup>[0]["parts"],
-    }));
-  const hasActivity =
-    (leadingActivity.length > 0 &&
-      (activityReasoning !== undefined || activityToolGroups.length > 0)) ||
-    hasSearchActivity;
 
   // Canvas cards are hoisted to the BOTTOM of the message (next to the file
   // digest) instead of interrupting the tool/answer flow.
@@ -1238,16 +1071,17 @@ export function MessageBubble({
     (s): s is Segment & { type: "canvasPresent" } => s.type === "canvasPresent",
   );
   const bodySegments = flowSegments.filter((s) => s.type !== "canvasPresent");
+  const lastTextIndex = bodySegments.findLastIndex((segment) => segment.type === "text");
 
   // Aggregate ALL file changes across the message's tool segments into one
   // standalone card at the END of the message (like the canvas box), instead
   // of a per-group box buried under each tool group. Dedupe by path, keeping
   // the most recent state for each file.
   const messageFileChanges = (() => {
-    const all = renderableSegments
+    const all = flowSegments
       .filter((s): s is Extract<Segment, { type: "tool" }> => s.type === "tool")
       .flatMap((s) =>
-        extractFileChanges(s.parts as unknown as Parameters<typeof extractFileChanges>[0]),
+        extractFileChanges(s.parts.filter(isToolUIPart)),
       );
     const byPath = new Map<string, (typeof all)[number]>();
     for (const change of all) byPath.set(change.path, change);
@@ -1258,31 +1092,15 @@ export function MessageBubble({
     <div className="group flex justify-start">
       <div className="w-full text-[15px] leading-relaxed text-foreground">
         <div className="flex flex-col gap-3.5">
-          {/* Claude-style activity — the leading reasoning + tool run is one
-              quiet collapsed line ("Edited session file · 5 calls"), expanding
-              to show the reasoning and the chained tool trace. */}
-          {hasActivity && (
-            <ActivityDisclosure
-              key="activity"
-              reasoning={
-                activityReasoning
-                  ? {
-                      text: activityReasoning.text,
-                      isStreaming: activityReasoning.isStreaming,
-                    }
-                  : null
-              }
-              toolGroups={activityToolGroups}
-              searchTrace={searchTrace}
-              hasSearchActivity={hasSearchActivity}
-              isStreaming={isStreaming ?? false}
-              responseStreaming={responseStreaming ?? false}
-              autoExpandWhileWorking={expandReasoningWhileWorking}
-            />
-          )}
+          <WorkActivity
+            key={activity?.runId ?? message.id}
+            parts={message.parts}
+            activity={activity}
+            streaming={isStreaming ?? false}
+            autoExpand={expandReasoningWhileWorking}
+            legacyDurationMs={requestTiming?.durationMs}
+          />
 
-          {/* Everything after the leading run (text, visuals, present cards,
-              mid-message tools) renders in its original interleaved order. */}
           {bodySegments.map((segment, idx) =>
             segment.type === "text" ? (
               <div
@@ -1301,26 +1119,12 @@ export function MessageBubble({
                       : segment.text
                   }
                   isStreaming={
-                    isStreaming && idx === bodySegments.length - 1
+                    isStreaming && idx === lastTextIndex
                   }
                   messageStreaming={isStreaming}
                   citations={!isStreaming ? messageSources.byUrl : null}
                 />
               </div>
-            ) : segment.type === "reasoning" ? (
-              <ReasoningBlock
-                key={`reasoning-${idx}`}
-                text={segment.text}
-                isStreaming={segment.isStreaming}
-                // Whole-message streaming keeps the single merged block open
-                // across tool gaps between reasoning phases, and is what
-                // finalizes the accumulated duration when the run completes.
-                messageStreaming={isStreaming}
-                // Collapse the block the moment the final answer starts
-                // generating (text streaming, no reasoning left).
-                responseStreaming={responseStreaming}
-                autoExpandWhileWorking={expandReasoningWhileWorking}
-              />
             ) : segment.type === "visual" ? (
               <VisualCardSegment key={`visual-${idx}`} part={segment.part} />
             ) : segment.type === "remiCard" ? (
@@ -1331,12 +1135,23 @@ export function MessageBubble({
                 part={segment.part}
               />
             ) : (
-              <ToolCallGroup
-                key={`tool-${idx}`}
-                parts={segment.parts as unknown as Parameters<typeof ToolCallGroup>[0]["parts"]}
-              />
+              segment.parts.filter(isToolUIPart).filter((part) => !isSearchTraceToolPart(part))
+                .map((part) => <ToolCallCard key={part.toolCallId} part={part} resultOnly />)
             ),
           )}
+
+          {message.parts.filter((part) => part.type === "file").map((part, index) => (
+            /^(?:https?:\/\/|data:|\/api\/)/i.test(part.url) && (
+              <AttachedFileCard
+                key={`file-${index}`}
+                url={part.url}
+                name={part.filename ?? "Generated file"}
+                mimeType={part.mediaType}
+              />
+            )
+          ))}
+
+          {!isStreaming && <VerificationDigest checks={verificationChecks} />}
 
           {/* Canvas cards — hoisted to the bottom of the message, next to the
               file digest, instead of interrupting the answer flow. */}
@@ -1383,7 +1198,7 @@ export function MessageBubble({
         </div>
 
         {/* Actions — hidden while the response is still streaming */}
-        {!isStreaming && (hasAnyContent || copyableText.length > 0) && (
+        {!isStreaming && (hasAnyContent || activity || copyableText.length > 0) && (
           <MessageActionsRow>
             {copyableText.length > 0 && (
               <CopyButton text={copyableText} ariaLabel="Copy response" />
@@ -1395,7 +1210,7 @@ export function MessageBubble({
                 onRegenerate={onRegenerate}
               />
             )}
-            {requestTiming && <RequestTimingLabel timing={requestTiming} />}
+            {requestTiming && <RequestTimingLabel timing={requestTiming} showDuration={!activity} />}
           </MessageActionsRow>
         )}
       </div>

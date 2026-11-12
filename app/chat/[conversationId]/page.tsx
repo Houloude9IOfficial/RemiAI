@@ -34,6 +34,7 @@ import { toast } from "sonner";
 import { useErrorHandler } from "@/lib/hooks/use-error-handler";
 import { applyConversationTitleUpdate, conversationsApi } from "@/lib/api/conversations";
 import { useStreamingContext } from "@/lib/chat/streaming-context";
+import { isActiveWork, latestWorkActivity, workReplayPrefix, type WorkActivityPart } from "@/lib/chat/work-activity";
 import { findActiveQuestions, type QuestionAnswerSubmission } from "@/lib/chat/questions";
 import { shouldPromotePlanToGoal } from "@/lib/chat/mode-transition";
 import { useSidebar } from "@/components/sidebar/SidebarContext";
@@ -620,6 +621,20 @@ function ConversationChat({
     primeClientLocation();
   }, []);
 
+  const [localWorkOutcomes, setLocalWorkOutcomes] = useState<Record<string, WorkActivityPart>>({});
+  const recordLocalWorkOutcome = useCallback((activity: WorkActivityPart, cancelled: boolean) => {
+    const outcome: WorkActivityPart = {
+      ...activity,
+      data: {
+        ...activity.data,
+        status: cancelled ? "cancelled" : "interrupted",
+        endedAt: Date.now(),
+        message: undefined,
+      },
+    };
+    setLocalWorkOutcomes((current) => ({ ...current, [outcome.id]: outcome }));
+  }, []);
+
   const {
     messages,
     setMessages,
@@ -663,11 +678,16 @@ function ConversationChat({
       }),
     }),
     onFinish: ({
+      message: finishedMessage,
       messages: finishedMessages,
       isAbort,
       isError,
       isDisconnect,
     }) => {
+      const activity = latestWorkActivity(finishedMessage.parts);
+      if (activity && isActiveWork(activity.data.status) && (isAbort || (isError && !isDisconnect))) {
+        recordLocalWorkOutcome(activity, isAbort);
+      }
       // Fallback presentation: the AI is instructed to present session files
       // it creates (session_present_file / session_present_files), but if a
       // finished message created/edited exactly ONE session file and never
@@ -698,8 +718,14 @@ function ConversationChat({
   const stoppedQuestionRunRef = useRef<string | null>(null);
   const displayMessages = useMemo(() => {
     const known = new Set(messages.map((message) => message.id));
-    return [...messages, ...questionAnswerMessages.filter((message) => !known.has(message.id))];
-  }, [messages, questionAnswerMessages]);
+    const withOutcomes = messages.map((message) => {
+      const activity = latestWorkActivity(message.parts);
+      const outcome = activity && isActiveWork(activity.data.status) && localWorkOutcomes[activity.id];
+      if (!outcome) return message;
+      return { ...message, parts: message.parts.map((part) => part === activity ? outcome : part) };
+    });
+    return [...withOutcomes, ...questionAnswerMessages.filter((message) => !known.has(message.id))];
+  }, [messages, questionAnswerMessages, localWorkOutcomes]);
 
   useEffect(() => {
     let disposed = false;
@@ -810,12 +836,12 @@ function ConversationChat({
             (message) => message.id === contextAssistantMessageId,
           );
           if (activeIndex >= 0) {
-            // The registry replays this assistant from its start. Retain the
-            // preceding transcript and replace the saved partial with an
-            // empty seed so text/reasoning/tool chunks cannot duplicate.
+            // Replay replaces this attempt's saved prefix. Parts from earlier
+            // attempts of the same message remain available during recovery.
+            const assistant = current[activeIndex];
             setMessages([
               ...current.slice(0, activeIndex),
-              { id: contextAssistantMessageId, role: "assistant", parts: [] },
+              { ...assistant, parts: workReplayPrefix(assistant.parts, contextStreamId) },
             ]);
           }
         }
@@ -1393,6 +1419,7 @@ function ConversationChat({
               <MessageList
                 messages={displayMessages}
                 status={status}
+                activeAssistantId={contextAssistantMessageId}
                 onSend={(text) => sendMessage({ text })}
                 onRegenerate={handleRegenerate}
                 onEdit={handleEdit}

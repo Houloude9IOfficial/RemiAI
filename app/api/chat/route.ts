@@ -31,8 +31,9 @@ import {
 } from "@/lib/chat/generation-presence";
 import { periodicallyPersistMessages } from "@/lib/chat/persist-interval";
 import { REQUEST_DURATION_PART } from "@/lib/chat/request-duration";
+import { WORK_ACTIVITY_PART, WORK_SUMMARY_METADATA, type WorkActivityPart } from "@/lib/chat/work-activity";
 import { asc, eq, sql } from "drizzle-orm";
-import { db, getRuntimeDb, initializeApp } from "@/db";
+import { db, initializeApp } from "@/db";
 import {
   conversations,
   providers,
@@ -177,6 +178,7 @@ import {
 } from "@/lib/build/runs";
 import {
   recordCitedClaims,
+  sanitizeSourceUrl,
   withSourceProvenance,
 } from "@/lib/research/source-storage";
 import { saveBuildResultArtifact } from "@/lib/artifacts/storage";
@@ -333,6 +335,7 @@ export async function POST(req: Request) {
     conversationId,
     assistantMessageId: run.assistantId,
     continuationCount: run.continuationCount,
+    startedAt: runStartedAtMs,
   });
   beginGenerationPresence(
     conversationId,
@@ -498,6 +501,8 @@ async function runChatRequest(req: Request, questionRun: QuestionRun, runStarted
   if (lastMessage?.role === "assistant") {
     questionRun.assistantId = lastMessage.id;
     questionRun.initialAssistantMessage = structuredClone(lastMessage);
+    await db.update(chatGenerationRuns).set({ assistantMessageId: lastMessage.id })
+      .where(eq(chatGenerationRuns.id, questionRun.generationRunId)).run();
   }
   if (lastMessage?.role === "user") {
     const fallbackTitle = titleFromMessage(lastMessage);
@@ -1532,6 +1537,22 @@ Definition of done:
   await persistUIMessage(conversationId, { id: questionRun.assistantId, role: "assistant", parts: [] });
   const initialQuestionMessageIds = new Set(uiMessages.map((message) => message.id));
 
+  const reasoningOptions = streamingReasoningProviderOptions(
+    activeProvider.kind,
+    activeModelId,
+    qualityStrategy.policy,
+  );
+  // Auto can fail over to a provider whose reasoning channel contains raw
+  // thoughts. Only forward documented summary modes on a known provider.
+  const thinking = reasoningOptions?.anthropic?.thinking;
+  const sendReasoningSummary = !autoMode && (
+    (activeProvider.kind === "anthropic" && (
+      thinking?.type === "adaptive" ||
+      (thinking?.type === "enabled" && /claude-(?:opus|sonnet)-4-5/.test(activeModelId.toLowerCase()))
+    )) ||
+    (activeProvider.kind === "google" && reasoningOptions?.google?.thinkingConfig.includeThoughts === true)
+  );
+
   const result = streamText({
     abortSignal: questionRun.controller.signal,
     model,
@@ -1545,11 +1566,7 @@ Definition of done:
     // Supported reasoning families receive reasoning options driven by the
     // conversation's effort policy (OpenAI reasoningEffort, Anthropic thinking
     // budget/adaptive). Unknown/local/OpenAI-compatible models stay normal.
-    providerOptions: streamingReasoningProviderOptions(
-      activeProvider.kind,
-      activeModelId,
-      qualityStrategy.policy,
-    ),
+    providerOptions: reasoningOptions,
     // Initial active set (core + classified + stored groups). prepareStep
     // re-evaluates it before every step, so load_tool_groups can add groups
     // mid-stream.
@@ -1732,7 +1749,7 @@ Definition of done:
     onError: (err) => {
       capturedErrorPayload = normalizeStreamError(err);
       trace.providerError(err);
-      console.error("[stream] Provider error:", err);
+      console.error("[stream] Provider error:", capturedErrorPayload.title, capturedErrorPayload.statusCode ?? "");
     },
     onAbort: () => {
       aborted = true;
@@ -2031,100 +2048,124 @@ Definition of done:
     },
   });
 
-  // Get the UIMessageChunk stream so we can tee it — one branch for the
-  // HTTP response, one for periodic persistence to the database.
-  //
-  // Pass a real `onError` so tool errors (e.g. "Root directory 8 not found")
-  // reach the UI and the model instead of the SDK's generic
-  // "An error occurred." fallback. Without this, the model can never
-  // self-correct (e.g. re-call list_permitted_roots) because it only sees
-  // a generic message.
   const uiMessageStream = result.toUIMessageStream({
     originalMessages: uiMessages,
-    // Forward structured reasoning parts when the selected provider emits
-    // them; providers without reasoning output simply emit none.
-    sendReasoning: true,
+    sendReasoning: sendReasoningSummary,
+    sendSources: true,
     generateMessageId: () => questionRun.assistantId,
-    // Return the PLAIN error message here. The SDK uses this callback's return
-    // value as the `errorText` for inline tool errors (tool-input-error,
-    // tool-output-error parts) that render directly on the tool card — encoding
-    // those as RMERR_JSON blobs made cards show raw "RMERR_JSON:%7B..." garbage
-    // instead of the real message. Terminal stream failures are still converted
-    // into structured RMERR_JSON payloads by the transform below.
-    onError: (error) => {
-      const message =
-        error instanceof Error ? error.message : String(error ?? "");
-      return message.trim() || "An error occurred.";
-    },
+    // Provider and tool diagnostics can echo arguments or instructions. The
+    // SDK uses this callback for inline tool errors as well as stream errors.
+    onError: () => "An error occurred.",
   });
 
-  // Add the elapsed time before teeing so both the live UI and the persisted
-  // assistant message receive the same completed request duration.
-  const timedMessageStream = uiMessageStream.pipeThrough(
-    new TransformStream<UIMessageChunk, UIMessageChunk>({
-      transform(chunk, controller) {
-        if (chunk.type === "finish") {
-          const completedAt = new Date();
-          controller.enqueue({
-            type: REQUEST_DURATION_PART,
-            data: {
-              durationMs: Math.max(0, completedAt.getTime() - runStartedAtMs),
-              completedAt: completedAt.toISOString(),
-            },
-          } as UIMessageChunk);
-        }
-        controller.enqueue(chunk);
-      },
-    }),
-  );
-
-  // Tee the stream: [persistBranch, responseBranch]
-  const [persistBranch, responseBranch] = timedMessageStream.tee();
-
-  // Pipe the response branch through a transform that injects a structured
-  // error payload for user-friendly frontend messaging.
-  //
-  // Interrupted runs (step/output limit, dangling promise, provider
-  // truncation) end with a CLEAN finish chunk — the SDK never emits an error
-  // chunk for them, so the UI would silently stop with no Continue option.
-  // We hold the terminal finish chunk and, when the run was interrupted
-  // (capturedErrorPayload was set by onFinish), emit an error chunk instead.
-  // This is race-safe: streamText's onFinish fires in the SDK's upstream
-  // consumer flush, which always completes before this transform's flush.
-  let pendingFinishChunk: UIMessageChunk | null = null;
   const canContinueOnServer = () =>
     !aborted &&
     capturedErrorPayload?.shouldResume === true &&
     capturedErrorPayload.category === "step_limit" &&
     questionRun.continuationCount < MAX_SERVER_CONTINUATIONS;
-  const enrichedBranch = responseBranch.pipeThrough(
+
+  const workActivity: WorkActivityPart = {
+    type: WORK_ACTIVITY_PART,
+    id: questionRun.id,
+    data: {
+      runId: questionRun.generationRunId,
+      startedAt: runStartedAtMs,
+      status: "running",
+    },
+  };
+  let pendingFinish: Extract<UIMessageChunk, { type: "finish" }> | undefined;
+
+  // Both branches receive the same start, ordered parts, and terminal status.
+  // Emit the terminal status before any SDK error, which stops the UI reader.
+  const timedMessageStream = uiMessageStream.pipeThrough(
     new TransformStream<UIMessageChunk, UIMessageChunk>({
+      start(controller) {
+        controller.enqueue({ type: "start", messageId: questionRun.assistantId });
+        controller.enqueue(workActivity);
+      },
       transform(chunk, controller) {
-        if (chunk.type === "error") {
-          const payload = capturedErrorPayload ?? normalizeStreamError(chunk.errorText);
-          controller.enqueue({
-            type: "error",
-            errorText: encodeStreamError(payload),
-          } as UIMessageChunk);
-        } else if (chunk.type === "finish") {
-          pendingFinishChunk = chunk;
-        } else {
-          controller.enqueue(chunk);
+        switch (chunk.type) {
+          case "start":
+            break;
+          case "finish":
+            pendingFinish = chunk;
+            break;
+          case "abort":
+            aborted = true;
+            break;
+          case "error":
+            capturedErrorPayload ??= normalizeStreamError(chunk.errorText);
+            break;
+          case "reasoning-start":
+            controller.enqueue({ type: chunk.type, id: chunk.id, providerMetadata: WORK_SUMMARY_METADATA });
+            break;
+          case "reasoning-delta":
+            controller.enqueue({ type: chunk.type, id: chunk.id, delta: chunk.delta });
+            break;
+          case "reasoning-end":
+            controller.enqueue({ type: chunk.type, id: chunk.id });
+            break;
+          case "reasoning-file":
+            break;
+          case "source-url":
+            if (/^https?:\/\//i.test(chunk.url)) {
+              controller.enqueue({
+                type: chunk.type, sourceId: chunk.sourceId, url: sanitizeSourceUrl(chunk.url), title: chunk.title,
+              });
+            }
+            break;
+          default:
+            controller.enqueue(chunk);
         }
       },
       flush(controller) {
-        if (!pendingFinishChunk) return;
-        if (capturedErrorPayload && !canContinueOnServer()) {
+        aborted ||= questionRun.controller.signal.aborted;
+        const continuing = canContinueOnServer();
+        if (!capturedErrorPayload && !aborted) {
+          if (!pendingFinish) capturedErrorPayload = normalizeStreamError("Connection closed before generation completed.");
+          else if (pendingFinish.finishReason === "error") capturedErrorPayload = normalizeStreamError("Generation failed.");
+        }
+        const status = aborted ? "cancelled"
+          : continuing ? "continuing"
+          : capturedErrorPayload?.shouldResume ? "interrupted"
+          : capturedErrorPayload ? "failed"
+          : "completed";
+        const endedAt = Date.now();
+        controller.enqueue({
+          ...workActivity,
+          data: {
+            ...workActivity.data,
+            status,
+            ...(continuing ? {} : { endedAt }),
+            message: aborted ? "Generation was stopped." : capturedErrorPayload?.message,
+          },
+        });
+
+        if (status === "completed") {
+          controller.enqueue({
+            type: REQUEST_DURATION_PART,
+            data: {
+              durationMs: Math.max(0, endedAt - runStartedAtMs),
+              completedAt: new Date(endedAt).toISOString(),
+            },
+          });
+        }
+        if (aborted) {
+          controller.enqueue({ type: "abort", reason: "Generation was stopped." });
+        } else if (capturedErrorPayload && !continuing) {
+          const { version, category, title, message, statusCode, retryable, shouldResume } = capturedErrorPayload;
           controller.enqueue({
             type: "error",
-            errorText: encodeStreamError(capturedErrorPayload),
-          } as UIMessageChunk);
-        } else {
-          controller.enqueue(pendingFinishChunk);
+            errorText: encodeStreamError({ version, category, title, message, statusCode, retryable, shouldResume }),
+          });
+        } else if (pendingFinish) {
+          controller.enqueue(pendingFinish);
         }
       },
     }),
   );
+
+  const [persistBranch, responseBranch] = timedMessageStream.tee();
 
   // Periodically persist partial messages to the DB (every 2s).
   // This ensures a page refresh shows partial AI responses.
@@ -2273,15 +2314,20 @@ Definition of done:
         });
       }
     }
-  }, trace).catch((error) => {
+  }, trace).catch(async (error) => {
     finishQuestionRun(db, conversationId, questionRun, false);
     console.error("[chat] Stream persistence failed:", error);
+    await finishDurableGeneration({
+      id: questionRun.generationRunId,
+      status: questionRun.controller.signal.aborted ? "stopped" : "failed",
+      error: "Could not save generation.",
+    }).catch((failure) => console.error("[chat] Could not finalize generation:", failure));
   });
 
   // Build the SSE response for the client, and register the SSE stream
   // for reconnection support.
   return createUIMessageStreamResponse({
-    stream: enrichedBranch,
+    stream: responseBranch,
     consumeSseStream: ({ stream }) => {
       streamRegistry.register(conversationId, stream, questionRun.id, questionRun.assistantId);
     },

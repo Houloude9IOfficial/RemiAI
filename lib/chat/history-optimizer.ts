@@ -1,3 +1,4 @@
+import { WORK_ACTIVITY_PART } from "./work-activity";
 import type { UIMessage } from "ai";
 
 /**
@@ -314,8 +315,9 @@ export function optimizeMessageParts(
     const part = rawPart as unknown as LoosePart;
 
     // UI-only markers — zero value to the model.
-    if (part.type === "step-start") continue;
-    if (part.type === "reasoning") continue;
+    if (part.type === "step-start" || part.type === WORK_ACTIVITY_PART) continue;
+    if (part.type === "reasoning" || part.type === "reasoning-file") continue;
+    if (part.state === "input-streaming") continue;
 
     // ── v7 tool parts: type is `tool-${toolName}` ───────────────────────
     if (

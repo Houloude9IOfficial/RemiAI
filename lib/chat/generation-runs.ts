@@ -1,6 +1,8 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { chatGenerationRuns } from "@/db/schema";
+import { chatGenerationRuns, messages } from "@/db/schema";
+import { isActiveWork, latestWorkActivity, type WorkStatus } from "./work-activity";
+import type { UIMessage } from "ai";
 import { continueInterruptedGeneration, MAX_SERVER_CONTINUATIONS } from "./server-continuation";
 import { publishGenerationUpdate, type GenerationStatus } from "./generation-events";
 
@@ -17,13 +19,14 @@ export async function beginDurableGeneration(input: {
   conversationId: number;
   assistantMessageId: string;
   continuationCount: number;
+  startedAt?: number;
 }): Promise<void> {
   const now = new Date().toISOString();
   await db.insert(chatGenerationRuns).values({
     id: input.id,
     conversationId: input.conversationId,
     assistantMessageId: input.assistantMessageId,
-    createdAt: now,
+    createdAt: input.startedAt == null ? now : new Date(input.startedAt).toISOString(),
     status: "running",
     continuationCount: input.continuationCount,
     maxContinuations: MAX_SERVER_CONTINUATIONS,
@@ -55,21 +58,45 @@ export async function finishDurableGeneration(input: {
   error?: string | null;
 }): Promise<void> {
   const terminal = ["completed", "failed", "stopped", "needs_attention"].includes(input.status);
-  await db.update(chatGenerationRuns).set({
-    status: input.status,
-    error: input.error ?? null,
-    updatedAt: new Date().toISOString(),
-    completedAt: terminal ? new Date().toISOString() : null,
-  }).where(eq(chatGenerationRuns.id, input.id)).run();
+  const endedAt = Date.now();
+  const timestamp = new Date(endedAt).toISOString();
+  const row = db.transaction((tx) => {
+    const run = tx.update(chatGenerationRuns).set({
+      status: input.status,
+      error: input.error ?? null,
+      updatedAt: timestamp,
+      completedAt: terminal ? timestamp : null,
+    }).where(eq(chatGenerationRuns.id, input.id)).returning().get();
 
-  // Publish the row's authoritative status so clients reconcile without
-  // polling. Reading it back also avoids emitting a stale transition when a
-  // newer run already took over the same id (server continuations reuse it).
+    // A stop between attempts or a restart may have no live stream to write
+    // its terminal activity event. Reconcile the saved message in that case.
+    if (terminal && run?.assistantMessageId) {
+      const saved = tx.select().from(messages).where(and(
+        eq(messages.conversationId, run.conversationId),
+        eq(messages.uiId, run.assistantMessageId),
+      )).get();
+      if (saved) {
+        const parts = saved.parts as UIMessage["parts"];
+        const activity = latestWorkActivity(parts);
+        if (activity?.data.runId === run.id && isActiveWork(activity.data.status)) {
+          const status: WorkStatus = input.status === "stopped" ? "cancelled"
+            : input.status === "needs_attention" ? "interrupted"
+            : input.status === "completed" ? "completed"
+            : "failed";
+          tx.update(messages).set({
+            parts: parts.map((part) => part === activity ? {
+              ...activity,
+              data: { ...activity.data, status, endedAt, message: undefined },
+            } : part),
+          }).where(eq(messages.id, saved.id)).run();
+        }
+      }
+    }
+    return run;
+  });
+
   // Lifecycle publishing must never break the generation's completion path.
   try {
-    const row = await db.select().from(chatGenerationRuns)
-      .where(eq(chatGenerationRuns.id, input.id))
-      .get();
     if (row) {
       publishGenerationUpdate({
         conversationId: row.conversationId,
@@ -81,7 +108,7 @@ export async function finishDurableGeneration(input: {
       });
     }
   } catch {
-    // A failed read-back leaves the descriptor to be reconciled by the next
+    // A failed publish leaves the descriptor to be reconciled by the next
     // snapshot/reconnect.
   }
 }

@@ -367,6 +367,7 @@ ${timeContext}
 
   const uiMessageStream = result.toUIMessageStream({
     originalMessages: [],
+    sendReasoning: false,
     generateMessageId: () => crypto.randomUUID(),
   });
 

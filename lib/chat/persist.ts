@@ -2,6 +2,7 @@ import type { UIMessage } from "ai";
 import { desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { messages } from "@/db/schema";
+import { visibleChatParts } from "./work-activity";
 
 export async function persistUIMessage(conversationId: number, message: UIMessage) {
   db.transaction((tx) => {
@@ -30,6 +31,6 @@ export function toUIMessage(row: typeof messages.$inferSelect): UIMessage {
   return {
     id: row.uiId,
     role: row.role,
-    parts: row.parts as UIMessage["parts"],
+    parts: visibleChatParts(row.parts as UIMessage["parts"]),
   };
 }

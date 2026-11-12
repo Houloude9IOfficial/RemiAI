@@ -95,17 +95,16 @@ export function OptionsSettings() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-sm">
             <Brain className="h-4 w-4 text-primary" />
-            Reasoning
+            Work activity
           </CardTitle>
           <CardDescription className="text-xs">
-            Control whether model reasoning opens automatically while work is in
-            progress.
+            Control how the activity timeline opens during a response.
           </CardDescription>
         </CardHeader>
         <CardContent className="border-t pt-4">
           <OptionRow
-            title="Expand reasoning while working"
-            description="Open active reasoning automatically, then fold it once the final response begins."
+            title="Expand activity while working"
+            description="Open the timeline during generation. Completed activity collapses automatically."
             checked={preferences?.expandReasoningWhileWorking ?? true}
             disabled={disabled}
             onCheckedChange={(expandReasoningWhileWorking) =>

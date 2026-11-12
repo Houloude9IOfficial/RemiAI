@@ -1,19 +1,16 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState } from "react";
 import type { ToolUIPart, DynamicToolUIPart } from "ai";
 import { getToolName } from "ai";
+import { extractSearchTrace } from "@/lib/chat/search-trace";
 import { cn } from "@/lib/utils";
 import {
   summarizeBuildCheckCounts,
-  summarizeBuildChecks,
   type BuildVerificationCheck,
 } from "@/lib/chat/build-verification";
-import { ToolCallCard } from "./ToolCallCard";
 import {
   CheckCircle2,
-  ChevronDown,
-  Loader2,
   Sparkles,
   Search,
   Pencil,
@@ -63,12 +60,7 @@ function isPartRunning(part: AnyToolPart): boolean {
 }
 
 function isPartComplete(part: AnyToolPart): boolean {
-  const s = getState(part);
-  return (
-    s === "output-available" ||
-    s === "output-denied" ||
-    s === "approval-responded"
-  );
+  return ["output-available", "output-denied", "approval-responded"].includes(getState(part));
 }
 
 function isPartError(part: AnyToolPart): boolean {
@@ -81,35 +73,6 @@ function getOutput(part: AnyToolPart): unknown {
 
 function getInput(part: AnyToolPart): unknown {
   return part.input;
-}
-
-function isQuestionsPart(part: AnyToolPart): boolean {
-  const output = getOutput(part);
-  return (
-    output !== undefined &&
-    output !== null &&
-    typeof output === "object" &&
-    (output as Record<string, unknown>).type === "questions"
-  );
-}
-
-function isRunNamePart(part: AnyToolPart): boolean {
-  try {
-    return bareToolName(getToolName(part)) === "set_run_name";
-  } catch {
-    return false;
-  }
-}
-
-function getRunName(parts: AnyToolPart[]): string | null {
-  for (const part of parts) {
-    if (!isRunNamePart(part)) continue;
-    const output = asRecord(getOutput(part));
-    const input = asRecord(getInput(part));
-    const name = output?.name ?? input?.name;
-    if (typeof name === "string" && name.trim()) return name.trim();
-  }
-  return null;
 }
 
 function bareToolName(name: string): string {
@@ -183,6 +146,15 @@ const TOOL_LABELS: Record<string, ToolLabel> = {
     past: "Checked device",
     icon: Monitor,
   },
+  bash_execute: { present: "Running command", past: "Ran command", icon: Terminal },
+  work_terminal: { present: "Running command", past: "Ran command", icon: Terminal },
+  create_visual: { present: "Creating visual", past: "Created visual", icon: Image },
+  canvas_create: { present: "Creating canvas", past: "Created canvas", icon: FilePlus2 },
+  canvas_open: { present: "Opening canvas", past: "Opened canvas", icon: Eye },
+  canvas_add_file: { present: "Adding canvas file", past: "Added canvas file", icon: FilePlus2 },
+  suggest_followups: { present: "Preparing suggestions", past: "Prepared suggestions", icon: Sparkles },
+  work_browser_screenshot: { present: "Capturing screenshot", past: "Captured screenshot", icon: Image },
+  switch_mode: { present: "Switching mode", past: "Switched mode", icon: RefreshCw },
   python_exec: {
     present: "Running Python",
     past: "Ran Python",
@@ -381,112 +353,37 @@ const TOOL_LABELS: Record<string, ToolLabel> = {
 };
 
 const FALLBACK_LABEL: ToolLabel = {
-  present: "Working",
-  past: "Worked",
+  present: "Running tool",
+  past: "Ran tool",
   icon: Wrench,
 };
 
 function getToolLabel(toolName: string): ToolLabel {
-  return TOOL_LABELS[bareToolName(toolName)] ?? FALLBACK_LABEL;
+  const name = bareToolName(toolName);
+  return Object.hasOwn(TOOL_LABELS, name) ? TOOL_LABELS[name] : FALLBACK_LABEL;
 }
 
-/**
- * Claude-style summary of a tool run: the past-tense activity label, call
- * count, run name, and live state. Used by the collapsed activity line at
- * the top of a message.
- */
-export function summarizeToolActivity(parts: AnyToolPart[]) {
-  const visibleParts = parts.filter((part) => !isRunNamePart(part));
-  const groupParts = visibleParts.length > 0 ? visibleParts : parts;
-  const { present, past } = getGroupLabel(groupParts);
-  return {
-    present,
-    past,
-    count: groupParts.length,
-    runName: getRunName(parts),
-    running: groupParts.some(isPartRunning),
-    searching: groupParts.some((part) => isPartRunning(part) && isSearchTool(part)),
-    hasError: groupParts.some(isPartError),
-    hasSuccess: groupParts.some(isPartComplete),
-    hasQuestions: groupParts.some(isQuestionsPart),
-  };
-}
-
-/** Search is a distinct AI activity state across local, memory, and web tools. */
-function isSearchTool(part: AnyToolPart): boolean {
-  try {
-    const name = bareToolName(getToolName(part));
-    return name.includes("search") || name === "glob_files";
-  } catch {
-    return false;
-  }
-}
-
-function getGroupLabel(parts: AnyToolPart[]): ToolLabel {
-  let best: ToolLabel | null = null;
-  let sessionWriteCount = 0;
-  let sessionWriteCreates = 0;
-  let hasSessionEdit = false;
-  for (const part of parts) {
-    if (!part || typeof part !== "object") continue;
-    let name: string;
-    try {
-      name = getToolName(part);
-    } catch {
-      continue;
-    }
-    const bare = bareToolName(name);
-    if (bare === "session_file_write") {
-      sessionWriteCount++;
-      const output = asRecord(getOutput(part));
-      if (output && output.created === true) sessionWriteCreates++;
-    }
-    if (bare === "session_file_edit") hasSessionEdit = true;
-    const label = getToolLabel(name);
-    if (label !== FALLBACK_LABEL) best = label;
-  }
-  // If ALL session_file_write calls were updates (zero creates), show "Updated"
-  if (sessionWriteCount > 0 && sessionWriteCreates === 0 && best) {
-    return { present: "Updating session file", past: "Updated session file", icon: best.icon };
-  }
-  // A chain that reads AND edits session files is summarized by the edit —
-  // that's the significant action (reads are just prep work).
-  if (hasSessionEdit && best) {
-    const editLabel = TOOL_LABELS.session_file_edit;
-    return { present: editLabel.present, past: editLabel.past, icon: editLabel.icon };
-  }
-  return best ?? FALLBACK_LABEL;
-}
-
-function getMcpServerName(parts: AnyToolPart[]): string | undefined {
-  for (const part of parts) {
-    if (!part || typeof part !== "object") continue;
-    let name: string;
-    try {
-      name = getToolName(part);
-    } catch {
-      continue;
-    }
-    if (name.includes("__")) {
-      return name.split("__")[0];
-    }
-  }
-  return undefined;
-}
-
-// ---------------------------------------------------------------------------
-// Elapsed time helpers
-// ---------------------------------------------------------------------------
-
-function formatElapsed(ms: number): string {
-  if (ms < 1000) return `${Math.max(1, Math.round(ms / 100) * 100)}ms`;
-  const seconds = ms / 1000;
-  if (seconds < 60) {
-    return seconds < 10 ? `${seconds.toFixed(1)}s` : `${Math.round(seconds)}s`;
-  }
-  const mins = Math.floor(seconds / 60);
-  const rem = Math.round(seconds % 60);
-  return rem > 0 ? `${mins}m ${rem}s` : `${mins}m`;
+/** User-facing activity uses fixed labels and counts, with no tool payloads. */
+export function describeToolActivity(part: AnyToolPart, active: boolean) {
+  const name = bareToolName(getToolName(part) ?? "");
+  const { present, past, icon } = getToolLabel(name);
+  const output = getOutput(part);
+  const result = asRecord(output);
+  const failed = isPartError(part) || Boolean(result?.error) ||
+    result?.success === false || result?.ok === false || result?.timedOut === true ||
+    (typeof result?.exitCode === "number" && result.exitCode !== 0);
+  const running = isPartRunning(part) ||
+    ("preliminary" in part && part.preliminary === true && !failed);
+  const denied = getState(part) === "output-denied" ||
+    ("approval" in part && part.approval?.approved === false);
+  const count = !running && !failed && !denied && name === "web_search"
+    ? extractSearchTrace([part]).length : 0;
+  const label = result?.timedOut === true ? `${present} timed out`
+    : failed ? `${present} failed`
+    : denied ? `${present} was denied`
+    : running ? active ? present : `${present} was interrupted`
+    : count ? `${past} · ${count} ${count === 1 ? "result" : "results"}` : past;
+  return { Icon: failed || denied ? AlertTriangle : icon ?? Wrench, label };
 }
 
 // ---------------------------------------------------------------------------
@@ -717,7 +614,7 @@ export function FileChangeDigest({
   );
 }
 
-function VerificationDigest({ checks }: { checks: BuildVerificationCheck[] }) {
+export function VerificationDigest({ checks }: { checks: BuildVerificationCheck[] }) {
   if (checks.length === 0) return null;
 
   const counts = summarizeBuildCheckCounts(checks);
@@ -741,7 +638,7 @@ function VerificationDigest({ checks }: { checks: BuildVerificationCheck[] }) {
         <ul className="flex flex-col gap-1">
           {checks.map((check, index) => (
             <li
-              key={`${check.toolName}-${check.command}-${index}`}
+              key={`${check.toolName}-${index}`}
               className="flex min-w-0 items-center gap-2 text-[11px] leading-tight"
             >
               {check.status === "passed" ? (
@@ -749,8 +646,8 @@ function VerificationDigest({ checks }: { checks: BuildVerificationCheck[] }) {
               ) : (
                 <XCircle className="h-3 w-3 shrink-0 text-status-danger" />
               )}
-              <span className="min-w-0 flex-1 truncate font-mono text-foreground/80">
-                {check.command}
+              <span className="min-w-0 flex-1 truncate text-foreground/80">
+                {getToolLabel(check.toolName).past}
               </span>
               <span
                 className={cn(
@@ -767,248 +664,6 @@ function VerificationDigest({ checks }: { checks: BuildVerificationCheck[] }) {
             </li>
           ))}
         </ul>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
-
-export function ToolCallGroup({
-  parts,
-  headerless = false,
-}: {
-  parts: AnyToolPart[];
-  /** Render only the execution trace — no header button or collapsible
-      wrapper. Used inside the Claude-style activity disclosure, which owns
-      the summary line and expand/collapse state. */
-  headerless?: boolean;
-}) {
-  const visibleParts = parts.filter((part) => !isRunNamePart(part));
-  const runName = getRunName(parts);
-  const groupParts = visibleParts.length > 0 ? visibleParts : parts;
-  const { present, past } = getGroupLabel(groupParts);
-  const mcpServer = getMcpServerName(groupParts);
-  const hasQuestions = groupParts.some(isQuestionsPart);
-  const keepOpen = hasQuestions;
-  const isBatch = groupParts.length > 1;
-
-  const [isOpen, setIsOpen] = useState(keepOpen);
-  const userToggledRef = useRef(false);
-
-  const running = groupParts.some(isPartRunning);
-  const completed = groupParts.every(isPartComplete) && groupParts.length > 0;
-  const hasError = groupParts.some(isPartError);
-  const hasSuccess = groupParts.some(isPartComplete);
-  const mixedOutcome = hasError && hasSuccess;
-
-  const fileChanges = useMemo(() => extractFileChanges(groupParts), [groupParts]);
-  const verificationChecks = useMemo(
-    () => summarizeBuildChecks(groupParts),
-    [groupParts],
-  );
-  const hasVerificationFailure = verificationChecks.some(
-    (check) => check.status === "failed",
-  );
-
-  // Client-side elapsed timer (live while running; frozen when done)
-  const startRef = useRef<number | null>(null);
-  const [elapsedMs, setElapsedMs] = useState(0);
-  const [finalElapsedMs, setFinalElapsedMs] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (running) {
-      if (startRef.current === null) startRef.current = Date.now();
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset the frozen duration when a new tool run starts
-      setFinalElapsedMs(null);
-      const id = window.setInterval(() => {
-        setElapsedMs(Date.now() - (startRef.current ?? Date.now()));
-      }, 1);
-      return () => window.clearInterval(id);
-    }
-    if (completed && startRef.current !== null && finalElapsedMs === null) {
-      const total = Date.now() - startRef.current;
-      setElapsedMs(total);
-      setFinalElapsedMs(total);
-    }
-  }, [running, completed, finalElapsedMs]);
-
-  useEffect(() => {
-    if (keepOpen) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- questions must force the disclosure open after tool output arrives
-      setIsOpen(true);
-    }
-  }, [keepOpen]);
-
-  useEffect(() => {
-    if (completed && parts.length > 0 && !keepOpen) {
-      if (userToggledRef.current) return;
-      const timer = setTimeout(() => setIsOpen(false), 250);
-      return () => clearTimeout(timer);
-    }
-  }, [completed, parts.length, keepOpen]);
-
-  const toggle = useCallback(() => {
-    userToggledRef.current = true;
-    setIsOpen((o) => !o);
-  }, []);
-
-  const displayElapsed = finalElapsedMs ??
-    // eslint-disable-next-line react-hooks/refs -- the timer's start marker is intentionally read during render for the live label
-    (running && startRef.current !== null ? elapsedMs : null);
-
-  const summaryLabel = runName ??
-    (hasError || hasVerificationFailure
-      ? hasVerificationFailure && !hasError
-        ? "Verification failed"
-        : "Work stopped with an error"
-      : running
-        ? present
-        : past);
-
-  // Single unremarkable call — no grouping needed. In headerless mode we
-  // still show it as a plain card inside the disclosure's trace.
-  if (
-    !headerless &&
-    !isBatch &&
-    !runName &&
-    fileChanges.length === 0 &&
-    verificationChecks.length === 0
-  ) {
-    return <ToolCallCard part={groupParts[0]} compact />;
-  }
-
-  const trace = (
-    <div className="flex flex-col gap-1 p-1.5 pt-0">
-      {groupParts.map((part, idx) => {
-              const runningPart = isPartRunning(part);
-              const errorPart = isPartError(part);
-              const completePart = isPartComplete(part);
-              let toolName = "tool";
-              try {
-                toolName = bareToolName(getToolName(part));
-              } catch {
-                // Keep a stable generic label for malformed/persisted parts.
-              }
-              const StepIcon = getToolLabel(toolName).icon ?? Wrench;
-              return (
-                <div
-                  key={part.toolCallId ?? idx}
-                  className="relative pl-5"
-                  aria-label={`${getToolLabel(toolName).past}: ${toolName}`}
-                >
-                  {idx < groupParts.length - 1 && (
-                    <span
-                      className="absolute left-1.5 top-4.5 bottom-[-0.25rem] w-px bg-border/60"
-                      aria-hidden="true"
-                    />
-                  )}
-                  <span
-                    className={cn(
-                      "absolute left-0 top-2 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-background",
-                      errorPart
-                        ? "text-status-danger"
-                        : runningPart
-                          ? "text-primary"
-                          : completePart
-                            ? "text-status-success"
-                            : "text-muted-foreground",
-                    )}
-                    aria-hidden="true"
-                  >
-                    {errorPart ? (
-                      <XCircle className="h-3 w-3" />
-                    ) : runningPart ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <StepIcon className="h-3 w-3" />
-                    )}
-                  </span>
-                  <ToolCallCard part={part} compact />
-                </div>
-              );
-            })}
-    </div>
-  );
-
-  // Headerless — just the trace (owned by the activity disclosure).
-  if (headerless) {
-    return (
-      <div className="animate-tool-slide-up">
-        {!running && <VerificationDigest checks={verificationChecks} />}
-        {trace}
-      </div>
-    );
-  }
-
-  return (
-    <div className="animate-tool-slide-up">
-      {/* Header — styled exactly like a compact ToolCallCard, with the call
-          count appended so a group is still distinguishable from one call */}
-      <button
-        type="button"
-        onClick={toggle}
-        aria-expanded={isOpen}
-        aria-label={`${summaryLabel}${groupParts.length > 1 ? `, ${groupParts.length} calls` : ""}`}
-        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-      >
-        <div
-          className={cn(
-            "flex h-3 w-3 shrink-0 items-center justify-center",
-            mixedOutcome
-              ? "text-status-warning"
-              : hasError || hasVerificationFailure
-                ? "text-status-danger"
-                : "text-muted-foreground",
-          )}
-        >
-          {mixedOutcome ? (
-            <AlertTriangle className="h-3 w-3" />
-          ) : hasError || hasVerificationFailure ? (
-            <XCircle className="h-3 w-3" />
-          ) : running ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
-          ) : (
-            <CheckCircle2 className="h-3 w-3" />
-          )}
-        </div>
-
-        <span className="min-w-0 flex-1 truncate text-[12px] text-foreground/85">
-          {summaryLabel}
-          {groupParts.length > 1 && (
-            <span className="text-muted-foreground">
-              {" "}· {groupParts.length} calls
-            </span>
-          )}
-        </span>
-
-        {mcpServer && (
-          <span className="shrink-0 rounded bg-muted px-1 py-0.5 text-[9px] text-muted-foreground">
-            {mcpServer}
-          </span>
-        )}
-
-        <ChevronDown
-          className={cn(
-            "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200",
-            isOpen && "rotate-180",
-          )}
-        />
-      </button>
-
-      {!running && <VerificationDigest checks={verificationChecks} />}
-
-      {/* Collapsible execution trace — the connector makes sequential tool
-          work readable without exposing private model chain-of-thought. */}
-      <div
-        className={cn(
-          "grid transition-[grid-template-rows] duration-300 ease-out",
-          isOpen ? "grid-rows-[1fr] mt-1.5" : "grid-rows-[0fr]",
-        )}
-      >
-        <div className="max-h-80 overflow-y-auto overscroll-contain">{trace}</div>
       </div>
     </div>
   );
