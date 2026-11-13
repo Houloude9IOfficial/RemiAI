@@ -178,7 +178,7 @@ function reconcileAdditiveMigrations(): void {
 }
 
 /**
- * Ensure the RemiAPI preference columns exist (migration 0043). Extracted so
+ * Ensure newer preference columns exist. Extracted so
  * routes can self-heal immediately on a SQLITE_ERROR without waiting for the
  * next server restart / instrumentation `register()` to run.
  */
@@ -202,6 +202,7 @@ export function ensureRemiPrefsColumns(): void {
   ensure("collapse_long_user_messages", 'ALTER TABLE "user_preferences" ADD COLUMN "collapse_long_user_messages" INTEGER NOT NULL DEFAULT 1');
   ensure("expand_reasoning_while_working", 'ALTER TABLE "user_preferences" ADD COLUMN "expand_reasoning_while_working" INTEGER NOT NULL DEFAULT 1');
   ensure("enable_title_generation", 'ALTER TABLE "user_preferences" ADD COLUMN "enable_title_generation" INTEGER NOT NULL DEFAULT 1');
+  ensure("chat_text_size", 'ALTER TABLE "user_preferences" ADD COLUMN "chat_text_size" INTEGER NOT NULL DEFAULT 100');
 }
 
 export function ensureMemoryColumns(): void {

@@ -422,7 +422,7 @@ function EditMessageForm({
           }
         }}
         aria-describedby={`${textareaId}-help`}
-        className="field-sizing-content min-h-32 max-h-[min(50vh,32rem)] w-full resize-y rounded-xl border border-input bg-background px-3 py-2.5 text-[15px] leading-relaxed text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20"
+        className="chat-user-text field-sizing-content min-h-32 max-h-[min(50vh,32rem)] w-full resize-y rounded-xl border border-input bg-background px-3 py-2.5 leading-relaxed text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20"
       />
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
         <p id={`${textareaId}-help`} className="text-xs text-muted-foreground">
@@ -460,7 +460,7 @@ function EditMessageForm({
  * external (non-upload) image.
  */
 function UserMessageText({ text }: { text: string }) {
-  // Split on image markdown so we can interleave plain text and <img>.
+  // Split on image markdown so we can interleave plain text and image previews.
   const segments = text.split(/(!\[[^\]]*\]\([^)]+\))/g);
 
   return (
@@ -523,7 +523,7 @@ function StreamingSafeMarkdown({
   }, [display.content]);
 
   return (
-    <div className={hasStarted ? "animate-streaming-response-in" : undefined}>
+    <div className={cn("chat-assistant-text min-w-0", hasStarted && "animate-streaming-response-in")}>
       <SafeMarkdown
         content={display.content}
         isStreaming={display.isStreaming}
@@ -825,12 +825,15 @@ function UserMessageBubble({
   const textContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!textContainerRef.current) return;
-    const scrollHeight = textContainerRef.current.scrollHeight;
-    if (scrollHeight > USER_MESSAGE_MAX_HEIGHT_COLLAPSED_PX + 20) {
-      setCanCollapse(true);
-    }
-  }, [cleanText]);
+    const container = textContainerRef.current;
+    const content = container?.firstElementChild;
+    if (!container || !content) return;
+    const observer = new ResizeObserver(() => {
+      setCanCollapse(container.scrollHeight > USER_MESSAGE_MAX_HEIGHT_COLLAPSED_PX + 20);
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [cleanText, isEditing]);
 
   if (!inlineText) return null;
 
@@ -852,7 +855,7 @@ function UserMessageBubble({
             className={cn(
               "relative flex flex-col gap-2 transition-[max-height] duration-200",
               hasText &&
-                "rounded-2xl bg-primary/90 px-3.5 py-2.5 text-[15px] leading-relaxed text-primary-foreground",
+                "chat-user-bubble text-[15px] leading-relaxed",
             )}
           >
             {hasText && (
@@ -870,9 +873,7 @@ function UserMessageBubble({
                       ? "linear-gradient(to bottom, black 0%, black 45%, rgba(0,0,0,0.85) 60%, rgba(0,0,0,0.45) 75%, rgba(0,0,0,0.15) 88%, transparent 100%)"
                       : undefined,
                   }}
-                  className={cn(
-                    "overflow-hidden transition-[max-height] duration-200",
-                  )}
+                  className="chat-user-text overflow-hidden transition-[max-height] duration-200"
                 >
                   <UserMessageText text={cleanText} />
                 </div>

@@ -387,6 +387,46 @@
 /* Markdown prose styles                                              */
 /* ------------------------------------------------------------------ */
 
+@layer components {
+  .chat-user-bubble {
+    @apply rounded-2xl bg-primary/90 px-3.5 py-2.5 text-primary-foreground;
+  }
+}
+
+.chat-user-text {
+  font-size: calc(15px * var(--chat-text-scale, 1));
+}
+
+.chat-assistant-text,
+.chat-assistant-text .markdown-body {
+  font-size: calc(var(--text-sm) * var(--chat-text-scale, 1));
+}
+
+.chat-assistant-text .markdown-table {
+  font-size: calc(clamp(0.68rem, 1.05cqw, 0.875rem) * var(--chat-text-scale, 1));
+}
+
+.chat-assistant-text .markdown-body th {
+  font-size: calc(var(--text-xs) * var(--chat-text-scale, 1));
+}
+
+.chat-composer-text {
+  font-size: calc(var(--chat-composer-font-size, var(--text-base)) * var(--chat-text-scale, 1));
+  line-height: calc(var(--spacing) * 6 * var(--chat-text-scale, 1));
+}
+
+@media (width >= 48rem) {
+  .chat-composer-text {
+    --chat-composer-font-size: var(--text-sm);
+  }
+}
+
+@media (width < 48rem) {
+  .chat-composer-text-large {
+    --chat-composer-font-size: 17px;
+  }
+}
+
 .markdown-body {
   line-height: 1.7;
   word-wrap: break-word;

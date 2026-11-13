@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { Slider } from "@base-ui/react/slider";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Palette, RefreshCw } from "lucide-react";
+import { Check, Palette, RefreshCw, Type } from "lucide-react";
 import { toast } from "sonner";
 import { ACCENT_PRESETS } from "@/lib/accent-colors";
 import { BACKGROUND_PRESETS } from "@/lib/background-colors";
@@ -10,6 +11,14 @@ import { preferencesApi, type UserPreferences } from "@/lib/api/preferences";
 import { useTheme } from "@/components/ThemeProvider";
 import { useAppearancePreview } from "@/components/AppearancePreviewProvider";
 import { Button } from "@/components/ui/button";
+import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
+import {
+  CHAT_TEXT_SIZE_STEP,
+  DEFAULT_CHAT_TEXT_SIZE,
+  MAX_CHAT_TEXT_SIZE,
+  MIN_CHAT_TEXT_SIZE,
+  chatTextSizeStyle,
+} from "@/lib/chat/text-size";
 import {
   Card,
   CardContent,
@@ -31,6 +40,7 @@ export function AppearanceSettings() {
     clearBackgroundHover,
   } = useAppearancePreview();
   const queryClient = useQueryClient();
+  const [textSizeDraft, setTextSizeDraft] = useState<number | null>(null);
   const {
     data: preferences,
     isLoading,
@@ -41,17 +51,26 @@ export function AppearanceSettings() {
     queryFn: preferencesApi.get,
   });
   const updateMutation = useMutation({
+    scope: { id: "appearance-preferences" },
     mutationFn: (data: Partial<UserPreferences>) => preferencesApi.update(data),
-    onSuccess: (updatedPreferences) => {
+    onSuccess: async (updatedPreferences) => {
+      await queryClient.cancelQueries({ queryKey: ["preferences"] });
       queryClient.setQueryData(["preferences"], updatedPreferences);
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error, data) => {
+      toast.error(data.chatTextSize === undefined ? error.message : "Could not save chat text size.");
+    },
   });
   const accentTheme: "light" | "dark" =
     resolvedTheme === "dark" ? "dark" : "light";
   const disabled = isLoading || updateMutation.isPending;
   const accentColor = preferences?.accentColor ?? "";
   const backgroundColor = preferences?.backgroundColor ?? "";
+  const savedTextSize = preferences?.chatTextSize ?? DEFAULT_CHAT_TEXT_SIZE;
+  const pendingTextSize = updateMutation.isPending
+    ? updateMutation.variables?.chatTextSize
+    : undefined;
+  const textSize = textSizeDraft ?? pendingTextSize ?? savedTextSize;
 
   useEffect(() => clearPreviews, [clearPreviews]);
 
@@ -63,13 +82,19 @@ export function AppearanceSettings() {
     setBackgroundPreview(value);
     updateMutation.mutate({ backgroundColor: value });
   };
+  const saveTextSize = (value: number) => {
+    setTextSizeDraft(null);
+    if (value !== (pendingTextSize ?? savedTextSize)) {
+      updateMutation.mutate({ chatTextSize: value });
+    }
+  };
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
       <div>
         <h1 className="text-lg font-semibold">Appearance</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Personalize the app&apos;s accent color and background palette.
+          Personalize the app&apos;s colors and chat text size.
         </p>
       </div>
 
@@ -201,6 +226,74 @@ export function AppearanceSettings() {
               The canvas, cards, and sidebar palette.
             </p>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle id="chat-text-size-label" className="flex items-center gap-2 text-sm">
+            <Type aria-hidden="true" className="h-4 w-4 text-primary" />
+            Chat text size
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Adjust the size of messages and the composer.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4 border-t pt-4">
+          <div className="flex items-center gap-3">
+            <Slider.Root
+              aria-labelledby="chat-text-size-label"
+              className="min-w-0 flex-1"
+              disabled={!preferences}
+              min={MIN_CHAT_TEXT_SIZE}
+              max={MAX_CHAT_TEXT_SIZE}
+              step={CHAT_TEXT_SIZE_STEP}
+              value={textSize}
+              onValueChange={setTextSizeDraft}
+              onValueCommitted={saveTextSize}
+            >
+              <Slider.Control
+                className="flex h-10 touch-none items-center"
+                onPointerDown={(event) => {
+                  // Base UI already handles touch through its touch event listeners.
+                  if (event.pointerType === "touch") event.preventBaseUIHandler();
+                }}
+              >
+                <Slider.Track className="relative h-1.5 w-full rounded-full bg-muted-foreground/25">
+                  <Slider.Indicator className="rounded-full bg-primary" />
+                  <Slider.Thumb
+                    getAriaValueText={(value) => `${value}%`}
+                    className="block size-4 rounded-full border-2 border-primary bg-background outline-none focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background"
+                  />
+                </Slider.Track>
+              </Slider.Control>
+            </Slider.Root>
+            <span aria-hidden="true" className="w-12 text-right text-sm tabular-nums">
+              {textSize}%
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!preferences || textSize === DEFAULT_CHAT_TEXT_SIZE}
+              onClick={() => saveTextSize(DEFAULT_CHAT_TEXT_SIZE)}
+            >
+              Reset
+            </Button>
+          </div>
+          <figure className="min-w-0 rounded-xl border bg-background p-4">
+            <figcaption className="mb-3 text-xs font-medium text-muted-foreground">
+              Preview
+            </figcaption>
+            <div className="flex flex-col gap-3" style={chatTextSizeStyle(textSize)}>
+              <p className="chat-user-bubble chat-user-text max-w-full self-end leading-relaxed">
+                Can you help me plan my day?
+              </p>
+              <div className="chat-assistant-text min-w-0">
+                <MarkdownRenderer content="**Start with one priority.** Then set aside time for the tasks that can wait." />
+              </div>
+            </div>
+          </figure>
         </CardContent>
       </Card>
 

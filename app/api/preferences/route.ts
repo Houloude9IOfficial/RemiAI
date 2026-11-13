@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db, ensureRemiPrefsColumns } from "@/db";
 import { userPreferences } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { DEFAULT_CHAT_TEXT_SIZE, isChatTextSize } from "@/lib/chat/text-size";
 
 const DEFAULT_PREFERENCES = {
   preferredName: "",
@@ -18,6 +19,7 @@ const DEFAULT_PREFERENCES = {
   links: {} as Record<string, string>,
   accentColor: "",
   backgroundColor: "",
+  chatTextSize: DEFAULT_CHAT_TEXT_SIZE,
   enableNewModels: true,
   remiApiUrl: "",
   remiApiEnabled: true,
@@ -66,6 +68,7 @@ export async function GET() {
     links: prefs!.links,
     accentColor: prefs!.accentColor,
     backgroundColor: prefs!.backgroundColor,
+    chatTextSize: prefs!.chatTextSize,
     enableNewModels: prefs!.enableNewModels,
     remiApiUrl: ((prefs as Record<string, unknown>).remiApiUrl as string | undefined) ?? "",
     remiApiEnabled: ((prefs as Record<string, unknown>).remiApiEnabled as boolean | undefined) ?? true,
@@ -92,6 +95,7 @@ export async function PUT(req: Request) {
     links?: Record<string, string>;
     accentColor?: string;
     backgroundColor?: string;
+    chatTextSize?: number;
     enableNewModels?: boolean;
     remiApiUrl?: string;
     remiApiEnabled?: boolean;
@@ -100,6 +104,10 @@ export async function PUT(req: Request) {
     expandReasoningWhileWorking?: boolean;
     enableTitleGeneration?: boolean;
   };
+
+  if (body.chatTextSize !== undefined && !isChatTextSize(body.chatTextSize)) {
+    return NextResponse.json({ error: "Invalid chat text size." }, { status: 400 });
+  }
 
   let existing: (typeof userPreferences.$inferSelect) | undefined;
   try {
@@ -125,6 +133,7 @@ export async function PUT(req: Request) {
     links: body.links ?? existing?.links ?? {},
     accentColor: body.accentColor ?? existing?.accentColor ?? "",
     backgroundColor: body.backgroundColor ?? existing?.backgroundColor ?? "",
+    chatTextSize: body.chatTextSize ?? existing?.chatTextSize ?? DEFAULT_CHAT_TEXT_SIZE,
     enableNewModels: body.enableNewModels ?? existing?.enableNewModels ?? true,
     remiApiUrl: body.remiApiUrl ?? ((existing as unknown as Record<string, unknown> | null)?.remiApiUrl as string | undefined) ?? "",
     remiApiEnabled: body.remiApiEnabled ?? ((existing as unknown as Record<string, unknown> | null)?.remiApiEnabled as boolean | undefined) ?? true,
@@ -136,10 +145,12 @@ export async function PUT(req: Request) {
   };
 
   if (existing) {
-    await db
+    const [updated] = await db
       .update(userPreferences)
-      .set(data)
-      .where(eq(userPreferences.id, existing.id));
+      .set({ ...data, chatTextSize: body.chatTextSize })
+      .where(eq(userPreferences.id, existing.id))
+      .returning({ chatTextSize: userPreferences.chatTextSize });
+    data.chatTextSize = updated.chatTextSize;
   } else {
     await db.insert(userPreferences).values(data);
   }

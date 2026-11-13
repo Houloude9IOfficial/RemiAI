@@ -13,6 +13,7 @@ export type UserPreferences = {
   links: Record<string, string>;
   accentColor: string;
   backgroundColor: string;
+  chatTextSize: number;
   enableNewModels: boolean;
   remiApiUrl: string;
   remiApiEnabled: boolean;

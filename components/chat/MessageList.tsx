@@ -7,6 +7,7 @@ import { MessageBubble } from "./MessageBubble";
 import { ChatMessageProvider } from "./ChatMessageContext";
 import { PendingWorkActivity } from "./WorkActivity";
 import { preferencesApi } from "@/lib/api/preferences";
+import { chatTextSizeStyle } from "@/lib/chat/text-size";
 
 // ── Component ────────────────────────────────────────────────────────
 
@@ -141,7 +142,7 @@ export function MessageList({
 
   return (
     <ChatMessageProvider value={{ sendMessage: safeSend, status }}>
-      <div className="relative flex flex-1 flex-col">
+      <div className="relative flex flex-1 flex-col" style={chatTextSizeStyle(preferences?.chatTextSize)}>
         <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 py-6 md:px-6">
           <div className="flex flex-col gap-5 md:gap-6">
             {deduped.map((message, idx) => {
