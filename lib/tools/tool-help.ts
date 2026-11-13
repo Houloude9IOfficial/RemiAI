@@ -679,14 +679,21 @@ delay({ ms: 2000 })
 
   "create-visual": `## Create Visual — render dynamic visuals in the chat
 
-The \`create_visual\` tool lets you generate SVG or HTML visuals and display them directly inline in the chat. This is perfect for when you want to show the user a visual representation instead of plain text.
+The \`create_visual\` tool displays interactive widgets, bar charts, SVG visuals, and static HTML inline in the chat.
 
-### Two content types:
+### Formats
 
 | Type | Best for |
 |---|---|
-| **SVG** (\`type: "svg"\`) | Charts (bar, line, pie, area), diagrams, graphs, icons, any 2D graphics |
+| **Interactive** (\`type: "interactive"\`) | Calculators, dashboards, live charts, maps, galleries, and filterable tables |
+| **Bar** (\`type: "bar"\`) | Compare categories or periods with bars on a shared scale |
+| **SVG** (\`type: "svg"\`) | Custom charts (line, pie, area), diagrams, graphs, icons, any 2D graphics |
 | **HTML** (\`type: "html"\`) | Rich cards, dashboards, stats panels, comparison grids, timelines, layouts |
+
+### Interactive widgets
+- Call \`create_visual({ type: "interactive", title: "API Usage Dashboard", preset: "api_usage" })\` for the sample dashboard.
+- For other widgets pass \`spec: { version: 1, blocks: [...] }\`. Declare controls once and place their IDs in controls blocks. Use earlier numeric IDs in calculations, numeric IDs in metrics and charts, and \`{id}\` in text.
+- Controls update the reply locally. The conversation saves the widget and restores its default values on reopening.
 
 ### Design guidelines:
 - **Use a TRANSPARENT background** by default — do NOT add background colors to the root SVG or HTML body. The visual should blend seamlessly into the chat theme.
@@ -706,8 +713,9 @@ The \`create_visual\` tool lets you generate SVG or HTML visuals and display the
 - User asks for visual comparison → create a comparison table
 
 ### Parameter hints:
-- \`title\` — A short, descriptive header shown above the visual
-- \`content\` — The raw SVG markup or HTML markup
+- \`title\` — A short, descriptive header used as the bar chart heading or the SVG alternative text
+- \`data\` — For bar charts, ordered rows with a label and a finite numeric value. Include zero values.
+- \`content\` — SVG or HTML markup
 - \`options.caption\` — Optional footnote/text shown below the visual
 - \`options.width\` / \`options.height\` — Control dimensions if the default doesn't work
 - \`options.align\` — Alignment of the visual card: \`"center"\` (default), \`"left"\`, or \`"right"\`. Users can also re-align any visual directly in the chat.
@@ -715,9 +723,13 @@ The \`create_visual\` tool lets you generate SVG or HTML visuals and display the
 ### Example — a simple bar chart:
 \`\`\`
 create_visual({
-  type: "svg",
+  type: "bar",
   title: "Monthly Revenue",
-  content: '<svg viewBox="0 0 500 300" xmlns="http://www.w3.org/2000/svg"><rect x="50" y="200" width="40" height="80" fill="#6366f1" rx="4"/><rect x="110" y="150" width="40" height="130" fill="#6366f1" rx="4"/><rect x="170" y="100" width="40" height="180" fill="#6366f1" rx="4"/><text x="70" y="295" text-anchor="middle" font-size="12" fill="#6b7280">Jan</text><text x="130" y="295" text-anchor="middle" font-size="12" fill="#6b7280">Feb</text><text x="190" y="295" text-anchor="middle" font-size="12" fill="#6b7280">Mar</text></svg>'
+  data: [
+    { label: "Jan", value: 80 },
+    { label: "Feb", value: 130 },
+    { label: "Mar", value: 180 }
+  ]
 })
 \`\`\`
 
@@ -769,9 +781,9 @@ After writing or editing session files, **always** call \`session_present_file\`
 
   "canvas": `## Canvas — interactive buildable web projects
 
-The **canvas** tool family creates a self-contained, runnable web project (HTML/CSS/JS) shown in a live **preview + code editor** panel. Use a canvas when the user wants something they can actually run and play with — a website, small app, calculator, game, quiz, dashboard, timer, interactive demo or prototype.
+The **canvas** tool family creates a self-contained, runnable web project (HTML/CSS/JS) shown in a live **preview + code editor** panel. Use a canvas for an explicit /canvas request or a runnable web project the user can open and edit, such as a website, app, or prototype.
 
-A canvas is DIFFERENT from \`create_visual\` (a static inline chart/card) and from a plain session file — prefer a canvas for buildable, interactive output.
+Use \`create_visual\` for calculators, charts, and other widgets embedded directly in a reply.
 
 ### Tools
 | Tool | Parameters | Purpose |
@@ -1070,7 +1082,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   newsapi: "News search",
   scheduling: "Scheduled tasks",
   elevenlabs: "ElevenLabs voice",
-  create_visual: "Dynamic visuals (SVG / HTML)",
+  create_visual: "Interactive and static visuals",
   session_files: "Session files (per-chat sandbox)",
   firecrawl: "Web scraping / search fallback (Firecrawl)",
   playwright: "Browser automation (Playwright)",

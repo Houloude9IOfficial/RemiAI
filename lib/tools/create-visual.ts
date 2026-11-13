@@ -1,21 +1,10 @@
 import { z } from "zod";
-import { truncateToolResult } from "@/lib/utils";
+import { apiUsageVisual } from "@/lib/chat/api-usage-visual";
+import { interactiveVisualSchema, parseInteractiveVisual } from "@/lib/chat/interactive-visual";
+import { hasNegativeSvgRectSize, normalizeVisualSvg } from "@/lib/chat/visual-svg";
 import { db } from "@/db";
 import { toolConfigs } from "@/db/schema";
 import { eq } from "drizzle-orm";
-
-// ---------------------------------------------------------------------------
-// SVG wrapper — minimal, transparent-friendly shell
-// ---------------------------------------------------------------------------
-
-function wrapSvg(svgContent: string): string {
-  // If it's already a full <svg> document, use as-is
-  if (/<svg[\s>]/i.test(svgContent.trim())) {
-    return svgContent;
-  }
-  // Otherwise wrap in a minimal SVG container
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="100%" height="100%">${svgContent}</svg>`;
-}
 
 // ---------------------------------------------------------------------------
 // HTML wrapper — sandboxed document shell with transparent bg
@@ -60,20 +49,60 @@ ${htmlContent}
 }
 
 // ---------------------------------------------------------------------------
-// Content type detection helper
-// ---------------------------------------------------------------------------
-
-function detectAndWrap(type: "svg" | "html", content: string): string {
-  if (type === "svg") return wrapSvg(content);
-  return wrapHtml(content);
-}
-
-// ---------------------------------------------------------------------------
 // Tool definition
 // ---------------------------------------------------------------------------
 
+const barDataSchema = z.array(z.object({
+  label: z.string().trim().min(1).max(120),
+  value: z.number().finite(),
+})).min(1).max(40);
+
+const visualInputSchema = z.object({
+  type: z
+    .enum(["bar", "svg", "html", "interactive"])
+    .describe('Use "bar" for bar charts, "svg" for custom diagrams, or "html" for cards and dashboards'),
+  title: z
+    .string()
+    .min(1)
+    .max(120)
+    .describe("Short descriptive title for the visual"),
+  content: z
+    .string()
+    .min(1)
+    .max(50_000)
+    .optional()
+    .describe("Required for SVG and HTML. For SVG include the <svg> tag with viewBox. Keep backgrounds transparent unless the user requests otherwise."),
+  data: barDataSchema.optional().describe("Required for bar charts. Supply rows in display order, including any zero values."),
+  spec: interactiveVisualSchema.optional().describe("Version 1 interactive widget specification. Use either spec or preset with type interactive."),
+  preset: z.literal("api_usage").optional().describe("Use for the sample API Usage Dashboard with two sliders and 7/30-day forecasts."),
+  options: z
+    .object({
+      width: z
+        .string()
+        .optional()
+        .describe("CSS width (e.g. '100%', '600px'). Default '100%'"),
+      height: z
+        .string()
+        .optional()
+        .describe("Initial CSS height for HTML visuals. Default 'auto'"),
+      caption: z
+        .string()
+        .max(300)
+        .optional()
+        .describe("Optional caption displayed below the visual"),
+      align: z
+        .enum(["center", "left", "right"])
+        .optional()
+        .describe("Alignment within the chat: 'center' (default), 'left', or 'right'"),
+    })
+    .optional()
+    .describe("Optional display options"),
+});
+
+type VisualInput = z.infer<typeof visualInputSchema>;
+
 export const createVisualTool = {
-  description: `Create a dynamic visual (SVG chart/diagram or HTML card/dashboard) and render it inline in the chat. Use whenever a visual helps the user understand faster than text: data charts (bar/line/pie), KPI metrics cards, timelines/process steps, comparison tables, flow diagrams.
+  description: `Create a visual and render it inline in chat. Use type "bar" for comparisons across categories or periods, including counts by year. Pass data as ordered {label, value} rows. RemiAI renders bars, labels, and values automatically. Use type "interactive" for native widgets, calculators, charts with live controls, maps, media, and comparison tables. Use preset "api_usage" for the sample API Usage Dashboard. For other requests use spec.version = 1 and ordered spec.blocks. Define controls once, then include their IDs in controls blocks where they should appear. In calculations, a and b are numbers or IDs of numeric controls or earlier calculations. For round, b is the number of decimal places. In text lines and descriptions use {id} to interpolate a control or calculated result. In metrics and chart points use IDs directly in numeric fields. The UI evaluates these bindings locally. Use SVG for custom diagrams and HTML for static markup.
 
 ## Design rules — NO AI SLOP
 - **Never** use purple/violet gradients; avoid the overused AI looks (cream+serif+terracotta, near-black+acid green, broadsheet hairline columns) unless the brief demands them.
@@ -82,76 +111,51 @@ export const createVisualTool = {
 - Clean and intentional: whitespace, 2-3 colors max, subtle borders, 8-12px radius.
 - SVG: use viewBox, include axis labels. HTML: flexbox/grid, subtle shadows. Fonts: 14-16px body, 20-32px headings. Responsive width 100%.`,
 
-  inputSchema: z.object({
-    type: z
-      .enum(["svg", "html"])
-      .describe('Format: "svg" for charts/diagrams/2D graphics; "html" for cards/dashboards/stats panels'),
-    title: z
-      .string()
-      .min(1)
-      .max(120)
-      .describe("Short title shown as a header above the visual"),
-    content: z
-      .string()
-      .min(1)
-      .max(50_000)
-      .describe("SVG or HTML markup to render. For SVG include the <svg> tag with viewBox. Keep backgrounds transparent unless the user requests otherwise."),
-    options: z
-      .object({
-        width: z
-          .string()
-          .optional()
-          .describe("CSS width (e.g. '100%', '600px'). Default '100%'"),
-        height: z
-          .string()
-          .optional()
-          .describe("CSS height (e.g. 'auto', '400px'). Default 'auto'"),
-        caption: z
-          .string()
-          .max(300)
-          .optional()
-          .describe("Optional caption displayed below the visual"),
-        align: z
-          .enum(["center", "left", "right"])
-          .optional()
-          .describe("Alignment within the chat: 'center' (default), 'left', or 'right'"),
-      })
-      .optional()
-      .describe("Optional display options"),
-  }),
+  inputSchema: visualInputSchema,
 
   execute: async ({
     type,
     title,
     content,
     options,
-  }: {
-    type: "svg" | "html";
-    title: string;
-    content: string;
-    options?: {
-      width?: string;
-      height?: string;
-      caption?: string;
-      align?: "center" | "left" | "right";
-    };
-  }) => {
-    // Wrap content in appropriate document shell
-    const finalContent = detectAndWrap(type, content);
-
-    const result = {
+    data,
+    spec,
+    preset,
+  }: VisualInput) => {
+    const display = {
       type: "visual" as const,
-      visualType: type,
       title,
-      content: finalContent,
       width: options?.width ?? "100%",
       height: options?.height ?? "auto",
       caption: options?.caption ?? null,
       align: options?.align ?? "center",
-      note: "Visual rendered with transparent background. Use get_tool_help({ topic: 'create-visual' }) for design guidelines.",
     };
 
-    return truncateToolResult(result);
+    if (type === "interactive") {
+      if (Boolean(spec) === Boolean(preset)) return { error: "Supply exactly one interactive spec or preset." };
+      const parsed = parseInteractiveVisual(preset ? apiUsageVisual : spec);
+      if ("error" in parsed) return { error: parsed.error };
+      return { ...display, visualType: type, spec: parsed.spec };
+    }
+
+    if (type === "bar") {
+      const rows = barDataSchema.safeParse(data);
+      if (!rows.success) return { error: "A bar chart requires 1–40 data rows with nonempty labels and finite numeric values." };
+      return { ...display, visualType: type, data: rows.data };
+    }
+
+    if (!content?.trim()) return { error: "SVG and HTML visuals require markup in content." };
+    const finalContent = type === "svg" ? normalizeVisualSvg(content) : wrapHtml(content);
+    if (finalContent === null) {
+      return { error: "The SVG markup is incomplete or invalid. Retry with a complete, well-formed <svg> document." };
+    }
+    if (type === "svg" && hasNegativeSvgRectSize(finalContent)) {
+      return { error: 'SVG rectangles require nonnegative width and height. For a bar chart, retry with type "bar" and ordered data rows.' };
+    }
+
+    // Content is already bounded by the tool schema. Truncating XML or HTML
+    // here would break the artifact that the chat renders and persists.
+    return { ...display, visualType: type, content: finalContent };
   },
 };
 
@@ -163,7 +167,7 @@ export const createVisualTool = {
  * Build the create_visual tool. Respects the user's toggle setting in DB.
  * Enabled by default for backward compatibility (was previously always-on).
  */
-export async function buildCreateVisualTool(): Promise<Record<string, any>> {
+export async function buildCreateVisualTool(): Promise<{ create_visual?: typeof createVisualTool }> {
   const config = await db
     .select()
     .from(toolConfigs)

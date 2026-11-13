@@ -5,8 +5,9 @@ import { useQuery } from "@tanstack/react-query";
 import type { UIMessage } from "ai";
 import { MessageBubble } from "./MessageBubble";
 import { ChatMessageProvider } from "./ChatMessageContext";
-import { GeneratingIndicator } from "./GeneratingIndicator";
+import { PendingWorkActivity } from "./WorkActivity";
 import { preferencesApi } from "@/lib/api/preferences";
+import { chatTextSizeStyle } from "@/lib/chat/text-size";
 
 // ── Component ────────────────────────────────────────────────────────
 
@@ -18,6 +19,7 @@ export function MessageList({
   onEdit,
   onContinue,
   conversationId,
+  activeAssistantId,
 }: {
   messages: UIMessage[];
   status?: "submitted" | "streaming" | "ready" | "error";
@@ -29,6 +31,7 @@ export function MessageList({
   /** Called when the last user message has no assistant response yet. */
   onContinue?: () => void;
   conversationId?: number;
+  activeAssistantId?: string | null;
 }) {
   const lastUserMessageRef = useRef<HTMLDivElement>(null);
   const didInitialScrollRef = useRef(false);
@@ -69,6 +72,7 @@ export function MessageList({
       }
       return typeof candidate.type === "string" &&
         (candidate.type.startsWith("tool-") ||
+          candidate.type === "dynamic-tool" ||
           candidate.type === "tool-invocation" ||
           candidate.type === "reasoning");
     });
@@ -76,22 +80,27 @@ export function MessageList({
     lastMessage?.role === "user" ||
     (lastMessage?.role === "assistant" && !lastAssistantHasOutput);
   const lastUserIndex = deduped.findLastIndex((message) => message.role === "user");
-  const isWaiting =
-    (status === "submitted" || status === "streaming") &&
-    (!lastMessage ||
-      lastMessage.role === "user" ||
-      (lastMessage.role === "assistant" && !lastAssistantHasOutput));
+  // A reconnect can seed an empty assistant before replaying any parts.
+  // Give that bubble the timer as soon as it exists.
+  const activityOwnerId = activeAssistantId
+    ?? (status === "streaming" && lastMessage?.role === "assistant" ? lastMessage.id : null);
+  const assistantOwnsActivity = deduped.some(
+    (message) => message.role === "assistant" && message.id === activityOwnerId,
+  );
+  const isWaiting = (status === "submitted" || status === "streaming" || activeAssistantId != null) &&
+    !assistantOwnsActivity;
+  const shouldAnchor = status === "submitted" && !assistantOwnsActivity && !activeAssistantId;
 
   // A send should bring the new request to the top of the readable area and
   // leave deliberate room below it for the pending state, rather than keeping
   // the prior conversation in view.
   useEffect(() => {
-    if (!isWaiting) return;
+    if (!shouldAnchor) return;
     const frame = requestAnimationFrame(() => {
       lastUserMessageRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
     return () => cancelAnimationFrame(frame);
-  }, [isWaiting, lastUserIndex]);
+  }, [shouldAnchor, lastUserIndex]);
 
   // Opening a conversation should land on the latest exchange, not on the top
   // of a long transcript (scrollTop 0) and not pinned to the very bottom: the
@@ -133,7 +142,7 @@ export function MessageList({
 
   return (
     <ChatMessageProvider value={{ sendMessage: safeSend, status }}>
-      <div className="relative flex flex-1 flex-col">
+      <div className="relative flex flex-1 flex-col" style={chatTextSizeStyle(preferences?.chatTextSize)}>
         <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 py-6 md:px-6">
           <div className="flex flex-col gap-5 md:gap-6">
             {deduped.map((message, idx) => {
@@ -149,9 +158,7 @@ export function MessageList({
                     message={message}
                     collapseLongUserMessages={collapseLongUserMessages}
                     expandReasoningWhileWorking={expandReasoningWhileWorking}
-                    isStreaming={
-                      idx === deduped.length - 1 && status === "streaming"
-                    }
+                    isStreaming={message.role === "assistant" && message.id === activityOwnerId}
                     onRegenerate={onRegenerate}
                     onEdit={canSend ? onEdit : undefined}
                     onContinue={
@@ -170,9 +177,7 @@ export function MessageList({
             })}
 
             {isWaiting && (
-              <div className="flex justify-start animate-fade-in">
-                <GeneratingIndicator state="working" label={null} />
-              </div>
+              <PendingWorkActivity />
             )}
 
             {/* Keep a stable response area after every request so completing

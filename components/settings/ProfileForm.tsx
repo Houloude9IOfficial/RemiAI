@@ -38,7 +38,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-const DEFAULT_PREFERENCES: UserPreferences = {
+const DEFAULT_PREFERENCES: Omit<UserPreferences, "chatTextSize"> = {
   preferredName: "",
   preferences: "",
   personality: "Be helpful, concise, and direct. Match the user's tone.",
@@ -129,7 +129,7 @@ function cardModesEqual(
   return true;
 }
 
-function preferencesEqual(a: UserPreferences, b: UserPreferences): boolean {
+function preferencesEqual(a: typeof DEFAULT_PREFERENCES, b: typeof DEFAULT_PREFERENCES): boolean {
   return (
     a.preferredName === b.preferredName &&
     a.preferences === b.preferences &&
@@ -154,7 +154,7 @@ function preferencesEqual(a: UserPreferences, b: UserPreferences): boolean {
 
 export function ProfileForm() {
   const queryClient = useQueryClient();
-  const [form, setForm] = useState<UserPreferences>(DEFAULT_PREFERENCES);
+  const [form, setForm] = useState(DEFAULT_PREFERENCES);
   const [links, setLinks] = useState<LinkEntry[]>([]);
   const [customLinkKey, setCustomLinkKey] = useState("");
   const [customLinkValue, setCustomLinkValue] = useState("");
@@ -213,7 +213,9 @@ export function ProfileForm() {
     }
 
     const timeout = setTimeout(() => {
-      savePreferences(payload);
+      const profile: Partial<UserPreferences> = payload;
+      delete profile.chatTextSize;
+      savePreferences(profile);
     }, 400);
 
     return () => clearTimeout(timeout);

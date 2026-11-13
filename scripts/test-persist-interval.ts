@@ -25,6 +25,15 @@ import {
   REQUEST_DURATION_PART,
 } from "../lib/chat/request-duration";
 
+import {
+  isWorkSummary,
+  latestWorkActivity,
+  workReplayPrefix,
+  prepareWorkReplay,
+  WORK_ACTIVITY_PART,
+  WORK_SUMMARY_METADATA,
+} from "../lib/chat/work-activity";
+
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function makeDb() {
@@ -322,6 +331,67 @@ async function main() {
     assert.equal(formatRequestCompletionTime(completedAt, localDateKey(new Date(2026, 8, 25))), "Thursday 4:56 PM");
     const wednesday = new Date(2026, 8, 23, 21, 10).toISOString();
     assert.equal(formatRequestCompletionTime(wednesday, localDateKey(new Date(2026, 8, 24))), "Wednesday 9:10 PM");
+  });
+
+  await okAsync("retains ordered, deduplicated activity across a resumed run", async () => {
+    const db = makeDb();
+    const start = { type: "start", messageId: "msg-7" };
+    const attempt = (id: string, status: string, endedAt?: number) => ({
+      type: WORK_ACTIVITY_PART,
+      id,
+      data: { runId: "run-7", startedAt: 1_000, status, endedAt },
+    });
+    const first = [
+      start,
+      attempt("attempt-1", "running"),
+      { type: "reasoning-start", id: "r1", providerMetadata: WORK_SUMMARY_METADATA },
+      { type: "reasoning-delta", id: "r1", delta: "Checking " },
+      { type: "reasoning-delta", id: "r1", delta: "the available sources." },
+      { type: "reasoning-end", id: "r1" },
+      { type: "tool-input-start", toolCallId: "c1", toolName: "web_search" },
+      { type: "tool-input-start", toolCallId: "c1", toolName: "web_search" },
+      attempt("attempt-1", "continuing"),
+      { type: "finish", finishReason: "length" },
+    ];
+    await periodicallyPersistMessages(7, [], streamFrom(first), undefined, undefined, db);
+    const saved = await persistedMessage(db, 7, "msg-7") as UIMessage["parts"];
+    assert.deepEqual(saved.map((part) => part.type), [WORK_ACTIVITY_PART, "reasoning", "tool-web_search"]);
+    assert.equal(saved.find(isWorkSummary)?.text, "Checking the available sources.");
+    assert.equal(latestWorkActivity(saved)?.data.status, "continuing");
+
+    const second = [
+      start,
+      attempt("attempt-2", "running"),
+      { type: "tool-input-start", toolCallId: "c2", toolName: "web_fetch" },
+      { type: "text-start", id: "t1" },
+      { type: "text-delta", id: "t1", delta: "Partial result" },
+      attempt("attempt-2", "cancelled", 8_000),
+      { type: "abort" },
+    ];
+    await periodicallyPersistMessages(
+      7,
+      [{ id: "msg-7", role: "assistant", parts: saved }],
+      streamFrom(second),
+      undefined,
+      undefined,
+      db,
+    );
+    const final = await persistedMessage(db, 7, "msg-7") as UIMessage["parts"];
+    assert.deepEqual(workReplayPrefix(final, "attempt-2"), saved);
+    assert.equal(latestWorkActivity(final)?.data.status, "cancelled");
+    assert.equal(latestWorkActivity(final)?.data.endedAt, 8_000);
+    assert.ok(final.some((part) => part.type === "text" && part.text === "Partial result"));
+  });
+
+  await okAsync("seeds a fresh question reply after the saved answers", async () => {
+    const history: UIMessage[] = [
+      { id: "questions", role: "assistant", parts: [{ type: "text", text: "Please answer." }] },
+      { id: "answers", role: "user", parts: [{ type: "text", text: "My answers." }] },
+    ];
+    assert.deepEqual(prepareWorkReplay(history, "reply", "new-stream"), [
+      ...history, { id: "reply", role: "assistant", parts: [] },
+    ]);
+    assert.deepEqual(prepareWorkReplay(history.slice(0, 1), "reply", "new-stream").at(-1)?.parts, []);
   });
 
   console.log(`\n✅ All ${passed} persistence tests passed.`);

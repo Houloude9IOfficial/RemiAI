@@ -285,9 +285,11 @@ function operationSummary(name: string, running: boolean): string {
 export function ToolCallCard({
   part,
   compact = true,
+  resultOnly = false,
 }: {
   part: AnyToolPart;
   compact?: boolean;
+  resultOnly?: boolean;
 }) {
   const [inputOpen, setInputOpen] = useState(false);
   // Collapsed by default — avoids oversized cards and nested scroll traps.
@@ -490,6 +492,13 @@ export function ToolCallCard({
     }
     if (isAgentResult && output && isComplete && !isMinor) {
       return <AgentResultCard data={output as Record<string, unknown>} />;
+    }
+
+    if (resultOnly) {
+      if (state !== "output-available") return null;
+      if (isMediaResult) return <MediaDisplay data={output as Record<string, unknown>} />;
+      if (isContentResult) return <ContentResult data={output as Record<string, unknown>} />;
+      return null;
     }
 
     // ── Minor tools: single line, expand on click ─────────────────────

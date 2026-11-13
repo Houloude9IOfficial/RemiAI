@@ -2,13 +2,13 @@ import { NextResponse } from "next/server";
 import { streamRegistry } from "@/lib/chat/stream-registry";
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
   const conversationId = Number(id);
 
-  const stream = streamRegistry.get(conversationId);
+  const stream = streamRegistry.get(conversationId, new URL(req.url).searchParams.get("streamId") ?? undefined);
   if (!stream) {
     // No active stream — nothing to reconnect to
     return new NextResponse(null, { status: 204 });

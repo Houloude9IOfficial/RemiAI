@@ -4,6 +4,8 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
+import { preferencesApi } from "@/lib/api/preferences";
+import { chatTextSizeStyle } from "@/lib/chat/text-size";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -365,6 +367,12 @@ export function ChatInput({
     }
   }, [disabled]);
 
+  const { data: preferences } = useQuery({
+    queryKey: ["preferences"],
+    queryFn: preferencesApi.get,
+  });
+  const chatTextSize = preferences?.chatTextSize;
+
   // Auto-resize textarea (stable identity so callbacks can depend on it)
   const resize = useCallback(() => {
     const el = inputRef.current;
@@ -377,7 +385,7 @@ export function ChatInput({
 
   useEffect(() => {
     resize();
-  }, [text, resize]);
+  }, [text, resize, chatTextSize]);
 
   // Build history can request a safe continuation without sending anything.
   // Append to existing text rather than silently replacing a user's draft.
@@ -1385,9 +1393,10 @@ export function ChatInput({
                         : "Write a message or / for commands"
               }
               disabled={disabled}
+              style={chatTextSizeStyle(chatTextSize)}
               className={cn(
-                "max-h-40 resize-none border-none bg-transparent! py-0 leading-6 shadow-none focus-visible:ring-0 dark:bg-transparent!",
-                large ? "min-h-10 text-[17px]" : "min-h-[1px]",
+                "chat-composer-text max-h-40 resize-none border-none bg-transparent! py-0 shadow-none focus-visible:ring-0 dark:bg-transparent!",
+                large ? "chat-composer-text-large min-h-10" : "min-h-[1px]",
               )}
               rows={1}
             />

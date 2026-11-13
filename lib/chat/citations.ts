@@ -83,11 +83,17 @@ export function collectMessageSources(parts: UIMessage["parts"]): MessageSources
     const part = rawPart as Record<string, unknown>;
     let output: unknown;
 
-    // AI SDK v7 `tool-*` parts carry `output` directly.
+    if (part.type === "source-url") {
+      if (typeof part.url === "string" && /^https?:\/\//i.test(part.url)) {
+        add(part.url, part.title);
+      }
+      continue;
+    }
+
+    // AI SDK v7 tool parts carry their output directly.
     if (
-      typeof part.type === "string" &&
-      part.type.startsWith("tool-") &&
-      part.type !== "tool-invocation"
+      part.type === "dynamic-tool" ||
+      (typeof part.type === "string" && part.type.startsWith("tool-") && part.type !== "tool-invocation")
     ) {
       output = part.output;
     }

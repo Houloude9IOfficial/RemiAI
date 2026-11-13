@@ -12,11 +12,13 @@
 import { desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { messages } from "@/db/schema";
-import type { UIMessage, UIMessageChunk } from "ai";
+import type { ReasoningUIPart, UIMessage, UIMessageChunk } from "ai";
 import type { RunTrace } from "@/lib/observability/run-trace";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "@/db/schema";
+import { RESPONSE_USAGE_PART } from "./response-usage";
 import { REQUEST_DURATION_PART } from "./request-duration";
+import { latestWorkActivity, WORK_ACTIVITY_PART, type WorkActivityPart } from "./work-activity";
 
 
 const PERSIST_INTERVAL_MS = 2000;
@@ -48,25 +50,14 @@ export async function periodicallyPersistMessages(
 
   async function persistSnapshot() {
     const persistStartedAt = performance.now();
-    // Drop tool parts that only saw `tool-input-start`: they carry no input
-    // yet and would render as a permanently-stuck "loading" card after a
-    // refresh. Their full `tool-input-available` counterpart is a few chunks
-    // away and is captured by the next snapshot (or the final one).
-    const persistableParts = parts.filter((part) => {
-      if (
-        part &&
-        typeof part === "object" &&
-        "state" in part &&
-        (part as { state?: string }).state === "input-streaming"
-      ) {
-        return false;
-      }
-      return true;
-    });
     const snapshot: UIMessage = {
       id: messageId,
       role: "assistant",
-      parts: persistableParts,
+      // Activity-aware turns keep a record of tools interrupted before their
+      // arguments arrived. Older stream callers still drop incomplete parts.
+      parts: latestWorkActivity(parts)
+        ? parts
+        : parts.filter((part) => !("state" in part && part.state === "input-streaming")),
     };
 
     // Persist the assistant message (upsert — updates parts if already exists)
@@ -106,7 +97,10 @@ export async function periodicallyPersistMessages(
       processChunk(chunk as unknown as Record<string, unknown>);
 
       // Persist every PERSIST_INTERVAL_MS
-      if (messageId && Date.now() - lastPersistTime >= PERSIST_INTERVAL_MS) {
+      if (messageId && (
+        (chunk.type === WORK_ACTIVITY_PART && (chunk as WorkActivityPart).data.status === "running") ||
+        Date.now() - lastPersistTime >= PERSIST_INTERVAL_MS
+      )) {
         await persistSnapshot();
       }
     }
@@ -131,6 +125,24 @@ export async function periodicallyPersistMessages(
     const type = chunk.type as string;
 
     switch (type) {
+      case WORK_ACTIVITY_PART: {
+        const activity = chunk as unknown as WorkActivityPart;
+        const index = parts.findIndex((part) =>
+          part.type === WORK_ACTIVITY_PART && part.id === activity.id,
+        );
+        if (index < 0) parts.push(activity);
+        else parts[index] = activity;
+        break;
+      }
+
+      case RESPONSE_USAGE_PART: {
+        const usage = { type: RESPONSE_USAGE_PART, id: chunk.id, data: chunk.data } as UIMessage["parts"][number];
+        const index = parts.findIndex((part) => part.type === RESPONSE_USAGE_PART && part.id === chunk.id);
+        if (index < 0) parts.push(usage);
+        else parts[index] = usage;
+        break;
+      }
+
       case REQUEST_DURATION_PART:
         parts.push({ type: REQUEST_DURATION_PART, data: chunk.data } as UIMessage["parts"][number]);
         break;
@@ -185,6 +197,7 @@ export async function periodicallyPersistMessages(
           type: "reasoning" as const,
           text: "",
           state: "streaming" as const,
+          providerMetadata: chunk.providerMetadata as ReasoningUIPart["providerMetadata"],
         });
         textById.set(id, parts.length - 1);
         break;
@@ -212,6 +225,7 @@ export async function periodicallyPersistMessages(
 
       case "tool-input-start": {
         const toolCallId = chunk.toolCallId as string;
+        if (toolById.has(toolCallId)) break;
         const toolName = chunk.toolName as string;
         toolNameById.set(toolCallId, toolName);
         const part: Record<string, unknown> = {
@@ -366,6 +380,14 @@ export async function periodicallyPersistMessages(
         break;
       }
 
+      case "source-url":
+      case "source-document":
+      case "file": {
+        const { type, ...fields } = chunk;
+        parts.push({ ...fields, type } as UIMessage["parts"][number]);
+        break;
+      }
+
       case "start-step":
         parts.push({ type: "step-start" as const });
         break;
@@ -375,9 +397,6 @@ export async function periodicallyPersistMessages(
         textById.clear();
         break;
 
-      case "error":
-        console.error("Stream chunk error:", chunk.errorText);
-        break;
     }
   }
 }

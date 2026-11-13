@@ -108,16 +108,6 @@ jobs:
             release/*.sha256
           draft: true
           prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') }}
-          body: |
-            ## macOS installation notice
-
-            These macOS installers use an ad-hoc signature and are **not notarized by Apple**. macOS will require app-specific approval before opening RemiAI.
-
-            1. Download the DMG for your Mac: `arm64` for Apple Silicon or `x64` for Intel. Download its matching `.dmg.sha256` file too.
-            2. In Terminal, go to the folder containing both files and run `shasum -a 256 -c RemiAI-<version>-mac-<arch>.dmg.sha256`, substituting the release version and your architecture. It should report `OK`. If the checksum differs, delete the download and get a fresh copy from this release; do not open the mismatched file. ZIP downloads have their own `.zip.sha256` files.
-            3. Open the DMG and drag RemiAI to Applications. Try opening RemiAI once. If macOS blocks it, open **System Settings → Privacy & Security**, scroll to **Security**, and click **Open Anyway** for RemiAI, then confirm **Open**. Apple shows this option for a limited time after an opening attempt.
-
-            If macOS still says the app is damaged after checksum verification and app-specific approval, report the macOS version, selected architecture, and exact alert in an issue. Do not disable Gatekeeper system-wide.
 
   # ────────────────────────────────────────────────────────────────────────
   # Windows — x64

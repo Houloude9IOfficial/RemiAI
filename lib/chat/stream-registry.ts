@@ -109,9 +109,9 @@ export const streamRegistry = {
   },
 
   /** Return a fresh replay + live subscription for each caller. */
-  get(conversationId: number): ReadableStream<string> | null {
+  get(conversationId: number, expectedStreamId?: string): ReadableStream<string> | null {
     const entry = activeStreams.get(conversationId);
-    if (!entry) return null;
+    if (!entry || (expectedStreamId !== undefined && entry.id !== expectedStreamId)) return null;
 
     let controllerRef: Subscriber | null = null;
     return new ReadableStream<string>({

@@ -1,24 +1,27 @@
 "use client";
 
 import { useRef, useEffect, useState } from "react";
+import { normalizeVisualSvg, repairSvgRectDimensions } from "@/lib/chat/visual-svg";
 import { cn } from "@/lib/utils";
 import { Eye, Loader2 } from "lucide-react";
+import { InteractiveVisual } from "./InteractiveVisual";
 
 // ─── Types ────────────────────────────────────────────────────────────
 
 type VisualAlign = "left" | "center" | "right";
 
-interface VisualData {
+type VisualData = {
   type: "visual";
-  visualType: "svg" | "html";
   title: string;
-  content: string;
   width: string;
   height: string;
   caption: string | null;
   align?: VisualAlign;
-  note?: string;
-}
+} & (
+  | { visualType: "svg" | "html"; content: string }
+  | { visualType: "interactive"; spec: unknown }
+  | { visualType: "bar"; data: { label: string; value: number }[] }
+);
 
 // ─── Theme injection ──────────────────────────────────────────────────
 
@@ -72,13 +75,6 @@ svg {
 `.trim();
 }
 
-function sanitizeSvg(svg: string): string {
-  let clean = svg.replace(/<script[\s\S]*?<\/script>/gi, "");
-  clean = clean.replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*)/gi, "");
-  clean = clean.replace(/javascript:\s*/gi, "");
-  return clean;
-}
-
 function injectSvgTheme(svgEl: SVGElement, vars: Record<string, string>) {
   svgEl.style.background = "transparent";
   svgEl.style.setProperty("--chat-bg", vars.chatBg);
@@ -125,102 +121,53 @@ function injectSvgTheme(svgEl: SVGElement, vars: Record<string, string>) {
 
 // ─── SVG Inline Renderer ──────────────────────────────────────────────
 
-function SvgRenderer({ content, className }: { content: string; className?: string }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [error, setError] = useState(false);
-  const [loading, setLoading] = useState(true);
+function SvgRenderer({ content, title, width }: { content: string; title: string; width: string }) {
+  const [rendered, setRendered] = useState<{ content: string; src: string | null }>();
+  const src = rendered?.content === content ? rendered.src : undefined;
+  const [loadError, setLoadError] = useState<string>();
 
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    try {
-      const sanitized = sanitizeSvg(content);
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(sanitized, "image/svg+xml");
-
-      if (doc.querySelector("parsererror")) {
-        queueMicrotask(() => {
-          setError(true);
-          setLoading(false);
-        });
-        return;
-      }
-
-      const vars = readChatThemeVars();
-      let svgEl = doc.querySelector("svg");
-      if (!svgEl) {
-        const wrapped = `<svg xmlns="http://www.w3.org/2000/svg">${sanitized}</svg>`;
-        const retryDoc = parser.parseFromString(wrapped, "image/svg+xml");
-        svgEl = retryDoc.querySelector("svg");
-        if (!svgEl) {
-          queueMicrotask(() => {
-            setError(true);
-            setLoading(false);
-          });
-          return;
+    const markup = normalizeVisualSvg(content);
+    let image: string | null = null;
+    if (markup) {
+      const document = new DOMParser().parseFromString(markup, "image/svg+xml");
+      const svg = document.documentElement as unknown as SVGElement;
+      if (svg.localName === "svg") {
+        repairSvgRectDimensions(svg);
+        const dimensions = [svg.getAttribute("width"), svg.getAttribute("height")];
+        if (!svg.hasAttribute("viewBox") && dimensions.every((value) => value && /^[1-9]\d*(?:\.\d+)?$/.test(value))) {
+          svg.setAttribute("viewBox", `0 0 ${dimensions.join(" ")}`);
         }
+        if (svg.hasAttribute("viewBox")) {
+          svg.removeAttribute("width");
+          svg.removeAttribute("height");
+        }
+        injectSvgTheme(svg, readChatThemeVars());
+        // Load the generated document as an image, keeping its markup outside
+        // the live page DOM while preserving its own SVG styles.
+        image = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(svg))}`;
       }
-
-      svgEl.removeAttribute("width");
-      svgEl.removeAttribute("height");
-      svgEl.setAttribute("width", "100%");
-      svgEl.setAttribute("height", "100%");
-      // Tailwind's [&_svg] rules can't pierce a shadow root, so replicate
-      // the sizing they provided (block display + capped width) inline.
-      svgEl.style.display = "block";
-      svgEl.style.maxWidth = "100%";
-      svgEl.style.height = "auto";
-      injectSvgTheme(svgEl, vars);
-
-      // Render inside a shadow root so any <style> in the SVG — including the
-      // theme block injected above — is fully encapsulated. Without this, a
-      // <style> inside an inline <svg> leaks document-wide (e.g. `html, body`
-      // or `:root` rules change the whole app's font/colors). CSS custom
-      // properties still inherit across the shadow boundary, so the visual
-      // keeps its theme-awareness.
-      //
-      // NOTE: inside the shadow root the theme block's `:root`/`html`/`body`
-      // selectors match nothing (only `svg` does), which is exactly why they
-      // are harmless here. Do NOT "simplify" this back to light-DOM rendering.
-      const shadow =
-        container.shadowRoot ?? container.attachShadow({ mode: "open" });
-      shadow.replaceChildren(svgEl);
-      queueMicrotask(() => setLoading(false));
-    } catch {
-      queueMicrotask(() => {
-        setError(true);
-        setLoading(false);
-      });
     }
+    const frame = requestAnimationFrame(() => setRendered({ content, src: image }));
+    return () => cancelAnimationFrame(frame);
   }, [content]);
 
-  if (error) {
+  if (src === null || (src && loadError === src)) {
     return (
       <div className="flex items-center justify-center rounded-lg border border-destructive/20 bg-destructive/5 p-6 text-sm text-destructive">
         Could not render this SVG visual. There may be a syntax error in the generated code.
       </div>
     );
   }
-
-  return (
-    <div className="relative">
-      {loading && (
-        <div className="flex items-center justify-center bg-transparent p-8">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
-      )}
-      <div
-        ref={containerRef}
-        className={cn(
-          "w-full bg-transparent",
-          loading && "hidden",
-          className,
-        )}
-        style={{ minHeight: loading ? 0 : 100, background: "transparent" }}
-      />
-    </div>
-  );
+  if (!src) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <Loader2 className="size-5 animate-spin text-muted-foreground" aria-label="Loading chart" />
+      </div>
+    );
+  }
+  // eslint-disable-next-line @next/next/no-img-element -- generated SVG is displayed in the browser's image context
+  return <img src={src} alt={title} className="block h-auto max-w-full" style={{ width }} onError={() => setLoadError(src)} />;
 }
 
 // ─── HTML Iframe Renderer ────────────────────────────────────────────
@@ -349,30 +296,74 @@ function HtmlRenderer({
   );
 }
 
+const formatBarValue = new Intl.NumberFormat(undefined, { maximumSignificantDigits: 15 });
+
+function BarRenderer({ title, data, width }: Extract<VisualData, { visualType: "bar" }>) {
+  const values = data.map(({ value }) => value);
+  const magnitude = Math.max(...values.map(Math.abs)) || 1;
+  const min = Math.min(0, ...values) / magnitude;
+  const max = Math.max(0, ...values) / magnitude;
+  const range = max - min || 1;
+  const zero = -min / range * 100;
+
+  return (
+    <figure className="mx-auto max-w-full px-1 py-3" style={{ width }}>
+      <figcaption className="mb-3 break-words text-base font-semibold">{title}</figcaption>
+      <ul className="space-y-2">
+        {data.map(({ label, value }, index) => {
+          const end = (value / magnitude - min) / range * 100;
+          return (
+            <li key={index} className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)_minmax(0,0.85fr)] items-center gap-2 text-sm">
+              <span className="[overflow-wrap:anywhere]">{label}</span>
+              <span aria-hidden="true" className="relative h-4 rounded-sm bg-muted/50">
+                <span className="absolute inset-y-0 w-px -translate-x-1/2 bg-muted-foreground/60" style={{ left: `${zero}%` }} />
+                <span className="absolute inset-y-0 rounded-sm bg-primary" style={{
+                  left: `${Math.min(zero, end)}%`,
+                  width: `${Math.abs(end - zero)}%`,
+                }} />
+              </span>
+              <span className="text-right tabular-nums [overflow-wrap:anywhere]">{formatBarValue.format(value)}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </figure>
+  );
+}
+
 // ─── Main VisualCard Component ────────────────────────────────────────
 
-export function VisualCard({ data }: { data: unknown }) {
+export function VisualCard({ data, conversationId }: { data: unknown; conversationId?: number }) {
   const [userAlign] = useState<VisualAlign | null>(null);
 
   if (!data || typeof data !== "object") return null;
 
-  const visual = data as Record<string, unknown>;
+  const visual = data as VisualData;
   if (visual.type !== "visual") return null;
 
   const {
     visualType,
-    content,
+    title,
     width,
     height,
     caption,
     align: alignFromData,
-  } = visual as unknown as VisualData;
+  } = visual;
 
   const align = userAlign ?? alignFromData ?? "center";
   const alignClass =
     align === "left" ? "mr-auto" : align === "right" ? "ml-auto" : "mx-auto";
 
-  if (!content) {
+  if (visualType === "interactive") {
+    return (
+      <div className={cn("w-full max-w-3xl", alignClass)}>
+        <InteractiveVisual spec={visual.spec} title={title} conversationId={conversationId} />
+        {caption && <p className="mt-2 text-sm text-muted-foreground">{caption}</p>}
+      </div>
+    );
+  }
+
+  if (visualType === "bar" ? !visual.data?.length : !visual.content) {
     return (
       <div className="rounded-xl border border-border/40 bg-transparent p-6 text-center">
         <Eye className="mx-auto mb-2 h-8 w-8 text-muted-foreground/40" />
@@ -390,10 +381,12 @@ export function VisualCard({ data }: { data: unknown }) {
     >
       <div className="overflow-hidden rounded-xl bg-transparent">
         <div className="w-full overflow-x-auto bg-transparent">
-          {visualType === "svg" ? (
-            <SvgRenderer content={content} />
+          {visualType === "bar" ? (
+            <BarRenderer {...visual} />
+          ) : visualType === "svg" ? (
+            <SvgRenderer content={visual.content} title={title} width={width} />
           ) : (
-            <HtmlRenderer content={content} width={width} height={height} />
+            <HtmlRenderer content={visual.content} width={width} height={height} />
           )}
         </div>
 

@@ -1,3 +1,6 @@
+import { File } from "lucide-react";
+import { dispatchSessionFilesPresent, sessionFilesApi } from "@/lib/api/session-files";
+import { sessionFileMentionPath } from "./FileMention";
 import React from "react";
 import Markdown from "markdown-to-jsx";
 import hljs from "highlight.js";
@@ -34,6 +37,7 @@ interface MarkdownRendererProps {
   /** Normalized URL → citation ref. Links whose destination matches a key
    *  render as a numbered Nexus-style chip instead of a plain link. */
   citations?: Map<string, CitationRef> | null;
+  conversationId?: number;
 }
 
 /**
@@ -43,7 +47,7 @@ interface MarkdownRendererProps {
  *
  * When `isStreaming` is true, copy buttons on code blocks are hidden.
  */
-export function MarkdownRenderer({ content, className, isStreaming, citations }: MarkdownRendererProps) {
+export function MarkdownRenderer({ content, className, isStreaming, citations, conversationId }: MarkdownRendererProps) {
   // While streaming, the caller injects raw HTML (animated <span>s) that must
   // be parsed. Once streaming is done, escape raw HTML outside of code fences
   // so stray JSX/HTML in message content renders as literal text instead of
@@ -66,6 +70,30 @@ export function MarkdownRenderer({ content, className, isStreaming, citations }:
             // -- Links: destinations matching a retrieved source render as a
             // numbered citation chip; everything else opens in a new tab.
             a: ({ href, children, ...props }: MarkdownLinkProps) => {
+              if (conversationId != null && typeof href === "string") {
+                const file = sessionFileMentionPath(href, conversationId);
+                if (file) {
+                  return (
+                    <a
+                      className="session-file-mention inline-flex max-w-full items-baseline gap-1.5 rounded-sm font-medium text-primary hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+                      href={sessionFilesApi.rawUrl(conversationId, file, true)}
+                      title={file}
+                      onClick={(event) => {
+                        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                        event.preventDefault();
+                        dispatchSessionFilesPresent({ focusPath: file, manualConversationId: conversationId });
+                      }}
+                    >
+                      <File className="size-[0.9em] shrink-0 self-center" aria-hidden="true" />
+                      <span className="min-w-0 [overflow-wrap:anywhere]">{children}</span>
+                    </a>
+                  );
+                }
+                if (/^\/api\/chat\/[^/]+\/session-files\//.test(href) &&
+                    !/^\/api\/chat\/\d+\/session-files\/(?:download|canvas\/[^/]+\/download)(?:[?#]|$)/.test(href)) {
+                  return <span>{children}</span>;
+                }
+              }
               const citation =
                 typeof href === "string" && citations?.size
                   ? citations.get(normalizeUrlKey(href))

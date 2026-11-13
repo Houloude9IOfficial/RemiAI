@@ -99,6 +99,7 @@ export const userPreferences = sqliteTable("user_preferences", {
   links: text("links", { mode: "json" }).$type<Record<string, string>>().notNull().default({}),
   accentColor: text("accent_color").notNull().default(""),
   backgroundColor: text("background_color").notNull().default(""),
+  chatTextSize: integer("chat_text_size").notNull().default(100),
   // Controls whether models discovered or manually added in the future are enabled.
   enableNewModels: integer("enable_new_models", { mode: "boolean" }).notNull().default(true),
   // RemiAPI (Cloudflare Worker caching proxy for zero-cost cards)

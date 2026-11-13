@@ -52,7 +52,7 @@ export function AttachedFileCard({
           url={url}
           alt={name}
           filename={name}
-          className="aspect-[4/3] w-full rounded-lg"
+          className="aspect-4/3 w-full rounded-lg"
           imgClassName="h-full w-full object-cover"
         />
       );
@@ -84,7 +84,7 @@ export function AttachedFileCard({
         // "hover:shadow-md hover:border-muted-foreground/20",
         inUserMessage
           ? "border-white/20 bg-primary-foreground/5 text-primary-foreground"
-          : "border-border/60 bg-card text-foreground shadow-sm",
+          : "border-border/60 bg-card text-foreground",
       )}
     >
       {/* Icon */}

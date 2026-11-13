@@ -1,5 +1,5 @@
 // Exercises the actual chat handlers against a local OpenAI-compatible mock.
-// All storage is isolated; startup services stay off in this test process.
+// Startup and all storage run in an isolated test process.
 // Run: node scripts/test-live-question-route.mjs
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
@@ -13,7 +13,7 @@ if (!process.argv.includes("--isolated-child")) {
   const directory = await mkdtemp(path.join(tmpdir(), "remi-live-questions-"));
   try {
     const result = spawnSync(process.execPath, ["--import", "tsx", fileURLToPath(import.meta.url), "--isolated-child"], {
-      stdio: "inherit", env: { ...process.env, REMI_DATA_DIR: directory, NEXT_PHASE: "phase-production-build" },
+      stdio: "inherit", env: { ...process.env, REMI_DATA_DIR: directory, NEXT_PHASE: "" },
     });
     if (result.error) throw result.error;
     process.exitCode = result.status ?? 1;
@@ -21,8 +21,7 @@ if (!process.argv.includes("--isolated-child")) {
 } else {
   const { db, initializeApp } = await import("../db/index.ts");
   const schema = await import("../db/schema.ts");
-  const { migrate } = await import("drizzle-orm/better-sqlite3/migrator");
-  migrate(db, { migrationsFolder: path.resolve("db/migrations") });
+  const { eq } = await import("drizzle-orm");
   await initializeApp();
   const chat = await import("../app/api/chat/route.ts");
   const answersApi = await import("../app/api/chat/[id]/question-answers/route.ts");
@@ -32,16 +31,42 @@ if (!process.argv.includes("--isolated-child")) {
     const until = Date.now() + 12000;
     while (!predicate()) { if (Date.now() > until) throw new Error("Integration timed out"); await sleep(10); }
   }
+  // Let startup's deferred recovery inspect the empty fixture before
+  // registering live test generations.
+  await sleep(100);
   let phase = "live";
   let call = 0;
   let finalGate;
   const requests = [];
   const mock = createServer(async (req, res) => {
+    if (req.method !== "POST") {
+      if (req.url === "/evidence") {
+        res.setHeader("content-type", "text/html");
+        res.end("<script>RAW_HTML_NOISE</script><main>ORIGINAL_EVIDENCE_MARKER</main>");
+        return;
+      }
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({ data: [] }));
+      return;
+    }
     let text = ""; for await (const chunk of req) text += chunk;
     const body = JSON.parse(text); requests.push(body); const number = ++call;
     res.writeHead(200, { "content-type": "text/event-stream" });
     const emit = (delta, reason = null) => res.write(`data: ${JSON.stringify({ id: `completion-${number}`, object: "chat.completion.chunk", created: 1, model: "mock", choices: [{ index: 0, delta, finish_reason: reason }] })}\n\n`);
-    if (number === 1) {
+    if (phase === "research" && number < 6) {
+      const action = [
+        ["web_fetch", { url: `http://127.0.0.1:${mock.address().port}/evidence` }],
+        ["load_tool_groups", { groups: ["session_files"] }],
+        ["get_time_details", {}],
+        ["get_time_details", {}],
+        ["read_tool_result", { toolCallId: "research-1" }],
+      ][number - 1];
+      emit({ role: "assistant", tool_calls: [{
+        index: 0, id: `research-${number}`, type: "function",
+        function: { name: action[0], arguments: JSON.stringify(action[1]) },
+      }] });
+      emit({}, "tool_calls");
+    } else if (number === 1) {
       const question = { title: "Live setup", questions: [{ id: "answer", question: "What should I use?", type: "free_text", options: [], allowCustom: true }] };
       const tools = [{ index: 0, id: `${phase}-questions`, type: "function", function: { name: "ask_questions", arguments: JSON.stringify(question) } }];
       if (phase !== "late") tools.push({ index: 1, id: `${phase}-delay`, type: "function", function: { name: "delay", arguments: JSON.stringify({ ms: 800 }) } });
@@ -50,6 +75,12 @@ if (!process.argv.includes("--isolated-child")) {
       emit({ role: "assistant", content: number === 2 ? "Current response." : "Answers received." });
       if (phase === "late" && number === 2) await new Promise((resolve) => { finalGate = resolve; });
       emit({}, "stop");
+    }
+    if (phase === "research") {
+      res.write(`data: ${JSON.stringify({
+        id: `completion-${number}`, object: "chat.completion.chunk", model: "mock", choices: [],
+        usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
+      })}\n\n`);
     }
     res.end("data: [DONE]\n\n");
   });
@@ -83,6 +114,7 @@ if (!process.argv.includes("--isolated-child")) {
     assert.equal(call, 2);
     assert.equal((JSON.stringify(requests[1].messages).match(/Immediate answer/g) || []).length, 1);
     assert.equal(delivery.pendingQuestionSubmissions(db, live.id).length, 0);
+    assert.equal(db.select().from(schema.conversations).where(eq(schema.conversations.id, live.id)).get().mode, "plan");
     console.log("✓ actual chat route receives answers during a tool execution without interruption");
 
     phase = "late"; call = 0; requests.length = 0;
@@ -94,6 +126,12 @@ if (!process.argv.includes("--isolated-child")) {
     await waitUntil(() => call === 3 && !delivery.questionRuns.has(late.id));
     assert.match(JSON.stringify(requests[2].messages), /Immediate answer/);
     assert.equal(delivery.pendingQuestionSubmissions(db, late.id).length, 0);
+    assert.equal(db.select().from(schema.conversations).where(eq(schema.conversations.id, late.id)).get().mode, "plan");
+    const history = db.select().from(schema.messages).where(eq(schema.messages.conversationId, late.id)).all()
+      .sort((left, right) => left.orderIndex - right.orderIndex);
+    assert.deepEqual(history.map((message) => message.role), ["user", "assistant", "user", "assistant"]);
+    assert.match(JSON.stringify(history[3].parts), /Answers received/);
+    assert.doesNotMatch(JSON.stringify(history[3].parts), /Current response|Live setup/);
     console.log("✓ actual late-answer submission starts and persists one automatic follow-up");
 
     phase = "stop"; call = 0; requests.length = 0;
@@ -110,7 +148,37 @@ if (!process.argv.includes("--isolated-child")) {
     assert.equal(delivery.pendingQuestionSubmissions(db, stopped.id).length, 1);
     assert.equal(delivery.pendingQuestionSubmissions(db, stopped.id, true).length, 0);
     console.log("✓ actual Stop aborts generation and retains undelivered answers without restarting");
-    console.log("✅ Live question route integration passed.");
+    for (const mode of ["chat", "goal"]) {
+      phase = "research"; call = 0; requests.length = 0;
+      const research = db.insert(schema.conversations).values({
+        title: "Research integration", providerId: provider.id, modelId: "mock",
+        memoryEnabled: false, mode,
+      }).returning().get();
+      const response = await chat.POST(new Request("http://localhost/api/chat", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ conversationId: research.id, messages: [{
+          id: crypto.randomUUID(), role: "user", parts: [{ type: "text", text: "Research this deeply." }],
+        }] }),
+      }));
+      await consume(response, async () => {});
+      await waitUntil(() => !delivery.questionRuns.has(research.id));
+      assert.equal(call, 6);
+      const assistant = db.select().from(schema.messages).where(eq(schema.messages.conversationId, research.id)).all()
+        .find((message) => message.role === "assistant");
+      const usage = assistant.parts.filter((part) => part.type === "data-response-usage");
+      assert.equal(usage.length, 1);
+      assert.deepEqual(usage[0].data, { inputTokens: 600, outputTokens: 120 });
+      const names = (index) => requests[index].tools.map((item) => item.function.name);
+      assert.ok(!names(0).includes("session_file_read"));
+      assert.ok(names(2).includes("session_file_read"));
+      assert.ok(names(5).includes("session_file_read"));
+      assert.match(JSON.stringify(requests[1].messages), /ORIGINAL_EVIDENCE_MARKER/);
+      assert.doesNotMatch(JSON.stringify(requests[1].messages), /RAW_HTML_NOISE/);
+      assert.ok(!requests[4].messages.some((message) => message.tool_call_id === "research-1"));
+      assert.match(JSON.stringify(requests[5].messages.find((message) => message.tool_call_id === "research-5")), /ORIGINAL_EVIDENCE_MARKER/);
+      console.log(`✓ actual ${mode} route filters schemas, extracts HTML, compacts old calls and retrieves their evidence`);
+    }
+    console.log("✅ Live chat route integration passed.");
   } finally { mock.closeAllConnections(); await new Promise((resolve) => mock.close(resolve)); }
   process.exit(0);
 }

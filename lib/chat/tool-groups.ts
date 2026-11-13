@@ -45,6 +45,7 @@ export const CORE_TOOLS: ReadonlySet<string> = new Set([
   "get_tool_help",
   "list_available_tools",
   "load_tool_groups",
+  "read_tool_result",
   "ask_questions",
   "suggest_followups",
   // Memory is core for memory-enabled chats so the assistant can proactively
@@ -240,7 +241,8 @@ export const CONDITIONAL_GROUPS: Record<string, ToolGroup> = {
       "chart", "graph", "visual", "dashboard", "diagram", "timeline", "kpi",
       "stat card", "svg", "visualize", "plot", "pie chart", "bar chart",
       "line chart", "metrics", "infographic", "flow chart", "data viz",
-      "visualization",
+      "visualization", "calculator", "interactive demo", "interactive map", "comparison table",
+      "filterable", "slider", "inline widget", "media gallery", "image gallery", "video gallery",
     ],
   },
   canvas: {
@@ -596,6 +598,7 @@ export function computeActiveToolGroups(opts: {
   userText: string;
   recentMessages: Array<{ parts: unknown[] }>;
   stored: StoredToolState;
+  inheritExplicit?: boolean;
 }): Set<string> {
   const { userText, recentMessages, stored } = opts;
 
@@ -608,9 +611,9 @@ export function computeActiveToolGroups(opts: {
     }
   }
 
-  // Stored: explicit (persistent) + recent (from the last request).
-  for (const group of stored.explicit) {
-    active.add(group);
+  // Chat ignores legacy explicit groups. Other modes retain their existing behavior.
+  if (opts.inheritExplicit !== false) {
+    for (const group of stored.explicit) active.add(group);
   }
   for (const group of stored.recent) {
     active.add(group);
@@ -713,7 +716,7 @@ export function activeToolNames(
  * (SDK `prepareStep` + `activeTools`), so a group enabled here becomes
  * available to the model in the very NEXT step of the SAME response — no
  * "repeat your request" round-trip. Enabled groups are stored as `explicit`
- * and persist across requests.
+ * and persist across requests unless the caller handles them for this run.
  *
  * @param toolSet the fully-built tool set for this request (used to skip
  *   groups whose tools aren't actually present, e.g. unconfigured
@@ -722,6 +725,7 @@ export function activeToolNames(
 export function buildLoadToolGroupsTool(
   conversationId: number,
   toolSet?: Record<string, unknown>,
+  onLoad?: (groups: string[]) => boolean,
 ): {
   description: string;
   // AI SDK v7 property (the legacy `parameters` key is silently ignored —
@@ -767,7 +771,7 @@ export function buildLoadToolGroupsTool(
         );
       }
 
-      db.transaction(() => {
+      if (!onLoad?.(valid)) db.transaction(() => {
         const current = db
           .select({ toolGroups: conversations.toolGroups })
           .from(conversations)
@@ -817,7 +821,7 @@ export async function persistActiveToolGroups(opts: {
       .get();
     const stored = parseStoredToolState(row?.toolGroups);
     const recent = new Set(activeGroups);
-    for (const group of stored.explicit) recent.delete(group);
+
     await db
       .update(conversations)
       .set({

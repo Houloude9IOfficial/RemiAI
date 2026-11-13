@@ -1,3 +1,5 @@
+import { RESPONSE_USAGE_PART } from "./response-usage";
+import { WORK_ACTIVITY_PART } from "./work-activity";
 import type { UIMessage } from "ai";
 
 /**
@@ -190,8 +192,10 @@ const OUTPUT_SHAPERS: Record<string, (output: unknown) => string | null> = {
   create_visual: (o) => {
     if (o && typeof o === "object") {
       const rec = o as Record<string, unknown>;
+      if (typeof rec.error === "string") return rec.error;
+      if (rec.type !== "visual") return null;
       const title = typeof rec.title === "string" ? rec.title : "";
-      const type = typeof rec.type === "string" ? rec.type : "";
+      const type = typeof rec.visualType === "string" ? rec.visualType : "";
       return `[Visual created${title ? ` — ${title}` : ""}${type ? ` (${type})` : ""}]`;
     }
     return null;
@@ -314,8 +318,9 @@ export function optimizeMessageParts(
     const part = rawPart as unknown as LoosePart;
 
     // UI-only markers — zero value to the model.
-    if (part.type === "step-start") continue;
-    if (part.type === "reasoning") continue;
+    if (part.type === "step-start" || part.type === WORK_ACTIVITY_PART || part.type === RESPONSE_USAGE_PART) continue;
+    if (part.type === "reasoning" || part.type === "reasoning-file") continue;
+    if (part.state === "input-streaming") continue;
 
     // ── v7 tool parts: type is `tool-${toolName}` ───────────────────────
     if (

@@ -225,9 +225,9 @@ function MapBody({ d }: { d: any }) {
   );
 }
 
-function MapTile({ latitude, longitude }: { latitude: number; longitude: number }) {
+export function MapTile({ latitude, longitude, title = "Interactive OpenStreetMap" }: { latitude: number; longitude: number; title?: string }) {
   const delta = 0.006;
-  return <iframe title="Interactive OpenStreetMap" className="h-56 w-full border-0 rounded-lg" loading="lazy" src={`https://www.openstreetmap.org/export/embed.html?bbox=${longitude - delta}%2C${latitude - delta}%2C${longitude + delta}%2C${latitude + delta}&layer=mapnik&marker=${latitude}%2C${longitude}`} />;
+  return <iframe title={title} className="h-56 w-full border-0 rounded-lg" loading="lazy" src={`https://www.openstreetmap.org/export/embed.html?bbox=${longitude - delta}%2C${latitude - delta}%2C${longitude + delta}%2C${latitude + delta}&layer=mapnik&marker=${latitude}%2C${longitude}`} />;
 }
 
 function CryptoBody({ d }: { d: any }) {

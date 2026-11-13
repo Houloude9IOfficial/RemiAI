@@ -4,6 +4,8 @@ import { db, initializeApp } from "@/db";
 import { conversations, messages, questionSubmissions } from "@/db/schema";
 import { and, asc, eq } from "drizzle-orm";
 import { acceptQuestionAnswers, listQuestionSubmissions, questionRuns, submissionMessage } from "@/lib/chat/question-delivery";
+import { toUIMessage } from "@/lib/chat/persist";
+import { visibleChatParts } from "@/lib/chat/work-activity";
 
 const inputSchema = z.object({
   submissionId: z.string().uuid(),
@@ -45,12 +47,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     mode: submissions.length ? db.select({ mode: conversations.mode }).from(conversations).where(eq(conversations.id, conversationId)).get()?.mode : null,
     resolvedIds: submissions.map((row) => row.toolCallId),
     activeAssistantId: run?.assistantId ?? null,
-    initialAssistantMessage: run?.initialAssistantMessage ?? null,
+    initialAssistantMessage: run?.initialAssistantMessage
+      ? { ...run.initialAssistantMessage, parts: visibleChatParts(run.initialAssistantMessage.parts) }
+      : null,
     hasAutomaticPending: submissions.some((row) => !row.delivered && row.autoContinue),
     // Only fetch the full persisted transcript when question submissions exist.
     answerMessages: submissions.map(submissionMessage),
     messages: submissions.length && new URL(req.url).searchParams.get("transcript") === "1" ? db.select().from(messages).where(eq(messages.conversationId, conversationId))
-      .orderBy(asc(messages.orderIndex)).all().map((row) => ({ id: row.uiId, role: row.role, parts: row.parts })) : null,
+      .orderBy(asc(messages.orderIndex)).all().map(toUIMessage) : null,
   });
 }
 

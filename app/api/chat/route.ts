@@ -1,3 +1,5 @@
+import { createLiveToolContext } from "@/lib/chat/live-tool-context";
+import { buildReadToolResultTool } from "@/lib/tools/read-tool-result";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { jsonError } from "@/lib/validation/api";
@@ -30,9 +32,11 @@ import {
   failGenerationPresence,
 } from "@/lib/chat/generation-presence";
 import { periodicallyPersistMessages } from "@/lib/chat/persist-interval";
+import { responseUsagePart } from "@/lib/chat/response-usage";
 import { REQUEST_DURATION_PART } from "@/lib/chat/request-duration";
+import { WORK_ACTIVITY_PART, WORK_SUMMARY_METADATA, type WorkActivityPart } from "@/lib/chat/work-activity";
 import { asc, eq, sql } from "drizzle-orm";
-import { db, getRuntimeDb, initializeApp } from "@/db";
+import { db, initializeApp } from "@/db";
 import {
   conversations,
   providers,
@@ -78,6 +82,7 @@ import {
   buildLoadToolGroupsTool,
   buildToolAvailabilityNote,
   computeActiveToolGroups,
+  groupsForTools,
   parseStoredToolState,
   persistActiveToolGroups,
 } from "@/lib/chat/tool-groups";
@@ -96,7 +101,7 @@ import { buildPlaywrightTools } from "@/lib/tools/playwright";
 import { buildDocumentReaderTools } from "@/lib/tools/document-reader";
 import { buildMediaTools } from "@/lib/media/tools";
 import { delayTool } from "@/lib/tools/delay";
-import { webFetchTool } from "@/lib/tools/web-fetch";
+import { chatWebFetchTool } from "@/lib/tools/web-fetch";
 import { buildHttpRequestTool } from "@/lib/tools/http-request";
 import { buildCreateVisualTool } from "@/lib/tools/create-visual";
 import { askQuestionsTool } from "@/lib/tools/ask-questions";
@@ -124,7 +129,6 @@ import { buildWorkExecutionTools, stopWorkServer } from "@/lib/work/execution";
 import { buildWorkBrowserTools, closeWorkBrowser } from "@/lib/work/browser";
 import { slugify } from "@/lib/canvas/storage";
 import { buildModeTool } from "@/lib/tools/mode";
-import { shouldPromotePlanToGoal } from "@/lib/chat/mode-transition";
 import {
   INSTANT_INSTRUCTIONS,
   INSTANT_MAX_OUTPUT_TOKENS,
@@ -177,6 +181,7 @@ import {
 } from "@/lib/build/runs";
 import {
   recordCitedClaims,
+  sanitizeSourceUrl,
   withSourceProvenance,
 } from "@/lib/research/source-storage";
 import { saveBuildResultArtifact } from "@/lib/artifacts/storage";
@@ -333,6 +338,7 @@ export async function POST(req: Request) {
     conversationId,
     assistantMessageId: run.assistantId,
     continuationCount: run.continuationCount,
+    startedAt: runStartedAtMs,
   });
   beginGenerationPresence(
     conversationId,
@@ -498,6 +504,8 @@ async function runChatRequest(req: Request, questionRun: QuestionRun, runStarted
   if (lastMessage?.role === "assistant") {
     questionRun.assistantId = lastMessage.id;
     questionRun.initialAssistantMessage = structuredClone(lastMessage);
+    await db.update(chatGenerationRuns).set({ assistantMessageId: lastMessage.id })
+      .where(eq(chatGenerationRuns.id, questionRun.generationRunId)).run();
   }
   if (lastMessage?.role === "user") {
     const fallbackTitle = titleFromMessage(lastMessage);
@@ -510,14 +518,6 @@ async function runChatRequest(req: Request, questionRun: QuestionRun, runStarted
       })
       .where(eq(conversations.id, conversationId));
     if (shouldSetFallbackTitle) expectedAutoTitle = fallbackTitle;
-
-    const answeredPlanQuestions = shouldPromotePlanToGoal(mode, uiMessages);
-    if (answeredPlanQuestions) {
-      mode = "goal";
-      await db.update(conversations)
-        .set({ mode: "goal", updatedAt: new Date().toISOString() })
-        .where(eq(conversations.id, conversationId));
-    }
   }
 
   const promptAssemblyStartedAt = performance.now();
@@ -577,7 +577,7 @@ async function runChatRequest(req: Request, questionRun: QuestionRun, runStarted
     sourceRunId: trace.traceId,
   };
   const sourceAwareWebFetchTool = withSourceProvenance(
-    webFetchTool,
+    chatWebFetchTool,
     "web_fetch",
     sourceProvenanceOptions,
   );
@@ -830,7 +830,7 @@ You are currently in **Plan mode**. This means:
 - Focus on understanding the user's requirements, exploring their codebase, and proposing a clear implementation plan.
 - Use \`todos_init\` at the start to lay out the steps you'll help them plan.
 - Stay in Plan mode while requirements are unclear or questions remain unanswered.
-- When the user has answered the planning questions and the requirements are clear, call \`switch_mode({ mode: "goal", reason: "..." })\` before continuing the work. The switch applies immediately to the current run, so continue with the newly available tools after it succeeds. Do not attempt build/write tools before switching.
+- Use clarification answers to finish and present the plan. Stay in Plan mode while awaiting approval. Switch to Goal or Build only when the user explicitly asks you to proceed with implementation.
 - If new ambiguity appears while working, call \`switch_mode({ mode: "plan", reason: "..." })\` and ask focused questions; the switch applies immediately and remains active for following turns.
 - Never claim to have changed modes without calling \`switch_mode\`.
 - Do NOT attempt to modify any files — you don't have permission to write in this mode.`
@@ -883,7 +883,9 @@ Definition of done:
   // Merge all tool sets (last writer wins on name collision). Typed as a
   // loose record so the list_available_tools rebuild below can replace the
   // original entry.
+  const liveToolContext = createLiveToolContext();
   const tools: Record<string, unknown> = {
+    read_tool_result: buildReadToolResultTool(liveToolContext.results),
     ...mcpToolSet,
     ...effectiveFsToolSet,
     ...contextToolSet,
@@ -1151,6 +1153,7 @@ Definition of done:
   // load on demand via deterministic intent classification, recent tool
   // usage, and the conversation's stored groups. The model can always enable
   // more via load_tool_groups / list_available_tools.
+  const usesRunScopedToolGroups = () => mode === "chat" || mode === "goal";
   const storedToolGroups = parseStoredToolState(conversation.toolGroups);
   // `let`: prepareStep below updates it when load_tool_groups enables a group
   // mid-stream, so onFinish's persist uses the freshest active set.
@@ -1160,6 +1163,7 @@ Definition of done:
     // follow-ups like "make the button blue" must not lose session files).
     recentMessages: uiMessages.slice(-10),
     stored: storedToolGroups,
+    inheritExplicit: !usesRunScopedToolGroups(),
   });
   // Every registered tool lives in the BASE set; the SDK `activeTools` filter
   // (initial value below, re-evaluated every step by prepareStep) decides
@@ -1172,6 +1176,8 @@ Definition of done:
   // (the AI SDK accepts these raw `{ description, inputSchema, execute }`
   // objects, e.g. in lib/tools/*.ts) — it also keeps the load_tool_groups
   // shape from breaking the ToolSet union.
+  const runToolGroups = new Set<string>();
+  const usedToolGroups = new Set<string>();
   const baseTools: Record<string, unknown> = instantMode
     ? (() => {
         let toolCallCount = 0;
@@ -1201,7 +1207,10 @@ Definition of done:
         // cache breakpoint on it, and since load_tool_groups is always active
         // and always last in the per-step filtered set, the tool-definitions
         // prefix stays cacheable on every step of the loop.
-        load_tool_groups: buildLoadToolGroupsTool(conversationId, tools),
+        load_tool_groups: buildLoadToolGroupsTool(conversationId, tools, (groups) => {
+          for (const group of groups) runToolGroups.add(group);
+          return usesRunScopedToolGroups();
+        }),
       };
 
   // AI SDK v7 requires `inputSchema` on every tool definition — some builders
@@ -1225,23 +1234,13 @@ Definition of done:
       ? instantToolNames(memoryEnabled).filter((name) => baseTools[name] !== undefined)
       : isDemoMode()
       ? Object.keys(filterDemoTools(tools))
-      : mode === "plan"
+      : mode === "plan" || usesRunScopedToolGroups()
         ? activeToolNames(tools, groups)
         : [...Object.keys(tools), "load_tool_groups"];
   const initialActiveToolNames = activeToolNamesForMode(activeToolGroups);
-  const estimatedToolDefinitionChars = Object.entries(baseTools).reduce(
-    (total, [name, tool]) => {
-      const toolRecord = tool && typeof tool === "object"
-        ? tool as Record<string, unknown>
-        : {};
-      return total + name.length + String(toolRecord.description ?? "").length +
-        (toolRecord.inputSchema ? 120 : 0);
-    },
-    0,
-  );
+  trace.metric("initialMode", mode);
   trace.metric("activeToolCount", initialActiveToolNames.length);
-  trace.metric("activeToolNames", initialActiveToolNames as string[]);
-  trace.metric("estimatedToolDefinitionChars", estimatedToolDefinitionChars);
+  trace.metric("activeToolNames", initialActiveToolNames);
 
   // Inject recent file changes into the system prompt for freshness.
   // Capped to 5 — the model can call query_recent_changes for more. Skipped
@@ -1358,14 +1357,14 @@ Definition of done:
   const dynamicSystemPromptBase = instantMode
     ? projectContext + projectAttachmentContext
     : systemTip + profileTip + memoryTip + projectContext + projectAttachmentContext + fileChangeTip + summarySection +
-      planModePrompt + goalModePrompt + buildModePrompt + workModePrompt + canvasSection + _remiCardsSection + existingCardSection + (Object.keys(_remiCardToolSet).length ? REMI_CARD_PRESENTATION_RULES + REMI_CARD_SCOPE_RULES : "") + activeSkillsSection +
+      planModePrompt + goalModePrompt + buildModePrompt + workModePrompt + _remiCardsSection + existingCardSection + (Object.keys(_remiCardToolSet).length ? REMI_CARD_PRESENTATION_RULES + REMI_CARD_SCOPE_RULES : "") + activeSkillsSection +
       taggedSkillsSection + qualityPolicyPrompt;
   const liveModeNote = () =>
     `\n\n## AUTHORITATIVE LIVE MODE\nThe active mode for this run is **${mode}**. This live mode overrides any earlier mode wording in the conversation. After a successful switch_mode call, immediately follow the new mode's rules and use its available tools.`;
 
   const dynamicSystemPrompt = instantMode
     ? projectContext + projectAttachmentContext
-    : dynamicSystemPromptBase + liveModeNote() + toolAvailabilityNote;
+    : dynamicSystemPromptBase + canvasSection + liveModeNote() + toolAvailabilityNote;
 
   const fullSystemPrompt = staticSystemPrompt + dynamicSystemPrompt;
 
@@ -1532,6 +1531,22 @@ Definition of done:
   await persistUIMessage(conversationId, { id: questionRun.assistantId, role: "assistant", parts: [] });
   const initialQuestionMessageIds = new Set(uiMessages.map((message) => message.id));
 
+  const reasoningOptions = streamingReasoningProviderOptions(
+    activeProvider.kind,
+    activeModelId,
+    qualityStrategy.policy,
+  );
+  // Auto can fail over to a provider whose reasoning channel contains raw
+  // thoughts. Only forward documented summary modes on a known provider.
+  const thinking = reasoningOptions?.anthropic?.thinking;
+  const sendReasoningSummary = !autoMode && (
+    (activeProvider.kind === "anthropic" && (
+      thinking?.type === "adaptive" ||
+      (thinking?.type === "enabled" && /claude-(?:opus|sonnet)-4-5/.test(activeModelId.toLowerCase()))
+    )) ||
+    (activeProvider.kind === "google" && reasoningOptions?.google?.thinkingConfig.includeThoughts === true)
+  );
+
   const result = streamText({
     abortSignal: questionRun.controller.signal,
     model,
@@ -1545,11 +1560,7 @@ Definition of done:
     // Supported reasoning families receive reasoning options driven by the
     // conversation's effort policy (OpenAI reasoningEffort, Anthropic thinking
     // budget/adaptive). Unknown/local/OpenAI-compatible models stay normal.
-    providerOptions: streamingReasoningProviderOptions(
-      activeProvider.kind,
-      activeModelId,
-      qualityStrategy.policy,
-    ),
+    providerOptions: reasoningOptions,
     // Initial active set (core + classified + stored groups). prepareStep
     // re-evaluates it before every step, so load_tool_groups can add groups
     // mid-stream.
@@ -1565,11 +1576,7 @@ Definition of done:
       // Do this before the cached-tool fast path. SDK message overrides carry
       // forward, so newly accepted answers are inserted exactly once.
       const delivery = await prepareQuestionAnswerStep(db, conversationId, stepMessages, initialQuestionMessageIds);
-      const liveMessages = delivery.messages;
-      if (delivery.deliveredCount && mode === "plan") {
-        mode = "goal";
-        await db.update(conversations).set({ mode: "goal" }).where(eq(conversations.id, conversationId));
-      }
+      const liveMessages = instantMode ? delivery.messages : liveToolContext.prepare(delivery.messages, steps);
 
       // Fast path: unless load_tool_groups ran in the previous step, the
       // active tool set cannot have changed — reuse the cached result so
@@ -1600,7 +1607,10 @@ Definition of done:
         userText: lastUserText,
         recentMessages: uiMessages.slice(-10),
         stored: freshStored,
+        inheritExplicit: !usesRunScopedToolGroups(),
       });
+      for (const group of runToolGroups) freshActive.add(group);
+      if (freshActive.has("canvas")) freshActive.add("session_files");
       activeToolGroups = freshActive;
       const repairNote = buildHasFailure
         ? `\n\n## BUILD REPAIR LOOP\n${buildRepairGuidance(Math.max(1, buildRepairState.attempt))}`
@@ -1614,6 +1624,7 @@ Definition of done:
           instantMode
             ? ""
             : dynamicSystemPromptBase +
+              (freshActive.has("canvas") ? CANVAS_SECTION : "") +
               liveModeNote() +
               repairNote +
               buildToolAvailabilityNote(tools, freshActive),
@@ -1653,8 +1664,15 @@ Definition of done:
         modelId: modelName,
       });
     },
-    onLanguageModelCallStart: ({ callId, provider: modelProvider, modelId: modelName }) => {
+    onLanguageModelCallStart: ({ callId, provider: modelProvider, modelId: modelName, instructions, messages, tools: stepTools }) => {
       trace.modelCallStart({ callId, provider: modelProvider, modelId: modelName });
+      trace.event("model.call.payload", {
+        callId,
+        instructionChars: typeof instructions === "string" ? instructions.length : (JSON.stringify(instructions)?.length ?? 0),
+        messageChars: JSON.stringify(messages).length,
+        toolSchemaChars: JSON.stringify(stepTools ?? []).length,
+        activeToolCount: stepTools?.length ?? 0,
+      });
     },
     onLanguageModelCallEnd: ({
       callId,
@@ -1670,6 +1688,9 @@ Definition of done:
         modelId: modelName,
         inputTokens: usage.inputTokens,
         outputTokens: usage.outputTokens,
+        cacheReadTokens: usage.inputTokenDetails.cacheReadTokens,
+        cacheWriteTokens: usage.inputTokenDetails.cacheWriteTokens,
+        uncachedInputTokens: usage.inputTokenDetails.noCacheTokens,
         responseTimeMs: callPerformance.responseTimeMs,
         timeToFirstOutputMs: callPerformance.timeToFirstOutputMs,
         finishReason,
@@ -1687,6 +1708,7 @@ Definition of done:
       );
     },
     onStepEnd: ({ stepNumber, usage, toolCalls: stepToolCalls, toolResults, finishReason }) => {
+      for (const group of groupsForTools(stepToolCalls.map((call) => call.toolName))) usedToolGroups.add(group);
       trace.step(stepNumber, {
         inputTokens: usage.inputTokens,
         outputTokens: usage.outputTokens,
@@ -1732,7 +1754,7 @@ Definition of done:
     onError: (err) => {
       capturedErrorPayload = normalizeStreamError(err);
       trace.providerError(err);
-      console.error("[stream] Provider error:", err);
+      console.error("[stream] Provider error:", capturedErrorPayload.title, capturedErrorPayload.statusCode ?? "");
     },
     onAbort: () => {
       aborted = true;
@@ -1970,7 +1992,7 @@ Definition of done:
       if (!instantMode) {
         void persistActiveToolGroups({
           conversationId,
-          activeGroups: activeToolGroups,
+          activeGroups: usesRunScopedToolGroups() ? usedToolGroups : activeToolGroups,
         });
       }
 
@@ -2031,100 +2053,129 @@ Definition of done:
     },
   });
 
-  // Get the UIMessageChunk stream so we can tee it — one branch for the
-  // HTTP response, one for periodic persistence to the database.
-  //
-  // Pass a real `onError` so tool errors (e.g. "Root directory 8 not found")
-  // reach the UI and the model instead of the SDK's generic
-  // "An error occurred." fallback. Without this, the model can never
-  // self-correct (e.g. re-call list_permitted_roots) because it only sees
-  // a generic message.
   const uiMessageStream = result.toUIMessageStream({
     originalMessages: uiMessages,
-    // Forward structured reasoning parts when the selected provider emits
-    // them; providers without reasoning output simply emit none.
-    sendReasoning: true,
+    sendReasoning: sendReasoningSummary,
+    sendSources: true,
     generateMessageId: () => questionRun.assistantId,
-    // Return the PLAIN error message here. The SDK uses this callback's return
-    // value as the `errorText` for inline tool errors (tool-input-error,
-    // tool-output-error parts) that render directly on the tool card — encoding
-    // those as RMERR_JSON blobs made cards show raw "RMERR_JSON:%7B..." garbage
-    // instead of the real message. Terminal stream failures are still converted
-    // into structured RMERR_JSON payloads by the transform below.
-    onError: (error) => {
-      const message =
-        error instanceof Error ? error.message : String(error ?? "");
-      return message.trim() || "An error occurred.";
-    },
+    // Provider and tool diagnostics can echo arguments or instructions. The
+    // SDK uses this callback for inline tool errors as well as stream errors.
+    onError: () => "An error occurred.",
   });
 
-  // Add the elapsed time before teeing so both the live UI and the persisted
-  // assistant message receive the same completed request duration.
-  const timedMessageStream = uiMessageStream.pipeThrough(
-    new TransformStream<UIMessageChunk, UIMessageChunk>({
-      transform(chunk, controller) {
-        if (chunk.type === "finish") {
-          const completedAt = new Date();
-          controller.enqueue({
-            type: REQUEST_DURATION_PART,
-            data: {
-              durationMs: Math.max(0, completedAt.getTime() - runStartedAtMs),
-              completedAt: completedAt.toISOString(),
-            },
-          } as UIMessageChunk);
-        }
-        controller.enqueue(chunk);
-      },
-    }),
-  );
-
-  // Tee the stream: [persistBranch, responseBranch]
-  const [persistBranch, responseBranch] = timedMessageStream.tee();
-
-  // Pipe the response branch through a transform that injects a structured
-  // error payload for user-friendly frontend messaging.
-  //
-  // Interrupted runs (step/output limit, dangling promise, provider
-  // truncation) end with a CLEAN finish chunk — the SDK never emits an error
-  // chunk for them, so the UI would silently stop with no Continue option.
-  // We hold the terminal finish chunk and, when the run was interrupted
-  // (capturedErrorPayload was set by onFinish), emit an error chunk instead.
-  // This is race-safe: streamText's onFinish fires in the SDK's upstream
-  // consumer flush, which always completes before this transform's flush.
-  let pendingFinishChunk: UIMessageChunk | null = null;
   const canContinueOnServer = () =>
     !aborted &&
     capturedErrorPayload?.shouldResume === true &&
     capturedErrorPayload.category === "step_limit" &&
     questionRun.continuationCount < MAX_SERVER_CONTINUATIONS;
-  const enrichedBranch = responseBranch.pipeThrough(
+
+  const workActivity: WorkActivityPart = {
+    type: WORK_ACTIVITY_PART,
+    id: questionRun.id,
+    data: {
+      runId: questionRun.generationRunId,
+      startedAt: runStartedAtMs,
+      status: "running",
+    },
+  };
+  let pendingFinish: Extract<UIMessageChunk, { type: "finish" }> | undefined;
+
+  // Both branches receive the same start, ordered parts, and terminal status.
+  // Emit the terminal status before any SDK error, which stops the UI reader.
+  const timedMessageStream = uiMessageStream.pipeThrough(
     new TransformStream<UIMessageChunk, UIMessageChunk>({
+      start(controller) {
+        controller.enqueue({ type: "start", messageId: questionRun.assistantId });
+        controller.enqueue(workActivity);
+      },
       transform(chunk, controller) {
-        if (chunk.type === "error") {
-          const payload = capturedErrorPayload ?? normalizeStreamError(chunk.errorText);
-          controller.enqueue({
-            type: "error",
-            errorText: encodeStreamError(payload),
-          } as UIMessageChunk);
-        } else if (chunk.type === "finish") {
-          pendingFinishChunk = chunk;
-        } else {
-          controller.enqueue(chunk);
+        switch (chunk.type) {
+          case "start":
+            break;
+          case "finish":
+            pendingFinish = chunk;
+            break;
+          case "abort":
+            aborted = true;
+            break;
+          case "error":
+            capturedErrorPayload ??= normalizeStreamError(chunk.errorText);
+            break;
+          case "reasoning-start":
+            controller.enqueue({ type: chunk.type, id: chunk.id, providerMetadata: WORK_SUMMARY_METADATA });
+            break;
+          case "reasoning-delta":
+            controller.enqueue({ type: chunk.type, id: chunk.id, delta: chunk.delta });
+            break;
+          case "reasoning-end":
+            controller.enqueue({ type: chunk.type, id: chunk.id });
+            break;
+          case "reasoning-file":
+            break;
+          case "source-url":
+            if (/^https?:\/\//i.test(chunk.url)) {
+              controller.enqueue({
+                type: chunk.type, sourceId: chunk.sourceId, url: sanitizeSourceUrl(chunk.url), title: chunk.title,
+              });
+            }
+            break;
+          default:
+            controller.enqueue(chunk);
         }
       },
-      flush(controller) {
-        if (!pendingFinishChunk) return;
-        if (capturedErrorPayload && !canContinueOnServer()) {
+      async flush(controller) {
+        const usage = await Promise.resolve(result.totalUsage).catch(() => undefined);
+        if (usage) {
+          const part = responseUsagePart(trace.traceId, usage);
+          if (part) controller.enqueue(part);
+        }
+        aborted ||= questionRun.controller.signal.aborted;
+        const continuing = canContinueOnServer();
+        if (!capturedErrorPayload && !aborted) {
+          if (!pendingFinish) capturedErrorPayload = normalizeStreamError("Connection closed before generation completed.");
+          else if (pendingFinish.finishReason === "error") capturedErrorPayload = normalizeStreamError("Generation failed.");
+        }
+        const status = aborted ? "cancelled"
+          : continuing ? "continuing"
+          : capturedErrorPayload?.shouldResume ? "interrupted"
+          : capturedErrorPayload ? "failed"
+          : "completed";
+        const endedAt = Date.now();
+        controller.enqueue({
+          ...workActivity,
+          data: {
+            ...workActivity.data,
+            status,
+            ...(continuing ? {} : { endedAt }),
+            message: aborted ? "Generation was stopped." : capturedErrorPayload?.message,
+          },
+        });
+
+        if (status === "completed") {
+          controller.enqueue({
+            type: REQUEST_DURATION_PART,
+            data: {
+              durationMs: Math.max(0, endedAt - runStartedAtMs),
+              completedAt: new Date(endedAt).toISOString(),
+            },
+          });
+        }
+        if (aborted) {
+          controller.enqueue({ type: "abort", reason: "Generation was stopped." });
+        } else if (capturedErrorPayload && !continuing) {
+          const { version, category, title, message, statusCode, retryable, shouldResume } = capturedErrorPayload;
           controller.enqueue({
             type: "error",
-            errorText: encodeStreamError(capturedErrorPayload),
-          } as UIMessageChunk);
-        } else {
-          controller.enqueue(pendingFinishChunk);
+            errorText: encodeStreamError({ version, category, title, message, statusCode, retryable, shouldResume }),
+          });
+        } else if (pendingFinish) {
+          controller.enqueue(pendingFinish);
         }
       },
     }),
   );
+
+  const [persistBranch, responseBranch] = timedMessageStream.tee();
 
   // Periodically persist partial messages to the DB (every 2s).
   // This ensures a page refresh shows partial AI responses.
@@ -2273,15 +2324,20 @@ Definition of done:
         });
       }
     }
-  }, trace).catch((error) => {
+  }, trace).catch(async (error) => {
     finishQuestionRun(db, conversationId, questionRun, false);
     console.error("[chat] Stream persistence failed:", error);
+    await finishDurableGeneration({
+      id: questionRun.generationRunId,
+      status: questionRun.controller.signal.aborted ? "stopped" : "failed",
+      error: "Could not save generation.",
+    }).catch((failure) => console.error("[chat] Could not finalize generation:", failure));
   });
 
   // Build the SSE response for the client, and register the SSE stream
   // for reconnection support.
   return createUIMessageStreamResponse({
-    stream: enrichedBranch,
+    stream: responseBranch,
     consumeSseStream: ({ stream }) => {
       streamRegistry.register(conversationId, stream, questionRun.id, questionRun.assistantId);
     },

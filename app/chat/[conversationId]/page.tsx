@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { motion, AnimatePresence } from "framer-motion";
-import { Files, Menu, Plus, Timer } from "lucide-react";
+import { ClipboardList, Files, Hammer, Menu, Plus, Timer } from "lucide-react";
 import { MessageList } from "@/components/chat/MessageList";
 import { EmptyChatState } from "@/components/chat/EmptyChatState";
 import { ActiveQuestionsPanel } from "@/components/chat/ActiveQuestionsPanel";
@@ -16,7 +16,8 @@ import {
   type QualityPolicy,
 } from "@/lib/chat/quality-policy";
 import { ChatSkeleton } from "@/components/chat/ChatSkeleton";
-import { TodoProgressBar } from "@/components/chat/TodoProgressBar";
+import { GoalChecklist, useGoalTasks } from "@/components/chat/GoalPanel";
+import { ChatSidePanel } from "@/components/chat/ChatSidePanel";
 import { BuildRunHistory } from "@/components/chat/BuildRunHistory";
 import { WorkOverview } from "@/components/chat/WorkOverview";
 import { AutomationRunHistory } from "@/components/chat/AutomationRunHistory";
@@ -27,15 +28,17 @@ import { ProjectControl } from "@/components/chat/ProjectControl";
 import {
   SessionFilesPanel,
   ResizableSessionFilesPanel,
+  type SessionFileFocus,
 } from "@/components/chat/SessionFilesPanel";
 import { ErrorCard } from "@/components/ui/error-card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { useErrorHandler } from "@/lib/hooks/use-error-handler";
 import { applyConversationTitleUpdate, conversationsApi } from "@/lib/api/conversations";
 import { useStreamingContext } from "@/lib/chat/streaming-context";
+import { isActiveWork, latestWorkActivity, prepareWorkReplay, type WorkActivityPart } from "@/lib/chat/work-activity";
 import { findActiveQuestions, type QuestionAnswerSubmission } from "@/lib/chat/questions";
-import { shouldPromotePlanToGoal } from "@/lib/chat/mode-transition";
 import { useSidebar } from "@/components/sidebar/SidebarContext";
 import {
   SESSION_FILES_PRESENT_EVENT,
@@ -474,7 +477,23 @@ function ConversationChat({
   const [panelOpen, setPanelOpen] = useState(false);
   // When the AI presents a single file (session_present_file), the panel
   // opens straight to that file in the viewer.
-  const [panelFocusPath, setPanelFocusPath] = useState<string | null>(null);
+  const [panelFocus, setPanelFocus] = useState<SessionFileFocus | null>(null);
+  const [progressPanel, setProgressPanel] = useState<{ kind: "goal" | "build"; open: boolean }>({ kind: "goal", open: false });
+  const dismissProgressPanel = useCallback(() => {
+    setProgressPanel((panel) => panel.open ? { ...panel, open: false } : panel);
+  }, []);
+  const goalOpen = progressPanel.open && progressPanel.kind === "goal";
+  const buildOpen = progressPanel.open && progressPanel.kind === "build";
+  const progressDesktop = useMediaQuery("(min-width: 1024px)");
+  const skipProgressFocus = useRef(false);
+  const goalTasks = useGoalTasks(conversationId);
+  const filesDesktop = useMediaQuery("(min-width: 768px)");
+  const goalSeen = useRef(false);
+  const desktopGoalTrigger = useRef<HTMLButtonElement>(null);
+  const mobileGoalTrigger = useRef<HTMLButtonElement>(null);
+  const desktopBuildTrigger = useRef<HTMLButtonElement>(null);
+  const mobileBuildTrigger = useRef<HTMLButtonElement>(null);
+  const goalStorageKey = `remiai:goal-opened:${conversationId}`;
   // Canvas panel — an interactive web-project preview+editor that shares the
   // same right-side slot as session files (they don't stack on narrow screens).
   const [canvasOpen, setCanvasOpen] = useState(false);
@@ -496,21 +515,28 @@ function ConversationChat({
     canvasWinsRef.current = true;
     setCanvasFocusSlug(detail.slug ?? null);
     setCanvasOpen(true);
+    dismissProgressPanel();
     setPanelOpen(false);
-    setPanelFocusPath(null);
+    setPanelFocus(null);
     if (detail.slug) dispatchCanvasOpened(detail.slug);
-  }, []);
+  }, [dismissProgressPanel, setCanvasOpen]);
 
   // Auto-open the session files panel when the AI calls session_present_files
   // or session_present_file; for the single-file variant, focus that file.
   useEffect(() => {
     const handler = (event: Event) => {
-      // User dismissed the panel — don't force it open again.
-      if (filesDismissedRef.current) return;
-      // A canvas was presented in this request — it owns the panel slot.
-      if (canvasWinsRef.current) return;
       const detail = (event as CustomEvent<SessionFilesPresentDetail>).detail;
-      if (detail?.focusPath) setPanelFocusPath(detail.focusPath);
+      const manual = detail?.manualConversationId === conversationId;
+      if (detail?.manualConversationId != null && !manual) return;
+      if (!manual && (filesDismissedRef.current || canvasWinsRef.current)) return;
+      if (manual) {
+        pendingCanvasPresentRef.current = null;
+        canvasDismissedRef.current = true;
+        filesDismissedRef.current = false;
+        void queryClient.invalidateQueries({ queryKey: ["session-files", conversationId] });
+      }
+      if (detail?.focusPath || manual) setPanelFocus(detail.focusPath ? { path: detail.focusPath } : null);
+      dismissProgressPanel();
       setPanelOpen(true);
       // a canvas and session files share the slot — opening files closes canvas
       setCanvasOpen(false);
@@ -518,7 +544,7 @@ function ConversationChat({
     };
     window.addEventListener(SESSION_FILES_PRESENT_EVENT, handler);
     return () => window.removeEventListener(SESSION_FILES_PRESENT_EVENT, handler);
-  }, []);
+  }, [conversationId, dismissProgressPanel, queryClient]);
 
   // Queue AI canvas presentations until the assistant turn is finished. This
   // keeps the first canvas creation message visible while tools are still
@@ -528,6 +554,8 @@ function ConversationChat({
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<CanvasPresentDetail>).detail ?? {};
       if (detail.manual) {
+        pendingCanvasPresentRef.current = null;
+        void queryClient.invalidateQueries({ queryKey: ["canvases", conversationId] });
         canvasDismissedRef.current = false;
         filesDismissedRef.current = true;
         openCanvasPanel(detail);
@@ -537,7 +565,7 @@ function ConversationChat({
     };
     window.addEventListener(CANVAS_PRESENT_EVENT, handler);
     return () => window.removeEventListener(CANVAS_PRESENT_EVENT, handler);
-  }, [openCanvasPanel]);
+  }, [conversationId, openCanvasPanel, queryClient]);
 
   // Reflect AI-controlled mode switches in the visible composer immediately.
   useEffect(() => {
@@ -620,6 +648,20 @@ function ConversationChat({
     primeClientLocation();
   }, []);
 
+  const [localWorkOutcomes, setLocalWorkOutcomes] = useState<Record<string, WorkActivityPart>>({});
+  const recordLocalWorkOutcome = useCallback((activity: WorkActivityPart, cancelled: boolean) => {
+    const outcome: WorkActivityPart = {
+      ...activity,
+      data: {
+        ...activity.data,
+        status: cancelled ? "cancelled" : "interrupted",
+        endedAt: Date.now(),
+        message: undefined,
+      },
+    };
+    setLocalWorkOutcomes((current) => ({ ...current, [outcome.id]: outcome }));
+  }, []);
+
   const {
     messages,
     setMessages,
@@ -647,6 +689,9 @@ function ConversationChat({
       // the database and merges this delta in (deduping by message id). The
       // small bounded tail is a safety net so a message that failed to reach
       // the server on a previous attempt is not lost.
+      prepareReconnectToStreamRequest: ({ api, id, body }) => ({
+        api: `${api}/${id}/stream${typeof body?.streamId === "string" ? `?streamId=${encodeURIComponent(body.streamId)}` : ""}`,
+      }),
       prepareSendMessagesRequest: async ({ messages, body, trigger, messageId }) => ({
         body: {
           ...body,
@@ -663,11 +708,16 @@ function ConversationChat({
       }),
     }),
     onFinish: ({
+      message: finishedMessage,
       messages: finishedMessages,
       isAbort,
       isError,
       isDisconnect,
     }) => {
+      const activity = latestWorkActivity(finishedMessage.parts);
+      if (activity && isActiveWork(activity.data.status) && (isAbort || (isError && !isDisconnect))) {
+        recordLocalWorkOutcome(activity, isAbort);
+      }
       // Fallback presentation: the AI is instructed to present session files
       // it creates (session_present_file / session_present_files), but if a
       // finished message created/edited exactly ONE session file and never
@@ -698,8 +748,14 @@ function ConversationChat({
   const stoppedQuestionRunRef = useRef<string | null>(null);
   const displayMessages = useMemo(() => {
     const known = new Set(messages.map((message) => message.id));
-    return [...messages, ...questionAnswerMessages.filter((message) => !known.has(message.id))];
-  }, [messages, questionAnswerMessages]);
+    const withOutcomes = messages.map((message) => {
+      const activity = latestWorkActivity(message.parts);
+      const outcome = activity && isActiveWork(activity.data.status) && localWorkOutcomes[activity.id];
+      if (!outcome) return message;
+      return { ...message, parts: message.parts.map((part) => part === activity ? outcome : part) };
+    });
+    return [...withOutcomes, ...questionAnswerMessages.filter((message) => !known.has(message.id))];
+  }, [messages, questionAnswerMessages, localWorkOutcomes]);
 
   useEffect(() => {
     let disposed = false;
@@ -723,9 +779,9 @@ function ConversationChat({
         if (streamIsBusy()) return;
         // General stream-ID reconnection below owns every active run. This
         // poll only synchronizes durable question-answer messages once idle.
-        if (!state.activeAssistantId && state.resolvedIds.length && !idleSynced) {
+        if (!state.activeAssistantId && !state.hasAutomaticPending && state.resolvedIds.length && !idleSynced) {
           const transcript = await fetch(`/api/chat/${conversationId}/question-answers?transcript=1`).then((r) => r.ok ? r.json() : null);
-          if (disposed || streamIsBusy() || transcript?.activeAssistantId) return;
+          if (disposed || streamIsBusy() || !transcript?.messages || transcript.activeAssistantId || transcript.hasAutomaticPending) return;
           if (transcript?.messages) {
             const persisted = transcript.messages as UIMessage[];
             const known = new Set(persisted.map((message) => message.id));
@@ -780,6 +836,7 @@ function ConversationChat({
   // most once, and the registry replays from the beginning before fanning out
   // live chunks.
   const attachedStreamIdRef = useRef<string | null>(null);
+  const desiredStreamIdRef = useRef<string | null>(null);
   const reconnectInFlightRef = useRef(false);
   const reconnectAttemptsRef = useRef(0);
   const [reconnectNonce, setReconnectNonce] = useState(0);
@@ -787,39 +844,46 @@ function ConversationChat({
   const contextAssistantMessageId =
     streams.get(conversationId)?.assistantMessageId ?? null;
   useEffect(() => {
+    desiredStreamIdRef.current = contextStreamId;
     if (!contextStreamId || reconnectInFlightRef.current) return;
 
-    // The foreground request is already consuming this stream. Remember its
-    // ID so a late descriptor does not replay it after onFinish.
-    if (questionStatusRef.current === "submitted" || questionStatusRef.current === "streaming") {
+    const consuming = questionStatusRef.current === "submitted" || questionStatusRef.current === "streaming";
+    const target = messagesRef.current.find((message) => message.id === contextAssistantMessageId);
+    const attempt = target && latestWorkActivity(target.parts);
+    // A later question reply can be registered while the foreground reader
+    // is still finishing. Only acknowledge the descriptor we actually read.
+    if (attempt?.id === contextStreamId && (consuming || !isActiveWork(attempt.data.status))) {
       attachedStreamIdRef.current = contextStreamId;
       reconnectAttemptsRef.current = 0;
       return;
     }
+    if (consuming) return;
     if (attachedStreamIdRef.current === contextStreamId) return;
 
     attachedStreamIdRef.current = contextStreamId;
     reconnectInFlightRef.current = true;
     clearChatError();
-    startStream(conversationId);
     void (async () => {
       try {
         if (contextAssistantMessageId) {
-          const current = messagesRef.current;
-          const activeIndex = current.findIndex(
-            (message) => message.id === contextAssistantMessageId,
-          );
-          if (activeIndex >= 0) {
-            // The registry replays this assistant from its start. Retain the
-            // preceding transcript and replace the saved partial with an
-            // empty seed so text/reasoning/tool chunks cannot duplicate.
-            setMessages([
-              ...current.slice(0, activeIndex),
-              { id: contextAssistantMessageId, role: "assistant", parts: [] },
-            ]);
+          let current = messagesRef.current;
+          if (!target) {
+            // An automatic reply starts after the saved user answers. They
+            // may still be displayed optimistically outside the SDK list.
+            const saved = await conversationsApi.get(conversationId, { timeoutMs: FETCH_TIMEOUT_MS }).catch(() => null);
+            if (questionStatusRef.current === "submitted" || questionStatusRef.current === "streaming") {
+              attachedStreamIdRef.current = null;
+              return;
+            }
+            if (saved) current = saved.messages;
+            else {
+              const known = new Set(current.map((message) => message.id));
+              current = [...current, ...questionAnswerMessages.filter((message) => !known.has(message.id))];
+            }
           }
+          setMessages(prepareWorkReplay(current, contextAssistantMessageId, contextStreamId));
         }
-        await resumeStream();
+        await resumeStream({ body: { streamId: contextStreamId } });
         reconnectAttemptsRef.current = 0;
       } catch {
         // A disconnect is not a generation failure: suppress the SDK's
@@ -833,15 +897,19 @@ function ConversationChat({
         }
       } finally {
         reconnectInFlightRef.current = false;
+        if (desiredStreamIdRef.current && desiredStreamIdRef.current !== contextStreamId) {
+          setReconnectNonce((value) => value + 1);
+        }
       }
     })();
   }, [
     contextStreamId,
     contextAssistantMessageId,
+    questionAnswerMessages,
+    status,
     reconnectNonce,
     conversationId,
     resumeStream,
-    startStream,
     clearChatError,
     setMessages,
   ]);
@@ -994,20 +1062,12 @@ function ConversationChat({
       clearError();
       clearChatError();
       setPendingUserTurn(true);
-      // Keep the UI and persisted conversation in sync with the server's
-      // automatic Plan → Goal transition when the user answers planning
-      // questions. This must happen before the request starts so the client
-      // does not keep filtering the response as Plan mode.
-      if (shouldPromotePlanToGoal(mode, messagesRef.current)) {
-        setMode("goal");
-        void conversationsApi.update(conversationId, { mode: "goal" }).catch(() => {});
-      }
       // A fresh request starts a fresh present — the previous request's canvas
       // no longer claims the panel slot.
       canvasWinsRef.current = false;
       sendMessage({ text });
     },
-    [clearError, clearChatError, conversationId, mode, sendMessage, status],
+    [clearError, clearChatError, sendMessage, status],
   );
 
   // A user message can survive locally even when its assistant request never
@@ -1179,17 +1239,17 @@ function ConversationChat({
   const closePanel = useCallback(() => {
     filesDismissedRef.current = true;
     setPanelOpen(false);
-    setPanelFocusPath(null);
+    setPanelFocus(null);
     setCanvasOpen(false);
     setCanvasFocusSlug(null);
-  }, []);
+  }, [setCanvasOpen]);
   const closeCanvasPanel = useCallback(() => {
     canvasDismissedRef.current = true;
     setCanvasOpen(false);
     setCanvasFocusSlug(null);
     // Let canvas cards flip their copy back to the neutral label.
     dispatchCanvasClosed();
-  }, []);
+  }, [setCanvasOpen]);
 
   // Fallback auto-present: when a finished assistant message created/edited
   // exactly ONE session file and the AI never called session_present_file /
@@ -1227,12 +1287,77 @@ function ConversationChat({
     [],
   );
 
+  const hasUnfinishedGoals = Boolean(goalTasks && goalTasks.pending + goalTasks.inProgress > 0);
+  const rememberGoalOpened = useCallback(() => {
+    goalSeen.current = true;
+    try { window.sessionStorage.setItem(goalStorageKey, "1"); } catch { /* Storage may be unavailable. */ }
+  }, [goalStorageKey]);
+
+  useEffect(() => {
+    if (!progressDesktop || !hasUnfinishedGoals || progressPanel.open || panelOpen || canvasOpen || goalSeen.current) return;
+    try {
+      if (window.sessionStorage.getItem(goalStorageKey)) return;
+    } catch { /* Fall back to the current conversation mount. */ }
+    const frame = requestAnimationFrame(() => {
+      rememberGoalOpened();
+      skipProgressFocus.current = false;
+      setProgressPanel({ kind: "goal", open: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [progressDesktop, hasUnfinishedGoals, progressPanel.open, panelOpen, canvasOpen, goalStorageKey, rememberGoalOpened]);
+
+  const progressTrigger = () => {
+    const [desktop, mobile] = progressPanel.kind === "build"
+      ? [desktopBuildTrigger.current, mobileBuildTrigger.current]
+      : [desktopGoalTrigger.current, mobileGoalTrigger.current];
+    return desktop?.getClientRects().length ? desktop : mobile;
+  };
+
+  const closeProgressPanel = () => {
+    dismissProgressPanel();
+    if (progressDesktop) progressTrigger()?.focus({ preventScroll: true });
+  };
+
+  const progressToggle = (kind: "goal" | "build", ref: typeof desktopGoalTrigger) => {
+    const isGoal = kind === "goal";
+    if (isGoal ? !goalTasks?.total : mode !== "build" && !buildOpen) return null;
+    const open = isGoal ? goalOpen : buildOpen;
+    const Icon = isGoal ? ClipboardList : Hammer;
+    return (
+      <button
+        ref={ref}
+        type="button"
+        aria-expanded={open}
+        aria-label={isGoal ? `Goal, ${goalTasks?.completed} of ${goalTasks?.total} completed` : "Build history"}
+        className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring aria-expanded:bg-muted"
+        onKeyDown={(event) => {
+          if (open && event.key === "Escape") {
+            event.stopPropagation();
+            closeProgressPanel();
+          }
+        }}
+        onClick={() => {
+          if (isGoal) rememberGoalOpened();
+          if (open) { closeProgressPanel(); return; }
+          if (panelOpen) closePanel();
+          if (canvasOpen) closeCanvasPanel();
+          skipProgressFocus.current = false;
+          setProgressPanel({ kind, open: true });
+        }}
+      >
+        <Icon className="size-4" aria-hidden="true" />
+        {isGoal ? "Goal" : <span className="max-sm:sr-only">Build</span>}
+      </button>
+    );
+  };
+
   const filesToggle = (
     <button
       type="button"
       onClick={() => {
-        if (panelOpen) setPanelFocusPath(null);
+        if (panelOpen) setPanelFocus(null);
         setPanelOpen((o) => !o);
+        dismissProgressPanel();
         // canvas shares the slot — close it when toggling files
         if (canvasOpen) closeCanvasPanel();
       }}
@@ -1290,20 +1415,12 @@ function ConversationChat({
       {/* ── Mobile Header ── */}
       <MobileChatHeader
         title={initialConversation.title}
-        actions={<><ProjectControl conversationId={conversationId} initialProjectId={initialConversation.projectId} />{filesToggle}</>}
+        actions={<><ProjectControl conversationId={conversationId} initialProjectId={initialConversation.projectId} />{progressToggle("goal", mobileGoalTrigger)}{progressToggle("build", mobileBuildTrigger)}{filesToggle}</>}
       />
 
-      {/* ── Desktop Header (redesigned: model status + live usage meter) ── */}
+      {/* ── Desktop Header ── */}
       <ChatHeader
-        conversationId={conversationId}
         title={initialConversation.title}
-        providerId={providerId}
-        modelId={modelId}
-        status={status}
-        initialTotalTokens={
-          (initialConversation.totalInputTokens ?? 0) +
-          (initialConversation.totalOutputTokens ?? 0)
-        }
         isTemporary={isTemporary}
         memoryEnabled={memoryEnabled}
         onTemporaryChange={setIsTemporary}
@@ -1314,6 +1431,8 @@ function ConversationChat({
             {messages.length > 0 && (
               <ExportDialog messages={messages} title={initialConversation.title} />
             )}
+            {progressToggle("goal", desktopGoalTrigger)}
+            {progressToggle("build", desktopBuildTrigger)}
             {filesToggle}
           </>
         }
@@ -1343,9 +1462,6 @@ function ConversationChat({
           header instead of being limited to the leftover message area. */}
       <div className="flex min-h-0 flex-1">
       <div className="flex min-w-0 flex-1 flex-col">
-      {/* ── Todo progress ── */}
-      <TodoProgressBar conversationId={conversationId} mode={mode} />
-      {mode === "build" && <BuildRunHistory conversationId={conversationId} />}
       {mode === "work" && <WorkOverview conversationId={conversationId} onClose={() => handleModeChange("chat")} onBeginPlanning={(intake) => handleSend(`Start the guided Work planning phase now.\n\nGoal: ${intake.goal}\nTarget: ${intake.targetLabel}\nSuccess criteria: ${intake.successCriteria || "Not specified"}\nTechnical brief: ${intake.technicalBrief || "Not specified"}\n\nFirst inspect the relevant target and report visible progress as you work. Ask only focused questions if necessary, then submit the complete Work plan for approval.`)} onBeginBuild={(run, source) => { window.setTimeout(() => { handleSend(source === "repair" ? `Continue the guided Work repair pass for “${run.goal}”. Review the current implementation and the previous verification outcome, fix what is needed, rerun relevant checks, and visibly report each repair and test result. Stop only when verified or when focused user input is required.` : `The Work plan is approved. Start the guided Work build now for “${run.goal}”. Work only in the approved target, make the implementation changes, and keep visible progress updates flowing through inspection, writing, and testing. Run relevant checks, report their actual results, and do not stop until this Work turn reaches a verified outcome or needs focused user input.`); }, 500); }} />}
       <AutomationRunHistory conversationId={conversationId} />
 
@@ -1393,6 +1509,7 @@ function ConversationChat({
               <MessageList
                 messages={displayMessages}
                 status={status}
+                activeAssistantId={contextAssistantMessageId}
                 onSend={(text) => sendMessage({ text })}
                 onRegenerate={handleRegenerate}
                 onEdit={handleEdit}
@@ -1475,7 +1592,7 @@ function ConversationChat({
 
         {/* Mobile — full-height drawer over the chat */}
         <AnimatePresence>
-          {canvasOpen && (
+          {!filesDesktop && canvasOpen && (
             <>
               <motion.div
                 initial={{ opacity: 0 }}
@@ -1503,16 +1620,13 @@ function ConversationChat({
               </motion.div>
             </>
           )}
-          {!canvasOpen && panelOpen && (
+          {!filesDesktop && !canvasOpen && panelOpen && (
             <>
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                onClick={() => {
-                  filesDismissedRef.current = true;
-                  setPanelOpen(false);
-                }}
+                onClick={closePanel}
                 className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm md:hidden"
               />
               <motion.div
@@ -1525,7 +1639,7 @@ function ConversationChat({
                 <SessionFilesPanel
                   conversationId={conversationId}
                   onClose={closePanel}
-                  focusPath={panelFocusPath}
+                  focus={panelFocus}
                 />
               </motion.div>
             </>
@@ -1534,21 +1648,37 @@ function ConversationChat({
       </div>
       </div>
 
+      <ChatSidePanel
+        open={(buildOpen || (goalOpen && Boolean(goalTasks?.total))) && !panelOpen && !canvasOpen}
+        desktop={progressDesktop}
+        title={progressPanel.kind === "build" ? "Build history" : "Goal"}
+        focusOnOpen={buildOpen}
+        onClose={closeProgressPanel}
+        returnFocus={() => skipProgressFocus.current || panelOpen || canvasOpen ? false : progressTrigger()}
+      >
+        {progressPanel.kind === "build" ? (
+          <BuildRunHistory conversationId={conversationId} open={buildOpen} onContinue={() => {
+            if (progressDesktop) return;
+            skipProgressFocus.current = true;
+            dismissProgressPanel();
+          }} />
+        ) : goalTasks && <GoalChecklist data={goalTasks} />}
+      </ChatSidePanel>
       {/* Desktop — full-height inline side panel. It shares the workspace row
           with the complete chat column, so long Work cards cannot crop it. */}
       <AnimatePresence>
-        {canvasOpen && (
+        {filesDesktop && canvasOpen && (
           <ResizableCanvasPanel
             conversationId={conversationId}
             onClose={closeCanvasPanel}
             focusSlug={canvasFocusSlug}
           />
         )}
-        {!canvasOpen && panelOpen && (
+        {filesDesktop && !canvasOpen && panelOpen && (
           <ResizableSessionFilesPanel
             conversationId={conversationId}
             onClose={closePanel}
-            focusPath={panelFocusPath}
+            focus={panelFocus}
           />
         )}
       </AnimatePresence>

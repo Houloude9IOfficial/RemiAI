@@ -358,6 +358,13 @@
       "when": 1790400000000,
       "tag": "0055_work_runs",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "6",
+      "when": 1790500000000,
+      "tag": "0056_chat_text_size",
+      "breakpoints": true
     }
   ]
 }

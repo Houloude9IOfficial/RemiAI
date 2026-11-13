@@ -22,11 +22,15 @@ trace.modelCallEnd({
   provider: "test",
   modelId: "mock",
   inputTokens: 42,
+  cacheReadTokens: 30,
+  cacheWriteTokens: 2,
+  uncachedInputTokens: 10,
   outputTokens: 12,
   responseTimeMs: 25,
   timeToFirstOutputMs: 9,
   finishReason: "stop",
 });
+trace.event("model.call.payload", { instructionChars: 52, messageChars: 410, toolSchemaChars: 780 });
 trace.toolStart("read_file", "tool-1");
 trace.toolEnd("read_file", 5, true, "tool-1");
 trace.step(0, { inputTokens: 42, outputTokens: 12, toolCallCount: 1 });
@@ -46,6 +50,8 @@ assert.equal(record.metrics.providerCallCount, 1);
 assert.equal(record.metrics.toolExecutionCount, 1);
 assert.equal(record.metrics.modelStepCount, 1);
 assert.equal(record.metrics.timeToFirstOutputMs, 9);
+assert.equal(record.events.find((event) => event.name === "model.call.end")?.data?.cacheReadTokens, 30);
+assert.equal(record.events.find((event) => event.name === "model.call.payload")?.data?.messageChars, 410);
 assert.equal(serialized.includes("must not be stored"), false);
 assert.equal(serialized.includes("private.txt"), false);
 assert.equal(serialized.includes("example.com/private"), false);

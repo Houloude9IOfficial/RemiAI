@@ -68,6 +68,7 @@ export const DEMO_ALLOWED_TOOL_NAMES = new Set([
   "session_present_files",
   "load_tool_groups",
   "get_tool_help",
+  "read_tool_result",
   "list_available_tools",
 ]);
 

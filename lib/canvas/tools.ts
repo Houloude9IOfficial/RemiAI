@@ -74,7 +74,7 @@ export function buildCanvasTools(opts: BuildCanvasToolsOptions) {
     canvas_create: {
       description:
         "Create a new interactive canvas — a self-contained multi-file web project (HTML/CSS/JS) that opens in a live-preview + code-editor panel the user can run and edit. " +
-        "Use for buildable, interactive deliverables: websites, small apps, calculators, games, dashboards, interactive docs, prototypes. " +
+        "Use for an explicit /canvas request or a runnable web project such as a website, app, game, or prototype. For interactive widgets embedded in a reply use create_visual. " +
         "This establishes the project (starter HTML entry file + manifest). The actual content (index.html, style.css, script.js, assets) is then written " +
         "with session_file_write / session_file_edit using paths under the canvas/{slug}/... prefix. " +
         "After writing the files, call the canvas_open tool to present it in the panel.",

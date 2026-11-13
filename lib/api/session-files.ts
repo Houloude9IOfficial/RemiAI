@@ -144,6 +144,8 @@ export type SessionFilesPresentDetail = {
   paths?: string[];
   /** When set, the panel opens straight to this file in the viewer (used by session_present_file). */
   focusPath?: string;
+  /** Explicit file-tag activation, scoped to the chat that rendered it. */
+  manualConversationId?: number;
   message?: string | null;
 };
 
