@@ -3,8 +3,6 @@
 import { useId, useState, type ComponentType, type ReactNode } from "react";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import { getToolName } from "ai";
-import { ChevronRight } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { decodeStreamError, STREAM_ERROR_PREFIX } from "@/lib/chat/error-payload";
 import { AnimatedDisclosure } from "./AnimatedDisclosure";
 
@@ -34,16 +32,15 @@ export function ToolActivityRow({ Icon, label, part, children }: {
   const hasDetails = Boolean(children) || (part != null && (
     part.input !== undefined || part.output !== undefined || Boolean(error)
   ));
-  const icon = <Icon className="mt-1 size-3.5 shrink-0" aria-hidden />;
-  if (!hasDetails) return <div className="flex items-start gap-2">{icon}<span>{label}</span></div>;
+  const icon = <Icon className="size-3.5 shrink-0" aria-hidden />;
+  if (!hasDetails) return <div className="flex items-center gap-2">{icon}<span>{label}</span></div>;
 
   return (
     <div className="min-w-0">
       <button type="button" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}
-        className={cn("flex max-w-full items-start gap-2 rounded-sm text-left transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring cursor-pointer")}>
+        className="flex max-w-full cursor-pointer items-center gap-2 rounded-sm text-left transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">
         {icon}
         <span>{label}</span>
-        {/* <ChevronRight aria-hidden="true" className={cn("mt-1 size-3.5 shrink-0 motion-safe:transition-transform", open && "rotate-90")} /> */}
       </button>
       <AnimatedDisclosure id={id} open={open}>
         <div className="ml-2 mt-1 space-y-2 border-l border-border py-1 pl-3 text-xs">

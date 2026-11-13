@@ -97,11 +97,14 @@ export function WorkActivity({
     let previousAttempt: WorkActivityPart | undefined;
 
     type SearchGroup = { rows: ReactNode[]; id: string; results: Set<string>; completed: number; failed: number; denied: number; interrupted: number; pending: boolean };
-    const timeline: (ReactNode | SearchGroup)[] = [];
+    type FetchGroup = { id: string; label: string; rows: ReactNode[] };
+    const timeline: (ReactNode | SearchGroup | FetchGroup)[] = [];
     let searchGroup: SearchGroup | undefined;
+    let fetchGroup: FetchGroup | undefined;
     for (const [index, part] of parts.entries()) {
       if (isWorkActivityPart(part)) {
         searchGroup = undefined;
+        fetchGroup = undefined;
         const previous = previousAttempt?.data;
         previousAttempt = part;
         // The lifecycle part occupies the beginning of its attempt. Render
@@ -112,12 +115,23 @@ export function WorkActivity({
           timeline.push(<p key={part.id}>{previous.message || outcomeLabels[previous.status]}</p>);
         }
       } else if (isWorkSummary(part) && part.text.trim()) {
+        fetchGroup = undefined;
         timeline.push(<p key={`summary-${index}`} className="whitespace-pre-wrap break-words">{part.text.trim()}</p>);
       } else if (isToolUIPart(part) && !seenTools.has(part.toolCallId)) {
         seenTools.add(part.toolCallId);
         const runningAttempt = active && index > activeAttemptIndex;
         const { Icon, label, name, failed, denied, running } = describeToolActivity(part, runningAttempt);
         const row = <ToolActivityRow key={`tool-${part.toolCallId}`} Icon={Icon} label={label} part={part} />;
+        if (name === "web_fetch" && !running && !failed && !denied) {
+          searchGroup = undefined;
+          if (!fetchGroup) {
+            fetchGroup = { id: part.toolCallId, label, rows: [] };
+            timeline.push(fetchGroup);
+          }
+          fetchGroup.rows.push(row);
+          continue;
+        }
+        fetchGroup = undefined;
         if (name === "web_search") {
           if (!searchGroup) {
             searchGroup = { rows: [], id: part.toolCallId, results: new Set(), completed: 0, failed: 0, denied: 0, interrupted: 0, pending: false };
@@ -139,7 +153,15 @@ export function WorkActivity({
       }
     }
     return timeline.map((entry) => {
-      if (!entry || typeof entry !== "object" || !("results" in entry)) return entry;
+      if (!entry || typeof entry !== "object" || !("rows" in entry)) return entry;
+      if (!("results" in entry)) {
+        if (entry.rows.length === 1) return entry.rows[0];
+        return (
+          <ToolActivityRow key={`fetch-${entry.id}`} Icon={Search} label={`${entry.label} · ${entry.rows.length} ${entry.rows.length === 1 ? "result" : "results"}`}>
+            {entry.rows}
+          </ToolActivityRow>
+        );
+      }
       const { id, results, completed, pending, failed, denied, interrupted } = entry;
       const label = results.size || completed
         ? `Searched web · ${results.size} ${results.size === 1 ? "result" : "results"}`
