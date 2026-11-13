@@ -1,3 +1,4 @@
+import { RESPONSE_USAGE_PART } from "./response-usage";
 import { WORK_ACTIVITY_PART } from "./work-activity";
 import type { UIMessage } from "ai";
 
@@ -317,7 +318,7 @@ export function optimizeMessageParts(
     const part = rawPart as unknown as LoosePart;
 
     // UI-only markers — zero value to the model.
-    if (part.type === "step-start" || part.type === WORK_ACTIVITY_PART) continue;
+    if (part.type === "step-start" || part.type === WORK_ACTIVITY_PART || part.type === RESPONSE_USAGE_PART) continue;
     if (part.type === "reasoning" || part.type === "reasoning-file") continue;
     if (part.state === "input-streaming") continue;
 

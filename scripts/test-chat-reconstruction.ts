@@ -30,6 +30,7 @@ import {
 import { asStringArray, normaliseTool } from "../lib/utils";
 import {
   CORE_TOOLS,
+  computeActiveToolGroups,
   buildToolAvailabilityNote,
   filterTools,
 } from "../lib/chat/tool-groups";
@@ -480,6 +481,7 @@ async function main() {
       "get_tool_help",
       "list_available_tools",
       "load_tool_groups",
+      "read_tool_result",
       "ask_questions",
       "suggest_followups",
       "remember",
@@ -511,7 +513,14 @@ async function main() {
       assert.equal(name in filtered, false, `${name} was unexpectedly loaded`);
     }
     assert.ok(CORE_TOOLS.has("web_search"));
-    assert.equal(CORE_TOOLS.size, 13);
+    assert.equal(CORE_TOOLS.size, required.length);
+  });
+
+  ok("Chat inherits recent tool usage without inheriting legacy explicit groups", () => {
+    const stored = { explicit: new Set(["exec"]), recent: new Set(["fs_read"]) };
+    const options = { userText: "yes", recentMessages: [], stored };
+    assert.deepEqual([...computeActiveToolGroups({ ...options, inheritExplicit: false })], ["fs_read"]);
+    assert.ok(computeActiveToolGroups(options).has("exec"));
   });
 
   ok("reports web search as loaded", () => {

@@ -1,3 +1,5 @@
+import { createLiveToolContext } from "@/lib/chat/live-tool-context";
+import { buildReadToolResultTool } from "@/lib/tools/read-tool-result";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { jsonError } from "@/lib/validation/api";
@@ -30,6 +32,7 @@ import {
   failGenerationPresence,
 } from "@/lib/chat/generation-presence";
 import { periodicallyPersistMessages } from "@/lib/chat/persist-interval";
+import { responseUsagePart } from "@/lib/chat/response-usage";
 import { REQUEST_DURATION_PART } from "@/lib/chat/request-duration";
 import { WORK_ACTIVITY_PART, WORK_SUMMARY_METADATA, type WorkActivityPart } from "@/lib/chat/work-activity";
 import { asc, eq, sql } from "drizzle-orm";
@@ -79,6 +82,7 @@ import {
   buildLoadToolGroupsTool,
   buildToolAvailabilityNote,
   computeActiveToolGroups,
+  groupsForTools,
   parseStoredToolState,
   persistActiveToolGroups,
 } from "@/lib/chat/tool-groups";
@@ -97,7 +101,7 @@ import { buildPlaywrightTools } from "@/lib/tools/playwright";
 import { buildDocumentReaderTools } from "@/lib/tools/document-reader";
 import { buildMediaTools } from "@/lib/media/tools";
 import { delayTool } from "@/lib/tools/delay";
-import { webFetchTool } from "@/lib/tools/web-fetch";
+import { chatWebFetchTool } from "@/lib/tools/web-fetch";
 import { buildHttpRequestTool } from "@/lib/tools/http-request";
 import { buildCreateVisualTool } from "@/lib/tools/create-visual";
 import { askQuestionsTool } from "@/lib/tools/ask-questions";
@@ -573,7 +577,7 @@ async function runChatRequest(req: Request, questionRun: QuestionRun, runStarted
     sourceRunId: trace.traceId,
   };
   const sourceAwareWebFetchTool = withSourceProvenance(
-    webFetchTool,
+    chatWebFetchTool,
     "web_fetch",
     sourceProvenanceOptions,
   );
@@ -879,7 +883,9 @@ Definition of done:
   // Merge all tool sets (last writer wins on name collision). Typed as a
   // loose record so the list_available_tools rebuild below can replace the
   // original entry.
+  const liveToolContext = createLiveToolContext();
   const tools: Record<string, unknown> = {
+    read_tool_result: buildReadToolResultTool(liveToolContext.results),
     ...mcpToolSet,
     ...effectiveFsToolSet,
     ...contextToolSet,
@@ -1147,6 +1153,7 @@ Definition of done:
   // load on demand via deterministic intent classification, recent tool
   // usage, and the conversation's stored groups. The model can always enable
   // more via load_tool_groups / list_available_tools.
+  const usesRunScopedToolGroups = () => mode === "chat" || mode === "goal";
   const storedToolGroups = parseStoredToolState(conversation.toolGroups);
   // `let`: prepareStep below updates it when load_tool_groups enables a group
   // mid-stream, so onFinish's persist uses the freshest active set.
@@ -1156,6 +1163,7 @@ Definition of done:
     // follow-ups like "make the button blue" must not lose session files).
     recentMessages: uiMessages.slice(-10),
     stored: storedToolGroups,
+    inheritExplicit: !usesRunScopedToolGroups(),
   });
   // Every registered tool lives in the BASE set; the SDK `activeTools` filter
   // (initial value below, re-evaluated every step by prepareStep) decides
@@ -1168,6 +1176,8 @@ Definition of done:
   // (the AI SDK accepts these raw `{ description, inputSchema, execute }`
   // objects, e.g. in lib/tools/*.ts) — it also keeps the load_tool_groups
   // shape from breaking the ToolSet union.
+  const runToolGroups = new Set<string>();
+  const usedToolGroups = new Set<string>();
   const baseTools: Record<string, unknown> = instantMode
     ? (() => {
         let toolCallCount = 0;
@@ -1197,7 +1207,10 @@ Definition of done:
         // cache breakpoint on it, and since load_tool_groups is always active
         // and always last in the per-step filtered set, the tool-definitions
         // prefix stays cacheable on every step of the loop.
-        load_tool_groups: buildLoadToolGroupsTool(conversationId, tools),
+        load_tool_groups: buildLoadToolGroupsTool(conversationId, tools, (groups) => {
+          for (const group of groups) runToolGroups.add(group);
+          return usesRunScopedToolGroups();
+        }),
       };
 
   // AI SDK v7 requires `inputSchema` on every tool definition — some builders
@@ -1221,23 +1234,13 @@ Definition of done:
       ? instantToolNames(memoryEnabled).filter((name) => baseTools[name] !== undefined)
       : isDemoMode()
       ? Object.keys(filterDemoTools(tools))
-      : mode === "plan"
+      : mode === "plan" || usesRunScopedToolGroups()
         ? activeToolNames(tools, groups)
         : [...Object.keys(tools), "load_tool_groups"];
   const initialActiveToolNames = activeToolNamesForMode(activeToolGroups);
-  const estimatedToolDefinitionChars = Object.entries(baseTools).reduce(
-    (total, [name, tool]) => {
-      const toolRecord = tool && typeof tool === "object"
-        ? tool as Record<string, unknown>
-        : {};
-      return total + name.length + String(toolRecord.description ?? "").length +
-        (toolRecord.inputSchema ? 120 : 0);
-    },
-    0,
-  );
+  trace.metric("initialMode", mode);
   trace.metric("activeToolCount", initialActiveToolNames.length);
-  trace.metric("activeToolNames", initialActiveToolNames as string[]);
-  trace.metric("estimatedToolDefinitionChars", estimatedToolDefinitionChars);
+  trace.metric("activeToolNames", initialActiveToolNames);
 
   // Inject recent file changes into the system prompt for freshness.
   // Capped to 5 — the model can call query_recent_changes for more. Skipped
@@ -1354,14 +1357,14 @@ Definition of done:
   const dynamicSystemPromptBase = instantMode
     ? projectContext + projectAttachmentContext
     : systemTip + profileTip + memoryTip + projectContext + projectAttachmentContext + fileChangeTip + summarySection +
-      planModePrompt + goalModePrompt + buildModePrompt + workModePrompt + canvasSection + _remiCardsSection + existingCardSection + (Object.keys(_remiCardToolSet).length ? REMI_CARD_PRESENTATION_RULES + REMI_CARD_SCOPE_RULES : "") + activeSkillsSection +
+      planModePrompt + goalModePrompt + buildModePrompt + workModePrompt + _remiCardsSection + existingCardSection + (Object.keys(_remiCardToolSet).length ? REMI_CARD_PRESENTATION_RULES + REMI_CARD_SCOPE_RULES : "") + activeSkillsSection +
       taggedSkillsSection + qualityPolicyPrompt;
   const liveModeNote = () =>
     `\n\n## AUTHORITATIVE LIVE MODE\nThe active mode for this run is **${mode}**. This live mode overrides any earlier mode wording in the conversation. After a successful switch_mode call, immediately follow the new mode's rules and use its available tools.`;
 
   const dynamicSystemPrompt = instantMode
     ? projectContext + projectAttachmentContext
-    : dynamicSystemPromptBase + liveModeNote() + toolAvailabilityNote;
+    : dynamicSystemPromptBase + canvasSection + liveModeNote() + toolAvailabilityNote;
 
   const fullSystemPrompt = staticSystemPrompt + dynamicSystemPrompt;
 
@@ -1573,7 +1576,7 @@ Definition of done:
       // Do this before the cached-tool fast path. SDK message overrides carry
       // forward, so newly accepted answers are inserted exactly once.
       const delivery = await prepareQuestionAnswerStep(db, conversationId, stepMessages, initialQuestionMessageIds);
-      const liveMessages = delivery.messages;
+      const liveMessages = instantMode ? delivery.messages : liveToolContext.prepare(delivery.messages, steps);
 
       // Fast path: unless load_tool_groups ran in the previous step, the
       // active tool set cannot have changed — reuse the cached result so
@@ -1604,7 +1607,10 @@ Definition of done:
         userText: lastUserText,
         recentMessages: uiMessages.slice(-10),
         stored: freshStored,
+        inheritExplicit: !usesRunScopedToolGroups(),
       });
+      for (const group of runToolGroups) freshActive.add(group);
+      if (freshActive.has("canvas")) freshActive.add("session_files");
       activeToolGroups = freshActive;
       const repairNote = buildHasFailure
         ? `\n\n## BUILD REPAIR LOOP\n${buildRepairGuidance(Math.max(1, buildRepairState.attempt))}`
@@ -1618,6 +1624,7 @@ Definition of done:
           instantMode
             ? ""
             : dynamicSystemPromptBase +
+              (freshActive.has("canvas") ? CANVAS_SECTION : "") +
               liveModeNote() +
               repairNote +
               buildToolAvailabilityNote(tools, freshActive),
@@ -1657,8 +1664,15 @@ Definition of done:
         modelId: modelName,
       });
     },
-    onLanguageModelCallStart: ({ callId, provider: modelProvider, modelId: modelName }) => {
+    onLanguageModelCallStart: ({ callId, provider: modelProvider, modelId: modelName, instructions, messages, tools: stepTools }) => {
       trace.modelCallStart({ callId, provider: modelProvider, modelId: modelName });
+      trace.event("model.call.payload", {
+        callId,
+        instructionChars: typeof instructions === "string" ? instructions.length : (JSON.stringify(instructions)?.length ?? 0),
+        messageChars: JSON.stringify(messages).length,
+        toolSchemaChars: JSON.stringify(stepTools ?? []).length,
+        activeToolCount: stepTools?.length ?? 0,
+      });
     },
     onLanguageModelCallEnd: ({
       callId,
@@ -1674,6 +1688,9 @@ Definition of done:
         modelId: modelName,
         inputTokens: usage.inputTokens,
         outputTokens: usage.outputTokens,
+        cacheReadTokens: usage.inputTokenDetails.cacheReadTokens,
+        cacheWriteTokens: usage.inputTokenDetails.cacheWriteTokens,
+        uncachedInputTokens: usage.inputTokenDetails.noCacheTokens,
         responseTimeMs: callPerformance.responseTimeMs,
         timeToFirstOutputMs: callPerformance.timeToFirstOutputMs,
         finishReason,
@@ -1691,6 +1708,7 @@ Definition of done:
       );
     },
     onStepEnd: ({ stepNumber, usage, toolCalls: stepToolCalls, toolResults, finishReason }) => {
+      for (const group of groupsForTools(stepToolCalls.map((call) => call.toolName))) usedToolGroups.add(group);
       trace.step(stepNumber, {
         inputTokens: usage.inputTokens,
         outputTokens: usage.outputTokens,
@@ -1974,7 +1992,7 @@ Definition of done:
       if (!instantMode) {
         void persistActiveToolGroups({
           conversationId,
-          activeGroups: activeToolGroups,
+          activeGroups: usesRunScopedToolGroups() ? usedToolGroups : activeToolGroups,
         });
       }
 
@@ -2105,7 +2123,12 @@ Definition of done:
             controller.enqueue(chunk);
         }
       },
-      flush(controller) {
+      async flush(controller) {
+        const usage = await Promise.resolve(result.totalUsage).catch(() => undefined);
+        if (usage) {
+          const part = responseUsagePart(trace.traceId, usage);
+          if (part) controller.enqueue(part);
+        }
         aborted ||= questionRun.controller.signal.aborted;
         const continuing = canContinueOnServer();
         if (!capturedErrorPayload && !aborted) {

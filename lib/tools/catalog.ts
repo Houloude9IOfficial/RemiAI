@@ -338,6 +338,16 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     togglable: false,
     requiresApiKey: false,
   },
+  {
+    id: "read_tool_result",
+    name: "Earlier Tool Results",
+    description: "Find and read results already returned by tools during the current chat run.",
+    toolNames: ["read_tool_result"],
+    category: "builtin",
+    subgroup: "Web & Research",
+    togglable: false,
+    requiresApiKey: false,
+  },
   // ── Advanced HTTP request tool (builtin, always on, not togglable) ──
   {
     id: "http_request",

@@ -1418,17 +1418,9 @@ function ConversationChat({
         actions={<><ProjectControl conversationId={conversationId} initialProjectId={initialConversation.projectId} />{progressToggle("goal", mobileGoalTrigger)}{progressToggle("build", mobileBuildTrigger)}{filesToggle}</>}
       />
 
-      {/* ── Desktop Header (redesigned: model status + live usage meter) ── */}
+      {/* ── Desktop Header ── */}
       <ChatHeader
-        conversationId={conversationId}
         title={initialConversation.title}
-        providerId={providerId}
-        modelId={modelId}
-        status={status}
-        initialTotalTokens={
-          (initialConversation.totalInputTokens ?? 0) +
-          (initialConversation.totalOutputTokens ?? 0)
-        }
         isTemporary={isTemporary}
         memoryEnabled={memoryEnabled}
         onTemporaryChange={setIsTemporary}

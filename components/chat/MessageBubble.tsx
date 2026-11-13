@@ -46,6 +46,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { isRemiCardOutput, remiCardPartIdentity } from "@/lib/chat/card-identity";
 import { isSearchTraceToolPart } from "@/lib/chat/search-trace";
+import { formatResponseTokens, messageResponseUsage } from "@/lib/chat/response-usage";
 import { getStreamDisplayCharsPerSecond } from "@/lib/chat/stream-display-rate";
 import {
   formatRequestCompletionTime,
@@ -332,7 +333,11 @@ function subscribeToLocalDay(callback: () => void) {
   };
 }
 
-function RequestTimingLabel({ timing, showDuration }: { timing: RequestTiming; showDuration: boolean }) {
+function RequestTimingLabel({ timing, showDuration, usage }: {
+  timing: RequestTiming | null;
+  showDuration: boolean;
+  usage: ReturnType<typeof messageResponseUsage>;
+}) {
   // Use the browser's local day after hydration so a server timezone cannot
   // render a different "today" label. The shared timer updates open chats
   // when their local calendar day changes.
@@ -341,19 +346,23 @@ function RequestTimingLabel({ timing, showDuration }: { timing: RequestTiming; s
     () => localDateKey(new Date()),
     () => null,
   );
-  const duration = formatRequestDuration(timing.durationMs);
-  const completedTime = timing.completedAt && todayKey
+  const duration = timing ? formatRequestDuration(timing.durationMs) : null;
+  const completedTime = timing?.completedAt && todayKey
     ? formatRequestCompletionTime(timing.completedAt, todayKey)
     : null;
   const label = [
-    showDuration && `Total request time: ${duration}`,
+    showDuration && duration && `Total request time: ${duration}`,
     completedTime && `Completed ${completedTime}`,
+    usage.inputTokens !== undefined && `${usage.inputTokens.toLocaleString("en-US")} input tokens`,
+    usage.outputTokens !== undefined && `${usage.outputTokens.toLocaleString("en-US")} output tokens`,
   ].filter(Boolean).join(" · ");
   if (!label) return null;
 
   return (
     <span className="ml-1 text-[11px] text-muted-foreground/70 tabular-nums" title={label} aria-label={label}>
-      {showDuration && <>· {duration}</>}{completedTime && <> · {completedTime}</>}
+      {showDuration && duration && <>· {duration}</>}{completedTime && <> · {completedTime}</>}
+      {usage.inputTokens !== undefined && <> · {formatResponseTokens(usage.inputTokens)} Input</>}
+      {usage.outputTokens !== undefined && <> · {formatResponseTokens(usage.outputTokens)} Output</>}
     </span>
   );
 }
@@ -1187,7 +1196,7 @@ export function MessageBubble({
                 onRegenerate={onRegenerate}
               />
             )}
-            {requestTiming && <RequestTimingLabel timing={requestTiming} showDuration={!activity} />}
+            <RequestTimingLabel timing={requestTiming} showDuration={!activity} usage={messageResponseUsage(message.parts)} />
           </MessageActionsRow>
         )}
       </div>

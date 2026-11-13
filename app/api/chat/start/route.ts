@@ -1,3 +1,6 @@
+import type { UIMessageChunk } from "ai";
+import { responseUsagePart } from "@/lib/chat/response-usage";
+import { REQUEST_DURATION_PART } from "@/lib/chat/request-duration";
 import { NextResponse } from "next/server";
 import {
   streamText,
@@ -29,6 +32,7 @@ import { isDemoMode, filterDemoTools } from "@/lib/demo-policy";
 import { buildProjectContext } from "@/lib/projects/context";
 
 export async function POST(req: Request) {
+  const startedAt = Date.now();
   await initializeApp();
   const trace = createRunTrace({ kind: "chat-start" });
   trace.metric("retryBudget", 3);
@@ -371,7 +375,22 @@ ${timeContext}
     generateMessageId: () => crypto.randomUUID(),
   });
 
-  const [persistBranch, responseBranch] = uiMessageStream.tee();
+  const measuredStream = uiMessageStream.pipeThrough(new TransformStream<UIMessageChunk, UIMessageChunk>({
+    async transform(chunk, controller) {
+      if (chunk.type === "finish" && chunk.finishReason !== "error" && !aborted && !providerFailed) {
+        const usage = await Promise.resolve(result.totalUsage).catch(() => undefined);
+        const part = usage && responseUsagePart(trace.traceId, usage);
+        if (part) controller.enqueue(part);
+        const endedAt = Date.now();
+        controller.enqueue({
+          type: REQUEST_DURATION_PART,
+          data: { durationMs: endedAt - startedAt, completedAt: new Date(endedAt).toISOString() },
+        });
+      }
+      controller.enqueue(chunk);
+    },
+  }));
+  const [persistBranch, responseBranch] = measuredStream.tee();
 
   periodicallyPersistMessages(
     conversationId,

@@ -40,6 +40,11 @@ if (!process.argv.includes("--isolated-child")) {
   const requests = [];
   const mock = createServer(async (req, res) => {
     if (req.method !== "POST") {
+      if (req.url === "/evidence") {
+        res.setHeader("content-type", "text/html");
+        res.end("<script>RAW_HTML_NOISE</script><main>ORIGINAL_EVIDENCE_MARKER</main>");
+        return;
+      }
       res.setHeader("content-type", "application/json");
       res.end(JSON.stringify({ data: [] }));
       return;
@@ -48,7 +53,20 @@ if (!process.argv.includes("--isolated-child")) {
     const body = JSON.parse(text); requests.push(body); const number = ++call;
     res.writeHead(200, { "content-type": "text/event-stream" });
     const emit = (delta, reason = null) => res.write(`data: ${JSON.stringify({ id: `completion-${number}`, object: "chat.completion.chunk", created: 1, model: "mock", choices: [{ index: 0, delta, finish_reason: reason }] })}\n\n`);
-    if (number === 1) {
+    if (phase === "research" && number < 6) {
+      const action = [
+        ["web_fetch", { url: `http://127.0.0.1:${mock.address().port}/evidence` }],
+        ["load_tool_groups", { groups: ["session_files"] }],
+        ["get_time_details", {}],
+        ["get_time_details", {}],
+        ["read_tool_result", { toolCallId: "research-1" }],
+      ][number - 1];
+      emit({ role: "assistant", tool_calls: [{
+        index: 0, id: `research-${number}`, type: "function",
+        function: { name: action[0], arguments: JSON.stringify(action[1]) },
+      }] });
+      emit({}, "tool_calls");
+    } else if (number === 1) {
       const question = { title: "Live setup", questions: [{ id: "answer", question: "What should I use?", type: "free_text", options: [], allowCustom: true }] };
       const tools = [{ index: 0, id: `${phase}-questions`, type: "function", function: { name: "ask_questions", arguments: JSON.stringify(question) } }];
       if (phase !== "late") tools.push({ index: 1, id: `${phase}-delay`, type: "function", function: { name: "delay", arguments: JSON.stringify({ ms: 800 }) } });
@@ -57,6 +75,12 @@ if (!process.argv.includes("--isolated-child")) {
       emit({ role: "assistant", content: number === 2 ? "Current response." : "Answers received." });
       if (phase === "late" && number === 2) await new Promise((resolve) => { finalGate = resolve; });
       emit({}, "stop");
+    }
+    if (phase === "research") {
+      res.write(`data: ${JSON.stringify({
+        id: `completion-${number}`, object: "chat.completion.chunk", model: "mock", choices: [],
+        usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
+      })}\n\n`);
     }
     res.end("data: [DONE]\n\n");
   });
@@ -124,7 +148,37 @@ if (!process.argv.includes("--isolated-child")) {
     assert.equal(delivery.pendingQuestionSubmissions(db, stopped.id).length, 1);
     assert.equal(delivery.pendingQuestionSubmissions(db, stopped.id, true).length, 0);
     console.log("✓ actual Stop aborts generation and retains undelivered answers without restarting");
-    console.log("✅ Live question route integration passed.");
+    for (const mode of ["chat", "goal"]) {
+      phase = "research"; call = 0; requests.length = 0;
+      const research = db.insert(schema.conversations).values({
+        title: "Research integration", providerId: provider.id, modelId: "mock",
+        memoryEnabled: false, mode,
+      }).returning().get();
+      const response = await chat.POST(new Request("http://localhost/api/chat", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ conversationId: research.id, messages: [{
+          id: crypto.randomUUID(), role: "user", parts: [{ type: "text", text: "Research this deeply." }],
+        }] }),
+      }));
+      await consume(response, async () => {});
+      await waitUntil(() => !delivery.questionRuns.has(research.id));
+      assert.equal(call, 6);
+      const assistant = db.select().from(schema.messages).where(eq(schema.messages.conversationId, research.id)).all()
+        .find((message) => message.role === "assistant");
+      const usage = assistant.parts.filter((part) => part.type === "data-response-usage");
+      assert.equal(usage.length, 1);
+      assert.deepEqual(usage[0].data, { inputTokens: 600, outputTokens: 120 });
+      const names = (index) => requests[index].tools.map((item) => item.function.name);
+      assert.ok(!names(0).includes("session_file_read"));
+      assert.ok(names(2).includes("session_file_read"));
+      assert.ok(names(5).includes("session_file_read"));
+      assert.match(JSON.stringify(requests[1].messages), /ORIGINAL_EVIDENCE_MARKER/);
+      assert.doesNotMatch(JSON.stringify(requests[1].messages), /RAW_HTML_NOISE/);
+      assert.ok(!requests[4].messages.some((message) => message.tool_call_id === "research-1"));
+      assert.match(JSON.stringify(requests[5].messages.find((message) => message.tool_call_id === "research-5")), /ORIGINAL_EVIDENCE_MARKER/);
+      console.log(`✓ actual ${mode} route filters schemas, extracts HTML, compacts old calls and retrieves their evidence`);
+    }
+    console.log("✅ Live chat route integration passed.");
   } finally { mock.closeAllConnections(); await new Promise((resolve) => mock.close(resolve)); }
   process.exit(0);
 }

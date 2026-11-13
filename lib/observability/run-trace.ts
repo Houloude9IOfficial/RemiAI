@@ -195,6 +195,9 @@ export class RunTrace {
     provider?: string;
     modelId?: string;
     inputTokens?: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+    uncachedInputTokens?: number;
     outputTokens?: number;
     responseTimeMs?: number;
     timeToFirstOutputMs?: number;

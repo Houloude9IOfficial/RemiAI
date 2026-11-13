@@ -16,6 +16,7 @@ import type { ReasoningUIPart, UIMessage, UIMessageChunk } from "ai";
 import type { RunTrace } from "@/lib/observability/run-trace";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "@/db/schema";
+import { RESPONSE_USAGE_PART } from "./response-usage";
 import { REQUEST_DURATION_PART } from "./request-duration";
 import { latestWorkActivity, WORK_ACTIVITY_PART, type WorkActivityPart } from "./work-activity";
 
@@ -131,6 +132,14 @@ export async function periodicallyPersistMessages(
         );
         if (index < 0) parts.push(activity);
         else parts[index] = activity;
+        break;
+      }
+
+      case RESPONSE_USAGE_PART: {
+        const usage = { type: RESPONSE_USAGE_PART, id: chunk.id, data: chunk.data } as UIMessage["parts"][number];
+        const index = parts.findIndex((part) => part.type === RESPONSE_USAGE_PART && part.id === chunk.id);
+        if (index < 0) parts.push(usage);
+        else parts[index] = usage;
         break;
       }
 
