@@ -1,6 +1,35 @@
 import { DOMParser, XMLSerializer } from "@xmldom/xmldom";
 
 const svgNamespace = "http://www.w3.org/2000/svg";
+const rectDimensions = [["width", "x"], ["height", "y"]] as const;
+const svgNumber = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i;
+
+/** Reject explicit negative rectangle dimensions before returning a tool result. */
+export function hasNegativeSvgRectSize(markup: string): boolean {
+  const document = new DOMParser().parseFromString(markup, "image/svg+xml");
+  const rects = document.getElementsByTagNameNS(svgNamespace, "rect");
+  for (let i = 0; i < rects.length; i++) {
+    const rect = rects.item(i);
+    if (rectDimensions.some(([size]) => parseFloat(rect?.getAttribute(size) ?? "") < 0)) return true;
+  }
+  return false;
+}
+
+/** Recover saved bars drawn backwards from their baseline using numeric coordinates. */
+export function repairSvgRectDimensions(svg: SVGElement) {
+  for (const rect of svg.querySelectorAll("rect")) {
+    for (const [size, origin] of rectDimensions) {
+      const dimension = rect.getAttribute(size)?.trim() ?? "";
+      const position = rect.getAttribute(origin)?.trim() ?? "0";
+      if (!svgNumber.test(dimension) || !svgNumber.test(position)) continue;
+      const length = Number(dimension);
+      const start = Number(position) + length;
+      if (length >= 0 || !Number.isFinite(start)) continue;
+      rect.setAttribute(origin, String(start));
+      rect.setAttribute(size, String(-length));
+    }
+  }
+}
 
 /** Accept SVG documents and fragments, including saved charts missing only the root closing tag. */
 export function normalizeVisualSvg(source: string): string | null {

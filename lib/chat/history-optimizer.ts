@@ -191,8 +191,10 @@ const OUTPUT_SHAPERS: Record<string, (output: unknown) => string | null> = {
   create_visual: (o) => {
     if (o && typeof o === "object") {
       const rec = o as Record<string, unknown>;
+      if (typeof rec.error === "string") return rec.error;
+      if (rec.type !== "visual") return null;
       const title = typeof rec.title === "string" ? rec.title : "";
-      const type = typeof rec.type === "string" ? rec.type : "";
+      const type = typeof rec.visualType === "string" ? rec.visualType : "";
       return `[Visual created${title ? ` — ${title}` : ""}${type ? ` (${type})` : ""}]`;
     }
     return null;

@@ -20,8 +20,30 @@ async function main() {
   assert.equal(normalizeVisualSvg(result.content!), result.content);
   const invalid = await createVisualTool.execute({ type: "svg", title: "Broken chart", content: "<svg><g>" });
   assert.ok("error" in invalid);
-  assert.match(invalid.error, /Retry with a complete/);
-  console.log("✅ SVG recovery, validation and intact visual output passed.");
+  assert.match(invalid.error ?? "", /Retry with a complete/);
+  const negativeHeight = await createVisualTool.execute({
+    type: "svg",
+    title: "Invalid bars",
+    content: '<svg viewBox="0 0 100 100"><rect y="80" width="20" height="-40"/></svg>',
+  });
+  assert.match(negativeHeight.error ?? "", /nonnegative width and height/);
+
+  const data = [
+    { label: "2023", value: 1 },
+    { label: "2024", value: 2 },
+    { label: "2025", value: 0 },
+    { label: "2026", value: 20 },
+  ];
+  const bar = await createVisualTool.execute({ type: "bar", title: "Releases", data });
+  assert.ok("visualType" in bar && bar.visualType === "bar");
+  assert.deepEqual(bar.data, data);
+  assert.ok("error" in await createVisualTool.execute({ type: "bar", title: "Empty" }));
+  assert.ok("error" in await createVisualTool.execute({
+    type: "bar",
+    title: "Invalid",
+    data: [{ label: "2026", value: Infinity }],
+  }));
+  console.log("✅ SVG recovery, validation, intact visual output, and structured bars passed.");
 }
 
 void main();

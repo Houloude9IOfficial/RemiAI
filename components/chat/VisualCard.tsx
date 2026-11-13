@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState } from "react";
-import { normalizeVisualSvg } from "@/lib/chat/visual-svg";
+import { normalizeVisualSvg, repairSvgRectDimensions } from "@/lib/chat/visual-svg";
 import { cn } from "@/lib/utils";
 import { Eye, Loader2 } from "lucide-react";
 
@@ -9,17 +9,17 @@ import { Eye, Loader2 } from "lucide-react";
 
 type VisualAlign = "left" | "center" | "right";
 
-interface VisualData {
+type VisualData = {
   type: "visual";
-  visualType: "svg" | "html";
   title: string;
-  content: string;
   width: string;
   height: string;
   caption: string | null;
   align?: VisualAlign;
-  note?: string;
-}
+} & (
+  | { visualType: "svg" | "html"; content: string }
+  | { visualType: "bar"; data: { label: string; value: number }[] }
+);
 
 // ─── Theme injection ──────────────────────────────────────────────────
 
@@ -131,6 +131,7 @@ function SvgRenderer({ content, title, width }: { content: string; title: string
       const document = new DOMParser().parseFromString(markup, "image/svg+xml");
       const svg = document.documentElement as unknown as SVGElement;
       if (svg.localName === "svg") {
+        repairSvgRectDimensions(svg);
         const dimensions = [svg.getAttribute("width"), svg.getAttribute("height")];
         if (!svg.hasAttribute("viewBox") && dimensions.every((value) => value && /^[1-9]\d*(?:\.\d+)?$/.test(value))) {
           svg.setAttribute("viewBox", `0 0 ${dimensions.join(" ")}`);
@@ -293,6 +294,41 @@ function HtmlRenderer({
   );
 }
 
+const formatBarValue = new Intl.NumberFormat(undefined, { maximumSignificantDigits: 15 });
+
+function BarRenderer({ title, data, width }: Extract<VisualData, { visualType: "bar" }>) {
+  const values = data.map(({ value }) => value);
+  const magnitude = Math.max(...values.map(Math.abs)) || 1;
+  const min = Math.min(0, ...values) / magnitude;
+  const max = Math.max(0, ...values) / magnitude;
+  const range = max - min || 1;
+  const zero = -min / range * 100;
+
+  return (
+    <figure className="mx-auto max-w-full px-1 py-3" style={{ width }}>
+      <figcaption className="mb-3 break-words text-base font-semibold">{title}</figcaption>
+      <ul className="space-y-2">
+        {data.map(({ label, value }, index) => {
+          const end = (value / magnitude - min) / range * 100;
+          return (
+            <li key={index} className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)_minmax(0,0.85fr)] items-center gap-2 text-sm">
+              <span className="[overflow-wrap:anywhere]">{label}</span>
+              <span aria-hidden="true" className="relative h-4 rounded-sm bg-muted/50">
+                <span className="absolute inset-y-0 w-px -translate-x-1/2 bg-muted-foreground/60" style={{ left: `${zero}%` }} />
+                <span className="absolute inset-y-0 rounded-sm bg-primary" style={{
+                  left: `${Math.min(zero, end)}%`,
+                  width: `${Math.abs(end - zero)}%`,
+                }} />
+              </span>
+              <span className="text-right tabular-nums [overflow-wrap:anywhere]">{formatBarValue.format(value)}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </figure>
+  );
+}
+
 // ─── Main VisualCard Component ────────────────────────────────────────
 
 export function VisualCard({ data }: { data: unknown }) {
@@ -300,24 +336,23 @@ export function VisualCard({ data }: { data: unknown }) {
 
   if (!data || typeof data !== "object") return null;
 
-  const visual = data as Record<string, unknown>;
+  const visual = data as VisualData;
   if (visual.type !== "visual") return null;
 
   const {
     visualType,
     title,
-    content,
     width,
     height,
     caption,
     align: alignFromData,
-  } = visual as unknown as VisualData;
+  } = visual;
 
   const align = userAlign ?? alignFromData ?? "center";
   const alignClass =
     align === "left" ? "mr-auto" : align === "right" ? "ml-auto" : "mx-auto";
 
-  if (!content) {
+  if (visualType === "bar" ? !visual.data?.length : !visual.content) {
     return (
       <div className="rounded-xl border border-border/40 bg-transparent p-6 text-center">
         <Eye className="mx-auto mb-2 h-8 w-8 text-muted-foreground/40" />
@@ -335,10 +370,12 @@ export function VisualCard({ data }: { data: unknown }) {
     >
       <div className="overflow-hidden rounded-xl bg-transparent">
         <div className="w-full overflow-x-auto bg-transparent">
-          {visualType === "svg" ? (
-            <SvgRenderer content={content} title={title} width={width} />
+          {visualType === "bar" ? (
+            <BarRenderer {...visual} />
+          ) : visualType === "svg" ? (
+            <SvgRenderer content={visual.content} title={title} width={width} />
           ) : (
-            <HtmlRenderer content={content} width={width} height={height} />
+            <HtmlRenderer content={visual.content} width={width} height={height} />
           )}
         </div>
 

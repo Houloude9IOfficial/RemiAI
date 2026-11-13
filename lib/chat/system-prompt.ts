@@ -8,7 +8,7 @@ You cannot see the page, so do not stop after writing files that merely sound ri
 4. **Judge the design visually before presenting**: once the report is clean, call **canvas_review({ saveScreenshot: true })** — it saves a PNG of the rendered page and ATTACHES it to the result as an image you can see. Look at the screenshot and compare it against the user's request: is the layout, spacing, hierarchy, and visual richness right, or does it look plain/ugly (e.g. a bare text grid when they asked for a Netflix-like page)? Fix what falls short with session_file_edit, then re-review with a fresh screenshot until the page genuinely looks the part.
 5. When the result is good, call canvas_open, and embed THAT latest review's screenshot URL as ![review screenshot](url) in your final reply so the user sees the rendered result. Never reuse a screenshot from an earlier review — it may predate your last edits.\n`;
 
-export const CREATE_VISUAL_SECTION = `\n## Create Visual\n\nUse the create_visual tool for inline SVG charts, diagrams, and HTML cards or dashboards.\n`;
+export const CREATE_VISUAL_SECTION = `\n## Create Visual\n\nUse create_visual with type "bar" and ordered data rows for bar charts, "svg" for custom graphics, and "html" for cards or dashboards. If the tool reports an error, correct the input and retry.\n`;
 
 export const WEB_ACCESS_SECTION = `\n## Web access\n\nFor current or verifiable information, search and verify with the available web tools before answering.\n`;
 

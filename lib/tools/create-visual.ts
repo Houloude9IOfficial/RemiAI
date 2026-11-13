@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { normalizeVisualSvg } from "@/lib/chat/visual-svg";
+import { hasNegativeSvgRectSize, normalizeVisualSvg } from "@/lib/chat/visual-svg";
 import { db } from "@/db";
 import { toolConfigs } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -50,8 +50,55 @@ ${htmlContent}
 // Tool definition
 // ---------------------------------------------------------------------------
 
+const barDataSchema = z.array(z.object({
+  label: z.string().trim().min(1).max(120),
+  value: z.number().finite(),
+})).min(1).max(40);
+
+const visualInputSchema = z.object({
+  type: z
+    .enum(["bar", "svg", "html"])
+    .describe('Use "bar" for bar charts, "svg" for custom diagrams, or "html" for cards and dashboards'),
+  title: z
+    .string()
+    .min(1)
+    .max(120)
+    .describe("Short descriptive title for the visual"),
+  content: z
+    .string()
+    .min(1)
+    .max(50_000)
+    .optional()
+    .describe("Required for SVG and HTML. For SVG include the <svg> tag with viewBox. Keep backgrounds transparent unless the user requests otherwise."),
+  data: barDataSchema.optional().describe("Required for bar charts. Supply rows in display order, including any zero values."),
+  options: z
+    .object({
+      width: z
+        .string()
+        .optional()
+        .describe("CSS width (e.g. '100%', '600px'). Default '100%'"),
+      height: z
+        .string()
+        .optional()
+        .describe("Initial CSS height for HTML visuals. Default 'auto'"),
+      caption: z
+        .string()
+        .max(300)
+        .optional()
+        .describe("Optional caption displayed below the visual"),
+      align: z
+        .enum(["center", "left", "right"])
+        .optional()
+        .describe("Alignment within the chat: 'center' (default), 'left', or 'right'"),
+    })
+    .optional()
+    .describe("Optional display options"),
+});
+
+type VisualInput = z.infer<typeof visualInputSchema>;
+
 export const createVisualTool = {
-  description: `Create a dynamic visual (SVG chart/diagram or HTML card/dashboard) and render it inline in the chat. Use whenever a visual helps the user understand faster than text: data charts (bar/line/pie), KPI metrics cards, timelines/process steps, comparison tables, flow diagrams.
+  description: `Create a visual and render it inline in chat. Use type "bar" for comparisons across categories or periods, including counts by year. Pass data as ordered {label, value} rows. RemiAI renders bars, labels, and values automatically. Use SVG for custom diagrams or other chart types, and HTML for cards and dashboards.
 
 ## Design rules — NO AI SLOP
 - **Never** use purple/violet gradients; avoid the overused AI looks (cream+serif+terracotta, near-black+acid green, broadsheet hairline columns) unless the brief demands them.
@@ -60,81 +107,42 @@ export const createVisualTool = {
 - Clean and intentional: whitespace, 2-3 colors max, subtle borders, 8-12px radius.
 - SVG: use viewBox, include axis labels. HTML: flexbox/grid, subtle shadows. Fonts: 14-16px body, 20-32px headings. Responsive width 100%.`,
 
-  inputSchema: z.object({
-    type: z
-      .enum(["svg", "html"])
-      .describe('Format: "svg" for charts/diagrams/2D graphics; "html" for cards/dashboards/stats panels'),
-    title: z
-      .string()
-      .min(1)
-      .max(120)
-      .describe("Short title shown as a header above the visual"),
-    content: z
-      .string()
-      .min(1)
-      .max(50_000)
-      .describe("SVG or HTML markup to render. For SVG include the <svg> tag with viewBox. Keep backgrounds transparent unless the user requests otherwise."),
-    options: z
-      .object({
-        width: z
-          .string()
-          .optional()
-          .describe("CSS width (e.g. '100%', '600px'). Default '100%'"),
-        height: z
-          .string()
-          .optional()
-          .describe("CSS height (e.g. 'auto', '400px'). Default 'auto'"),
-        caption: z
-          .string()
-          .max(300)
-          .optional()
-          .describe("Optional caption displayed below the visual"),
-        align: z
-          .enum(["center", "left", "right"])
-          .optional()
-          .describe("Alignment within the chat: 'center' (default), 'left', or 'right'"),
-      })
-      .optional()
-      .describe("Optional display options"),
-  }),
+  inputSchema: visualInputSchema,
 
   execute: async ({
     type,
     title,
     content,
     options,
-  }: {
-    type: "svg" | "html";
-    title: string;
-    content: string;
-    options?: {
-      width?: string;
-      height?: string;
-      caption?: string;
-      align?: "center" | "left" | "right";
-    };
-  }) => {
-    // Wrap content in appropriate document shell
-    const finalContent = type === "svg" ? normalizeVisualSvg(content) : wrapHtml(content);
-    if (finalContent === null) {
-      return { error: "The SVG markup is incomplete or invalid. Retry with a complete, well-formed <svg> document." };
-    }
-
-    const result = {
+    data,
+  }: VisualInput) => {
+    const display = {
       type: "visual" as const,
-      visualType: type,
       title,
-      content: finalContent,
       width: options?.width ?? "100%",
       height: options?.height ?? "auto",
       caption: options?.caption ?? null,
       align: options?.align ?? "center",
-      note: "Visual rendered with transparent background. Use get_tool_help({ topic: 'create-visual' }) for design guidelines.",
     };
+
+    if (type === "bar") {
+      const rows = barDataSchema.safeParse(data);
+      if (!rows.success) return { error: "A bar chart requires 1–40 data rows with nonempty labels and finite numeric values." };
+      return { ...display, visualType: type, data: rows.data };
+    }
+
+    if (!content?.trim()) return { error: "SVG and HTML visuals require markup in content." };
+    const finalContent = type === "svg" ? normalizeVisualSvg(content) : wrapHtml(content);
+    if (finalContent === null) {
+      return { error: "The SVG markup is incomplete or invalid. Retry with a complete, well-formed <svg> document." };
+    }
+    if (type === "svg" && hasNegativeSvgRectSize(finalContent)) {
+      return { error: 'SVG rectangles require nonnegative width and height. For a bar chart, retry with type "bar" and ordered data rows.' };
+    }
 
     // Content is already bounded by the tool schema. Truncating XML or HTML
     // here would break the artifact that the chat renders and persists.
-    return result;
+    return { ...display, visualType: type, content: finalContent };
   },
 };
 
@@ -146,7 +154,7 @@ export const createVisualTool = {
  * Build the create_visual tool. Respects the user's toggle setting in DB.
  * Enabled by default for backward compatibility (was previously always-on).
  */
-export async function buildCreateVisualTool(): Promise<Record<string, any>> {
+export async function buildCreateVisualTool(): Promise<{ create_visual?: typeof createVisualTool }> {
   const config = await db
     .select()
     .from(toolConfigs)

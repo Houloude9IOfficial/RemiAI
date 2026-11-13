@@ -679,13 +679,14 @@ delay({ ms: 2000 })
 
   "create-visual": `## Create Visual — render dynamic visuals in the chat
 
-The \`create_visual\` tool lets you generate SVG or HTML visuals and display them directly inline in the chat. This is perfect for when you want to show the user a visual representation instead of plain text.
+The \`create_visual\` tool lets you generate bar charts, SVG visuals, and HTML cards and display them directly inline in the chat. This is perfect for when you want to show the user a visual representation instead of plain text.
 
-### Two content types:
+### Formats
 
 | Type | Best for |
 |---|---|
-| **SVG** (\`type: "svg"\`) | Charts (bar, line, pie, area), diagrams, graphs, icons, any 2D graphics |
+| **Bar** (\`type: "bar"\`) | Compare categories or periods with bars on a shared scale |
+| **SVG** (\`type: "svg"\`) | Custom charts (line, pie, area), diagrams, graphs, icons, any 2D graphics |
 | **HTML** (\`type: "html"\`) | Rich cards, dashboards, stats panels, comparison grids, timelines, layouts |
 
 ### Design guidelines:
@@ -706,8 +707,9 @@ The \`create_visual\` tool lets you generate SVG or HTML visuals and display the
 - User asks for visual comparison → create a comparison table
 
 ### Parameter hints:
-- \`title\` — A short, descriptive header shown above the visual
-- \`content\` — The raw SVG markup or HTML markup
+- \`title\` — A short, descriptive header used as the bar chart heading or the SVG alternative text
+- \`data\` — For bar charts, ordered rows with a label and a finite numeric value. Include zero values.
+- \`content\` — SVG or HTML markup
 - \`options.caption\` — Optional footnote/text shown below the visual
 - \`options.width\` / \`options.height\` — Control dimensions if the default doesn't work
 - \`options.align\` — Alignment of the visual card: \`"center"\` (default), \`"left"\`, or \`"right"\`. Users can also re-align any visual directly in the chat.
@@ -715,9 +717,13 @@ The \`create_visual\` tool lets you generate SVG or HTML visuals and display the
 ### Example — a simple bar chart:
 \`\`\`
 create_visual({
-  type: "svg",
+  type: "bar",
   title: "Monthly Revenue",
-  content: '<svg viewBox="0 0 500 300" xmlns="http://www.w3.org/2000/svg"><rect x="50" y="200" width="40" height="80" fill="#6366f1" rx="4"/><rect x="110" y="150" width="40" height="130" fill="#6366f1" rx="4"/><rect x="170" y="100" width="40" height="180" fill="#6366f1" rx="4"/><text x="70" y="295" text-anchor="middle" font-size="12" fill="#6b7280">Jan</text><text x="130" y="295" text-anchor="middle" font-size="12" fill="#6b7280">Feb</text><text x="190" y="295" text-anchor="middle" font-size="12" fill="#6b7280">Mar</text></svg>'
+  data: [
+    { label: "Jan", value: 80 },
+    { label: "Feb", value: 130 },
+    { label: "Mar", value: 180 }
+  ]
 })
 \`\`\`
 
