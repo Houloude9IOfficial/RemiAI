@@ -8,7 +8,7 @@ import { Copy, Check, Play, RefreshCw, Pencil, X, ChevronDown, ChevronUp } from 
 import { extractFileChanges } from "./ToolActivity";
 import { ToolCallCard } from "./ToolCallCard";
 import { WorkActivity } from "./WorkActivity";
-import { latestWorkActivity } from "@/lib/chat/work-activity";
+import { latestWorkActivity, partitionWorkText } from "@/lib/chat/work-activity";
 import { VisualCard } from "./VisualCard";
 import { RemiCard } from "./RemiCard";
 import { FollowupSuggestions } from "./FollowupSuggestions";
@@ -1031,12 +1031,13 @@ export function MessageBubble({
   }
 
   // ---- Assistant messages ----
-  const segments = buildSegments(message.parts);
+  const { answerParts, activityParts } = partitionWorkText(message.parts);
+  const segments = buildSegments(answerParts);
   const hasAnyContent = segments.length > 0;
 
   // Plain-text representation of the response (for the copy button): all
   // text parts joined, mirroring what the markdown renderer displays.
-  const copyableText = message.parts
+  const copyableText = answerParts
     .filter(isTextUIPart)
     .map((p) => p.text)
     .join("\n\n");
@@ -1088,7 +1089,7 @@ export function MessageBubble({
         <div className="flex flex-col gap-3.5">
           <WorkActivity
             key={activity?.runId ?? message.id}
-            parts={message.parts}
+            parts={activityParts}
             activity={activity}
             streaming={isStreaming ?? false}
             autoExpand={expandReasoningWhileWorking}
@@ -1127,6 +1128,7 @@ export function MessageBubble({
             ) : segment.type === "sessionPresent" ? (
               <SessionFilesPresentSegment
                 key={`present-${idx}`}
+                conversationId={conversationId}
                 part={segment.part}
               />
             ) : (
@@ -1333,7 +1335,7 @@ function RemiCardSegment({ part }: { part: UIMessage["parts"][number] }) {
 
 // ── Session files present segment — extracts output from a session_present_files part ──
 
-function SessionFilesPresentSegment({ part }: { part: UIMessage["parts"][number] }) {
+function SessionFilesPresentSegment({ part, conversationId }: { part: UIMessage["parts"][number]; conversationId?: number }) {
   const partObj = part as Record<string, unknown>;
   const state = (partObj.state as string) ?? "call-result";
   const output = partObj.output;
@@ -1361,7 +1363,7 @@ function SessionFilesPresentSegment({ part }: { part: UIMessage["parts"][number]
     );
   }
 
-  return <SessionFilesPresentCard data={output} />;
+  return <SessionFilesPresentCard data={output} conversationId={conversationId} />;
 }
 
 // ── Canvas present segment — extracts output from canvas_* tool parts ──

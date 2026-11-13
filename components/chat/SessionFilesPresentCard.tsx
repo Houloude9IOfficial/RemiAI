@@ -44,17 +44,17 @@ type PresentSingleOutput = {
  * - `session_present_files` → lists the files and opens the panel.
  * - `session_present_file`  → opens the panel straight to that file's viewer.
  */
-export function SessionFilesPresentCard({ data }: { data: unknown }) {
+export function SessionFilesPresentCard({ data, conversationId }: { data: unknown; conversationId?: number }) {
   const raw =
     data && typeof data === "object" ? (data as Record<string, unknown>) : null;
   const type = raw?.type;
 
   if (type === "session_file") {
-    return <SingleFileCard data={data as PresentSingleOutput} />;
+    return <SingleFileCard data={data as PresentSingleOutput} conversationId={conversationId} />;
   }
 
   if (type === "session_files") {
-    return <FilesCard data={data as PresentOutput} />;
+    return <FilesCard data={data as PresentOutput} conversationId={conversationId} />;
   }
 
   return null;
@@ -62,7 +62,7 @@ export function SessionFilesPresentCard({ data }: { data: unknown }) {
 
 // ── Single file (session_present_file) ─────────────────────────────────────
 
-function SingleFileCard({ data }: { data: PresentSingleOutput }) {
+function SingleFileCard({ data, conversationId }: { data: PresentSingleOutput; conversationId?: number }) {
   const showCard = false // Do not show for now...
   const name = data.name || data.path.split("/").pop() || data.path;
 
@@ -121,6 +121,7 @@ function SingleFileCard({ data }: { data: PresentSingleOutput }) {
           type="button"
           onClick={() =>
             dispatchSessionFilesPresent({
+              manualConversationId: conversationId,
               focusPath: data.path,
               message: data.message ?? null,
             })
@@ -136,7 +137,7 @@ function SingleFileCard({ data }: { data: PresentSingleOutput }) {
 
 // ── File list (session_present_files) ──────────────────────────────────────
 
-function FilesCard({ data }: { data: PresentOutput }) {
+function FilesCard({ data, conversationId }: { data: PresentOutput; conversationId?: number }) {
   const files = data.files && Array.isArray(data.files) ? data.files : [];
 
   // Auto-open the side panel once the card appears.
@@ -183,6 +184,7 @@ function FilesCard({ data }: { data: PresentOutput }) {
           type="button"
           onClick={() =>
             dispatchSessionFilesPresent({
+              manualConversationId: conversationId,
               paths: files.map((f) => f.path),
               message: data.message ?? null,
             })

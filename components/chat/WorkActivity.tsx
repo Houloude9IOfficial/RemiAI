@@ -112,7 +112,7 @@ export function WorkActivity({
           timeline.push(<p key={part.id}>{previous.message || outcomeLabels[previous.status]}</p>);
         }
       } else if (isWorkSummary(part) && part.text.trim()) {
-        timeline.push(<p key={`summary-${index}`} className="whitespace-pre-wrap break-words">{part.text}</p>);
+        timeline.push(<p key={`summary-${index}`} className="whitespace-pre-wrap break-words">{part.text.trim()}</p>);
       } else if (isToolUIPart(part) && !seenTools.has(part.toolCallId)) {
         seenTools.add(part.toolCallId);
         const runningAttempt = active && index > activeAttemptIndex;

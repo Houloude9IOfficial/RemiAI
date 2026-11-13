@@ -1,4 +1,4 @@
-import { isReasoningUIPart, type ReasoningUIPart, type UIMessage } from "ai";
+import { isReasoningUIPart, isTextUIPart, isToolUIPart, type ReasoningUIPart, type UIMessage } from "ai";
 
 export const WORK_ACTIVITY_PART = "data-work-activity";
 export const WORK_SUMMARY_METADATA = { remiai: { workSummary: true } };
@@ -37,6 +37,36 @@ export function isActiveWork(status: WorkStatus) {
 
 export function isWorkSummary(part: UIMessage["parts"][number]): part is ReasoningUIPart {
   return isReasoningUIPart(part) && part.providerMetadata?.remiai?.workSummary === true;
+}
+
+// Some providers emit progress narration as ordinary text before a tool call.
+const progressNarration = /^(?:(?:now )?I have (?:the data|enough information)[.!]\s+)?(?:let me|I(?:['’]ll| will)|I(?:['’]m| am) going to) (?:dig deeper|look|check|search|inspect|read|review|verify|fetch|gather|create|generate|build|run|test|update|write|compare|continue)\b[^.!?]*[.!]?$/i;
+
+export function partitionWorkText(parts: UIMessage["parts"]) {
+  const answerParts: UIMessage["parts"] = [];
+  const activityParts: UIMessage["parts"] = [];
+  let toolFollows = false;
+
+  // Only move standalone narration followed by a tool in the same step.
+  // Final answers, questions and mixed prose stay in the response.
+  for (let index = parts.length - 1; index >= 0; index--) {
+    const part = parts[index];
+    if (isToolUIPart(part)) toolFollows = true;
+    else if (part.type === "step-start" || isWorkActivityPart(part)) toolFollows = false;
+
+    if (toolFollows && isTextUIPart(part) && progressNarration.test(part.text.trim())) {
+      activityParts.push({
+        type: "reasoning",
+        text: part.text,
+        providerMetadata: WORK_SUMMARY_METADATA,
+      });
+    } else {
+      answerParts.push(part);
+      activityParts.push(part);
+    }
+  }
+
+  return { answerParts: answerParts.reverse(), activityParts: activityParts.reverse() };
 }
 
 /** Legacy providers wrote raw reasoning parts before summaries were marked. */

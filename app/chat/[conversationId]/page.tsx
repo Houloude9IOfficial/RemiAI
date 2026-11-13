@@ -530,10 +530,12 @@ function ConversationChat({
       if (detail?.manualConversationId != null && !manual) return;
       if (!manual && (filesDismissedRef.current || canvasWinsRef.current)) return;
       if (manual) {
+        pendingCanvasPresentRef.current = null;
+        canvasDismissedRef.current = true;
         filesDismissedRef.current = false;
         void queryClient.invalidateQueries({ queryKey: ["session-files", conversationId] });
       }
-      if (detail?.focusPath) setPanelFocus({ path: detail.focusPath });
+      if (detail?.focusPath || manual) setPanelFocus(detail.focusPath ? { path: detail.focusPath } : null);
       dismissProgressPanel();
       setPanelOpen(true);
       // a canvas and session files share the slot — opening files closes canvas
@@ -552,6 +554,8 @@ function ConversationChat({
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<CanvasPresentDetail>).detail ?? {};
       if (detail.manual) {
+        pendingCanvasPresentRef.current = null;
+        void queryClient.invalidateQueries({ queryKey: ["canvases", conversationId] });
         canvasDismissedRef.current = false;
         filesDismissedRef.current = true;
         openCanvasPanel(detail);
@@ -561,7 +565,7 @@ function ConversationChat({
     };
     window.addEventListener(CANVAS_PRESENT_EVENT, handler);
     return () => window.removeEventListener(CANVAS_PRESENT_EVENT, handler);
-  }, [openCanvasPanel]);
+  }, [conversationId, openCanvasPanel, queryClient]);
 
   // Reflect AI-controlled mode switches in the visible composer immediately.
   useEffect(() => {
