@@ -679,15 +679,21 @@ delay({ ms: 2000 })
 
   "create-visual": `## Create Visual — render dynamic visuals in the chat
 
-The \`create_visual\` tool lets you generate bar charts, SVG visuals, and HTML cards and display them directly inline in the chat. This is perfect for when you want to show the user a visual representation instead of plain text.
+The \`create_visual\` tool displays interactive widgets, bar charts, SVG visuals, and static HTML inline in the chat.
 
 ### Formats
 
 | Type | Best for |
 |---|---|
+| **Interactive** (\`type: "interactive"\`) | Calculators, dashboards, live charts, maps, galleries, and filterable tables |
 | **Bar** (\`type: "bar"\`) | Compare categories or periods with bars on a shared scale |
 | **SVG** (\`type: "svg"\`) | Custom charts (line, pie, area), diagrams, graphs, icons, any 2D graphics |
 | **HTML** (\`type: "html"\`) | Rich cards, dashboards, stats panels, comparison grids, timelines, layouts |
+
+### Interactive widgets
+- Call \`create_visual({ type: "interactive", title: "API Usage Dashboard", preset: "api_usage" })\` for the sample dashboard.
+- For other widgets pass \`spec: { version: 1, blocks: [...] }\`. Declare controls once and place their IDs in controls blocks. Use earlier numeric IDs in calculations, numeric IDs in metrics and charts, and \`{id}\` in text.
+- Controls update the reply locally. The conversation saves the widget and restores its default values on reopening.
 
 ### Design guidelines:
 - **Use a TRANSPARENT background** by default — do NOT add background colors to the root SVG or HTML body. The visual should blend seamlessly into the chat theme.
@@ -775,9 +781,9 @@ After writing or editing session files, **always** call \`session_present_file\`
 
   "canvas": `## Canvas — interactive buildable web projects
 
-The **canvas** tool family creates a self-contained, runnable web project (HTML/CSS/JS) shown in a live **preview + code editor** panel. Use a canvas when the user wants something they can actually run and play with — a website, small app, calculator, game, quiz, dashboard, timer, interactive demo or prototype.
+The **canvas** tool family creates a self-contained, runnable web project (HTML/CSS/JS) shown in a live **preview + code editor** panel. Use a canvas for an explicit /canvas request or a runnable web project the user can open and edit, such as a website, app, or prototype.
 
-A canvas is DIFFERENT from \`create_visual\` (a static inline chart/card) and from a plain session file — prefer a canvas for buildable, interactive output.
+Use \`create_visual\` for calculators, charts, and other widgets embedded directly in a reply.
 
 ### Tools
 | Tool | Parameters | Purpose |
@@ -1076,7 +1082,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   newsapi: "News search",
   scheduling: "Scheduled tasks",
   elevenlabs: "ElevenLabs voice",
-  create_visual: "Dynamic visuals (SVG / HTML)",
+  create_visual: "Interactive and static visuals",
   session_files: "Session files (per-chat sandbox)",
   firecrawl: "Web scraping / search fallback (Firecrawl)",
   playwright: "Browser automation (Playwright)",

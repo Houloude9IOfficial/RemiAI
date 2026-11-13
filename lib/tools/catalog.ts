@@ -425,7 +425,7 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     id: "create_visual",
     name: "Create Visual",
     description:
-      "Generate dynamic visuals — SVG charts, diagrams, and HTML cards/dashboards — rendered directly in the chat. The AI uses this automatically when it needs to show data visually.",
+      "Show interactive dashboards, charts, calculators, maps, tables, and galleries directly in chat, alongside static SVG and HTML visuals.",
     toolNames: ["create_visual"],
     category: "builtin",
     subgroup: "Media & Audio",

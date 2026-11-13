@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { apiUsageVisual } from "@/lib/chat/api-usage-visual";
+import { interactiveVisualSchema, parseInteractiveVisual } from "@/lib/chat/interactive-visual";
 import { hasNegativeSvgRectSize, normalizeVisualSvg } from "@/lib/chat/visual-svg";
 import { db } from "@/db";
 import { toolConfigs } from "@/db/schema";
@@ -57,7 +59,7 @@ const barDataSchema = z.array(z.object({
 
 const visualInputSchema = z.object({
   type: z
-    .enum(["bar", "svg", "html"])
+    .enum(["bar", "svg", "html", "interactive"])
     .describe('Use "bar" for bar charts, "svg" for custom diagrams, or "html" for cards and dashboards'),
   title: z
     .string()
@@ -71,6 +73,8 @@ const visualInputSchema = z.object({
     .optional()
     .describe("Required for SVG and HTML. For SVG include the <svg> tag with viewBox. Keep backgrounds transparent unless the user requests otherwise."),
   data: barDataSchema.optional().describe("Required for bar charts. Supply rows in display order, including any zero values."),
+  spec: interactiveVisualSchema.optional().describe("Version 1 interactive widget specification. Use either spec or preset with type interactive."),
+  preset: z.literal("api_usage").optional().describe("Use for the sample API Usage Dashboard with two sliders and 7/30-day forecasts."),
   options: z
     .object({
       width: z
@@ -98,7 +102,7 @@ const visualInputSchema = z.object({
 type VisualInput = z.infer<typeof visualInputSchema>;
 
 export const createVisualTool = {
-  description: `Create a visual and render it inline in chat. Use type "bar" for comparisons across categories or periods, including counts by year. Pass data as ordered {label, value} rows. RemiAI renders bars, labels, and values automatically. Use SVG for custom diagrams or other chart types, and HTML for cards and dashboards.
+  description: `Create a visual and render it inline in chat. Use type "bar" for comparisons across categories or periods, including counts by year. Pass data as ordered {label, value} rows. RemiAI renders bars, labels, and values automatically. Use type "interactive" for native widgets, calculators, charts with live controls, maps, media, and comparison tables. Use preset "api_usage" for the sample API Usage Dashboard. For other requests use spec.version = 1 and ordered spec.blocks. Define controls once, then include their IDs in controls blocks where they should appear. In calculations, a and b are numbers or IDs of numeric controls or earlier calculations. For round, b is the number of decimal places. In text lines and descriptions use {id} to interpolate a control or calculated result. In metrics and chart points use IDs directly in numeric fields. The UI evaluates these bindings locally. Use SVG for custom diagrams and HTML for static markup.
 
 ## Design rules — NO AI SLOP
 - **Never** use purple/violet gradients; avoid the overused AI looks (cream+serif+terracotta, near-black+acid green, broadsheet hairline columns) unless the brief demands them.
@@ -115,6 +119,8 @@ export const createVisualTool = {
     content,
     options,
     data,
+    spec,
+    preset,
   }: VisualInput) => {
     const display = {
       type: "visual" as const,
@@ -124,6 +130,13 @@ export const createVisualTool = {
       caption: options?.caption ?? null,
       align: options?.align ?? "center",
     };
+
+    if (type === "interactive") {
+      if (Boolean(spec) === Boolean(preset)) return { error: "Supply exactly one interactive spec or preset." };
+      const parsed = parseInteractiveVisual(preset ? apiUsageVisual : spec);
+      if ("error" in parsed) return { error: parsed.error };
+      return { ...display, visualType: type, spec: parsed.spec };
+    }
 
     if (type === "bar") {
       const rows = barDataSchema.safeParse(data);

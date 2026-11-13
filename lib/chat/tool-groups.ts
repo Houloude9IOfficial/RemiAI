@@ -240,7 +240,8 @@ export const CONDITIONAL_GROUPS: Record<string, ToolGroup> = {
       "chart", "graph", "visual", "dashboard", "diagram", "timeline", "kpi",
       "stat card", "svg", "visualize", "plot", "pie chart", "bar chart",
       "line chart", "metrics", "infographic", "flow chart", "data viz",
-      "visualization",
+      "visualization", "calculator", "interactive demo", "interactive map", "comparison table",
+      "filterable", "slider", "inline widget", "media gallery", "image gallery", "video gallery",
     ],
   },
   canvas: {

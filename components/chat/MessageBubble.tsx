@@ -1122,7 +1122,7 @@ export function MessageBubble({
                 />
               </div>
             ) : segment.type === "visual" ? (
-              <VisualCardSegment key={`visual-${idx}`} part={segment.part} />
+              <VisualCardSegment key={isToolUIPart(segment.part) ? segment.part.toolCallId : `visual-${idx}`} part={segment.part} conversationId={conversationId} />
             ) : segment.type === "remiCard" ? (
               <RemiCardSegment key={`remi-${idx}`} part={segment.part} />
             ) : segment.type === "sessionPresent" ? (
@@ -1197,7 +1197,7 @@ export function MessageBubble({
 
 // ── Visual card segment — extracts output from a create_visual tool part ──
 
-function VisualCardSegment({ part }: { part: UIMessage["parts"][number] }) {
+function VisualCardSegment({ part, conversationId }: { part: UIMessage["parts"][number]; conversationId?: number }) {
   // Safely extract output and state from the tool part
   const partObj = part as Record<string, unknown>;
   const state = (partObj.state as string) ?? "call-result";
@@ -1255,7 +1255,7 @@ function VisualCardSegment({ part }: { part: UIMessage["parts"][number] }) {
     );
   }
 
-  return <VisualCard data={output} />;
+  return <VisualCard data={output} conversationId={conversationId} />;
 }
 
 // ── Remi card segment — inline visual card (weather, timezone, etc.) ──

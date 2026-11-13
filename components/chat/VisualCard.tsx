@@ -4,6 +4,7 @@ import { useRef, useEffect, useState } from "react";
 import { normalizeVisualSvg, repairSvgRectDimensions } from "@/lib/chat/visual-svg";
 import { cn } from "@/lib/utils";
 import { Eye, Loader2 } from "lucide-react";
+import { InteractiveVisual } from "./InteractiveVisual";
 
 // ─── Types ────────────────────────────────────────────────────────────
 
@@ -18,6 +19,7 @@ type VisualData = {
   align?: VisualAlign;
 } & (
   | { visualType: "svg" | "html"; content: string }
+  | { visualType: "interactive"; spec: unknown }
   | { visualType: "bar"; data: { label: string; value: number }[] }
 );
 
@@ -331,7 +333,7 @@ function BarRenderer({ title, data, width }: Extract<VisualData, { visualType: "
 
 // ─── Main VisualCard Component ────────────────────────────────────────
 
-export function VisualCard({ data }: { data: unknown }) {
+export function VisualCard({ data, conversationId }: { data: unknown; conversationId?: number }) {
   const [userAlign] = useState<VisualAlign | null>(null);
 
   if (!data || typeof data !== "object") return null;
@@ -351,6 +353,15 @@ export function VisualCard({ data }: { data: unknown }) {
   const align = userAlign ?? alignFromData ?? "center";
   const alignClass =
     align === "left" ? "mr-auto" : align === "right" ? "ml-auto" : "mx-auto";
+
+  if (visualType === "interactive") {
+    return (
+      <div className={cn("w-full max-w-3xl", alignClass)}>
+        <InteractiveVisual spec={visual.spec} title={title} conversationId={conversationId} />
+        {caption && <p className="mt-2 text-sm text-muted-foreground">{caption}</p>}
+      </div>
+    );
+  }
 
   if (visualType === "bar" ? !visual.data?.length : !visual.content) {
     return (
